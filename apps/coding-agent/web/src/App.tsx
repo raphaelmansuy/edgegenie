@@ -5,9 +5,11 @@
  *  2. what you are looking at, and what you @-mention, goes to the agent as context;
  *  3. when the agent writes something, the tree refreshes and the result opens in one click.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type ModelOption, type SessionSummary } from "./api/client";
 import { ApprovalSheet, EmptyState, Inspector } from "./components/Chrome";
+import { Palette, PaletteActions } from "./components/Palette";
+import { ShortcutSheet } from "./components/ShortcutSheet";
 import { CatalogTree } from "./components/CatalogTree";
 import { Composer } from "./components/Composer";
 import { OpenDoc, WorkspaceLinks } from "./components/DocContext";
@@ -16,6 +18,10 @@ import type { Workspace } from "./domain/links";
 import { TurnView } from "./components/Transcript";
 import { NotebookViewer, TableViewer } from "./components/Viewer";
 import { WorkspaceTree } from "./components/WorkspaceTree";
+import { tabKeys } from "./components/Tree";
+import type { Candidate } from "./domain/fuzzy";
+import { caps, display } from "./domain/keys";
+import { useHotkeys } from "./hooks/useHotkeys";
 import { ACTIONS, asAttachment, docForNode, makeDoc, touched, type Action, type Doc } from "./domain/docs";
 import type { Attachment } from "./domain/events";
 import { useSessionStream } from "./hooks/useSessionStream";
@@ -44,7 +50,12 @@ export function App() {
   const [view, setView] = useState<string>(CHAT);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [treeRev, setTreeRev] = useState(0);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [keysOpen, setKeysOpen] = useState(false);
+  const [railShown, setRailShown] = useState(true);
+  const [inspShown, setInspShown] = useState(true);
   const bottom = useRef<HTMLDivElement>(null);
+  const composerBox = useRef<HTMLTextAreaElement | null>(null);
 
   const { session, conn, error, send, stop, setSession } = useSessionStream(active);
 
@@ -94,6 +105,13 @@ export function App() {
     setView((v) => (v === id ? CHAT : v));
   };
   const viewDoc = docs.find((d) => d.id === view) ?? null;
+
+  // The palette opens objects; it does not know how the shell renders them.
+  PaletteActions.onOpenTable = (ref: string) => openDoc(makeDoc("table", ref));
+  PaletteActions.onOpenFile = (kind: string, path: string) => {
+    const d = docForNode(kind as never, path);
+    if (d) openDoc(d);
+  };
   const addContext = useCallback((a: Attachment) => setAttachments((cur) => dedupe([...cur, a])), []);
 
   // The agent wrote something: refresh the tree and reload any open copy. Each call counts once.
@@ -146,7 +164,98 @@ export function App() {
   };
   useEffect(() => { if (notice) { const id = window.setTimeout(() => setNotice(""), 6000); return () => window.clearTimeout(id); } }, [notice]);
 
+  const newSession = useCallback(() => {
+    setActive(null);
+    setView(CHAT);
+    setAttachments([]);
+    requestAnimationFrame(() => composerBox.current?.focus());
+  }, []);
+
+  const focusComposer = useCallback(() => {
+    composerBox.current?.focus();
+  }, []);
+
+  /** Everything reachable without the mouse: objects, panels, tabs and actions. */
+  const paletteItems = useMemo<Candidate[]>(() => {
+    const items: Candidate[] = [];
+    const add = (id: string, title: string, group: string, run: () => void, hint?: string, weight = 0) =>
+      items.push({ id, title, group, run, hint, weight });
+
+    add("act:new", "New session", "Actions", newSession, display("mod+shift+n"), 5);
+    add("act:keys", "Keyboard shortcuts", "Actions", () => setKeysOpen(true), display("mod+slash"));
+    add("act:refresh", "Refresh sessions and models", "Actions", () => void refresh());
+    for (const r of ["sessions", "files", "catalog"] as Rail[]) {
+      const key = r === "sessions" ? "mod+1" : r === "files" ? "mod+2" : "mod+3";
+      add(`rail:${r}`, `${r[0].toUpperCase()}${r.slice(1)} panel`, "Panels",
+        () => { setRail(r); setRailShown(true); }, display(key), 2);
+    }
+    add("panel:rail", railShown ? "Hide the left panel" : "Show the left panel", "Panels",
+      () => setRailShown((v) => !v), display("mod+b"));
+    add("panel:insp", inspShown ? "Hide the inspector" : "Show the inspector", "Panels",
+      () => setInspShown((v) => !v), display("mod+i"));
+
+    add("tab:chat", "Chat", "Open", () => setView(CHAT), undefined, 1);
+
+    // Actions on what is on screen. A palette that only navigates is a menu; this is the useful part.
+    const open = docs.find((d) => d.id === view);
+    if (open) {
+      add("act:attach", `Add ${open.name} to the message`, "Actions",
+        () => addContext(asAttachment(open)), undefined, 2);
+      for (const a of ["explain", "fix", "document", "optimize"] as Action[]) {
+        add(`act:${a}:${open.id}`, `${ACTIONS[a].label} ${open.name}`, "Actions",
+          () => ask(a, open), a, 3);
+      }
+    }
+    for (const d of docs) {
+      add(`doc:${d.id}`, d.name, d.kind === "table" ? "Tables" : "Files",
+        () => setView(d.id), d.ref, 1);
+    }
+    for (const s of sessions.slice(0, 40)) {
+      const title = s.title === "New session" ? s.id.slice(0, 8) : s.title;
+      items.push({
+        id: `session:${s.id}`, title, group: "Sessions", hint: s.folder,
+        keywords: s.id, weight: 3,
+        run: () => { setActive(s.id); setView(CHAT); },
+      });
+    }
+    return items;
+  }, [docs, sessions, railShown, inspShown, newSession, refresh, view, addContext, ask]);
+
   const busy = session.status === "streaming";
+
+  const handlers = useMemo(() => {
+    const go = (r: Rail) => () => { setRail(r); setRailShown(true); };
+    const cycle = (step: number) => () => {
+      const ids = [CHAT, ...docs.map((d) => d.id)];
+      const at = ids.indexOf(view);
+      setView(ids[(at + step + ids.length) % ids.length]);
+    };
+    return {
+      "mod+k": () => setPaletteOpen((v) => !v),
+      "mod+slash": () => { setKeysOpen((v) => !v); },
+      "mod+shift+n": newSession,
+      "mod+l": focusComposer,
+      "mod+1": go("sessions"),
+      "mod+2": go("files"),
+      "mod+3": go("catalog"),
+      "mod+b": () => setRailShown((v) => !v),
+      "mod+i": () => setInspShown((v) => !v),
+      "mod+p": () => { setRail("files"); setRailShown(true); focusComposer(); },
+      "ctrl+tab": cycle(1),
+      "ctrl+shift+tab": cycle(-1),
+      "mod+w": () => {
+        if (view === CHAT) return false;      // never close someone's only view by accident
+        closeDoc(view);
+        return true;
+      },
+      escape: () => {
+        if (paletteOpen || keysOpen) { setPaletteOpen(false); setKeysOpen(false); return true; }
+        return false;                          // the composer handles Esc as "stop"
+      },
+    };
+  }, [docs, view, paletteOpen, keysOpen, newSession, focusComposer]);
+
+  useHotkeys(handlers);
   const toolCalls = session.turns.reduce((n, t) => n + t.tools.length, 0);
   const pending = session.approvals.find((a) => !a.outcome);
   const turns = session.turns;
@@ -178,12 +287,21 @@ export function App() {
               </span>
             )}
             {active && <span className={`pill ${session.status}`}>{session.status}</span>}
-            <button className="btn ghost" onClick={() => void refresh()} aria-label="Refresh sessions">⟳</button>
+            <button className="search-trigger" onClick={() => setPaletteOpen(true)}
+              aria-label={`Search or run a command (${display("mod+k")})`} title={`Search or run a command — ${display("mod+k")}`}>
+              <span aria-hidden>⌕</span>
+              <span className="search-trigger-label">Search or run a command</span>
+              <span className="kbd-hint">{caps("mod+k").map((c) => <kbd key={c}>{c}</kbd>)}</span>
+            </button>
+            <button className="btn ghost" onClick={() => setKeysOpen(true)} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (⌘/)">⌘</button>
+            <button className="btn ghost" onClick={() => void refresh()} aria-label="Refresh sessions" title="Refresh">⟳</button>
           </span>
         </header>
 
-        <div className={`layout${active ? "" : " no-inspector"}`}>
-          <nav className="pane rail" aria-label="Navigator">
+        <div className={`layout${active && inspShown ? "" : " no-inspector"}${railShown ? "" : " no-rail"}`}>
+          {railShown && <nav className="pane rail" aria-label="Navigator">
+            <button className="rail-collapse" onClick={() => setRailShown(false)}
+              title="Hide this panel (⌘B)" aria-label="Hide the left panel">‹</button>
             <div className="rail-tabs" role="tablist" aria-label="Navigator">
               {(["sessions", "files", "catalog"] as Rail[]).map((r) => (
                 <button key={r} className="rail-tab" role="tab" aria-selected={rail === r} onClick={() => setRail(r)}>
@@ -225,17 +343,26 @@ export function App() {
                 <CatalogTree selected={selectedRef} onAttach={addContext} onOpenTable={(ref) => openDoc(makeDoc("table", ref))} />
               </div>
             )}
-          </nav>
+          </nav>}
+
+          {!railShown && (
+            <button className="rail-reveal" onClick={() => setRailShown(true)}
+              title="Show the left panel (⌘B)" aria-label="Show the left panel">›</button>
+          )}
 
           <main className="pane main">
             {docs.length > 0 && (
-              <div className="doc-tabs" role="tablist" aria-label="Open items">
-                <button className="doc-tab" role="tab" aria-selected={view === CHAT} onClick={() => setView(CHAT)}>
+              <div className="doc-tabs" role="tablist" aria-label="Open items"
+                onKeyDown={tabKeys([CHAT, ...docs.map((d) => d.id)], view, setView)}>
+                <button id={`tab-${CHAT}`} className="doc-tab" role="tab" aria-selected={view === CHAT}
+                  tabIndex={view === CHAT ? 0 : -1} onClick={() => setView(CHAT)}>
                   <span aria-hidden>💬</span> Chat
                 </button>
                 {docs.map((d) => (
                   <span key={d.id} className="doc-tab-wrap">
-                    <button className="doc-tab" role="tab" aria-selected={view === d.id} onClick={() => setView(d.id)} title={d.ref}>
+                    <button id={`tab-${d.id.replace(/[^\w-]/g, "_")}`} className="doc-tab" role="tab"
+                      aria-selected={view === d.id} tabIndex={view === d.id ? 0 : -1}
+                      onClick={() => setView(d.id)} title={d.ref}>
                       <span aria-hidden>{d.kind === "table" ? "▦" : "▤"}</span> {d.name}
                     </button>
                     <button className="doc-close" aria-label={`Close ${d.name}`} onClick={() => closeDoc(d.id)}>×</button>
@@ -281,6 +408,7 @@ export function App() {
               </p>
             )}
             <Composer
+              inputRef={composerBox}
               disabled={session.status === "archived"} busy={busy} onSend={message} onStop={stop}
               attachments={attachments} auto={viewDoc ? asAttachment(viewDoc) : null}
               onAdd={addContext} onRemove={(a) => setAttachments((cur) => cur.filter((x) => x !== a))}
@@ -289,8 +417,11 @@ export function App() {
             />
           </main>
 
-          {active && <Inspector session={session} />}
+          {active && inspShown && <Inspector session={session} />}
         </div>
+
+        {paletteOpen && <Palette items={paletteItems} onClose={() => setPaletteOpen(false)} />}
+        {keysOpen && <ShortcutSheet onClose={() => setKeysOpen(false)} />}
 
         {pending && active && (
           <ApprovalSheet approval={pending} sessionId={active} onDecided={() => void refresh()} />

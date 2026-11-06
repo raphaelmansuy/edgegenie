@@ -91,4 +91,17 @@ describe("Tree keyboard", () => {
     expect(run).toHaveBeenCalledTimes(1);
     expect(onActivate).not.toHaveBeenCalled();
   });
+
+  it("sends on Enter and breaks the line on Shift+Enter", async () => {
+    const sent = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<Composer busy={false} onSend={sent} onStop={() => {}} attachments={[]}
+      onAdd={() => {}} onRemove={() => {}} openDocs={[]} />);
+    const box = container.querySelector("textarea")!;
+    fireEvent.change(box, { target: { value: "hello" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(sent).toHaveBeenCalledWith("hello"));
+    fireEvent.change(box, { target: { value: "line" } });
+    fireEvent.keyDown(box, { key: "Enter", shiftKey: true });
+    expect(sent).toHaveBeenCalledTimes(1);
+  });
 });

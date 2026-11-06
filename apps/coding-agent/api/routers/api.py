@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -81,6 +82,16 @@ def _home(request: Request) -> str:
 async def whoami(request: Request) -> dict:
     """The signed-in user and the folder this app suggests as scratch space."""
     user = _user(request)
+    # Warm the table-name cache for THIS user, in the background. The app is opened here before any
+    # search, so by the time someone types in the palette the walk is usually done. Only a real
+    # token counts: the token is the permission boundary, and an anonymous walk finds nothing.
+    token = _user_token(request)
+    warm = getattr(request.app.state.catalog, "table_names", None)
+    if token and warm is not None:
+        task = asyncio.create_task(warm(token))
+        request.app.state.warm = getattr(request.app.state, "warm", set())
+        request.app.state.warm.add(task)          # keep a reference: a bare task can be collected
+        task.add_done_callback(request.app.state.warm.discard)
     return {"user": user, "home": _home(request), "scratch": f"{_home(request)}/agent_scratch",
             "workspace": {"host": normalize_host(os.environ.get("DATABRICKS_HOST")),
                           "orgId": os.environ.get("DATABRICKS_WORKSPACE_ID", "")},

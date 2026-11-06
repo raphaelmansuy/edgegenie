@@ -28,8 +28,10 @@ export function Chip({ a, auto, onRemove }: { a: Attachment; auto?: boolean; onR
 
 interface Option { a: Attachment; hint: string }
 
-export function Composer({ disabled, busy, onSend, onStop, attachments, auto, onAdd, onRemove, openDocs, placeholder }: {
+export function Composer({ disabled, busy, onSend, onStop, attachments, auto, onAdd, onRemove, openDocs, placeholder, inputRef }: {
   disabled?: boolean; busy: boolean; onSend: (text: string) => Promise<void>; onStop: () => void;
+  /** Lets the app focus the box from a shortcut (⌘L) without prop-drilling a callback. */
+  inputRef?: { current: HTMLTextAreaElement | null };
   attachments: Attachment[]; auto?: Attachment | null;
   onAdd: (a: Attachment) => void; onRemove: (a: Attachment) => void;
   openDocs: Doc[]; placeholder?: string;
@@ -46,7 +48,8 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
   const [history, setHistory] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]"); } catch { return []; }
   });
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const own = useRef<HTMLTextAreaElement>(null);
+  const ref = inputRef ?? own;
 
   useEffect(() => {
     const el = ref.current;
@@ -197,7 +200,9 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
                 const r = stepHistory(history, histAt, e.key);
                 if (r.at !== -1 || histAt !== -1) { e.preventDefault(); useHistory(e.key); return; }
               }
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void submit(); }
+              // Enter sends and Shift+Enter breaks the line, which is what every chat box does now.
+              // ⌘⏎ still works for people who learned it here.
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); }
               if (e.key === "Escape" && busy) { e.preventDefault(); onStop(); }
             }}
             disabled={disabled}
@@ -238,8 +243,9 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
           )}
         </div>
         <div className="composer-actions">
-          <button className="btn ghost" aria-label="Add context" title="Add a notebook, file or table (@)" onClick={mention} disabled={disabled}>＠</button>
-          <button className="btn ghost" aria-label="Commands" title="Commands (/)" disabled={disabled}
+          {/* Tools on the left, the primary action on the right: the reading order of every chat UI. */}
+          <button className="btn ghost icon-btn" aria-label="Add a notebook, file or table" title="Add context (⌘⇧A)" onClick={mention} disabled={disabled}>＠</button>
+          <button className="btn ghost icon-btn" aria-label="Commands" title="Commands (/)" disabled={disabled}
             onClick={() => {
               const el = ref.current;
               const at = el?.selectionStart ?? text.length;
@@ -248,12 +254,14 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
               setText(next); setCaret(at + lead.length + 1);
               requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(at + lead.length + 1, at + lead.length + 1); });
             }}>/</button>
+          <span className="hint"><kbd>⏎</kbd> send · <kbd>⇧⏎</kbd> new line</span>
           {busy ? (
-            <button className="btn stop" onClick={onStop}>⏹ Stop</button>
+            <button className="btn stop" onClick={onStop}>Stop <kbd>Esc</kbd></button>
           ) : (
-            <button className="btn primary" onClick={() => void submit()} disabled={!text.trim() || disabled}>Send</button>
+            <button className="btn primary" onClick={() => void submit()} disabled={!text.trim() || disabled}>
+              Send <kbd>⌘⏎</kbd>
+            </button>
           )}
-          <span className="hint"><kbd>⌘</kbd><kbd>⏎</kbd> send · <kbd>/</kbd> commands · <kbd>@</kbd> context · <kbd>Esc</kbd> stop</span>
         </div>
       </div>
     </div>

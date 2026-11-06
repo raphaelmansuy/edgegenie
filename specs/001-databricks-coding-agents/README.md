@@ -46,6 +46,7 @@ Read in this order the first time. Each document is self-contained and cross-lin
 | 16 | [**Implementation**](16-implementation.md) | What is built, what did running it teach us, what is still open? | All |
 | 17 | [**Deployment**](17-deployment.md) | Did it deploy? What did that find? | All |
 | 18 | [**Gap analysis**](18-gap-analysis.md) | What separates this from Genie Code, and what closed it? | All |
+| 19 | [**Interaction design**](19-interaction-design.md) | Is it as fast to use as the best app of 2026? Palette, keys, navigation | 05, 11 |
 | — | [E2E screenshots](e2e/README.md) | What does it actually look like? | UX |
 
 ## The seven lenses, and where each one bites

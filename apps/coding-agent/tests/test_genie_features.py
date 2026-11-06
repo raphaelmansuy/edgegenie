@@ -609,3 +609,60 @@ def test_a_conversational_prompt_is_answered_not_blocked():
     work = extract_requirements("Write a notebook that prints hello world")
     assert any(needs_evidence(r.text) for r in work)
     assert decide(State(requirements=work, calls=[], answer="Sure, done.")).verdict is not Verdict.DONE
+
+
+def test_table_search_shows_partial_results_instead_of_nothing_while_it_walks():
+    """The first search used to be empty: the walk was given 6 s and then abandoned. A user who
+    types a table name once must see it, so results accumulate and a search reads what exists."""
+    import asyncio
+    from api.adapters.databricks.catalog import CatalogBrowser
+
+    class Slow:
+        def __init__(self):
+            self.calls = 0
+        async def get(self, path, token, params=None):
+            if path.endswith("/catalogs"):
+                return {"catalogs": [{"name": "samples"}]}
+            if path.endswith("/schemas"):
+                return {"schemas": [{"name": "nyctaxi"}]}
+            self.calls += 1
+            await asyncio.sleep(0.2)
+            return {"tables": [{"full_name": "samples.nyctaxi.trips"}]}
+
+    async def scenario():
+        c = CatalogBrowser("h", lambda: "t", http=Slow())
+        first = await c.find("t", "trips")          # cold: the walk is still going
+        await asyncio.sleep(0.5)
+        return first, await c.find("t", "trips")    # warm: the result is cached
+
+    first, second = run(scenario())
+    assert second and second[0]["ref"] == "samples.nyctaxi.trips"
+    assert not first or first[0]["ref"] == "samples.nyctaxi.trips"
+
+
+def test_the_table_name_cache_is_per_credential():
+    """Deployed defect: a startup warm-up with no user token filled one shared cache, so every user's
+    palette search returned nothing. The token is the permission boundary; the cache follows it."""
+    from api.adapters.databricks.catalog import CatalogBrowser
+
+    class H:
+        def __init__(self): self.asked: list[str | None] = []
+        async def get(self, path, token, params=None):
+            self.asked.append(token)
+            if path.endswith("/catalogs"):
+                return {"catalogs": [{"name": "samples"}]}
+            if path.endswith("/schemas"):
+                return {"schemas": [{"name": "nyctaxi"}]}
+            return {"tables": [{"full_name": "samples.nyctaxi.trips"}]}
+
+    async def scenario():
+        h = H()
+        c = CatalogBrowser("h", lambda: "t", http=h)
+        mine = await c.find("token-alice", "trips")
+        theirs = await c.find("token-bob", "trips")
+        return mine, theirs, c
+
+    mine, theirs, c = run(scenario())
+    assert mine[0]["ref"] == "samples.nyctaxi.trips"
+    assert theirs[0]["ref"] == "samples.nyctaxi.trips"
+    assert len(c._walks) == 2, "results were shared across credentials"

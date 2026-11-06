@@ -20,7 +20,8 @@ PREVIEW_ROWS = 10
 #: catalogs -> schemas -> tables; a user with a large metastore must not pay for an unbounded walk.
 SEARCH_SCHEMAS = 24
 SEARCH_TTL = 300
-SEARCH_BUDGET = 6.0
+SEARCH_BUDGET = 3.5
+SEARCH_CONCURRENCY = 8
 
 
 def _check(name: str, label: str) -> str:
@@ -36,11 +37,24 @@ def _quote(full_name: str) -> str:
     return ".".join(f"`{p}`" for p in full_name.split("."))
 
 
+class _Walk:
+    """A table-name walk in progress: names arrive as schemas answer, so a search is useful meanwhile."""
+
+    __slots__ = ("key", "at", "names", "done", "task")
+
+    def __init__(self, key: str, at: float) -> None:
+        self.key = key
+        self.at = at
+        self.names: list[str] = []
+        self.done = False
+        self.task: asyncio.Task | None = None
+
+
 class CatalogBrowser:
     def __init__(self, host: str, token_provider, http: DbxHttp | None = None) -> None:
         self._http = http or DbxHttp(host, token_provider)
-        #: (when, token tail, table names) — the walk is expensive, the answer is stable enough.
-        self._names: tuple[float, str, list[str]] | None = None
+        #: One name walk per credential: the token is the permission boundary, so results cannot be shared.
+        self._walks: dict[str, _Walk] = {}
 
     async def children(self, token: str | None, catalog: str = "", schema: str = "") -> list[dict[str, Any]]:
         """One level: catalogs, or the schemas of a catalog, or the tables of a schema."""
@@ -94,39 +108,93 @@ class CatalogBrowser:
                 "warehouse": pick.get("name", "")}
 
     async def table_names(self, token: str | None) -> list[str]:
-        """Every table name this user can see, for name search. Cached for a few minutes."""
-        tail = (token or "")[-12:]
-        if self._names and self._names[0] > time.monotonic() - SEARCH_TTL and self._names[1] == tail:
-            return self._names[2]
-        names: list[str] = []
-        cats = await self._http.get("/api/2.1/unity-catalog/catalogs", token)
-        for c in cats.get("catalogs", []):
-            cat = c.get("name", "")
-            try:
-                sch = await self._http.get("/api/2.1/unity-catalog/schemas", token, {"catalog_name": cat})
-            except (PermissionError, RuntimeError):
-                continue
-            for s in sch.get("schemas", [])[:SEARCH_SCHEMAS]:
+        """Every table name this user can see, for name search.
+
+        The walk (catalogs -> schemas -> tables) takes seconds on a real metastore, and Unity Catalog
+        has no name-search endpoint, so it runs once and incrementally into a cache. One cache PER
+        CREDENTIAL: in a deployed app the caller's token is the permission boundary, and a cache
+        filled anonymously at startup showed every user nothing (seen on the deployed app).
+        """
+        await self._ensure_walk(token)
+        return list(self._walk(token).names)
+
+    def _walk(self, token: str | None) -> "_Walk":
+        key = (token or "")[-24:] or "anonymous"
+        found = self._walks.get(key)
+        if found is None or found.at < time.monotonic() - SEARCH_TTL:
+            found = _Walk(key=key, at=time.monotonic())
+            self._walks[key] = found
+            found.task = asyncio.create_task(self._run_walk(token, found))
+        return found
+
+    async def _ensure_walk(self, token: str | None) -> None:
+        """Start the walk if it is not running, and never make the caller wait for all of it."""
+        walk = self._walk(token)
+        try:
+            await asyncio.wait_for(asyncio.shield(walk.task), 0.4)
+        except (TimeoutError, PermissionError, RuntimeError):
+            pass
+
+    async def _run_walk(self, token: str | None, walk: "_Walk") -> None:
+        """One pass over every schema this user can see, a few requests at a time.
+
+        Sequentially this is hundreds of round trips and a search never finishes; eight at a time
+        turns it into a couple of seconds on a real metastore. Names land in `walk.names` as each
+        schema answers, so a search during the walk still finds what has arrived.
+        """
+        try:
+            cats = await self._http.get("/api/2.1/unity-catalog/catalogs", token)
+        except (PermissionError, RuntimeError):
+            walk.done = True
+            return
+        gate = asyncio.Semaphore(SEARCH_CONCURRENCY)
+
+        async def tables_of(cat: str, schema: str) -> list[str]:
+            async with gate:
                 try:
                     t = await self._http.get("/api/2.1/unity-catalog/tables", token, {
-                        "catalog_name": cat, "schema_name": s.get("name", ""), "max_results": 200})
+                        "catalog_name": cat, "schema_name": schema, "max_results": 200})
                 except (PermissionError, RuntimeError):
-                    continue
-                names.extend(tab.get("full_name", "") for tab in t.get("tables", []) if tab.get("full_name"))
-        self._names = (time.monotonic(), tail, names)
-        return names
+                    return []
+                return [tab["full_name"] for tab in t.get("tables", []) if tab.get("full_name")]
+
+        async def schemas_of(cat: str) -> list[tuple[str, str]]:
+            async with gate:
+                try:
+                    s = await self._http.get("/api/2.1/unity-catalog/schemas", token, {"catalog_name": cat})
+                except (PermissionError, RuntimeError):
+                    return []
+                return [(cat, sch["name"]) for sch in s.get("schemas", [])[:SEARCH_SCHEMAS]]
+
+        # Both levels in parallel: catalogs -> schemas must not be a sequential loop, or a workspace
+        # with three catalogs pays three seconds before the first table request is even sent.
+        groups = await asyncio.gather(*(schemas_of(c.get("name", "")) for c in cats.get("catalogs", [])))
+        tasks = [asyncio.create_task(tables_of(c, s)) for group in groups for c, s in group]
+        for done in asyncio.as_completed(tasks):
+            walk.names.extend(await done)
+        walk.done = True
 
     async def find(self, token: str | None, needle: str, limit: int = 8) -> list[dict[str, Any]]:
-        """Tables and columns whose name contains `needle`, best match first, within a time budget."""
+        """Tables whose name contains `needle`, best match first.
+
+        The walk is incremental, so this re-checks the cache while it fills and returns the moment
+        something matches: a search never waits for the whole metastore, and never returns nothing
+        just because the user typed before the cache was warm.
+        """
         q = (needle or "").lower().strip()
         if len(q) < 2:
             return []
-        try:
-            names = await asyncio.wait_for(self.table_names(token), SEARCH_BUDGET)
-        except (TimeoutError, PermissionError, RuntimeError):
-            return []
+        walk = self._walk(token)
+        deadline = time.monotonic() + SEARCH_BUDGET
+        while True:
+            hits = self._score(walk.names, q, limit)
+            if hits or walk.done or time.monotonic() >= deadline:
+                return hits
+            await asyncio.sleep(0.1)
+
+    def _score(self, names: list[str], q: str, limit: int) -> list[dict[str, Any]]:
         scored: list[tuple[float, str]] = []
-        for n in names:
+        for n in list(names):
             low = n.lower()
             leaf = low.rsplit(".", 1)[-1]
             if q in low:
