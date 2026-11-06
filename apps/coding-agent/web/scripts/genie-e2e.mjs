@@ -63,6 +63,10 @@ await step("a folder expands lazily and shows its children", async () => {
   await p.locator('[role="treeitem"][aria-level="2"]').first().waitFor({ timeout: 20000 });
   const kids = await p.locator('[role="treeitem"][aria-level="2"] .tree-name').allInnerTexts();
   ok(kids.length >= 1, "home has no children");
+  const row = p.locator('[role="treeitem"][aria-level="2"]', { hasText: /agent_scratch|coding-agent/ }).first();
+  await row.hover();
+  const href = await row.locator("a.tree-act").getAttribute("href");
+  ok(href && /\/browse\/folders\/\d+|#workspace\//.test(href), `no Databricks link on a folder row: ${href}`);
   await shot("files-home-expanded");
 });
 
@@ -92,6 +96,13 @@ await step("opening a result shows the notebook as highlighted cells", async () 
   ok((await p.locator("pre.code [class^=tk-]").count()) > 0, "no syntax highlighting");
   ok(await p.getByRole("tab", { name: new RegExp(HINT, "i") }).first().isVisible(), "no document tab");
   await shot("notebook-open");
+});
+
+await step("the notebook links to the same object in Databricks", async () => {
+  const link = p.locator(".viewer-actions a", { hasText: /Open in Databricks/ });
+  const href = await link.getAttribute("href");
+  ok(href && /\/editor\/notebooks\/\d+|#workspace\//.test(href), `unexpected link: ${href}`);
+  ok((await link.getAttribute("target")) === "_blank" && /noopener/.test(await link.getAttribute("rel")), "unsafe external link");
 });
 
 await step("the open notebook rides along as context", async () => {
@@ -154,6 +165,12 @@ await step("a finished turn shows time and token use", async () => {
   await p.locator(".turn-foot").first().waitFor({ timeout: 90000 });
   ok(/\d/.test(await p.locator(".turn-foot").first().innerText()), "empty footer");
   await shot("turn-finished");
+});
+
+await step("the session strip links to the working folder in Databricks", async () => {
+  const href = await p.locator(".strip a.ext-link").first().getAttribute("href");
+  ok(href && /#workspace\/Users\//.test(href), `unexpected folder link: ${href}`);
+  await shot("links");
 });
 
 await step("tool cards for notebooks offer to open what the agent touched", async () => {

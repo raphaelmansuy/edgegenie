@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
-import { emptySession, reduce, type AgentEvent, type Attachment, type SessionView } from "../domain/events";
+import { emptySession, newTurn, PENDING, reduce, type AgentEvent, type Attachment, type SessionView } from "../domain/events";
 
 export type Conn = "idle" | "connecting" | "live" | "reconnecting" | "lost";
 
@@ -91,9 +91,17 @@ export function useSessionStream(sessionId: string | null) {
   const send = useCallback(async (text: string, attachments: Attachment[] = []) => {
     if (!sessionId) return;
     setError(null);
+    // Show the user's message at once. Waiting for the server's echo made a slow start look like
+    // nothing had been sent, and people sent the same request twice.
+    const pending = `${PENDING}${Date.now()}`;
+    setSession((s) => ({
+      ...s, status: "streaming",
+      turns: [...s.turns, { ...newTurn(pending, s.turns.length + 1, text, s.model), attachments, status: "running" }],
+    }));
     try {
       await api.send(sessionId, text, `${sessionId}:${Date.now()}`, attachments);
     } catch (e) {
+      setSession((s) => ({ ...s, status: "ready", turns: s.turns.filter((t) => t.id !== pending) }));
       setError(e instanceof ApiError ? e.message : "could not send");
       throw e;
     }

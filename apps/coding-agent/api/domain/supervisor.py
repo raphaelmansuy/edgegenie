@@ -56,6 +56,12 @@ CONTINUE_PROMPT = (
     "work, verify it by running a check, then write your final report."
 )
 
+ACT_PROMPT = (
+    "Your last turn ended with reasoning only: no tool was called and nothing was written. Planning is "
+    "finished. Do not think about it again. Call the tool now (for a notebook: dbx_write_notebook with "
+    "the full path and the cells), then continue."
+)
+
 _BLOCKED_CUES = (
     "cannot continue",
     "cannot proceed",
@@ -74,7 +80,9 @@ def decide(state: State) -> Decision:
 
     if not answer:
         if state.continuations < MAX_CONTINUATIONS:
-            return Decision(Verdict.CONTINUE, CONTINUE_PROMPT)
+            # A model that narrates "let's do that" and stops needs a different instruction than one
+            # that stopped midway: repeating the same prompt got the same empty turn five times.
+            return Decision(Verdict.CONTINUE, ACT_PROMPT if not calls else CONTINUE_PROMPT)
         return Decision(Verdict.BLOCKED, "the agent stopped without an answer", ("no final answer",))
 
     rows = limit_to(state.requirements, dedupe(verify(parse_evidence_block(answer), calls)))

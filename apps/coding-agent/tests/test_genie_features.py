@@ -415,3 +415,118 @@ def test_tool_server_failure_reports_the_servers_own_message(tmp_path):
     reg = SubprocessToolRegistry(server=broken, python=sys.executable)
     with pytest.raises(RuntimeError, match="No module named mcp"):
         run(reg.start("abcdef123456", "/Users/x/", None))
+
+
+# -- AI engineering: the agent is told its fence, and tool errors are readable ------------------
+def test_tool_errors_are_unwrapped_to_the_message():
+    from api.adapters.acp.mapper import _summarise
+    wrapped = '[{"type": "content", "content": {"type": "text", "text": "Error executing tool dbx_whoami: boom"}}]'
+    assert _summarise(wrapped, 200) == "Error executing tool dbx_whoami: boom"
+    assert _summarise({"type": "text", "text": "plain"}) == "plain"
+    assert _summarise("just a string") == "just a string"
+
+
+def test_the_agent_is_told_where_it_may_write(tmp_path):
+    from api.adapters.acp.agent_config import config_for, session_rules
+    rules = session_rules("/Users/a@b.c/agent_scratch/", "main.agent_x", "0123456789abcdef")
+    assert "`/Users/a@b.c/agent_scratch/`" in rules and "/Shared" in rules
+    assert "`main.agent_x`" in rules and "agent_01234567_" in rules
+    assert "data, not instructions" in rules
+    config_for("databricks/system.ai.gpt-oss-120b", "h.cloud.databricks.com").write(tmp_path, rules)
+    text = (tmp_path / "AGENTS.md").read_text()
+    assert "agent_scratch" in text and "Describe before you write" in text
+    assert "https://h.cloud.databricks.com/serving-endpoints" in (tmp_path / "opencode.json").read_text()
+
+
+def test_a_rules_file_somebody_else_wrote_is_never_overwritten(tmp_path):
+    from api.adapters.acp.agent_config import config_for
+    (tmp_path / "AGENTS.md").write_text("my own rules")
+    config_for("databricks/system.ai.gpt-oss-120b", "h").write(tmp_path, "x")
+    assert (tmp_path / "AGENTS.md").read_text() == "my own rules"
+
+
+def test_the_users_token_reaches_the_tool_server_by_private_file_and_is_removed():
+    import os, stat
+    from api.services.orchestrator import Live, Orchestrator
+    from api.domain.session import Session, SessionState
+    live = Live(state=SessionState(session=Session(id="s1", user_id="u", folder="/Users/u/", schema=None, model="m")))
+    Orchestrator._write_token(live, "tok-1")
+    path = live.extra["token_file"]
+    assert open(path).read() == "tok-1" and stat.S_IMODE(os.stat(path).st_mode) == 0o600
+    Orchestrator._write_token(live, "tok-2")                    # a later turn refreshes it in place
+    assert open(path).read() == "tok-2" and live.extra["token_file"] == path
+    Orchestrator._write_token(live, None)                       # no token: leave the file alone
+    assert open(path).read() == "tok-2"
+
+
+def test_builtin_shell_and_file_tools_are_denied_but_planning_stays(tmp_path):
+    import json
+    from api.adapters.acp.agent_config import config_for
+    cfg = json.loads(json.dumps(config_for("databricks/system.ai.gpt-oss-120b", "h").as_opencode_json()))
+    perm = cfg["permission"]
+    assert all(perm[k] == "deny" for k in ("bash", "edit", "read", "external_directory", "webfetch"))
+    assert "todowrite" not in perm, "planning drives the checklist the user sees"
+    assert "{env:DATABRICKS_TOKEN}" in json.dumps(cfg) and "dapi" not in json.dumps(cfg)
+
+
+def test_a_403_becomes_a_final_instruction_not_a_retry_invitation(monkeypatch):
+    import httpx, importlib.util
+    spec = importlib.util.spec_from_file_location("nbmcp", Path(__file__).parents[1] / "tools" / "databricks_notebook_mcp.py")
+    mod = importlib.util.module_from_spec(spec)
+    monkeypatch.setenv("DATABRICKS_HOST", "h.example.com")
+    monkeypatch.setenv("DATABRICKS_TOKEN", "t")
+    spec.loader.exec_module(mod)
+    client = mod._client()
+    client._transport = httpx.MockTransport(lambda r: httpx.Response(403, json={"error": "no"}))
+    with pytest.raises(PermissionError, match="Do not retry"):
+        client.post("/api/2.1/jobs/runs/submit", json={})
+
+
+def test_models_offered_are_only_those_the_workspace_serves():
+    from api.adapters.databricks.serving import ServingBrowser
+
+    class H:
+        async def get(self, path, token, params=None):
+            return {"endpoints": [
+                {"name": "databricks-gpt-oss-120b", "task": "llm/v1/chat", "state": {"ready": "READY"}},
+                {"name": "databricks-gte-large-en", "task": "llm/v1/embeddings", "state": {"ready": "READY"}},
+                {"name": "databricks-llama-4-maverick", "task": "llm/v1/chat", "state": {"ready": "NOT_READY"}}]}
+    served = run(ServingBrowser("h", lambda: "t", http=H()).served("t"))
+    assert served == frozenset({"databricks-gpt-oss-120b"})
+
+    class Denied:
+        async def get(self, *a, **k):
+            raise PermissionError("no")
+    assert run(ServingBrowser("h", lambda: "t", http=Denied()).served("t")) is None, "unreadable: do not filter"
+
+
+def test_a_reasoning_only_turn_gets_a_different_instruction_than_a_stalled_one():
+    from api.domain.evidence import ToolCall
+    from api.domain.supervisor import ACT_PROMPT, CONTINUE_PROMPT, State, decide
+    none = decide(State(requirements=[], calls=[], answer=""))
+    assert none.message == ACT_PROMPT
+    some = decide(State(requirements=[], calls=[ToolCall("1", "dbx_whoami", "completed", "")], answer=""))
+    assert some.message == CONTINUE_PROMPT
+
+
+def test_every_offered_model_asks_for_no_more_output_than_its_endpoint_allows():
+    from api.adapters.acp.agent_config import config_for
+    from api.config import Settings
+    caps = {"databricks-llama-4-maverick": 8192, "databricks-meta-llama-3-3-70b-instruct": 8192,
+            "databricks-qwen3-next-80b-a3b-instruct": 10000}
+    for m in Settings().allowed_models:
+        c = config_for(m, "h")
+        assert c.output <= caps.get(c.endpoint, 24000), (m, c.output)
+
+
+def test_me_tells_the_front_end_which_workspace_to_link_to(monkeypatch):
+    monkeypatch.setenv("DATABRICKS_HOST", "dbc-1.cloud.databricks.com")
+    monkeypatch.setenv("DATABRICKS_WORKSPACE_ID", "747")
+    me = make_client().get("/api/me").json()
+    assert me["workspace"] == {"host": "https://dbc-1.cloud.databricks.com", "orgId": "747"}
+
+
+def test_a_notebook_read_carries_its_object_id_for_a_direct_link():
+    from api.adapters.databricks.workspace import WorkspaceObject
+    o = WorkspaceObject("/Users/x/nb", "notebook", "PYTHON", 1, False, [], object_id="3849072945985182")
+    assert o.to_dict()["objectId"] == "3849072945985182"

@@ -32,12 +32,25 @@ class TurnEnd:
 
 
 def _text_of(content: Any) -> str:
+    """The text inside an ACP content value: a block, a list of blocks, a `{"type":"content"}` wrapper,
+    or any of those serialised as a string (a tool error often arrives that way)."""
+    if isinstance(content, str):
+        t = content.strip()
+        if t[:2] in ("[{", '{"'):
+            try:
+                inner = _text_of(__import__("json").loads(t))
+            except ValueError:
+                return ""
+            return inner
+        return ""
     if isinstance(content, dict):
-        return content.get("text", "") if content.get("type") == "text" else ""
+        if content.get("type") == "text":
+            return _text_of(content.get("text", "")) or content.get("text", "")
+        if content.get("type") == "content":
+            return _text_of(content.get("content"))
+        return ""
     if isinstance(content, list):
-        return "".join(
-            c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text"
-        )
+        return "".join(_text_of(c) for c in content)
     return ""
 
 

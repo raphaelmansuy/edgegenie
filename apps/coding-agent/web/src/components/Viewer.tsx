@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, type TableInfo, type WsObject } from "../api/client";
 import { ACTIONS, ACTIONS_FOR, type Action, type Doc } from "../domain/docs";
 import { tokenize } from "../domain/highlight";
+import { ExtLink } from "./ExtLink";
 import { Markdown } from "./Markdown";
 
 export function Code({ text, language }: { text: string; language: string }) {
@@ -36,8 +37,8 @@ export interface ViewerActions {
   onAttach: (doc: Doc) => void;
 }
 
-function Head({ doc, subtitle, badge, actions, busy, reload }: {
-  doc: Doc; subtitle: string; badge?: string; actions: ViewerActions; busy: boolean; reload: () => void;
+function Head({ doc, subtitle, badge, actions, busy, reload, objectId }: {
+  doc: Doc; subtitle: string; badge?: string; actions: ViewerActions; busy: boolean; reload: () => void; objectId?: string;
 }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -52,6 +53,8 @@ function Head({ doc, subtitle, badge, actions, busy, reload }: {
       }}>{copied ? "copied" : subtitle}</button>
       <div className="viewer-actions" role="toolbar" aria-label="Ask the agent about this">
         <button className="btn" onClick={() => actions.onAttach(doc)}>＠ Add to chat</button>
+        <ExtLink className="btn" label={`Open ${doc.name} in Databricks`}
+          target={{ kind: doc.kind, ref: doc.ref, objectId }}>Open in Databricks ↗</ExtLink>
         {ACTIONS_FOR[doc.kind].map((a) => (
           <button key={a} className="btn" onClick={() => actions.onAsk(a, doc)}>{ACTIONS[a].label}</button>
         ))}
@@ -65,7 +68,7 @@ export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActi
   const isFile = data?.kind === "file";
   return (
     <section className="viewer" aria-label={`${doc.name} viewer`}>
-      <Head doc={doc} busy={loading} reload={reload} actions={actions}
+      <Head doc={doc} busy={loading} reload={reload} actions={actions} objectId={data?.objectId}
         subtitle={doc.ref} badge={data?.language ? data.language.toLowerCase() : undefined} />
       <div className="viewer-body">
         {loading && !data && <p className="viewer-note"><span className="spin" /> opening…</p>}

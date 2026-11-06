@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .adapters.acp.runtime import AcpAgentRuntime
 from .adapters.databricks.catalog import CatalogBrowser
+from .adapters.databricks.serving import ServingBrowser
 from .adapters.databricks.workspace import WorkspaceBrowser
 from .adapters.mcp.registry import NullToolRegistry, SubprocessToolRegistry
 from .adapters.memory.store import MemoryEventStore
@@ -81,6 +82,10 @@ def build(settings: Settings | None = None) -> FastAPI:
         lambda: os.environ.get("DATABRICKS_TOKEN") or None,
     )
     app.state.catalog = CatalogBrowser(
+        os.environ.get("DATABRICKS_HOST", ""),
+        lambda: os.environ.get("DATABRICKS_TOKEN") or None,
+    )
+    app.state.serving = ServingBrowser(
         os.environ.get("DATABRICKS_HOST", ""),
         lambda: os.environ.get("DATABRICKS_TOKEN") or None,
     )

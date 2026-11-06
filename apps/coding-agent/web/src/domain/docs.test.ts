@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ACTIONS, ACTIONS_FOR, docForNode, makeDoc, touched } from "./docs";
 import { tokenize } from "./highlight";
-import { reduce, emptySession } from "./events";
+import { reduce, emptySession, newTurn, PENDING } from "./events";
 
 describe("highlight", () => {
   const samples: [string, string][] = [
@@ -77,5 +77,14 @@ describe("reducer: plan and attachments", () => {
     s = reduce(s, { seq: 3, sessionId: "s", type: "plan.updated", turnId: "t",
       entries: [{ content: "a", status: "completed" }, { content: "b", status: "in_progress" }] });
     expect(s.turns[0].plan?.map((p) => p.status)).toEqual(["completed", "in_progress"]);
+  });
+});
+
+describe("optimistic turns", () => {
+  it("the server's turn replaces the one shown at once, so the message appears once", () => {
+    const s = { ...emptySession(), turns: [{ ...newTurn(`${PENDING}1`, 1, "hello"), status: "running" as const }] };
+    const next = reduce(s, { type: "turn.started", turnId: "t1", text: "hello", sessionId: "x", seq: 1 } as never);
+    expect(next.turns.map((t) => t.id)).toEqual(["t1"]);
+    expect(next.turns[0].prompt).toBe("hello");
   });
 });

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -38,7 +39,7 @@ from ..domain.session import (
     TurnStatus,
     updated,
 )
-from ..adapters.acp.agent_config import config_for
+from ..adapters.acp.agent_config import config_for, session_rules
 from ..ports import AgentRuntime, RuntimeHandle, SessionSpec, ToolRegistry
 
 MAX_TURNS = 200
@@ -158,12 +159,16 @@ class Orchestrator:
 
         # 1. The agent needs a provider config and its working rules, or it starts and never answers.
         try:
-            config_for(s.model, os.environ.get("DATABRICKS_HOST", "")).write(cwd)
+            config_for(s.model, os.environ.get("DATABRICKS_HOST", "")).write(
+                cwd, session_rules(live.workspace_folder, s.schema, s.id))
         except OSError:
             pass  # a read-only cwd is not fatal; the agent will report the failure
 
-        # 2. The tool server, fenced to the workspace folder the user chose.
-        live.mcp_url = await self._tools.start(s.id, live.workspace_folder, s.schema)
+        # 2. The tool server, fenced to the workspace folder the user chose. It reads the user's
+        #    token from a private file (not the agent's cwd) that every turn refreshes.
+        self._write_token(live, live.extra.get("user_token") or os.environ.get("DATABRICKS_TOKEN", ""))
+        live.mcp_url = await self._tools.start(s.id, live.workspace_folder, s.schema,
+                                               live.extra.get("token_file"))
         live.tools = TOOL_COUNT_CORE if live.mcp_url else 0
 
         # 3. The agent process itself. It authenticates as the USER: the forwarded token is the only
@@ -182,6 +187,20 @@ class Orchestrator:
         await self._store.append(
             session_ready(s.id, live.tools, live.handle.capabilities.agent,
                           live.handle.capabilities.version, live.handle.capabilities.raw))
+
+    @staticmethod
+    def _write_token(live: Live, token: str | None) -> None:
+        """Keep the tool server's credential current. A forwarded user token lasts about an hour."""
+        if not token:
+            return
+        path = live.extra.get("token_file")
+        if not path:
+            folder = tempfile.mkdtemp(prefix="nbmcp-")        # mode 0700
+            path = os.path.join(folder, "token")
+            live.extra["token_file"] = path
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(token)
 
     async def model_options(self, session_id: str) -> dict:
         live = self.get(session_id)
@@ -215,6 +234,9 @@ class Orchestrator:
         if live.handle:
             await self._rt.close(live.handle)
         await self._tools.stop(session_id)
+        token_file = live.extra.get("token_file")
+        if token_file:       # only ever our own mkdtemp folder; never derive a path from nothing
+            shutil.rmtree(os.path.dirname(token_file), ignore_errors=True)
         await self._store.append(Event(session_id, "session.archived", {}))
 
     async def cancel(self, session_id: str) -> None:
@@ -225,12 +247,13 @@ class Orchestrator:
 
     # -- turns ----------------------------------------------------------------
     async def submit(self, session_id: str, text: str, context: str = "",
-                     attachments: list[dict] | None = None) -> Turn:
+                     attachments: list[dict] | None = None, user_token: str | None = None) -> Turn:
         live = self.get(session_id)
         if live.state.session.status is SessionStatus.ARCHIVED:
             raise DomainError("this session is archived")
         if len(live.state.turns) >= MAX_TURNS:
             raise DomainError(f"this session reached its limit of {MAX_TURNS} turns")
+        self._write_token(live, user_token)
         running = live.state.running()
         text = DEMO_MARKER.sub(" ", text).strip()     # never store a demo hint as the user's words
         turn = live.state.new_turn(text, context)

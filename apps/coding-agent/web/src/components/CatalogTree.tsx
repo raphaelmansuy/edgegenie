@@ -1,7 +1,9 @@
 /** Unity Catalog tree: catalogs, schemas, tables. Opens a table viewer; "@" attaches it. */
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { api, type CatalogItem } from "../api/client";
 import type { Attachment } from "../domain/events";
+import { workspaceUrl } from "../domain/links";
+import { WorkspaceLinks } from "./DocContext";
 import { focusFirstChild, focusParent, TreeRow, treeKeys } from "./Tree";
 
 function Row({ item, depth, onOpenTable, onAttach, selected }: {
@@ -14,6 +16,7 @@ function Row({ item, depth, onOpenTable, onAttach, selected }: {
   const [err, setErr] = useState("");
   const container = item.kind !== "table";
   const [catalog, schema] = item.ref.split(".");
+  const tableUrl = workspaceUrl(useContext(WorkspaceLinks), { kind: "table", ref: item.ref });
 
   const toggle = async () => {
     if (!container) return;
@@ -35,7 +38,8 @@ function Row({ item, depth, onOpenTable, onAttach, selected }: {
         caret={container} icon={item.kind} iconClass={`kind-${item.kind}`}
         name={item.name} title={item.comment ? `${item.ref}\n${item.comment}` : item.ref}
         actions={item.kind === "table"
-          ? [{ label: `Attach table ${item.name}`, glyph: "@", run: () => onAttach({ kind: "table", ref: item.ref, name: item.ref }) }]
+          ? [{ label: `Attach table ${item.name}`, glyph: "@", run: () => onAttach({ kind: "table", ref: item.ref, name: item.ref }) },
+             ...(tableUrl ? [{ label: `Open ${item.name} in Databricks`, glyph: "↗", href: tableUrl }] : [])]
           : undefined}
         onActivate={() => (container ? void toggle() : onOpenTable(item.ref))}
         onKeyDown={(e) => {

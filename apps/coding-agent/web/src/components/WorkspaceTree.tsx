@@ -8,9 +8,11 @@
  *  - opening a notebook shows its cells; "@" attaches it to the next message;
  *  - the tree refreshes itself when the agent writes something, keeping what you had open.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api, type WsHit } from "../api/client";
 import type { Attachment } from "../domain/events";
+import { workspaceUrl } from "../domain/links";
+import { WorkspaceLinks } from "./DocContext";
 import { Icon } from "./Icons";
 import { focusFirstChild, focusParent, TreeRow, treeKeys, type RowAction } from "./Tree";
 
@@ -78,11 +80,16 @@ function Row({ node, depth, sh }: { node: WsNode; depth: number; sh: Shared }) {
     if (!kids && !loading) await load();
   };
 
+  const ws = useContext(WorkspaceLinks);
+  const link = workspaceUrl(ws, { kind: node.kind, ref: node.path, objectId: node.objectId });
+  const openIn: RowAction[] = link ? [{ label: `Open ${node.name} in Databricks`, glyph: "↗", href: link }] : [];
   const actions: RowAction[] = folder
     ? [{ label: `Work in ${node.name}`, glyph: "⌂", run: () => sh.onUseFolder(node.path) },
-       { label: `Attach folder ${node.name}`, glyph: "@", run: () => sh.onAttach({ kind: "folder", ref: node.path, name: node.name }) }]
+       { label: `Attach folder ${node.name}`, glyph: "@", run: () => sh.onAttach({ kind: "folder", ref: node.path, name: node.name }) },
+       ...openIn]
     : [{ label: `Attach ${node.name}`, glyph: "@",
-         run: () => sh.onAttach({ kind: node.kind === "notebook" ? "notebook" : "file", ref: node.path, name: node.name }) }];
+         run: () => sh.onAttach({ kind: node.kind === "notebook" ? "notebook" : "file", ref: node.path, name: node.name }) },
+       ...openIn];
 
   return (
     <>

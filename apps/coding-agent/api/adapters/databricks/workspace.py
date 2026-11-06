@@ -67,9 +67,10 @@ class WorkspaceObject:
     truncated: bool
     cells: list[nb.Cell]
     text: str = ""
+    object_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {"path": self.path, "name": self.path.rsplit("/", 1)[-1], "kind": self.kind,
+        return {"objectId": self.object_id, "path": self.path, "name": self.path.rsplit("/", 1)[-1], "kind": self.kind,
                 "language": self.language, "size": self.size, "truncated": self.truncated,
                 "cells": [c.to_dict() for c in self.cells], "text": self.text}
 
@@ -135,9 +136,11 @@ class WorkspaceBrowser:
         truncated = len(raw) > MAX_READ_BYTES
         text = raw[:MAX_READ_BYTES].decode("utf-8", "replace")
         language = str(status.get("language") or "").upper()
+        oid = str(status.get("object_id") or "")
         if kind == "notebook":
-            return WorkspaceObject(path, kind, language, size, truncated, nb.parse_source(text, language))
-        return WorkspaceObject(path, kind, language, size, truncated, [], text)
+            return WorkspaceObject(path, kind, language, size, truncated, nb.parse_source(text, language),
+                                   object_id=oid)
+        return WorkspaceObject(path, kind, language, size, truncated, [], text, oid)
 
     # -- searching -------------------------------------------------------------------------
     async def search(self, root: str, query: str, token: str | None) -> tuple[list[Node], bool]:

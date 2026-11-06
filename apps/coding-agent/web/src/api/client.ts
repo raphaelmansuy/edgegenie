@@ -9,6 +9,7 @@ export interface SessionSummary {
 
 export interface Cell { index: number; kind: "code" | "markdown"; language: string; source: string; truncated: boolean }
 export interface WsObject {
+  objectId?: string;
   path: string; name: string; kind: "notebook" | "file"; language: string; size: number;
   truncated: boolean; cells: Cell[]; text: string;
 }
@@ -48,7 +49,7 @@ export const api = {
       headers: { ...json, "Idempotency-Key": key },
       // references only: the server reads the content with the user's own token
       body: JSON.stringify({ text, attachments: attachments.map(({ kind, ref }) => ({ kind, ref })) }) }),
-  me: () => call<{ user: string; scratch: string; demo: boolean }>("/api/me"),
+  me: () => call<{ user: string; scratch: string; demo: boolean; workspace?: { host: string; orgId?: string } }>("/api/me"),
   object: (path: string) => call<WsObject>(`/api/workspace/object?path=${encodeURIComponent(path)}`),
   search: (q: string, path?: string) =>
     call<{ root: string; complete: boolean; results: WsHit[] }>(

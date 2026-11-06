@@ -26,3 +26,25 @@ describe("Markdown", () => {
     expect(container.querySelector("pre code")?.textContent).toBe("select 1");
   });
 });
+
+import { WorkspaceLinks } from "./DocContext";
+describe("Markdown links into the workspace", () => {
+  const ws = { host: "https://dbc-1.cloud.databricks.com" };
+  it("turns a workspace path, in prose or in code, into a link", () => {
+    const { container } = render(
+      <WorkspaceLinks.Provider value={ws}>
+        <Markdown text={"Wrote /Users/a@b.c/agent_scratch/hello_world. Also `/Shared/x`."} />
+      </WorkspaceLinks.Provider>);
+    const hrefs = Array.from(container.querySelectorAll("a.path-link")).map((a) => a.getAttribute("href"));
+    expect(hrefs).toEqual([
+      "https://dbc-1.cloud.databricks.com/#workspace/Users/a%40b.c/agent_scratch/hello_world",
+      "https://dbc-1.cloud.databricks.com/#workspace/Shared/x",
+    ]);
+    expect(container.querySelector("a.path-link")?.getAttribute("rel")).toContain("noopener");
+  });
+  it("adds no links without a workspace, and still shows the path", () => {
+    const { container } = render(<Markdown text={"Wrote /Users/a/x"} />);
+    expect(container.querySelectorAll("a").length).toBe(0);
+    expect(container.textContent).toContain("/Users/a/x");
+  });
+});

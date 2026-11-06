@@ -43,7 +43,8 @@ class SubprocessToolRegistry:
         self._stderr: str = ""
         self._logs: dict[str, str] = {}
 
-    async def start(self, session_id: str, folder: str, schema: str | None) -> str:
+    async def start(self, session_id: str, folder: str, schema: str | None,
+                    token_file: str | None = None) -> str:
         port = free_port()
         env = {
             **os.environ,
@@ -57,6 +58,8 @@ class SubprocessToolRegistry:
             "NBMCP_WRITE_JOB_PREFIX": f"agent_{session_id[:8]}_",
             "NBMCP_WRITE_INSTANCE_PREFIX": f"agent-{session_id[:8]}-",
             "NBMCP_SKILLS_DIR": str(self._server.parent / "skills"),
+            # Where the server reads the user's current token; never the agent's working folder.
+            **({"NBMCP_TOKEN_FILE": token_file} if token_file else {}),
         }
         # stderr goes to a file, not a pipe nobody reads and not /dev/null: when the server cannot
         # start, its own message is the only useful diagnostic, and a full pipe would block it.
@@ -116,7 +119,8 @@ class SubprocessToolRegistry:
 class NullToolRegistry:
     """Demo mode: no tool server. The advertised count is 0 and the UI says writes are off."""
 
-    async def start(self, session_id: str, folder: str, schema: str | None) -> str:
+    async def start(self, session_id: str, folder: str, schema: str | None,
+                    token_file: str | None = None) -> str:
         return ""
 
     async def health(self, url: str) -> int:

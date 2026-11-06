@@ -27,10 +27,15 @@ class Settings(BaseSettings):
     tool_server_python: str = "python3"
 
     # models
-    default_model: str = "databricks/system.ai.gpt-oss-120b"
+    # Chosen by running the same tasks on every served model (specs 001/18): the non-reasoning
+    # models call tools reliably; gpt-oss-120b often ended a turn after reasoning with no tool call.
+    default_model: str = "databricks/databricks-llama-4-maverick"
     allowed_models: list[str] = Field(
         default_factory=lambda: [
+            "databricks/databricks-llama-4-maverick",
             "databricks/system.ai.gpt-oss-120b",
+            "databricks/system.ai.qwen3-next-80b-a3b-instruct",
+            "databricks/databricks-meta-llama-3-3-70b-instruct",
             "databricks/databricks-claude-sonnet-4-5",
         ]
     )

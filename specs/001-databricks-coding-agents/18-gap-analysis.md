@@ -1,7 +1,7 @@
 # 18 · Gap analysis: Genie Code class assistant
 
 Verified on the deployed app with the real agent (OpenCode 1.19.5, 19 tools):
-13/13 end-to-end steps pass; screenshots in `e2e/screenshots/genie-deployed/`.
+15/15 end-to-end steps pass; screenshots in `e2e/screenshots/genie-deployed/`.
 
 ## Gaps found and closed
 
@@ -32,7 +32,31 @@ User authorization scopes the app needs:
 ([docs](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/auth)).
 Set with `databricks apps update coding-agent --json '{"user_api_scopes":[...]}'`.
 
+## Second round: agent quality and links (found by using the deployed app)
+
+| Symptom | Root cause | Fix |
+|---|---|---|
+| Agent: "set DATABRICKS_HOST and DATABRICKS_TOKEN", then gave up | The tool server never received the user's token; a deployed app has no PAT | The user's forwarded token goes to the tool server through a private 0600 file, refreshed every turn, removed on archive. Never in the agent's working folder |
+| Agent tried to write to `/Shared` | Nobody told it where it may write | Per-session rules in `AGENTS.md`: working folder, schema, name prefixes, what to do on refusal |
+| Four identical retries of a failing call | A 403 reached the model as an httpx trace | The tool server turns 401/403 into "permission denied ... do not retry"; the rules say a refusal is final |
+| Turn hung on a built-in `read` | opencode's own file and shell tools wait for a human and touch the container, not the workspace | Built-ins denied (least privilege); planning stays on |
+| `gpt-oss-120b` ended turns after reasoning with no tool call, five times | Reasoning-only completions; the same continue prompt gave the same result | Continue prompt differs when no tool was called. Same task on every served model: Llama 4 Maverick, Qwen3-Next and Llama 3.3 all completed; **Maverick** was fastest and best (2.9 s explain, describe then write). Now the default |
+| Llama and Qwen failed at once: "max_tokens 24000 cannot exceed 8192" | One output limit for every model | Per-endpoint limits |
+| The model list offered Claude, which this workspace does not serve | Static allow-list | `/api/models` intersects with the workspace's ready chat endpoints |
+| Error list showed raw `[{"type":"content",...}]` | Serialised ACP blocks | Unwrapped to the message |
+| Message did not appear until the server echoed it | Waited for the event | Shown at once, replaced by the server's turn |
+| Files footer overlapped the tree | Scroll container and footer shared a box | Tree scrolls, footer is fixed |
+
+**Links into Databricks** (from the tree, viewer, tool cards, the session strip and any workspace path in
+an answer): a notebook goes to `/editor/notebooks/<id>`, a file to `/editor/files/<id>`, a folder to
+`/browse/folders/<id>`, a table to `/explore/data/<c>/<s>/<t>`. Without an id the link uses
+`/#workspace/<path>`, which needs no lookup. All open in a new tab with `noopener`.
+
 ## Residual gaps (not done)
+
+- **Running notebooks.** Jobs are not an Apps user scope, so `run notebook` is refused. The agent now
+  reports the notebook as written, not executed. Options: a service-principal run path (a design
+  decision, because it runs as the app, not the user), or SQL-only execution.
 
 - **Jobs, pipelines, clusters under the user's identity.** No supported Apps scope covers them, so the
   tool server's job and pipeline tools may be refused with the user's token. Not tested end to end.

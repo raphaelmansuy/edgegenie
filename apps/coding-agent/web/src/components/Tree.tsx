@@ -2,7 +2,7 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import { Icon } from "./Icons";
 
-export interface RowAction { label: string; glyph: string; run: () => void }
+export interface RowAction { label: string; glyph: string; run?: () => void; href?: string | null }
 
 export function TreeRow({ depth, role = "treeitem", expanded, selected, loading, caret, icon, iconClass, dim, name, title,
   badge, actions, onActivate, onKeyDown }: {
@@ -33,10 +33,13 @@ export function TreeRow({ depth, role = "treeitem", expanded, selected, loading,
       {loading && <span className="spin" role="status" aria-label="loading" />}
       {actions && (
         <span className="tree-actions">
-          {actions.map((a) => (
+          {actions.map((a) => a.href ? (
+            <a key={a.label} className="tree-act" href={a.href} target="_blank" rel="noopener noreferrer"
+              title={a.label} aria-label={a.label} onClick={(e) => e.stopPropagation()}>{a.glyph}</a>
+          ) : a.run ? (
             <button key={a.label} className="tree-act" title={a.label} aria-label={a.label}
-              onClick={(e) => { e.stopPropagation(); a.run(); }}>{a.glyph}</button>
-          ))}
+              onClick={(e) => { e.stopPropagation(); a.run?.(); }}>{a.glyph}</button>
+          ) : null)}
         </span>
       )}
     </div>

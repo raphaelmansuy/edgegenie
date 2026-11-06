@@ -3,6 +3,7 @@ import { useContext, useState } from "react";
 import type { Turn } from "../domain/events";
 import { touched } from "../domain/docs";
 import { OpenDoc } from "./DocContext";
+import { ExtLink } from "./ExtLink";
 import { Chip } from "./Composer";
 import { Markdown } from "./Markdown";
 
@@ -31,8 +32,12 @@ export function ToolCard({ name, args, status, seconds, summary, error }: {
       {hit && state === "completed" && (
         <button className="tool-open" onClick={() => openDoc(hit.doc)}
           title={`${hit.mutates ? "Open what the agent wrote" : "Open"}: ${hit.doc.ref}`}>
-          {hit.mutates ? "Open result" : "Open"} ↗
+          {hit.mutates ? "Open result" : "Open"}
         </button>
+      )}
+      {hit && state === "completed" && (
+        <ExtLink className="tool-open ext" label={`Open ${hit.doc.name} in Databricks`}
+          target={{ kind: hit.doc.kind, ref: hit.doc.ref }}>Databricks ↗</ExtLink>
       )}
       <button className="tool-row" onClick={() => setOpen((o) => !o)}
         aria-expanded={open} aria-label={`${label(name)} ${state}`}>

@@ -10,7 +10,9 @@ import { api, type ModelOption, type SessionSummary } from "./api/client";
 import { ApprovalSheet, EmptyState, Inspector } from "./components/Chrome";
 import { CatalogTree } from "./components/CatalogTree";
 import { Composer } from "./components/Composer";
-import { OpenDoc } from "./components/DocContext";
+import { OpenDoc, WorkspaceLinks } from "./components/DocContext";
+import { ExtLink } from "./components/ExtLink";
+import type { Workspace } from "./domain/links";
 import { TurnView } from "./components/Transcript";
 import { NotebookViewer, TableViewer } from "./components/Viewer";
 import { WorkspaceTree } from "./components/WorkspaceTree";
@@ -31,6 +33,7 @@ export function App() {
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
   const [scratch, setScratch] = useState("");
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [demo, setDemo] = useState(false);
   const [active, setActive] = useState<string | null>(null);
   const [folder, setFolder] = useState("");
@@ -48,11 +51,12 @@ export function App() {
   // stable identity: this is called from a mount effect, so it must not change per render
   const refresh = useCallback(async () => {
     const [s, m, me] = await Promise.all([
-      api.sessions(), api.models(), api.me().catch(() => ({ scratch: "", demo: false, user: "" }))]);
+      api.sessions(), api.models(), api.me().catch(() => ({ scratch: "", demo: false, user: "", workspace: undefined }))]);
     setSessions(s.sessions);
     setModels(m.available);
     setDefaultModel(m.default);
     setScratch(me.scratch ?? "");
+    setWorkspace(me.workspace?.host ? me.workspace : null);
     setDemo(Boolean(me.demo));
   }, []);
 
@@ -137,6 +141,7 @@ export function App() {
   const viewerActions = { onAsk: ask, onAttach: (d: Doc) => addContext(asAttachment(d)) };
 
   return (
+    <WorkspaceLinks.Provider value={workspace}>
     <OpenDoc.Provider value={openDoc}>
       <div className="app">
         <header className="topbar">
@@ -244,6 +249,7 @@ export function App() {
                   <span>{session.tools > 0 ? `${session.tools} tools available` : "no tool server"}</span>
                   <span>·</span>
                   <span title="The agent can write only here">{session.folder}</span>
+                  <ExtLink target={{ kind: "directory", ref: session.folder }} label="Open the working folder in Databricks" />
                   {error && <span style={{ color: "var(--pink-700)", marginLeft: "auto" }}>{error}</span>}
                 </div>
                 <div className="transcript" aria-live="polite" aria-busy={busy}>
@@ -279,5 +285,6 @@ export function App() {
         )}
       </div>
     </OpenDoc.Provider>
+    </WorkspaceLinks.Provider>
   );
 }

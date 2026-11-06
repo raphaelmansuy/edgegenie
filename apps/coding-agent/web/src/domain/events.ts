@@ -104,7 +104,7 @@ export const emptySession = (id = ""): SessionView => ({
   tools: 0, agent: "", agentVersion: "", turns: [], approvals: [],
 });
 
-const newTurn = (id: string, index: number, prompt = "", model = ""): Turn => ({
+export const newTurn = (id: string, index: number, prompt = "", model = ""): Turn => ({
   id, index, prompt, model, status: "running", thought: "", answer: "", tools: [],
   evidence: [], auditPasses: 0,
 });
@@ -119,6 +119,9 @@ const patchTurn = (s: SessionView, turnId: string | null | undefined, fn: (t: Tu
 };
 
 /** Pure reducer. Unknown events are ignored (a newer server must not break an older tab). */
+/** Id prefix of a turn shown before the server has confirmed it. */
+export const PENDING = "pending:";
+
 export function reduce(state: SessionView, e: AgentEvent): SessionView {
   const s = state.turns ? state : { ...state, turns: [], approvals: state.approvals ?? [] };
   switch (e.type) {
@@ -134,9 +137,11 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
       return { ...s, status: "archived" };
     case "turn.started": {
       const id = String(e.turnId);
-      const next = newTurn(id, s.turns.length + 1, String(e.text ?? ""), String(e.model ?? s.model));
+      // the optimistic copy the composer showed at once is replaced by the server's turn
+      const settled = s.turns.filter((t) => !t.id.startsWith(PENDING));
+      const next = newTurn(id, settled.length + 1, String(e.text ?? ""), String(e.model ?? s.model));
       return { ...s, status: "streaming",
-        turns: [...s.turns, { ...next, attachments: (e.attachments as Attachment[] | undefined) ?? [],
+        turns: [...settled, { ...next, attachments: (e.attachments as Attachment[] | undefined) ?? [],
           status: "queued" === e.status ? "queued" : "running" }] };
     }
     case "turn.queued":

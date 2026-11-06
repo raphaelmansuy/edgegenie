@@ -92,12 +92,38 @@ def tool():
 # --------------------------------------------------------------------------
 # plumbing
 # --------------------------------------------------------------------------
+def _token() -> str:
+    """The credential, read at call time. A host app that acts for a user rewrites this file with
+    the user's current token (they expire in about an hour); a plain PAT in the environment works too."""
+    path = os.environ.get("NBMCP_TOKEN_FILE", "")
+    if path:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                return fh.read().strip()
+        except OSError:
+            return ""
+    return TOKEN
+
+
 def _client() -> httpx.Client:
-    if not HOST or not TOKEN:
-        raise RuntimeError("set DATABRICKS_HOST and DATABRICKS_TOKEN")
+    token = _token()
+    if not HOST or not token:
+        raise RuntimeError(
+            "the workspace connection is not available to this tool server: "
+            "this is an app configuration problem, not something to retry or work around")
+    def _refuse(response: httpx.Response) -> None:
+        # A 401/403 will not change on retry. Say so, in words the model acts on, instead of an
+        # httpx traceback it answers with another attempt.
+        if response.status_code in (401, 403):
+            raise PermissionError(
+                f"permission denied by the workspace for {response.request.method} "
+                f"{response.request.url.path}. The signed-in user or this app's authorization does not "
+                "allow it. Do not retry; use another tool or report it.")
+
     return httpx.Client(
+        event_hooks={"response": [_refuse]},
         base_url=HOST,
-        headers={"Authorization": f"Bearer {TOKEN}"},
+        headers={"Authorization": f"Bearer {token}"},
         timeout=120.0,
     )
 

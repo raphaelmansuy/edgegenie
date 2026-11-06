@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from contextlib import contextmanager
 from collections.abc import AsyncIterator
 from typing import Any
@@ -12,6 +13,8 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from ..adapters.acp.agent_config import config_for
+from ..adapters.databricks.http import normalize_host
 from ..domain import context as ctx
 from ..domain.session import DomainError, Session
 from ..services import context as ctx_service
@@ -79,15 +82,19 @@ async def whoami(request: Request) -> dict:
     """The signed-in user and the folder this app suggests as scratch space."""
     user = _user(request)
     return {"user": user, "home": _home(request), "scratch": f"{_home(request)}/agent_scratch",
+            "workspace": {"host": normalize_host(os.environ.get("DATABRICKS_HOST")),
+                          "orgId": os.environ.get("DATABRICKS_WORKSPACE_ID", "")},
             "demo": request.app.state.settings.agent_mode == "fake"}
 
 
 @router.get("/models")
 async def models(request: Request) -> dict:
-    return {
-        "available": request.app.state.models.allowed(_user(request)),
-        "default": request.app.state.settings.default_model,
-    }
+    allowed = request.app.state.models.allowed(_user(request))
+    # Offer only what the workspace serves; if that cannot be read, offer the allow-list unfiltered.
+    served = await request.app.state.serving.served(_user_token(request))
+    if served is not None:
+        allowed = [m for m in allowed if config_for(m["id"], "").endpoint in served] or allowed
+    return {"available": allowed, "default": request.app.state.settings.default_model}
 
 
 @router.get("/sessions")
@@ -181,7 +188,8 @@ async def send_message(
     resolved = await ctx_service.resolve(items, _browser(request), request.app.state.catalog,
                                          _user_token(request))
     try:
-        turn = await orch.submit(sid, body.text, ctx.render(resolved), [a.to_dict() for a in items])
+        turn = await orch.submit(sid, body.text, ctx.render(resolved), [a.to_dict() for a in items],
+                                user_token=_user_token(request))
     except KeyError:
         raise HTTPException(404, "no such session") from None
     except DomainError as exc:

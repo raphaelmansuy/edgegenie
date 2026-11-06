@@ -14,6 +14,6 @@ env:
   - name: APP_REQUIRE_FORWARDED_USER
     value: "true"
   - name: APP_DEFAULT_MODEL
-    value: databricks/system.ai.gpt-oss-120b
+    value: databricks/databricks-llama-4-maverick
   - name: APP_MAX_CONCURRENT_AGENTS
     value: "4"
