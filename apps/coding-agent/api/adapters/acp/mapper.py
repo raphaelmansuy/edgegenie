@@ -17,6 +17,7 @@ from ...domain.events import (
     Event,
     approval_requested,
     message,
+    plan_updated,
     thought,
     tool_started,
     tool_updated,
@@ -108,6 +109,14 @@ def from_update(sid: str, tid: str | None, update: dict) -> list[Event]:
                 args,
             )
         ]
+    if kind == "plan":
+        # ACP: {"entries": [{"content", "priority", "status": pending|in_progress|completed}]}.
+        entries = [
+            {"content": str(e.get("content", ""))[:200], "status": str(e.get("status", "pending")),
+             "priority": str(e.get("priority", "medium"))}
+            for e in update.get("entries") or [] if isinstance(e, dict) and e.get("content")
+        ]
+        return [plan_updated(sid, tid or "", entries)] if entries else []
     if kind == "usage_update":
         u = update.get("usage") or {}
         return [usage_updated(sid, tid or "", u)] if u else []

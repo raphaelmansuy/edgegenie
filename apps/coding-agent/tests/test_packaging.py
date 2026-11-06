@@ -72,3 +72,18 @@ def test_the_agent_is_a_declared_dependency():
                                   "package.json", "scripts/prepare-app.sh"])
 def test_files_the_runtime_needs_are_present(path):
     assert (APP / path).exists(), f"{path} is needed by the deployed app"
+
+
+def test_no_python_source_looks_like_a_databricks_notebook():
+    """A line that starts with the notebook header turns the file into a notebook when the app is
+    deployed: the ".py" is dropped and the import fails at boot. This took the app down once."""
+    import re
+
+    header = re.compile(r"^\s*(?:#|--|//)\s*Databricks notebook source", re.M)
+    root = Path(__file__).resolve().parents[1]
+    offenders = [
+        str(p.relative_to(root))
+        for p in root.rglob("*.py")
+        if ".venv" not in p.parts and "node_modules" not in p.parts and header.search(p.read_text("utf-8"))
+    ]
+    assert not offenders, f"these would deploy as notebooks, not modules: {offenders}"

@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
-import { emptySession, reduce, type AgentEvent, type SessionView } from "../domain/events";
+import { emptySession, reduce, type AgentEvent, type Attachment, type SessionView } from "../domain/events";
 
 export type Conn = "idle" | "connecting" | "live" | "reconnecting" | "lost";
 
@@ -88,11 +88,11 @@ export function useSessionStream(sessionId: string | null) {
     };
   }, [sessionId]);
 
-  const send = useCallback(async (text: string) => {
+  const send = useCallback(async (text: string, attachments: Attachment[] = []) => {
     if (!sessionId) return;
     setError(null);
     try {
-      await api.send(sessionId, text, `${sessionId}:${Date.now()}`);
+      await api.send(sessionId, text, `${sessionId}:${Date.now()}`, attachments);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "could not send");
       throw e;

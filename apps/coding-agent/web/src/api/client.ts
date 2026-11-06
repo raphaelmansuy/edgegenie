@@ -1,10 +1,22 @@
 /** Typed API client. One place that knows the HTTP surface. */
-import type { SessionView } from "../domain/events";
+import type { Attachment, SessionView } from "../domain/events";
 
 const json = { "Content-Type": "application/json" };
 
 export interface SessionSummary {
   id: string; title: string; folder: string; model: string; status: string; tools: number;
+}
+
+export interface Cell { index: number; kind: "code" | "markdown"; language: string; source: string; truncated: boolean }
+export interface WsObject {
+  path: string; name: string; kind: "notebook" | "file"; language: string; size: number;
+  truncated: boolean; cells: Cell[]; text: string;
+}
+export interface WsHit { path: string; name: string; kind: string; language?: string }
+export interface CatalogItem { kind: "catalog" | "schema" | "table"; name: string; ref: string; tableType?: string; comment?: string }
+export interface TableInfo {
+  fullName: string; tableType: string; owner: string; comment: string; format: string;
+  columns: { name: string; type: string; nullable: boolean; comment: string }[];
 }
 
 export interface ModelOption { id: string; name: string; default?: boolean }
@@ -31,9 +43,23 @@ export const api = {
       body: JSON.stringify({ folder, model, schema: schema ?? null }) }),
   session: (id: string) => call<SessionView & { turns: any[]; scope: any; running: number | null }>(`/api/sessions/${id}`),
   archive: (id: string) => call<void>(`/api/sessions/${id}`, { method: "DELETE" }),
-  send: (id: string, text: string, key: string) =>
+  send: (id: string, text: string, key: string, attachments: Attachment[] = []) =>
     call<{ turnId: string }>(`/api/sessions/${id}/messages`, { method: "POST",
-      headers: { ...json, "Idempotency-Key": key }, body: JSON.stringify({ text }) }),
+      headers: { ...json, "Idempotency-Key": key },
+      // references only: the server reads the content with the user's own token
+      body: JSON.stringify({ text, attachments: attachments.map(({ kind, ref }) => ({ kind, ref })) }) }),
+  me: () => call<{ user: string; scratch: string; demo: boolean }>("/api/me"),
+  object: (path: string) => call<WsObject>(`/api/workspace/object?path=${encodeURIComponent(path)}`),
+  search: (q: string, path?: string) =>
+    call<{ root: string; complete: boolean; results: WsHit[] }>(
+      `/api/workspace/search?q=${encodeURIComponent(q)}${path ? `&path=${encodeURIComponent(path)}` : ""}`),
+  mkdir: (path: string) => call<{ path: string }>("/api/workspace/mkdir", { method: "POST", headers: json,
+    body: JSON.stringify({ path }) }),
+  catalog: (catalog = "", schema = "") =>
+    call<{ items: CatalogItem[] }>(`/api/catalog?catalog=${encodeURIComponent(catalog)}&schema=${encodeURIComponent(schema)}`),
+  table: (name: string) => call<TableInfo>(`/api/catalog/table?name=${encodeURIComponent(name)}`),
+  preview: (name: string) => call<{ columns: string[]; rows: (string | null)[][]; warehouse: string }>(
+    `/api/catalog/preview?name=${encodeURIComponent(name)}`),
   cancel: (id: string) => call<{ cancelled: boolean }>(`/api/sessions/${id}/cancel`, { method: "POST" }),
   decide: (sid: string, approvalId: string, outcome: string, optionId?: string) =>
     call<{ ok: boolean }>(`/api/approvals/${sid}/${approvalId}`, { method: "POST", headers: json,

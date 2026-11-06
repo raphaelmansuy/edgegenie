@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import contextmanager
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -11,7 +12,9 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from ..domain import context as ctx
 from ..domain.session import DomainError, Session
+from ..services import context as ctx_service
 from ..services.orchestrator import Orchestrator
 
 log = logging.getLogger("app.api")
@@ -30,6 +33,8 @@ class CreateSession(BaseModel):
 
 class Message(BaseModel):
     text: str = Field(min_length=1, max_length=20_000)
+    #: References only ({kind, ref}); the server reads the content with the user's own token.
+    attachments: list[dict] = Field(default_factory=list, max_length=ctx.MAX_ATTACHMENTS * 2)
 
 
 class Approval(BaseModel):
@@ -63,12 +68,18 @@ def _user(request: Request) -> str:
     return request.state.user_id
 
 
+def _home(request: Request) -> str:
+    """The user's workspace home folder, named by e-mail (not by the proxy's opaque user id)."""
+    return f"/Users/{getattr(request.state, 'home', request.state.user_id)}"
+
+
 # -- sessions ----------------------------------------------------------------
 @router.get("/me")
 async def whoami(request: Request) -> dict:
     """The signed-in user and the folder this app suggests as scratch space."""
     user = _user(request)
-    return {"user": user, "scratch": f"/Users/{user}/agent_scratch"}
+    return {"user": user, "home": _home(request), "scratch": f"{_home(request)}/agent_scratch",
+            "demo": request.app.state.settings.agent_mode == "fake"}
 
 
 @router.get("/models")
@@ -160,7 +171,17 @@ async def send_message(
     if key and key in cache:
         return cache[key]
     try:
-        turn = await orch.submit(sid, body.text)
+        orch.get(sid)
+    except KeyError:
+        raise HTTPException(404, "no such session") from None
+    try:
+        items = ctx.parse(body.attachments)
+    except ctx.ContextError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    resolved = await ctx_service.resolve(items, _browser(request), request.app.state.catalog,
+                                         _user_token(request))
+    try:
+        turn = await orch.submit(sid, body.text, ctx.render(resolved), [a.to_dict() for a in items])
     except KeyError:
         raise HTTPException(404, "no such session") from None
     except DomainError as exc:
@@ -251,8 +272,7 @@ def _user_token(request: Request) -> str | None:
 async def workspace_dir(request: Request, path: str | None = None, depth: int = 1) -> dict:
     """List a workspace folder (one level by default). The tree loads lazily as the user expands."""
     browser = _browser(request)
-    user = _user(request)
-    target = path or f"/Users/{user}"
+    target = path or _home(request)
     try:
         node = await browser.tree(target, _user_token(request), depth=max(1, min(depth, 3)))
     except PermissionError as exc:
@@ -270,9 +290,8 @@ async def workspace_roots(request: Request) -> dict:
     A root that does not exist for this user is not shown: an entry that opens onto nothing is
     worse than an absent entry. The user's own home is always first when it exists.
     """
-    user = _user(request)
-    home = f"/Users/{user}"
-    repo_owner = user.split("@")[0].replace(".", "_")
+    home = _home(request)
+    repo_owner = home.removeprefix("/Users/").split("@")[0].replace(".", "_")
     candidates = [
         {"path": home, "name": "My home", "kind": "directory"},
         {"path": "/Shared", "name": "Shared", "kind": "directory"},
@@ -288,6 +307,80 @@ async def workspace_roots(request: Request) -> dict:
         if children or c["path"] == home:
             out.append({**c, "childCount": len(children)})
     return {"roots": out or [{"path": "/", "name": "Workspace", "kind": "directory"}]}
+
+
+def _ws_path(path: str) -> str:
+    if not path.startswith("/") or ".." in path.split("/") or "\x00" in path:
+        raise HTTPException(422, "a workspace path starts with / and has no ..")
+    return path
+
+
+@contextmanager
+def _dbx_errors(what: str):
+    """Platform failures -> honest HTTP statuses. A denial is a 403, never an empty result."""
+    try:
+        yield
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except (LookupError, IsADirectoryError) as exc:
+        raise HTTPException(404 if isinstance(exc, LookupError) else 422, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except RuntimeError as exc:
+        log.warning("%s failed: %s", what, exc)
+        raise HTTPException(502, str(exc)) from exc
+
+
+@router.get("/workspace/object")
+async def workspace_object(request: Request, path: str) -> dict:
+    """A notebook as cells (or a file as text), read with the user's token."""
+    with _dbx_errors("workspace read"):
+        obj = await _browser(request).read(_ws_path(path), _user_token(request))
+    return obj.to_dict()
+
+
+@router.get("/workspace/search")
+async def workspace_search(request: Request, q: str, path: str | None = None) -> dict:
+    """Name search under a root. `complete` is false when a bound stopped the walk."""
+    root = _ws_path(path or _home(request))
+    if len(q.strip()) < 2:
+        raise HTTPException(422, "type at least two characters")
+    with _dbx_errors("workspace search"):
+        hits, complete = await _browser(request).search(root, q, _user_token(request))
+    return {"root": root, "complete": complete, "results": [h.to_dict() for h in hits]}
+
+
+class MakeDir(BaseModel):
+    path: str = Field(min_length=2, max_length=512)
+
+
+@router.post("/workspace/mkdir", status_code=201)
+async def workspace_mkdir(request: Request, body: MakeDir) -> dict:
+    """Create a folder as the signed-in user. Creation only: the app never deletes or overwrites."""
+    path = _ws_path(body.path)
+    with _dbx_errors("workspace mkdir"):
+        await _browser(request).mkdirs(path, _user_token(request))
+    return {"path": path}
+
+
+# -- unity catalog -------------------------------------------------------------
+@router.get("/catalog")
+async def catalog_children(request: Request, catalog: str = "", schema: str = "") -> dict:
+    with _dbx_errors("catalog list"):
+        rows = await request.app.state.catalog.children(_user_token(request), catalog, schema)
+    return {"items": rows}
+
+
+@router.get("/catalog/table")
+async def catalog_table(request: Request, name: str) -> dict:
+    with _dbx_errors("catalog table"):
+        return await request.app.state.catalog.table(name, _user_token(request))
+
+
+@router.get("/catalog/preview")
+async def catalog_preview(request: Request, name: str) -> dict:
+    with _dbx_errors("table preview"):
+        return await request.app.state.catalog.preview(name, _user_token(request))
 
 
 # -- misc --------------------------------------------------------------------

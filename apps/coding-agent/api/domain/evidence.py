@@ -47,14 +47,53 @@ class EvidenceRow:
         }
 
 
+# A sentence that restricts the work is not itself work to prove: "Do not change anything." has no
+# tool call that could evidence it, and treating it as a requirement blocks every read-only request.
+CONSTRAINT_RE = re.compile(
+    r"^\s*(?:please\s+)?(?:do\s+not|don'?t|never|without|avoid|leave\b|keep\b.*\b(?:untouched|unchanged|as is)|"
+    r"no\s+(?:changes|writes|edits)|only\b|make\s+sure\s+(?:not|nothing)|it\s+must\s+not)",
+    re.I,
+)
+# Verbs that ask for an explanation of something already in front of the agent.
+INFORMATIONAL_RE = re.compile(
+    r"^\s*(?:please\s+)?(?:explain|summari[sz]e|describe|walk\s+(?:me\s+)?through|tell\s+me|what|why|how|"
+    r"which|who|when|where)\b",
+    re.I,
+)
+
+
+# A sentence that asks to explain AND to do something is not read-only.
+CHANGE_RE = re.compile(
+    r"\b(?:write|create|build|make|fix|run|add|update|delete|drop|rename|schedule|deploy|optimi[sz]e|modify|"
+    r"insert|save|generate|rewrite|refactor|then)\b",
+    re.I,
+)
+
+
+def is_constraint(text: str) -> bool:
+    return bool(CONSTRAINT_RE.match(text))
+
+
 def extract_requirements(prompt: str) -> list[Requirement]:
-    """Split a user prompt into requirements: numbered/bulleted lines, else sentences of substance."""
+    """Split a user prompt into requirements: numbered/bulleted lines, else sentences of substance.
+
+    Constraints ("do not change anything") are not requirements: nothing could prove them.
+    """
     prompt = DEMO_MARKER.sub(" ", prompt).strip()
     found = [Requirement(m.group(1).strip()) for m in REQUIREMENT_RE.finditer(prompt)]
     if found:
-        return found
+        return [r for r in found if not is_constraint(r.text)]
     parts = [p.strip() for p in re.split(r"(?<=[.?!])\s+|\n+", prompt) if len(p.strip()) >= 12]
-    return [Requirement(p) for p in parts[:6]]
+    return [Requirement(p) for p in parts[:6] if not is_constraint(p)]
+
+
+def is_read_only(requirements: list[Requirement], has_context: bool) -> bool:
+    """True when the user asked only to be told about context they attached.
+
+    Without context the agent has to look things up, so an explanation is a claim that needs
+    evidence like any other. With context, the evidence is the attachment itself.
+    """
+    return has_context and bool(requirements) and all(INFORMATIONAL_RE.match(r.text) and not CHANGE_RE.search(r.text) for r in requirements)
 
 
 def parse_evidence_block(text: str) -> list[dict]:

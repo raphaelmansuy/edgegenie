@@ -14,6 +14,26 @@
     }
    },
    {
+    "sessionUpdate": "plan",
+    "entries": [
+     {
+      "content": "Describe samples.nyctaxi.trips",
+      "priority": "high",
+      "status": "in_progress"
+     },
+     {
+      "content": "Write the notebook",
+      "priority": "high",
+      "status": "pending"
+     },
+     {
+      "content": "Run it and report the exit value",
+      "priority": "medium",
+      "status": "pending"
+     }
+    ]
+   },
+   {
     "sessionUpdate": "tool_call",
     "toolCallId": "c1",
     "title": "dbx_describe_table",
@@ -73,6 +93,26 @@
      "type": "text",
      "text": "SUCCESS in 4.1s, exit_value 24"
     }
+   },
+   {
+    "sessionUpdate": "plan",
+    "entries": [
+     {
+      "content": "Describe samples.nyctaxi.trips",
+      "priority": "high",
+      "status": "completed"
+     },
+     {
+      "content": "Write the notebook",
+      "priority": "high",
+      "status": "completed"
+     },
+     {
+      "content": "Run it and report the exit value",
+      "priority": "medium",
+      "status": "completed"
+     }
+    ]
    }
   ],
   "answer": "I created and ran the notebook.\n\n**Done**\n- `taxi_hours` has 5 cells: a title, two analysis cells, a chart and an exit.\n- It ran on serverless and returned an exit value.\n\nEVIDENCE\n\n| requirement | tool | summary |\n|---|---|---|\n| create the notebook taxi_hours | dbx_write_notebook | 5 cells, 1 markdown |\n| count trips by hour | dbx_run_notebook | SUCCESS, exit 24 |\n| run it and report the exit value | dbx_run_notebook | exit_value 24 |\n",

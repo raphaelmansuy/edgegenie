@@ -24,6 +24,15 @@ class ForwardedIdentity:
             raise PermissionError("no forwarded user: this app must run behind the Databricks proxy")
         return self._cfg.dev_user
 
+    def home_name(self, headers: dict[str, str], user_id: str) -> str:
+        """The name of the user's workspace home folder (/Users/<this>).
+
+        Behind the Databricks proxy `x-forwarded-user` is "<numeric id>@<app id>", which is not a
+        folder anyone has; the workspace home is named by the e-mail address.
+        """
+        h = {k.lower(): v for k, v in headers.items()}
+        return h.get(self.EMAIL_HEADER) or user_id
+
     def token(self, headers: dict[str, str]) -> str | None:
         h = {k.lower(): v for k, v in headers.items()}
         return h.get(self.TOKEN_HEADER)

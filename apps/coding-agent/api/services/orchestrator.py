@@ -27,7 +27,7 @@ from ..domain.events import (
     turn_ended,
     turn_started,
 )
-from ..domain.evidence import DEMO_MARKER, ToolCall, extract_requirements
+from ..domain.evidence import DEMO_MARKER, ToolCall, extract_requirements, is_read_only
 from ..domain.scope import Scope, describe
 from ..domain.session import (
     DomainError,
@@ -224,7 +224,8 @@ class Orchestrator:
             await self._rt.cancel(live.handle)
 
     # -- turns ----------------------------------------------------------------
-    async def submit(self, session_id: str, text: str) -> Turn:
+    async def submit(self, session_id: str, text: str, context: str = "",
+                     attachments: list[dict] | None = None) -> Turn:
         live = self.get(session_id)
         if live.state.session.status is SessionStatus.ARCHIVED:
             raise DomainError("this session is archived")
@@ -232,8 +233,9 @@ class Orchestrator:
             raise DomainError(f"this session reached its limit of {MAX_TURNS} turns")
         running = live.state.running()
         text = DEMO_MARKER.sub(" ", text).strip()     # never store a demo hint as the user's words
-        turn = live.state.new_turn(text)
-        await self._store.append(turn_started(session_id, turn.id, text, live.state.session.model))
+        turn = live.state.new_turn(text, context)
+        await self._store.append(
+            turn_started(session_id, turn.id, text, live.state.session.model, attachments))
         if running is None:
             live.task = asyncio.create_task(self._run_turn(live, turn.id))
         return turn
@@ -248,7 +250,7 @@ class Orchestrator:
         ended: dict = {"error": "no result"}
         usage: dict = {}
         try:
-            await self._rt.prompt_in_background(live.handle, turn.prompt)  # type: ignore[arg-type]
+            await self._rt.prompt_in_background(live.handle, turn.context + turn.prompt)  # type: ignore[arg-type]
             ended, usage, new_text = await self._drain(live)
             parts.append(new_text)
             if live.cancel:
@@ -318,9 +320,11 @@ class Orchestrator:
             self._start_next(live)
             return
 
+        requirements = extract_requirements(turn.prompt)
         decision = supervisor.decide(
             supervisor.State(
-                requirements=extract_requirements(turn.prompt),
+                requirements=requirements,
+                read_only=is_read_only(requirements, bool(turn.context)),
                 calls=live.tool_calls(),
                 answer=answer,
                 continuations=continuations,

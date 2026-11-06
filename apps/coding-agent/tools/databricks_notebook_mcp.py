@@ -59,7 +59,9 @@ from typing import Any
 import httpx
 from mcp.server.fastmcp import FastMCP
 
-HOST = os.environ.get("DATABRICKS_HOST", "").rstrip("/")
+HOST = os.environ.get("DATABRICKS_HOST", "").strip().rstrip("/")
+if HOST and not HOST.startswith(("http://", "https://")):
+    HOST = "https://" + HOST          # Databricks Apps may provide a bare hostname
 TOKEN = os.environ.get("DATABRICKS_TOKEN", "")
 ALLOW_WRITES = os.environ.get("NBMCP_ALLOW_WRITES", "0") == "1"
 MAX_CHARS = int(os.environ.get("NBMCP_MAX_CHARS", "6000"))

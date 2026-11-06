@@ -91,6 +91,9 @@ class Turn:
     error: str = ""
     queued_reason: str = ""
     cancelled: bool = False
+    #: Text placed before `prompt` when talking to the agent (attached notebooks, tables). The
+    #: transcript and the requirement extractor see `prompt` only: context is not the user's words.
+    context: str = ""
 
     def start(self) -> Turn:
         if self.status not in (TurnStatus.QUEUED, TurnStatus.INTERRUPTED):
@@ -125,7 +128,7 @@ class SessionState:
     def next_index(self) -> int:
         return len(self.turns) + 1
 
-    def new_turn(self, prompt: str) -> Turn:
+    def new_turn(self, prompt: str, context: str = "") -> Turn:
         """Create the next turn. If one is already running, the new turn is queued behind it."""
         running = self.running()
         t = Turn(
@@ -133,6 +136,7 @@ class SessionState:
             session_id=self.session.id,
             index=self.next_index(),
             prompt=prompt,
+            context=context,
             model=self.session.model,
             queued_reason=f"after turn {running.index}" if running else "",
         )

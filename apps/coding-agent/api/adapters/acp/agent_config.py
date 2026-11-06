@@ -10,6 +10,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..databricks.http import normalize_host
+
 # Databricks serving endpoints expose an OpenAI-compatible chat completions API at this path.
 GATEWAY_PATH = "/serving-endpoints"
 
@@ -120,4 +122,4 @@ def config_for(model_id: str, host: str) -> AgentConfig:
         # A user may also write the endpoint name directly: databricks/<endpoint>
         short = model_id.split("/", 1)[-1]
         endpoint = short.replace("system.ai.", "databricks-").replace(".", "-")
-    return AgentConfig(host=host, endpoint=endpoint, model_name=endpoint.replace("databricks-", ""))
+    return AgentConfig(host=normalize_host(host), endpoint=endpoint, model_name=endpoint.replace("databricks-", ""))

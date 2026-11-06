@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .adapters.acp.runtime import AcpAgentRuntime
+from .adapters.databricks.catalog import CatalogBrowser
 from .adapters.databricks.workspace import WorkspaceBrowser
 from .adapters.mcp.registry import NullToolRegistry, SubprocessToolRegistry
 from .adapters.memory.store import MemoryEventStore
@@ -54,7 +55,9 @@ def build(settings: Settings | None = None) -> FastAPI:
         runtime = HttpAcpAgentRuntime(cfg.agent_config_dir or None)
 
     tools = (
-        SubprocessToolRegistry(python=cfg.tool_server_python)
+        SubprocessToolRegistry(
+            # `python3` on a container's PATH is not the interpreter that has our dependencies (mcp).
+            python=sys.executable if cfg.tool_server_python == "python3" else cfg.tool_server_python)
         if cfg.tool_mode == "subprocess"
         else NullToolRegistry()
     )
@@ -77,6 +80,10 @@ def build(settings: Settings | None = None) -> FastAPI:
         os.environ.get("DATABRICKS_HOST", ""),
         lambda: os.environ.get("DATABRICKS_TOKEN") or None,
     )
+    app.state.catalog = CatalogBrowser(
+        os.environ.get("DATABRICKS_HOST", ""),
+        lambda: os.environ.get("DATABRICKS_TOKEN") or None,
+    )
     app.state.dev_token = os.environ.get("APP_DEV_TOKEN") or os.environ.get("DATABRICKS_TOKEN")
 
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -84,7 +91,9 @@ def build(settings: Settings | None = None) -> FastAPI:
     @app.middleware("http")
     async def identity_middleware(request: Request, call_next):
         try:
-            request.state.user_id = identity.user_id(dict(request.headers))
+            headers = dict(request.headers)
+            request.state.user_id = identity.user_id(headers)
+            request.state.home = identity.home_name(headers, request.state.user_id)
         except PermissionError as exc:
             return JSONResponse({"detail": str(exc)}, status_code=401)
         return await call_next(request)

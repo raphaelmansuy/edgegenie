@@ -63,8 +63,13 @@ export interface EvidenceRow {
 export type TurnStatus =
   | "queued" | "running" | "auditing" | "completed" | "blocked" | "cancelled" | "interrupted" | "failed";
 
+export interface Attachment { kind: "notebook" | "file" | "folder" | "table"; ref: string; name: string }
+export interface PlanEntry { content: string; status: "pending" | "in_progress" | "completed" | string; priority?: string }
+
 export interface Turn {
   id: string;
+  attachments?: Attachment[];
+  plan?: PlanEntry[];
   index: number;
   prompt: string;
   model: string;
@@ -131,10 +136,14 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
       const id = String(e.turnId);
       const next = newTurn(id, s.turns.length + 1, String(e.text ?? ""), String(e.model ?? s.model));
       return { ...s, status: "streaming",
-        turns: [...s.turns, { ...next, status: "queued" === e.status ? "queued" : "running" }] };
+        turns: [...s.turns, { ...next, attachments: (e.attachments as Attachment[] | undefined) ?? [],
+          status: "queued" === e.status ? "queued" : "running" }] };
     }
     case "turn.queued":
       return patchTurn(s, e.turnId, (t) => ({ ...t, status: "queued" }));
+    case "plan.updated":
+      // a snapshot, like evidence: the agent re-sends the whole plan each time it changes
+      return patchTurn(s, e.turnId, (t) => ({ ...t, plan: (e.entries as PlanEntry[]) ?? [] }));
     case "thought.delta":
       return patchTurn(s, e.turnId, (t) => ({ ...t, thought: t.thought + String(e.text ?? "") }));
     case "message.delta":

@@ -80,8 +80,15 @@ def session_ready(sid: str, tools: int, agent: str, version: str, capabilities: 
     )
 
 
-def turn_started(sid: str, tid: str, text: str, model: str) -> Event:
-    return Event(sid, "turn.started", {"text": text, "model": model}, turn_id=tid, actor="user")
+def turn_started(sid: str, tid: str, text: str, model: str, attachments: list[dict] | None = None) -> Event:
+    payload: dict[str, Any] = {"text": text, "model": model}
+    if attachments:
+        payload["attachments"] = attachments
+    return Event(sid, "turn.started", payload, turn_id=tid, actor="user")
+
+
+def plan_updated(sid: str, tid: str, entries: list[dict]) -> Event:
+    return Event(sid, "plan.updated", {"entries": entries}, turn_id=tid, actor="agent")
 
 
 def thought(sid: str, tid: str, text: str) -> Event:

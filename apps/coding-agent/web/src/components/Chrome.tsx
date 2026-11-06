@@ -1,61 +1,7 @@
-/** Composer, approval sheet, inspector and the empty state. */
+/** Approval sheet, inspector and the empty state. */
 import { useEffect, useRef, useState } from "react";
 import type { Approval, SessionView } from "../domain/events";
 import { api } from "../api/client";
-import { WorkspaceTree } from "./WorkspaceTree";
-
-export function Composer({ disabled, busy, onSend, onStop }: {
-  disabled?: boolean; busy: boolean; onSend: (text: string) => Promise<void>; onStop: () => void;
-}) {
-  const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
-  const ref = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-  }, [text]);
-
-  const submit = async () => {
-    const value = text.trim();
-    if (!value || sending || disabled) return;
-    setSending(true);
-    setText("");
-    try { await onSend(value); } finally { setSending(false); }
-  };
-
-  return (
-    <div className="composer">
-      <div className="composer-box">
-        <textarea
-          ref={ref}
-          value={text}
-          placeholder="Ask for a notebook, a job, a fix, an investigation…"
-          aria-label="Message the agent"
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void submit(); }
-            if (e.key === "Escape" && busy) { e.preventDefault(); onStop(); }
-          }}
-          disabled={disabled}
-        />
-        <div className="composer-actions">
-          <button className="btn ghost" aria-label="Attach a file" title="Attach a file" disabled>📎</button>
-          {busy ? (
-            <button className="btn stop" onClick={onStop}>⏹ Stop</button>
-          ) : (
-            <button className="btn primary" onClick={() => void submit()} disabled={!text.trim() || disabled}>
-              Send
-            </button>
-          )}
-          <span className="hint"><kbd>⌘</kbd><kbd>⏎</kbd> send · <kbd>Esc</kbd> stop</span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function ApprovalSheet({ approval, sessionId, onDecided }: {
   approval: Approval; sessionId: string; onDecided: () => void;
@@ -100,19 +46,16 @@ export function ApprovalSheet({ approval, sessionId, onDecided }: {
 }
 
 export function Inspector({ session }: { session: SessionView }) {
-  const [tab, setTab] = useState<"context" | "files" | "audit">("context");
+  const [tab, setTab] = useState<"context" | "audit">("context");
   const calls = session.turns.flatMap((t) => t.tools);
   return (
     <aside className="pane inspector">
       <div className="insp-head" role="tablist" aria-label="Inspector">
         <button className="tab" role="tab" aria-selected={tab === "context"} onClick={() => setTab("context")}>Context</button>
-        <button className="tab" role="tab" aria-selected={tab === "files"} onClick={() => setTab("files")}>Files</button>
         <button className="tab" role="tab" aria-selected={tab === "audit"} onClick={() => setTab("audit")}>Audit</button>
       </div>
       <div className="insp-body">
-        {tab === "files" ? (
-          <WorkspaceTree selected={session.folder} />
-        ) : tab === "context" ? (
+        {tab === "context" ? (
           <>
             <div className="fieldset">
               <legend>Working scope</legend>
@@ -183,27 +126,28 @@ const CARDS = [
 /** The default working folder: a real workspace path under the user's home. */
 export const USER_SCRATCH = "/Users/me/agent_scratch";
 
-export function EmptyState({ models, defaultModel, onStart, scratch }: {
+export function EmptyState({ models, folder, onFolder, model, onModel, onStart, demo, notice }: {
   models: { id: string; name: string }[];
-  defaultModel: string;
-  scratch: string;
-  onStart: (prompt: string, folder: string, model: string) => Promise<void>;
+  folder: string; onFolder: (v: string) => void;
+  model: string; onModel: (v: string) => void;
+  demo: boolean;
+  notice?: string;
+  onStart: (prompt: string) => Promise<void>;
 }) {
-  const [folder, setFolder] = useState(scratch || USER_SCRATCH);
-  const [model, setModel] = useState(defaultModel);
   const [starting, setStarting] = useState(false);
   return (
     <div className="empty">
       <h1>What should we build today?</h1>
-      <p className="sub">A coding agent works in your workspace: it writes, runs and proves.</p>
+      <p className="sub">A coding agent that works in your workspace: it reads, writes, runs and proves.
+        Open a notebook or table on the left and ask about it.</p>
       <div className="cards">
         {CARDS.map((c) => (
           <button key={c.t} className="card" disabled={starting}
             onClick={async () => {
               setStarting(true);
               // Demo mode only: the marker tells the reference agent which behaviour to play.
-              // A real agent ignores it; it is plain text in the prompt.
-              try { await onStart(`${c.prompt} [[scenario:${c.scenario}]]`, folder, model); }
+              // A real agent never sees it: sending it would put noise in a real prompt.
+              try { await onStart(demo ? `${c.prompt} [[scenario:${c.scenario}]]` : c.prompt); }
               finally { setStarting(false); }
             }}>
             <span className="t"><span className="ico" style={{ background: c.bg }} aria-hidden>{c.icon}</span>{c.t}</span>
@@ -212,15 +156,17 @@ export function EmptyState({ models, defaultModel, onStart, scratch }: {
         ))}
       </div>
       <div className="setup">
-        <label>Working folder<input value={folder} onChange={(e) => setFolder(e.target.value)} spellCheck={false} /></label>
+        <label>Working folder<input value={folder} onChange={(e) => onFolder(e.target.value)} spellCheck={false} /></label>
         <label>Model
-          <select value={model} onChange={(e) => setModel(e.target.value)}>
+          <select value={model} onChange={(e) => onModel(e.target.value)}>
             {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
         </label>
-        <p style={{ color: "var(--ink-3)", fontSize: 12.5, margin: "6px 0 0 130px" }}>
+        <p className="setup-note">
           It can write only to this folder and its schema. Anything else asks you first.
+          Hover a folder in <strong>Files</strong> and press ⌂ to work there.
         </p>
+        {notice && <p className="setup-notice" role="status">{notice}</p>}
       </div>
     </div>
   );

@@ -27,6 +27,8 @@ class State:
     answer: str
     continuations: int = 0
     audits: int = 0
+    #: The user only asked about attached context: an answer is the deliverable, no tool needed.
+    read_only: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,7 +89,7 @@ def decide(state: State) -> Decision:
             tuple(missing) or ("unknown",),
             tuple(r.to_dict() for r in rows),
         )
-    if not missing:
+    if not missing or (state.read_only and not admits):
         return Decision(Verdict.DONE, evidence=tuple(r.to_dict() for r in rows))
     if state.audits < MAX_AUDITS:
         return Decision(Verdict.AUDIT, AUDIT_PROMPT, tuple(missing), tuple(r.to_dict() for r in rows))
