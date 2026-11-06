@@ -118,12 +118,20 @@ class Orchestrator:
 
     # -- lifecycle ------------------------------------------------------------
     async def create(
-        self, user_id: str, folder: str, model: str, schema: str | None, title: str = "New session"
+        self,
+        user_id: str,
+        folder: str,
+        model: str,
+        schema: str | None,
+        title: str = "New session",
+        user_token: str | None = None,
     ) -> Session:
         self._models.check(user_id, model)
         sid = uuid4().hex[:16]
         session = Session(id=sid, user_id=user_id, folder=folder, schema=schema, model=model, title=title)
         live = Live(state=SessionState(session=session), workspace_folder=folder)
+        # The user's forwarded token: the agent and the tool server act as this user, not as the app.
+        live.extra["user_token"] = user_token
         self._live[sid] = live
         await self._store.append(session_created(sid, folder, model, schema))
         try:
@@ -158,8 +166,11 @@ class Orchestrator:
         live.mcp_url = await self._tools.start(s.id, live.workspace_folder, s.schema)
         live.tools = TOOL_COUNT_CORE if live.mcp_url else 0
 
-        # 3. The agent process itself.
-        spec = SessionSpec(session_id=s.id, cwd=cwd, model=s.model, mcp_url=live.mcp_url)
+        # 3. The agent process itself. It authenticates as the USER: the forwarded token is the only
+        # credential in a deployed app, and the tool server needs it for the workspace too.
+        token = live.extra.get("user_token") or os.environ.get("DATABRICKS_TOKEN", "")
+        spec = SessionSpec(session_id=s.id, cwd=cwd, model=s.model, mcp_url=live.mcp_url,
+                           env={"DATABRICKS_TOKEN": token} if token else {})
         live.handle = await self._rt.start(spec)
         live.state.session = s.transition(SessionStatus.READY)
         live.state.session = updated(

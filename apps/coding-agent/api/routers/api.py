@@ -88,7 +88,8 @@ async def list_sessions(request: Request) -> dict:
 async def create_session(request: Request, body: CreateSession) -> dict:
     model = body.model or request.app.state.settings.default_model
     try:
-        s = await _orch(request).create(_user(request), body.folder, model, body.schema_, body.title)
+        s = await _orch(request).create(_user(request), body.folder, model, body.schema_, body.title,
+                                        user_token=_user_token(request))
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - provisioning failures are 503, never a 200

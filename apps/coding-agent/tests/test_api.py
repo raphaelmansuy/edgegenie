@@ -101,6 +101,15 @@ def test_a_workspace_folder_is_not_used_as_the_process_cwd(client):
     assert live.workspace_folder == "/Users/nobody@example.com/agent_scratch"
 
 
+def test_the_users_forwarded_token_reaches_the_agent_not_the_app(client):
+    """A deployed app has no DATABRICKS_TOKEN of its own: the agent must run as the signed-in user."""
+    r = client.post("/api/sessions", json={"folder": "/tmp/agent-work"},
+                    headers={"x-forwarded-access-token": "dapi-user-token-value"})
+    assert r.status_code == 201, r.text
+    live = client.app.state.orchestrator.get(r.json()["id"])
+    assert live.extra["user_token"] == "dapi-user-token-value"
+
+
 def test_empty_message_is_rejected(client):
     sid = client.post("/api/sessions", json={"folder": "/tmp/agent-work"}).json()["id"]
     assert client.post(f"/api/sessions/{sid}/messages", json={"text": ""}).status_code == 422
