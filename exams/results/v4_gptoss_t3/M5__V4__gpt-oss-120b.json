@@ -1,0 +1,81 @@
+{
+  "mission": "M5",
+  "title": "ETL pipeline: medallion job, idempotent, scheduled run",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x6ec0a",
+  "batch": "v4_gptoss_t3",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=347\n83529 events.jsonl",
+  "tool_calls": 27,
+  "steps": 32,
+  "tokens": 472762,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_create_job",
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_run_job",
+    "dbxnb_dbx_run_sql",
+    "dbxnb_dbx_skill",
+    "dbxnb_dbx_write_notebook",
+    "invalid"
+  ],
+  "tool_errors": 2,
+  "answer": "**Audit Evidence Mapping**\n\n| # | Requirement / Constraint | Tool call that proves it was satisfied |\n|---|--------------------------|----------------------------------------|\n| 1 | **Create `silver_events` table** with columns `event_id STRING, user_id STRING, event_ts TIMESTAMP, event_type STRING, amount DOUBLE`. | `dbx_write_notebook` \u2192 wrote notebook `/Users/raphael.mansuy@gmail.com/exams/x6ec0a/m5_etl/silver_etl` (2 cells). |\n| 2 | **Deduplicate raw events** \u2013 keep the row with the latest `ingested_at` per `event_id`. | The Silver notebook code uses `row_number()` over `Window.partitionBy('event_id').orderBy(col('ingested_at').desc())` and filters `rn = 1`. |\n| 3 | **Filter out rows with NULL `user_id` and un\u2011parseable `event_ts`** after deduplication. | Notebook code creates `reject_null_user` and `reject_bad_ts` and then selects only rows where `user_id` is NOT NULL **and** `event_ts_ts` is NOT NULL. |\n| 4 | **`silver_events` contains only the kept rows** (no nulls, no bad timestamps). | `dbx_run_sql(\"SELECT COUNT(*) FROM workspace.exam_x6ec0a.silver_events\")` \u2192 **2761** rows and `dbx_describe_table(...).properties` shows `event_ts.nullCount = 0` and `user_id.nullCount = 0`. |\n| 5 | **Create `silver_rejects` table** with columns `event_id STRING, reject_reason STRING`. | `dbx_write_notebook` \u2192 notebook `/Users/raphael.mansuy@gmail.com/exams/x6ec0a/m5_etl/silver_etl` writes the table. `dbx_describe_table(full_name=\"workspace.exam_x6ec0a.silver_rejects\")` confirms schema. |\n| 6 | **Reject reason priority** \u2013 rows with NULL `user_id` get `null_user_id` even if timestamp is bad. | `dbx_run_sql(\"SELECT r.event_id FROM ... WHERE r.reject_reason='bad_timestamp' AND re.user_id IS NULL\")` returned **0** rows, proving the priority rule. |\n| 7 | **Reject counts** \u2013 `null_user_id` and `bad_timestamp` correctly recorded. | `dbx_run_sql(\"SELECT reject_reason, COUNT(*) FROM workspace.exam_x6ec0a.silver_rejects GROUP BY reject_reason\")` \u2192 `null_user_id: 143`, `bad_timestamp: 96` (total 239). |\n| 8 | **Total deduplicated rows = silver + rejects** (covers all distinct `event_id`s). | `dbx_run_sql(\"SELECT COUNT(DISTINCT event_id) FROM workspace.exam_x6ec0a.raw_events\")` \u2192 **3000**; `2761 (silver) + 239 (rejects) = 3000`. |\n| 9 | **Create `gold_daily` table** with columns `event_date DATE, active_users LONG, purchases LONG, revenue DOUBLE`. | `dbx_write_notebook` \u2192 notebook `/Users/raphael.mansuy@gmail.com/exams/x6ec0a/m5_etl/gold_etl` writes the table. `dbx_describe_table(full_name=\"workspace.exam_x6ec0a.gold_daily\")` confirms schema. |\n|10| **`active_users` = distinct `user_id` per day**. | `dbx_run_sql(\"SELECT active_users FROM workspace.exam_x6ec0a.gold_daily LIMIT 1\")` returns a LONG count; schema shows `active_users LONG`. The aggregation uses `countDistinct(col('user_id'))`. |\n|11| **`purchases` = count of rows where `event_type = 'purchase'` per day**. | In Gold notebook code the aggregation uses `_sum(when(col('event_type') == 'purchase', lit(1)).otherwise(lit(0)))`. |\n|12| **`revenue` = sum of `amount` for purchases, rounded to 2 decimals, 0 if none**. | `dbx_run_sql(\"SELECT revenue FROM workspace.exam_x6ec0a.gold_daily LIMIT 5\")` \u2192 values like `5382.65`, `4288.24` (two\u2011decimal). `dbx_run_sql(\"SELECT revenue, CAST(revenue AS STRING) FROM ... LIMIT 5\")` confirms the string representation has exactly two decimal places. |\n|13| **Gold row count equals distinct event dates from silver**. | `dbx_run_sql(\"SELECT COUNT(DISTINCT to_date(event_ts)) FROM workspace.exam_x6ec0a.silver_events\")` \u2192 **14**; `dbx_run_sql(\"SELECT COUNT(*) FROM workspace.exam_x6ec0a.gold_daily\")` \u2192 **14**. |\n|14| **Job named exactly `x6ec0a_etl` with two tasks, gold depends on silver**. | `dbx_create_job` \u2192 returned `job_id 350069420614326` and task list `[\"silver\",\"gold\"]` with `depends_on:[\"silver\"]`. |\n|15| **Notebooks stored under the required folder**. | Paths used in the two `dbx_write_notebook` calls are under `/Users/raphael.mansuy@gmail.com/exams/x6ec0a/m",
+  "score": 17,
+  "total": 17,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "silver_events equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "silver_rejects equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 2,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "gold_daily equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 3,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "job named x6ec0a_etl exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "job has >= 2 tasks with a dependency",
+      "passed": true,
+      "weight": 1,
+      "detail": "2 tasks"
+    },
+    {
+      "name": "latest run succeeded",
+      "passed": true,
+      "weight": 2,
+      "detail": "{'life_cycle_state': 'TERMINATED', 'result_state': 'SUCCESS', 'state_message': '', 'user_cancelled_or_timedout': False}"
+    },
+    {
+      "name": "grader re-runs the job: still succeeds and counts unchanged (idempotent)",
+      "passed": true,
+      "weight": 2,
+      "detail": "before={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} after={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} state=SUCCESS"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 417
+}

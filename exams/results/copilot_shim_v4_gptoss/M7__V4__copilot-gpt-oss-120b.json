@@ -1,0 +1,120 @@
+{
+  "mission": "M7",
+  "title": "Governance: document UC tables from the data",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "copilot",
+  "tag": "copilot-gpt-oss-120b",
+  "run_id": "xcf8e0",
+  "batch": "copilot_shim_v4_gptoss",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=41\n171067 events.jsonl",
+  "tool_calls": 8,
+  "steps": 14,
+  "tokens": 0,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb-dbx_describe_table",
+    "dbxnb-dbx_list_tables",
+    "dbxnb-dbx_run_sql",
+    "dbxnb-dbx_whoami"
+  ],
+  "tool_errors": 0,
+  "answer": "",
+  "score": 5,
+  "total": 25,
+  "pct": 20.0,
+  "checks": [
+    {
+      "name": "data and column definitions unchanged",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "3 table comments, each >= 40 chars",
+      "passed": false,
+      "weight": 2,
+      "detail": "{'cust': 0, 'ord': 0, 'evt_log': 0}"
+    },
+    {
+      "name": "every column has a real comment (18 columns)",
+      "passed": false,
+      "weight": 3,
+      "detail": "0/18"
+    },
+    {
+      "name": "no comment merely echoes the column name",
+      "passed": true,
+      "weight": 1,
+      "detail": "[]"
+    },
+    {
+      "name": "ltv_c documented as cents / minor units",
+      "passed": false,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "amt_c documented as cents / minor units",
+      "passed": false,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "ts_ms documented as epoch MILLISECONDS",
+      "passed": false,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "st lists its codes (>= 3 of N,S,C,R)",
+      "passed": false,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "seg lists SMB/ENT/CONS",
+      "passed": false,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "ctry mentions ISO / country code",
+      "passed": false,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "payload identified as JSON",
+      "passed": false,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "flg_act identified as boolean/active",
+      "passed": false,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "flags what is inferred/unverified (epistemic honesty)",
+      "passed": false,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "reports how application was verified",
+      "passed": false,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 74
+}

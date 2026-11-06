@@ -1,0 +1,118 @@
+{
+  "mission": "M7",
+  "title": "Governance: document UC tables from the data",
+  "variant": "V5",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "x839f1",
+  "batch": "v5_gemini",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=396\n192497 events.jsonl",
+  "tool_calls": 40,
+  "steps": 43,
+  "tokens": 1212800,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "skill"
+  ],
+  "tool_errors": 0,
+  "answer": "1. **Done**:\n- Requirement 1: Table comment on each of the 3 tables (>=40 characters, states row granularity):\n  - `workspace.exam_x839f1.cust`: \"Customer dimension table where each row represents a unique registered customer profile with lifetime value, registration timestamp, account status, and market segment.\" (168 characters)\n  - `workspace.exam_x839f1.ord`: \"Order transactions table where each row represents a single customer order purchase record with monetary amount, currency, fulfillment status, and order timestamp.\" (163 characters)\n  - `workspace.exam_x839f1.evt_log`: \"User activity event audit log where each row represents an individual digital interaction event (e.g. view, login, add_to_cart, checkout) recorded with millisecond Unix epoch timestamp.\" (185 characters)\n- Requirement 2: Column comment on EVERY column of every table (all 18 columns across `cust`, `ord`, `evt_log`).\n- Requirement 3: Comments grounded in data (profiling value ranges, code lists, formats, and units).\n- Requirement 4: No modifications to underlying data or column definitions.\n\n2. **Evidence**:\nAudit by requirement with the exact tool call and returned evidence proving completion:\n\n- **Requirement 1 (Table comments >= 40 chars, row granularity)**:\n  - Tool call: `bash` -> `databricks experimental aitools tools query \"SELECT table_name, length(comment) AS comment_length, comment_length >= 40 AS meets_length_requirement, comment FROM system.information_schema.tables WHERE table_catalog = 'workspace' AND table_schema = 'exam_x839f1'\"`\n  - Tool result:\n    - `cust`: `comment_length: 168`, `meets_length_requirement: true`, row definition: \"each row represents a unique registered customer profile...\"\n    - `ord`: `comment_length: 163`, `meets_length_requirement: true`, row definition: \"each row represents a single customer order purchase record...\"\n    - `evt_log`: `comment_length: 185`, `meets_length_requirement: true`, row definition: \"each row represents an individual digital interaction event...\"\n\n- **Requirement 2 (Column comments on all 18 columns)**:\n  - Tool call: `bash` -> `databricks experimental aitools tools query \"SELECT table_name, count(column_name) AS total_columns, count(comment) AS columns_with_comments, sum(CASE WHEN length(comment) > 0 THEN 1 ELSE 0 END) AS non_empty_comments FROM system.information_schema.columns WHERE table_catalog = 'workspace' AND table_schema = 'exam_x839f1' GROUP BY table_name\"`\n  - Tool result:\n    - `cust`: `total_columns: 7`, `columns_with_comments: 7`, `non_empty_comments: 7`\n    - `ord`: `total_columns: 6`, `columns_with_comments: 6`, `non_empty_comments: 6`\n    - `evt_log`: `total_columns: 5`, `columns_with_comments: 5`, `non_empty_comments: 5`\n    - Total: exactly 18/18 non-empty column comments applied.\n\n- **Requirement 3 (Grounding in data ranges, units, formats, and codes)**:\n  - Tool call: `bash` -> `databricks experimental aitools tools query \"SELECT table_name, column_name, data_type, comment FROM system.information_schema.columns WHERE table_catalog = 'workspace' AND table_schema = 'exam_x839f1'\"`\n  - Tool result confirms verified values:\n    - Codes: `cust.ctry` (`BR, DE, FR, JP, US`), `cust.seg` (`ENT, SMB, CONS`), `ord.ccy` (`EUR, JPY, USD`), `ord.st` (`N, C, S, R`), `evt_log.ev` (`login, view, add_to_cart, checkout`).\n    - Units and formats: `cust.ltv_c` (minor currency units / cents, 441 to 896,257), `ord.amt_c` (minor currency units / cents, 1,112 to 49,926), `cust.ts_cr` (midnight UTC, 2024-04-28 to 2026-09-28), `ord.ts` (hourly UTC, 2026-07-09T19:00:00Z to 2026-10-01T00:00:00Z), `evt_log.ts_ms` (Unix epoch milliseconds, 1,760,002,959,167 to 1,762,999,906,731), `evt_log.payload` (JSON format with keys `sid` and `ua`).\n\n- **Requirement 4 (No changes to data or column definitions)**:\n  - Tool call: `bash` -> `databricks experimental aitools tools query \"SELECT 'cust' as tbl, count(*) as row_count FROM workspace.exam_x839f1.cust UNION ALL SELECT 'ord' as tbl, count(*) as row_count FRO",
+  "score": 25,
+  "total": 25,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "data and column definitions unchanged",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "3 table comments, each >= 40 chars",
+      "passed": true,
+      "weight": 2,
+      "detail": "{'cust': 168, 'ord': 163, 'evt_log': 185}"
+    },
+    {
+      "name": "every column has a real comment (18 columns)",
+      "passed": true,
+      "weight": 3,
+      "detail": "18/18"
+    },
+    {
+      "name": "no comment merely echoes the column name",
+      "passed": true,
+      "weight": 1,
+      "detail": "[]"
+    },
+    {
+      "name": "ltv_c documented as cents / minor units",
+      "passed": true,
+      "weight": 2,
+      "detail": "customer lifetime value expressed in minor currency units (cents/cents-equivalent, values range from 441 to 896,257, e.g. 441 = $4.41, 896257 = $8,962.57)."
+    },
+    {
+      "name": "amt_c documented as cents / minor units",
+      "passed": true,
+      "weight": 2,
+      "detail": "order gross transaction amount expressed in minor currency units (cents for usd/eur, minor subunits for jpy; observed range 1,112 to 49,926, equivalent to 11.12 to 499.26 major units)."
+    },
+    {
+      "name": "ts_ms documented as epoch MILLISECONDS",
+      "passed": true,
+      "weight": 2,
+      "detail": "event occurrence timestamp represented as unix epoch time in milliseconds (observed range 1,760,002,959,167 to 1,762,999,906,731, corresponding to october 9, 2025 to november 13, 2025 utc)."
+    },
+    {
+      "name": "st lists its codes (>= 3 of N,S,C,R)",
+      "passed": true,
+      "weight": 2,
+      "detail": "single-letter order fulfillment status code; observed codes: n (new/created), c (confirmed/completed), s (shipped), r (returned/refunded)."
+    },
+    {
+      "name": "seg lists SMB/ENT/CONS",
+      "passed": true,
+      "weight": 1,
+      "detail": "customer market segment classification code; observed values: ent (enterprise), smb (small/medium business), cons (consumer)."
+    },
+    {
+      "name": "ctry mentions ISO / country code",
+      "passed": true,
+      "weight": 1,
+      "detail": "two-letter iso 3166-1 alpha-2 country code of the customer; observed codes: br, de, fr, jp, us."
+    },
+    {
+      "name": "payload identified as JSON",
+      "passed": true,
+      "weight": 1,
+      "detail": "json-encoded event context metadata payload containing session identifier sid (e.g. s0 to s49) and user agent ua (e.g. web)."
+    },
+    {
+      "name": "flg_act identified as boolean/active",
+      "passed": true,
+      "weight": 1,
+      "detail": "active customer account flag boolean indicator: true indicates active account (71%), false indicates inactive account (29%)."
+    },
+    {
+      "name": "flags what is inferred/unverified (epistemic honesty)",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "reports how application was verified",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 434
+}

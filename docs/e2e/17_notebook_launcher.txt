@@ -1,0 +1,14 @@
+Experiment 17 - launch the sandbox from a Databricks notebook (no local shell)
+Date: 2026-11-06
+Notebook: notebooks/launch_agent_from_notebook.py  (serverless compute, standard library only)
+Auth:     the notebook's own API token (dbutils context), no PAT pasted anywhere
+Result:   run state SUCCESS; notebook exit value = a new sandbox id (mas-sbx-189f3bcbfb12411eb7c351b0)
+Meaning:  a user with only a browser can create the sandbox and send shell commands to it
+          from a notebook. Everything else in docs/02 then runs inside that sandbox.
+Not verified: the Databricks *web terminal* route (notebook terminal icon).
+
+Note (2026-11-06, later): this note records the FIRST launcher, which only created a sandbox and
+printed `uname`/versions. notebooks/launch_agent_from_notebook.py has since grown into the full
+tutorial flow (install, fence, ask, build a notebook, test the fence). Its real outputs are saved
+in docs/tutorial/captures.json and rendered in docs/e2e/screenshots/tutorial/. What remains
+unverified is the same as above: running the extended notebook inside Databricks itself.

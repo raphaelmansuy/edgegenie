@@ -1,0 +1,40 @@
+{
+  "mission": "M1",
+  "title": "Complex SQL: windowed revenue ranking",
+  "variant": "V5",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x73449",
+  "batch": "smoke_v5",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=48\n24597 events.jsonl",
+  "tool_calls": 3,
+  "steps": 9,
+  "tokens": 127549,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "skill"
+  ],
+  "tool_errors": 0,
+  "answer": "",
+  "score": 2,
+  "total": 5,
+  "pct": 40.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": false,
+      "weight": 3,
+      "detail": "workspace.exam_x73449.m1_top_zips missing"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 66
+}

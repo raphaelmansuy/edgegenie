@@ -1,0 +1,72 @@
+[
+ {
+  "heading": "Step 1 \u00b7 Helpers (just run this cell)",
+  "code": "import base64, getpass, io, json, os, tarfile, time, urllib.request\n\nHOST = \"https://\" + spark.conf.get(\"spark.databricks.workspaceUrl\")\nSESSION_TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()\nEP = f\"{HOST}/ai-gateway/mcp-services/system.ai.sandbox\"\n\n\ndef rpc(method, params):\n    req = urllib.request.Request(\n        EP, method=\"POST\",\n        data=json.dumps({\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": method, \"params\": params}).encode(),\n        headers={\"Authorization\": f\"Bearer {SESSION_TOKEN}\", \"Content-Type\": \"application/json\",\n                 \"Accept\": \"application/json, text/event-stream\"})\n    raw = urllib.request.urlopen(req, timeout=300).read().decode()\n    for line in raw.splitlines():\n        if line.startswith(\"data: \"):\n            raw = line[6:]\n    return json.loads(raw)[\"result\"]\n\n\ndef tool(name, **args):\n    r = rpc(\"tools/call\", {\"name\": name, \"arguments\": args})\n    return \"\\n\".join(c.get(\"text\", \"\") for c in r.get(\"content\", []))\n\n\ndef sh(sandbox_id, script, timeout=170):\n    \"\"\"Run a shell script in the sandbox. One call is cut after about 180 seconds.\"\"\"\n    b = base64.b64encode(script.encode()).decode()\n    return tool(\"run_code\", sandbox_id=sandbox_id, language=\"sh\", timeout_seconds=timeout,\n                code=f\"echo '{b}' | base64 -d > /tmp/_s.sh; bash /tmp/_s.sh\")\n\n\ndef put_tree(sandbox_id, local_dir, remote_dir, include=(\"templates\", \"mcp\")):\n    \"\"\"Copy the kit folders from a Git folder under /Workspace into the sandbox (secrets and caches are never copied).\"\"\"\n    skip = {\".env\", \".git\", \"__pycache__\", \".venv\", \"results\"}\n    buf = io.BytesIO()\n    with tarfile.open(fileobj=buf, mode=\"w:gz\") as tar:\n        for name in include:\n            tar.add(os.path.join(local_dir, name), arcname=name,\n                    filter=lambda ti: None if skip & set(ti.name.split(\"/\")) else ti)\n    data = base64.b64encode(buf.getvalue()).decode()\n    parts = [data[i:i + 60000] for i in range(0, len(data), 60000)]\n    for i, part in enumerate(parts):\n        tool(\"run_code\", sandbox_id=sandbox_id, language=\"sh\", code=f\"echo -n '{part}' {'>' if i == 0 else '>>'} /tmp/_up.b64\")\n    return sh(sandbox_id, f\"mkdir -p {remote_dir} && base64 -d /tmp/_up.b64 | tar xz -C {remote_dir} && ls {remote_dir}\")\n\n\ndef ask(sandbox_id, request, max_minutes=20):\n    \"\"\"Give the agent a task and wait for its report (works for tasks longer than one 180-second call).\"\"\"\n    q = base64.b64encode(request.encode()).decode()\n    sh(sandbox_id, f\"\"\"export DATABRICKS_HOST={HOST}\ncd ~/agent-work && rm -f run.done run.log\necho '{q}' | base64 -d > q.txt\nnohup bash -c 'bash ask.sh \"$(cat q.txt)\" > run.log 2>&1; touch run.done' >/dev/null 2>&1 &\necho started\"\"\")\n    waited = 0\n    while waited < max_minutes * 60:\n        time.sleep(15)\n        waited += 15\n        if \"yes\" in sh(sandbox_id, \"[ -f ~/agent-work/run.done ] && echo yes || echo no\"):\n            break\n    return sh(sandbox_id, \"tail -n 60 ~/agent-work/run.log\")",
+  "output": "",
+  "seconds": 0.0,
+  "error": null
+ },
+ {
+  "heading": "Step 2 \u00b7 Get a sandbox (your temporary Linux machine)",
+  "code": "sandbox_id = json.loads(tool(\"create_sandbox\"))[\"sandbox_id\"]\nprint(\"sandbox:\", sandbox_id)\nprint(sh(sandbox_id, \"uname -sm; databricks --version; node --version\"))",
+  "output": "sandbox: mas-sbx-0b1514ef85df4f36b9637827\nLinux x86_64\nDatabricks CLI v1.23.0\nv24.22.1",
+  "seconds": 4.8,
+  "error": null
+ },
+ {
+  "heading": "Step 3 \u00b7 Put the agent kit in the sandbox",
+  "code": "KIT_REPO = \"https://github.com/raphaelmansuy/edgegenie\"\n# print(sh(sandbox_id, f\"rm -rf ~/edgegenie && git clone --depth 1 {KIT_REPO} ~/edgegenie 2>&1 | tail -1; ls ~/edgegenie/templates\"))   # Option A\n\nprint(put_tree(sandbox_id, \"/Workspace/Users/YOU@example.com/edgegenie\", \"~/edgegenie\"))",
+  "output": "mcp\ntemplates",
+  "seconds": 3.9,
+  "error": null
+ },
+ {
+  "heading": "Step 4 \u00b7 Give the agent your token",
+  "code": "agent_token = getpass.getpass(\"Paste your Databricks token: \")\nb = base64.b64encode(agent_token.encode()).decode()\nsh(sandbox_id, f\"umask 077; echo '{b}' | base64 -d > /tmp/dbx_token.txt\")\ndel agent_token, b\nprint(sh(sandbox_id, f\"export DATABRICKS_HOST={HOST}; unset DATABRICKS_CONFIG_FILE DATABRICKS_CONFIG_PROFILE; \"\n                     \"DATABRICKS_TOKEN=$(cat /tmp/dbx_token.txt) databricks current-user me -o json | python3 -c \\\"import json,sys;print('signed in as', json.load(sys.stdin)['userName'])\\\"\"))",
+  "output": "Paste your Databricks token: ********\nsigned in as you@example.com",
+  "seconds": 2.5,
+  "error": null
+ },
+ {
+  "heading": "Step 5 \u00b7 Install the agent",
+  "code": "print(sh(sandbox_id, f\"export DATABRICKS_HOST={HOST}; cd ~/edgegenie && bash templates/setup_agent.sh\"))",
+  "output": "[1/5] Installing the OpenCode agent (no root needed)\nadded 3 packages in 9s\n      opencode 1.19.5\n[2/5] Creating the Python environment for the tool server\n      python packages ok\n[3/5] Writing the agent config (model + tool server + safety switches)\n[4/5] Copying the rules file and skills\n[5/5] Checking the token against the workspace\n      signed in as you@example.com\n\nREADY. Next:  cd /home/sandbox-agent/agent-work && bash start_mcp.sh <catalog.schema> <workspace-folder>",
+  "seconds": 15.4,
+  "error": null
+ },
+ {
+  "heading": "Step 5b \u00b7 Start the tool server and choose the only place the agent may write",
+  "code": "SCRATCH_SCHEMA = \"workspace.agent_scratch\"                          # the only schema the agent may write to\nSCRATCH_FOLDER = \"/Workspace/Users/YOU@example.com/agent_scratch\"   # the only folder the agent may write to\nprint(sh(sandbox_id, f\"export DATABRICKS_HOST={HOST}; cd ~/agent-work && bash start_mcp.sh {SCRATCH_SCHEMA} {SCRATCH_FOLDER}\"))",
+  "output": "tool server is up\n  can write tables in : workspace.agent_scratch\n  can write files in  : /Workspace/Users/you@example.com/agent_scratch/\n  can create jobs named: agent_*",
+  "seconds": 3.2,
+  "error": null
+ },
+ {
+  "heading": "Step 6 \u00b7 Ask the agent to do something",
+  "code": "print(ask(sandbox_id, \"Which three pickup zip codes in samples.nyctaxi.trips have the highest total fare_amount? Show the SQL you ran and the numbers.\"))",
+  "output": "supervisor: empty final answer, continuing (1)\nsupervisor: audit pass 1\nsupervisor: audit pass 2\n\n=== FINAL ANSWER ===\n**Done**  \nIdentified the three pickup zip codes with the highest total\u202f`fare_amount` in `samples.nyctaxi.trips`, displayed the exact SQL that performed the aggregation, and presented the resulting totals.\n\n**Evidence**\n\n| Requirement | Tool Call | Real Result |\n|-------------|-----------|-------------|\n| Find the three pickup zip codes with the highest total `fare_amount` | `dbx_run_sql` (SQL execution) | Returned rows: <br>\u2022 `pickup_zip = 11422`, `total_fare = 19209.5`<br>\u2022 `pickup_zip = 11371`, `total_fare = 14798.84`<br>\u2022 `pickup_zip = 10001`, `total_fare = 13028.01` |\n| Show the SQL that was run | `dbx_run_sql` (SQL execution) | Query sent: <pre>SELECT pickup_zip, SUM(fare_amount) AS total_fare<br>FROM samples.nyctaxi.trips<br>GROUP BY pickup_zip<br>ORDER BY total_fare DESC<br>LIMIT 3</pre> |\n| Show the numbers (totals) | `dbx_run_sql` (SQL execution) | Same result set shown above (three zip codes with their summed `fare_amount`). |\n\n**Assumptions and unverified**  \n- none\n\n**Anything odd or suspicious**  \n- none\n\n--- the agent made 2 tool calls: dbx_describe_table, dbx_run_sql",
+  "seconds": 50.8,
+  "error": null
+ },
+ {
+  "heading": "Step 7 \u00b7 Ask for something real: build a notebook, run it, prove it works",
+  "code": "print(ask(sandbox_id, f\"\"\"Create a Databricks notebook at {SCRATCH_FOLDER}/taxi_hours with a title, then cells that read samples.nyctaxi.trips and\n(1) count trips and total fare by pickup hour, (2) chart total fare by hour, (3) end with dbutils.notebook.exit(<number of hours covered>).\nRun the notebook. Fix any error. Tell me the exit value you got.\"\"\"))",
+  "output": "supervisor: audit pass 1\nsupervisor: audit pass 2\n\n=== FINAL ANSWER ===\n**Done**  \nAll original requirements have been satisfied and verified with concrete tool\u2011call results.\n\n**Evidence per requirement**\n\n| Requirement | Tool call that proves it | Relevant result |\n|---|---|---|\n| Create a notebook at **/Workspace/Users/you@example.com/agent_scratch/taxi_hours** with a title | `dbx_write_notebook` | Returned `cells:5, markdown_cells:1, code_cells:4` and the first markdown cell source is `# Taxi Hours Analysis \u2026` |\n| Read `samples.nyctaxi.trips` | `dbx_write_notebook` | Code cell source contains `df = spark.table(\"samples.nyctaxi.trips\")` |\n| Count trips and total fare by pickup hour | `dbx_write_notebook` | Aggregation code `F.count(\"*\").alias(\"trip_count\")` and `F.sum(\"fare_amount\").alias(\"total_fare\")` grouped by `pickup_hour` is present |\n| Chart total fare by hour | `dbx_write_notebook` | Second display cell source `display(agg_df.select(\"pickup_hour\", \"total_fare\"))` (creates a chart when rendered) |\n| End with `dbutils.notebook.exit(<number of hours covered>)` | `dbx_write_notebook` (exit call) **and** `dbx_run_notebook` (actual exit value) | Exit call present in last code cell; `dbx_run_notebook` returned `exit_value: \"24\"` |\n| Run the notebook and report the exit value | `dbx_run_notebook` | Run result shows `result: \"SUCCESS\"` and `exit_value: \"24\"` |\n\n**Assumptions and unverified**  \nNone.\n\n**Anything odd or suspicious**  \nNone.\n\n--- the agent made 7 tool calls: dbx_describe_table, dbx_run_notebook, dbx_skill, dbx_write_notebook, invalid",
+  "seconds": 115.1,
+  "error": null
+ },
+ {
+  "heading": "Step 8 \u00b7 See the safety fence work",
+  "code": "print(ask(sandbox_id, \"Create a table workspace.default.not_allowed_demo with one row, then tell me exactly what happened.\"))",
+  "output": "supervisor: audit pass 1\nsupervisor: audit pass 2\n\n=== FINAL ANSWER ===\n**Audit of Requirements**\n\n| # | Requirement | Tool Call (real result) | Outcome |\n|---|-------------|--------------------------|---------|\n| 1 | Create table **workspace.default.not_allowed_demo** | `dbxnb_dbx_run_sql` with `CREATE TABLE workspace.default.not_allowed_demo (id INT);` | **Failed** \u2013 error: `write blocked: target workspace.default.not_allowed_demo is not inside allowed schemas ['workspace.agent_scratch']; use fully qualified catalog.schema.name` |\n| 2 | Insert one row into the table | `dbxnb_dbx_run_sql` with `INSERT INTO workspace.default.not_allowed_demo VALUES (1);` (executed in the same call as the CREATE) | **Not executed** \u2013 insertion aborted because the table creation failed. |\n| 3 | Report exactly what happened | The assistant\u2019s response (this final report) summarizing the error returned by the `dbxnb_dbx_run_sql` call. | **Provided** \u2013 the error message precisely describes why the operation could not be performed. |\n\n**Result**  \nThe original task could not be completed because the workspace policy restricts write operations to the `workspace.agent_scratch` schema. The tool call `dbxnb_dbx_run_sql` provides concrete evidence of this restriction. No further action can satisfy the requirement to create a table in `workspace.default` within the current environment.\n\n--- the agent made 2 tool calls: dbx_run_sql, invalid",
+  "seconds": 34.5,
+  "error": null
+ },
+ {
+  "heading": "Step 9 \u00b7 Tidy up",
+  "code": "print(sh(sandbox_id, \"cd ~/agent-work && bash start_mcp.sh stop\"))\nprint(tool(\"delete_sandbox\", sandbox_id=sandbox_id))\ndbutils.notebook.exit(\"done\")",
+  "output": "stopped\n{\"sandbox_id\":\"mas-sbx-0b1514ef85df4f36b9637827\",\"deleted\":true}",
+  "seconds": 2.0,
+  "error": null
+ }
+]

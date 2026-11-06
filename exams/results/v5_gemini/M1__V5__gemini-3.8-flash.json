@@ -1,0 +1,64 @@
+{
+  "mission": "M1",
+  "title": "Complex SQL: windowed revenue ranking",
+  "variant": "V5",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "xf44a3",
+  "batch": "v5_gemini",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=336\n177075 events.jsonl",
+  "tool_calls": 27,
+  "steps": 30,
+  "tokens": 968749,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "skill"
+  ],
+  "tool_errors": 0,
+  "answer": "### Requirement-by-Requirement Audit & Tool Evidence\n\n#### 1. Save ranking as table `workspace.exam_xf44a3.m1_top_zips` from `samples.nyctaxi.trips`\n- **Tool call:**\n  ```bash\n  databricks experimental aitools tools query \"SHOW TABLES IN workspace.exam_xf44a3 LIKE 'm1_top_zips'\"\n  ```\n- **Result:**\n  ```json\n  [{\"database\": \"exam_xf44a3\", \"isTemporary\": \"false\", \"tableName\": \"m1_top_zips\"}]\n  ```\n\n---\n\n#### 2. Ignore trips where `pickup_zip` is NULL; revenue is sum of `fare_amount`\n- **Tool call:**\n  ```bash\n  databricks experimental aitools tools query \"SELECT COUNT(CASE WHEN pickup_zip IS NULL THEN 1 END) AS null_zips, COUNT(CASE WHEN total_fare IS NULL THEN 1 END) AS null_fares FROM workspace.exam_xf44a3.m1_top_zips\"\n  ```\n- **Result:**\n  ```json\n  [{\"null_fares\": \"0\", \"null_zips\": \"0\"}]\n  ```\n\n---\n\n#### 3. Only consider zips with at least 200 trips\n- **Tool call:**\n  ```bash\n  databricks experimental aitools tools query \"SELECT MIN(trips) AS min_trips FROM workspace.exam_xf44a3.m1_top_zips\"\n  ```\n- **Result:**\n  ```json\n  [{\"min_trips\": \"429\"}]\n  ```\n  *(All zips in the result have $\\ge 200$ trips, minimum is 429).*\n\n---\n\n#### 4. Columns, exactly: `pickup_zip`, `trips`, `total_fare` (rounded to 2 decimals), `fare_rank` (DENSE_RANK by total_fare descending), `cumulative_share_pct`, `busiest_hour`\n- **Tool call:**\n  ```bash\n  databricks experimental aitools tools query \"DESCRIBE TABLE workspace.exam_xf44a3.m1_top_zips\"\n  ```\n- **Result:**\n  ```json\n  [\n    {\"col_name\": \"pickup_zip\", \"data_type\": \"int\"},\n    {\"col_name\": \"trips\", \"data_type\": \"bigint\"},\n    {\"col_name\": \"total_fare\", \"data_type\": \"double\"},\n    {\"col_name\": \"fare_rank\", \"data_type\": \"int\"},\n    {\"col_name\": \"cumulative_share_pct\", \"data_type\": \"double\"},\n    {\"col_name\": \"busiest_hour\", \"data_type\": \"int\"}\n  ]\n  ```\n\n---\n\n#### 5. `cumulative_share_pct` = running sum of `total_fare`, ordered by `total_fare` descending then `pickup_zip` ascending, divided by total revenue of all eligible zips, times 100, rounded to 2 decimals\n- **Tool call:**\n  ```bash\n  databricks experimental aitools tools query \"\n  WITH all_eligible AS (\n    SELECT pickup_zip, COUNT(*) AS trips, ROUND(SUM(fare_amount), 2) AS total_fare\n    FROM samples.nyctaxi.trips\n    WHERE pickup_zip IS NOT NULL\n    GROUP BY pickup_zip\n    HAVING COUNT(*) >= 200\n  ),\n  tot AS (SELECT SUM(total_fare) AS grand_total FROM all_eligible),\n  calc AS (\n    SELECT pickup_zip, ROUND(SUM(total_fare) OVER (ORDER BY total_fare DESC, pickup_zip ASC) * 100.0 / grand_total, 2) AS expected_share\n    FROM all_eligible CROSS JOIN tot\n  )\n  SELECT t.pickup_zip, t.cumulative_share_pct, c.expected_share, (t.cumulative_share_pct = c.expected_share) AS matches\n  FROM workspace.exam_xf44a3.m1_top_zips t\n  JOIN calc c ON t.pickup_zip = c.pickup_zip\n  ORDER BY t.fare_rank\"\n  ```\n- **Result:**\n  All 10 rows returned `matches: true` (grand total revenue of all 31 eligible zips is 233,763.97; cumulative shares match 8.22%, 14.55%, 20.12%, 25.67%, 30.94%, 35.88%, 40.34%, 44.67%, 48.72%, 52.77%).\n\n---\n\n#### 6. `busiest_hour` = hour of day (0-23, from `tpep_pickup_datetime`) with most trips in zip; break ties by choosing smaller hour\n- **Tool call:**\n  ```bash\n  databricks experimental aitools tools query \"\n  WITH hourly AS (\n    SELECT pickup_zip, hour(tpep_pickup_datetime) AS hr, COUNT(*) AS cnt\n    FROM samples.nyctaxi.trips\n    WHERE pickup_zip IS NOT NULL\n    GROUP BY pickup_zip, hour(tpep_pickup_datetime)\n  ),\n  best_hr AS (\n    SELECT pickup_zip, hr, ROW_NUMBER() OVER (PARTITION BY pickup_zip ORDER BY cnt DESC, hr ASC) AS rn\n    FROM hourly\n  )\n  SELECT t.pickup_zip, t.busiest_hour, b.hr AS expected_hr, (t.busiest_hour = b.hr) AS matches\n  FROM workspace.exam_xf44a3.m1_top_zips t\n  JOIN best_hr b ON t.pickup_zip = b.pickup_zip AND b.rn = 1\n  ORDER BY t.fare_rank\"\n  ```\n- **Result:**\n  All 10 rows returned `matches: true`.\n\n---\n\n#### 7. Keep only rows with `fare_rank <= 10`\n- **Tool call:**\n  ```bash\n  databricks experimental aito",
+  "score": 10,
+  "total": 10,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['pickup_zip', 'trips', 'total_fare', 'fare_rank', 'cumulative_share_pct', 'busiest_hour']"
+    },
+    {
+      "name": "row count matches golden",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 10, want 10"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports SQL and row count",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 359
+}

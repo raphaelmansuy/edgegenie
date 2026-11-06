@@ -1,0 +1,83 @@
+{
+  "mission": "M4",
+  "title": "Notebook editing: fix loud + silent bugs minimally",
+  "variant": "V1",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "xefb84",
+  "batch": "baseline",
+  "runner_log": "EXIT=0 SECONDS=11\n622 events.jsonl",
+  "tool_calls": 0,
+  "steps": 1,
+  "tokens": 8801,
+  "tools_used": [],
+  "tool_errors": 0,
+  "answer": "",
+  "score": 8,
+  "total": 18,
+  "pct": 44.4,
+  "checks": [
+    {
+      "name": "notebook still exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "runs successfully on serverless",
+      "passed": false,
+      "weight": 2,
+      "detail": "FAILED [UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with name `fare` cannot be resolved. Did you mean one of the following? [`fare_amo"
+    },
+    {
+      "name": "exit value equals the golden answer (all 3 defects fixed)",
+      "passed": false,
+      "weight": 5,
+      "detail": "no result"
+    },
+    {
+      "name": "protected lines preserved verbatim",
+      "passed": true,
+      "weight": 1,
+      "detail": "3/3"
+    },
+    {
+      "name": "minimal diff (<= 12 changed lines)",
+      "passed": true,
+      "weight": 2,
+      "detail": "0 changed lines"
+    },
+    {
+      "name": "cell structure preserved",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "no hard-coded answer",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "lists all three defects (fare column, < 1 filter, unordered first)",
+      "passed": false,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "reports an independent SQL verification",
+      "passed": false,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 75
+}

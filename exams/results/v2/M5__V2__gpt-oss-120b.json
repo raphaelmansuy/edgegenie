@@ -1,0 +1,80 @@
+{
+  "mission": "M5",
+  "title": "ETL pipeline: medallion job, idempotent, scheduled run",
+  "variant": "V2",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "xd3f15",
+  "batch": "v2",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=308\n37344 events.jsonl",
+  "tool_calls": 11,
+  "steps": 16,
+  "tokens": 214200,
+  "tools_used": [
+    "dbxnb_dbx_create_job",
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_read_notebook",
+    "dbxnb_dbx_run_job",
+    "dbxnb_dbx_write_notebook",
+    "edit",
+    "invalid",
+    "read"
+  ],
+  "tool_errors": 2,
+  "answer": "",
+  "score": 4,
+  "total": 17,
+  "pct": 23.5,
+  "checks": [
+    {
+      "name": "silver_events equals golden",
+      "passed": false,
+      "weight": 4,
+      "detail": "missing"
+    },
+    {
+      "name": "silver_rejects equals golden",
+      "passed": false,
+      "weight": 2,
+      "detail": "missing"
+    },
+    {
+      "name": "gold_daily equals golden",
+      "passed": false,
+      "weight": 3,
+      "detail": "missing"
+    },
+    {
+      "name": "job named xd3f15_etl exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "job has >= 2 tasks with a dependency",
+      "passed": true,
+      "weight": 1,
+      "detail": "2 tasks"
+    },
+    {
+      "name": "latest run succeeded",
+      "passed": false,
+      "weight": 2,
+      "detail": "{'life_cycle_state': 'INTERNAL_ERROR', 'result_state': 'FAILED', 'state_message': 'Task silver failed with message: Workload failed, see run output for details. This caused all downstream tasks to get skipped.', 'user_cancelled_or_timedout': False}"
+    },
+    {
+      "name": "grader re-runs the job: still succeeds and counts unchanged (idempotent)",
+      "passed": false,
+      "weight": 2,
+      "detail": "before={} after={} state=FAILED"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 355
+}

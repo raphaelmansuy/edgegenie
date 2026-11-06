@@ -1,0 +1,39 @@
+{
+  "mission": "M3",
+  "title": "Notebook authoring: demand-pattern analysis",
+  "variant": "V1",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "xbc04d",
+  "batch": "baseline",
+  "runner_log": "EXIT=0 SECONDS=12\n5062 events.jsonl",
+  "tool_calls": 3,
+  "steps": 4,
+  "tokens": 37348,
+  "tools_used": [
+    "dbsql_execute_sql",
+    "dbxnb_dbx_list_warehouses",
+    "dbxnb_dbx_whoami"
+  ],
+  "tool_errors": 0,
+  "answer": "",
+  "score": 2,
+  "total": 5,
+  "pct": 40.0,
+  "checks": [
+    {
+      "name": "notebook exists at the requested path",
+      "passed": false,
+      "weight": 3,
+      "detail": "/Users/raphael.mansuy@gmail.com/exams/xbc04d/m3_taxi_analysis"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 30
+}

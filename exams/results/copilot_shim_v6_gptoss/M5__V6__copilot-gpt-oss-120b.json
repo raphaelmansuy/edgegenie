@@ -1,0 +1,77 @@
+{
+  "mission": "M5",
+  "title": "ETL pipeline: medallion job, idempotent, scheduled run",
+  "variant": "V6",
+  "model": "gpt-oss-120b",
+  "agent": "copilot",
+  "tag": "copilot-gpt-oss-120b",
+  "run_id": "x4bc62",
+  "batch": "copilot_shim_v6_gptoss",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=58\n287234 events.jsonl",
+  "tool_calls": 4,
+  "steps": 10,
+  "tokens": 0,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "dbxnb-dbx_describe_table",
+    "skill"
+  ],
+  "tool_errors": 0,
+  "answer": "**Done**:\u202fThe ETL cannot be created because the workspace CLI is not authenticated. There is no\u202f`~/.databrickscfg`\u202ffile, and `databricks auth profiles` fails.\n\n**Evidence**:\u202fRunning `databricks auth profiles` returned:\n\n```\nError: cannot parse config file: no configuration file found at /home/sandbox-agent/exam/x4bc62/home/.databrickscfg; please create one by running 'databricks auth login'\n```\n\n**Assumptions and unverified**:\u202fNone \u2013 the task requires an authenticated Databricks CLI to create notebooks, jobs, and run them. Without a profile (or `DATABRICKS_HOST`/`DATABRICKS_TOKEN` environment variables) the `dbx_*` commands cannot operate.\n\n**Anything odd or suspicious**:\u202fnone. \n\n**Next step**:\u202fProvide a Databricks authentication profile (run `databricks auth login --profile <NAME>` or set `DATABRICKS_HOST` and `DATABRICKS_TOKEN`). Once a profile is available, I can create the notebooks, job, run it, and report the job/run IDs and row counts.",
+  "score": 2,
+  "total": 17,
+  "pct": 11.8,
+  "checks": [
+    {
+      "name": "silver_events equals golden",
+      "passed": false,
+      "weight": 4,
+      "detail": "missing"
+    },
+    {
+      "name": "silver_rejects equals golden",
+      "passed": false,
+      "weight": 2,
+      "detail": "missing"
+    },
+    {
+      "name": "gold_daily equals golden",
+      "passed": false,
+      "weight": 3,
+      "detail": "missing"
+    },
+    {
+      "name": "job named x4bc62_etl exists",
+      "passed": false,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "job has >= 2 tasks with a dependency",
+      "passed": false,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "latest run succeeded",
+      "passed": false,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "re-running the job is idempotent",
+      "passed": false,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 95
+}

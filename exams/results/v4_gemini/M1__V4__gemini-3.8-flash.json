@@ -1,0 +1,67 @@
+{
+  "mission": "M1",
+  "title": "Complex SQL: windowed revenue ranking",
+  "variant": "V4",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "x4815a",
+  "batch": "v4_gemini",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=152\n117062 events.jsonl",
+  "tool_calls": 23,
+  "steps": 25,
+  "tokens": 495778,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_list_tables",
+    "dbxnb_dbx_run_sql",
+    "dbxnb_dbx_skill",
+    "dbxnb_dbx_whoami"
+  ],
+  "tool_errors": 0,
+  "answer": "### Requirement Audit & Tool Call Evidence\n\n1. **Source data and target table location (`workspace.exam_x4815a.m1_top_zips`)**:\n   - **Tool call**: `dbx_describe_table(full_name='workspace.exam_x4815a.m1_top_zips')`\n   - **Evidence**: Confirmed table `workspace.exam_x4815a.m1_top_zips` exists as a managed Delta table owned by `raphael.mansuy@gmail.com` with 10 rows.\n\n2. **Ignore trips where `pickup_zip` is NULL**:\n   - **Tool call**: `dbx_run_sql(sql=\"SELECT COUNT_IF(pickup_zip IS NULL) AS null_pickup_zips FROM workspace.exam_x4815a.m1_top_zips\")`\n   - **Evidence**: Returned `null_pickup_zips = 0`.\n\n3. **Only consider zips with at least 200 trips**:\n   - **Tool call**: `dbx_run_sql(sql=\"SELECT MIN(trips) AS min_trips FROM workspace.exam_x4815a.m1_top_zips\")`\n   - **Evidence**: Returned `min_trips = 429` (all rows have >= 200 trips).\n\n4. **Columns, exactly: `pickup_zip`, `trips`, `total_fare` (rounded to 2 decimals), `fare_rank` (DENSE_RANK by total_fare descending), `cumulative_share_pct`, `busiest_hour`**:\n   - **Tool call**: `dbx_run_sql(sql=\"SELECT column_name, data_type, ordinal_position FROM system.information_schema.columns WHERE table_catalog = 'workspace' AND table_schema = 'exam_x4815a' AND table_name = 'm1_top_zips' ORDER BY ordinal_position\")`\n   - **Evidence**: Returned exact 6 columns in matching order: `pickup_zip` (INT), `trips` (LONG), `total_fare` (DOUBLE), `fare_rank` (INT), `cumulative_share_pct` (DOUBLE), `busiest_hour` (INT).\n\n5. **`cumulative_share_pct` calculation**:\n   - **Tool call**: `dbx_run_sql(sql=\"SELECT COUNT_IF(ROUND(cumulative_share_pct, 2) != cumulative_share_pct) AS unrounded FROM workspace.exam_x4815a.m1_top_zips\")`\n   - **Evidence**: Returned `unrounded = 0`.\n\n6. **`busiest_hour` calculation (0-23, ties broken by smaller hour)**:\n   - **Tool call**: `dbx_run_sql(sql=\"SELECT COUNT_IF(busiest_hour NOT BETWEEN 0 AND 23) AS invalid_hr FROM workspace.exam_x4815a.m1_top_zips\")`\n   - **Evidence**: Returned `invalid_hr = 0`.\n\n7. **Keep only rows with `fare_rank <= 10`**:\n   - **Tool call**: `dbx_run_sql(sql=\"SELECT MIN(fare_rank) AS min_r, MAX(fare_rank) AS max_r, COUNT_IF(fare_rank > 10) AS over_10, COUNT(*) AS total_rows FROM workspace.exam_x4815a.m1_top_zips\")`\n   - **Evidence**: Returned `min_r = 1`, `max_r = 10`, `over_10 = 0`, `total_rows = 10`.\n\n8. **End-to-end consistency check**:\n   - **Tool call**: Bidirectional `EXCEPT` SQL check comparing table rows against an independent query using `MAX_BY`.\n   - **Evidence**: Both directions returned 0 mismatched rows.\n\n---\n\n### Final SQL Used\n\n```sql\nCREATE OR REPLACE TABLE workspace.exam_x4815a.m1_top_zips AS\nWITH eligible_zips AS (\n    SELECT \n        pickup_zip,\n        COUNT(*) AS trips,\n        ROUND(SUM(fare_amount), 2) AS total_fare\n    FROM samples.nyctaxi.trips\n    WHERE pickup_zip IS NOT NULL\n    GROUP BY pickup_zip\n    HAVING COUNT(*) >= 200\n),\nhourly_counts AS (\n    SELECT \n        pickup_zip,\n        HOUR(tpep_pickup_datetime) AS hr,\n        COUNT(*) AS cnt,\n        ROW_NUMBER() OVER (\n            PARTITION BY pickup_zip \n            ORDER BY COUNT(*) DESC, HOUR(tpep_pickup_datetime) ASC\n        ) AS rn\n    FROM samples.nyctaxi.trips\n    WHERE pickup_zip IS NOT NULL\n    GROUP BY pickup_zip, HOUR(tpep_pickup_datetime)\n),\nbusiest AS (\n    SELECT \n        pickup_zip,\n        hr AS busiest_hour\n    FROM hourly_counts\n    WHERE rn = 1\n),\nranked AS (\n    SELECT \n        e.pickup_zip,\n        e.trips,\n        e.total_fare,\n        DENSE_RANK() OVER (ORDER BY e.total_fare DESC) AS fare_rank,\n        ROUND(\n            100.0 * SUM(e.total_fare) OVER (ORDER BY e.total_fare DESC, e.pickup_zip ASC) / SUM(e.total_fare) OVER (),\n            2\n        ) AS cumulative_share_pct,\n        b.busiest_hour\n    FROM eligible_zips e\n    JOIN busiest b ON e.pickup_zip = b.pickup_zip\n)\nSELECT \n    pickup_zip,\n    trips,\n    total_fare,\n    fare_rank,\n    cumulative_share_pct,\n    busiest_hour\nFROM ranked\nWHERE fare_rank <= 10\nORDER BY fare_rank;\n```\n\n**Number o",
+  "score": 10,
+  "total": 10,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['pickup_zip', 'trips', 'total_fare', 'fare_rank', 'cumulative_share_pct', 'busiest_hour']"
+    },
+    {
+      "name": "row count matches golden",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 10, want 10"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports SQL and row count",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 176
+}

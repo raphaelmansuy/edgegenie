@@ -1,0 +1,64 @@
+{
+  "mission": "M1",
+  "title": "Complex SQL: windowed revenue ranking",
+  "variant": "V6",
+  "model": "gpt-oss-120b",
+  "agent": "copilot",
+  "tag": "copilot-gpt-oss-120b",
+  "run_id": "xc43b8",
+  "batch": "copilot_shim_v6_gptoss",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: audit pass 1\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=66\n264140 events.jsonl",
+  "tool_calls": 6,
+  "steps": 12,
+  "tokens": 0,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb-dbx_describe_table",
+    "dbxnb-dbx_run_sql"
+  ],
+  "tool_errors": 0,
+  "answer": "**SQL used**\n\n```sql\nCREATE OR REPLACE TABLE workspace.exam_xc43b8.m1_top_zips AS\nWITH base AS (\n  SELECT pickup_zip,\n         fare_amount,\n         tpep_pickup_datetime\n  FROM samples.nyctaxi.trips\n  WHERE pickup_zip IS NOT NULL\n),\nzip_agg AS (\n  SELECT pickup_zip,\n         COUNT(*) AS trips,\n         ROUND(SUM(fare_amount), 2) AS total_fare\n  FROM base\n  GROUP BY pickup_zip\n  HAVING COUNT(*) >= 200\n),\nbusiest AS (\n  SELECT pickup_zip,\n         HOUR(tpep_pickup_datetime) AS hour,\n         COUNT(*) AS cnt,\n         ROW_NUMBER() OVER (\n           PARTITION BY pickup_zip\n           ORDER BY COUNT(*) DESC, HOUR(tpep_pickup_datetime) ASC\n         ) AS rn\n  FROM base\n  GROUP BY pickup_zip, HOUR(tpep_pickup_datetime)\n),\nbusiest_hour AS (\n  SELECT pickup_zip, hour AS busiest_hour\n  FROM busiest\n  WHERE rn = 1\n),\njoined AS (\n  SELECT z.pickup_zip,\n         z.trips,\n         z.total_fare,\n         bh.busiest_hour\n  FROM zip_agg z\n  LEFT JOIN busiest_hour bh ON z.pickup_zip = bh.pickup_zip\n),\nranked AS (\n  SELECT *,\n         DENSE_RANK() OVER (ORDER BY total_fare DESC) AS fare_rank,\n         ROUND(\n           SUM(total_fare) OVER (\n             ORDER BY total_fare DESC, pickup_zip ASC\n             ROWS UNBOUNDED PRECEDING\n           ) / SUM(total_fare) OVER () * 100,\n           2\n         ) AS cumulative_share_pct\n  FROM joined\n)\nSELECT pickup_zip,\n       trips,\n       total_fare,\n       fare_rank,\n       cumulative_share_pct,\n       busiest_hour\nFROM ranked\nWHERE fare_rank <= 10\nORDER BY fare_rank;\n```\n\n**Rows in `workspace.exam_xc43b8.m1_top_zips`**: **10**.",
+  "score": 10,
+  "total": 10,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['pickup_zip', 'trips', 'total_fare', 'fare_rank', 'cumulative_share_pct', 'busiest_hour']"
+    },
+    {
+      "name": "row count matches golden",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 10, want 10"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports SQL and row count",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 106
+}

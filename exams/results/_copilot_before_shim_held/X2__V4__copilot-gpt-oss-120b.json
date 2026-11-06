@@ -1,0 +1,63 @@
+{
+  "mission": "X2",
+  "title": "HELD-OUT: diagnose and fix a failing job (1 loud + 1 silent bug)",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "copilot",
+  "tag": "copilot-gpt-oss-120b",
+  "run_id": "x7808a",
+  "batch": "copilot_heldout_v4_gptoss",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=18\n49715 events.jsonl",
+  "tool_calls": 1,
+  "steps": 2,
+  "tokens": 0,
+  "api_errors": 5,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb-dbx_whoami"
+  ],
+  "tool_errors": 0,
+  "answer": "",
+  "score": 3,
+  "total": 14,
+  "pct": 21.4,
+  "checks": [
+    {
+      "name": "the original job still exists (no replacement job)",
+      "passed": true,
+      "weight": 1,
+      "detail": "1 jobs"
+    },
+    {
+      "name": "latest run of the job succeeded",
+      "passed": false,
+      "weight": 3,
+      "detail": "None"
+    },
+    {
+      "name": "x2_revenue equals golden (incl. UNKNOWN row, N/A ignored)",
+      "passed": false,
+      "weight": 4,
+      "detail": "missing"
+    },
+    {
+      "name": "minimal edit: markdown cell kept, <= 12 changed lines",
+      "passed": false,
+      "weight": 2,
+      "detail": "0 changed lines"
+    },
+    {
+      "name": "answer names both root causes",
+      "passed": false,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 42
+}

@@ -1,0 +1,58 @@
+{
+  "mission": "X3",
+  "title": "HELD-OUT: data-quality audit (read-only on the source)",
+  "variant": "V5",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x055c5",
+  "batch": "heldout_v5_gptoss",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=88\n40025 events.jsonl",
+  "tool_calls": 6,
+  "steps": 10,
+  "tokens": 178568,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "skill"
+  ],
+  "tool_errors": 0,
+  "answer": "**Evidence\u2011by\u2011tool for every explicit requirement**\n\n| # | Requirement / Constraint (as written) | Tool call that proves it was satisfied (real output) |\n|---|----------------------------------------|-------------------------------------------------------|\n| 1 | **Create table** `workspace.exam_x055c5.dq_report` **with columns** `check_name` (STRING) **and** `failing_rows` (BIGINT). | `databricks experimental aitools tools query \"CREATE OR REPLACE TABLE workspace.exam_x055c5.dq_report \u2026\"` \u2013 this **CREATE** statement executed (no error) and created the table. |\n| 2 | **Verify column types** are exactly STRING and BIGINT. | `databricks experimental aitools tools query \"DESCRIBE workspace.exam_x055c5.dq_report\"` returned: <br>```json [{ \"col_name\":\"check_name\",\"data_type\":\"string\" },{ \"col_name\":\"failing_rows\",\"data_type\":\"bigint\" }]``` |\n| 3 | **Exactly six rows**, one per named check, must exist in `dq_report`. | `databricks experimental aitools tools query \"SELECT * FROM workspace.exam_x055c5.dq_report\"` returned six rows, each with the required `check_name` values. |\n| 4 | **Correct check definitions** (null amount, negative amount, duplicate\u202forder_id, orphan\u202fcustomer, future\u202forder_date, invalid\u202fstatus). | The same **CREATE** query (Tool\u202f1) contains the six `SELECT \u2026 COUNT(*) \u2026` clauses with the appropriate predicates (`amount IS NULL`, `amount < 0`, `COUNT(*)\u2011COUNT(DISTINCT order_id)`, left\u2011join to `dq_customers` for orphan, `order_date > DATE('2026\u201111\u201101')`, `status NOT IN (\u2026)`). The resulting counts shown by Tool\u202f3 confirm each predicate was applied. |\n| 5 | **Do NOT modify, delete or clean** the source tables `dq_orders` and `dq_customers`. | No DML statements (`INSERT`, `UPDATE`, `DELETE`, `MERGE`) were issued. Only `SELECT` queries and a `CREATE OR REPLACE TABLE` that writes to a new table were run, so the source tables remain untouched. |\n| 6 | **Respond with the check that has the most failing rows**. | From Tool\u202f3 output the highest `failing_rows` value is **22** for `future_order_date`. |\n\n**Answer to the final question**\n\nThe check with the most failing rows is **`future_order_date`** (22 rows).\n**Evidence\u2011by\u2011tool for every explicit requirement / constraint**\n\n| # | Requirement (as written) | Tool call that proves it was satisfied (real output) |\n|---|---------------------------|------------------------------------------------------|\n| 1 | **Create table** `workspace.exam_x055c5.dq_report` **with columns** `check_name` (STRING) **and** `failing_rows` (BIGINT). | `databricks experimental aitools tools query \"CREATE OR REPLACE TABLE workspace.exam_x055c5.dq_report AS SELECT ...\"`\u00a0\u2192 returned `[]` (no error), confirming the table was created. |\n| 2 | **Verify column types** are exactly STRING and BIGINT. | `databricks experimental aitools tools query \"DESCRIBE workspace.exam_x055c5.dq_report\"`\u00a0\u2192 output: <br>`[ {\"col_name\":\"check_name\",\"data_type\":\"string\"}, {\"col_name\":\"failing_rows\",\"data_type\":\"bigint\"} ]` |\n| 3 | **Exactly six rows**, one per named check, must exist in `dq_report`. | `databricks experimental aitools tools query \"SELECT * FROM workspace.exam_x055c5.dq_report\"`\u00a0\u2192 output (6 rows): <br>`[ {\"check_name\":\"duplicate_order_id\",\"failing_rows\":\"20\"}, {\"check_name\":\"future_order_date\",\"failing_rows\":\"22\"}, {\"check_name\":\"negative_amount\",\"failing_rows\":\"8\"}, {\"check_name\":\"orphan_customer\",\"failing_rows\":\"20\"}, {\"check_name\":\"invalid_status\",\"failing_rows\":\"10\"}, {\"check_name\":\"null_amount\",\"failing_rows\":\"15\"} ]` |\n| 4 | **Correct check definitions** (null amount, negative amount, duplicate\u202forder_id, orphan\u202fcustomer, future\u202forder_date, invalid\u202fstatus). | The **CREATE** statement (tool\u202f1) contains the six `SELECT \u2026 COUNT(*) \u2026` clauses with the exact predicates:<br>`amount IS NULL`, `amount < 0`, `COUNT(*)\u2011COUNT(DISTINCT order_id)`, left\u2011join to `dq_customers` where `c.customer_id IS NULL`, `order_date > DATE('2026\u201111\u201101')`, `status NOT IN ('new','paid','shipped','cancelled')`. The resulting counts shown by too",
+  "score": 12,
+  "total": 12,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "dq_report has exactly the 6 named checks",
+      "passed": true,
+      "weight": 2,
+      "detail": "6 rows"
+    },
+    {
+      "name": "every count equals golden",
+      "passed": true,
+      "weight": 5,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "source tables untouched (audit only)",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "answer names the check with the most failing rows",
+      "passed": true,
+      "weight": 1,
+      "detail": "want future_order_date"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 113
+}

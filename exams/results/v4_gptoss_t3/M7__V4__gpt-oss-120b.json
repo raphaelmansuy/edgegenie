@@ -1,0 +1,120 @@
+{
+  "mission": "M7",
+  "title": "Governance: document UC tables from the data",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x4fe71",
+  "batch": "v4_gptoss_t3",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=160\n90405 events.jsonl",
+  "tool_calls": 37,
+  "steps": 43,
+  "tokens": 633306,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_list_tables",
+    "dbxnb_dbx_run_sql",
+    "invalid"
+  ],
+  "tool_errors": 0,
+  "answer": "**Done**  \n- Added a comprehensive table comment to each of the three tables in `workspace.exam_x4fe71`.  \n- Added column comments to all 18 columns (7 in `cust`, 6 in `ord`, 5 in `evt_log`).  \n- Table comments describe what a single row represents (\u226540 characters).  \n- Column comments describe data meaning, units, formats, and code lists where observed.  \n\n**Evidence**  \n- `DESCRIBE EXTENDED workspace.exam_x4fe71.cust` shows column comments and the table comment:  \n\n  ```\n  Comment: Each row represents a customer, identified by a unique customer ID, with name, country, lifetime value, creation date, active flag, and segment.\n  Columns have comments such as:\n    cid      bigint   Unique customer identifier.\n    cname    string   Customer name.\n    ctry     string   ISO country code of the customer.\n    ltv_c    bigint   Customer lifetime value (currency unit unspecified).\n    ts_cr    timestamp Timestamp when the customer record was created.\n    flg_act boolean  Indicates whether the customer is currently active.\n    seg      string   Customer segment: ENT (Enterprise), SMB (Small/Medium Business), CONS (Consumer).\n  ```  \n\n- `DESCRIBE EXTENDED workspace.exam_x4fe71.ord` shows the table comment and all column comments, e.g.:\n\n  ```\n  Comment: Each row represents an order, linking a customer to an order amount, currency, status, and timestamp.\n  Columns:\n    oid   bigint   Unique order identifier.\n    cid   bigint   Identifier of the customer who placed the order.\n    amt_c bigint   Order amount in the smallest currency unit (e.g., cents).\n    ccy   string   Three-letter ISO currency code.\n    st    string   Order status code (N=New, S=Shipped, R=Returned, C=Cancelled).\n    ts    timestamp Timestamp when the order was recorded.\n  ```\n\n- `DESCRIBE EXTENDED workspace.exam_x4fe71.evt_log` shows the table comment and all column comments, e.g.:\n\n  ```\n  Comment: Each row represents an event logged for a customer, with event type, timestamp in milliseconds, and payload data.\n  Columns:\n    eid      bigint   Unique event identifier.\n    cid      bigint   Identifier of the customer associated with the event.\n    ev       string   Event type (e.g., login, add_to_cart, view).\n    ts_ms    bigint   Event timestamp in milliseconds since epoch.\n    payload  string   JSON payload with additional event details.\n  ```\n\nAll comments were applied via `ALTER TABLE \u2026 SET TBLPROPERTIES ('comment' = \u2026)` for table comments and `ALTER TABLE \u2026 ALTER COLUMN \u2026 COMMENT \u2026` for column comments.  \n\n**Assumptions and unverified**  \n- The unit for `ltv_c` (customer lifetime value) and `amt_c` (order amount) is unspecified; we noted \u201ccurrency unit unspecified\u201d and \u201csmallest currency unit (e.g., cents)\u201d.  \n- Status codes in `ord.st` were inferred from sample data (`N`, `S`, `R`, `C`) and typical order lifecycle semantics.  \n\n**Anything odd or suspicious**  \n- None. All comments were successfully applied and verified via `DESCRIBE EXTENDED`.",
+  "score": 23,
+  "total": 25,
+  "pct": 92.0,
+  "checks": [
+    {
+      "name": "data and column definitions unchanged",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "3 table comments, each >= 40 chars",
+      "passed": true,
+      "weight": 2,
+      "detail": "{'cust': 144, 'ord': 101, 'evt_log': 113}"
+    },
+    {
+      "name": "every column has a real comment (18 columns)",
+      "passed": true,
+      "weight": 3,
+      "detail": "18/18"
+    },
+    {
+      "name": "no comment merely echoes the column name",
+      "passed": true,
+      "weight": 1,
+      "detail": "[]"
+    },
+    {
+      "name": "ltv_c documented as cents / minor units",
+      "passed": false,
+      "weight": 2,
+      "detail": "customer lifetime value (currency unit unspecified)."
+    },
+    {
+      "name": "amt_c documented as cents / minor units",
+      "passed": true,
+      "weight": 2,
+      "detail": "order amount in the smallest currency unit (e.g., cents)."
+    },
+    {
+      "name": "ts_ms documented as epoch MILLISECONDS",
+      "passed": true,
+      "weight": 2,
+      "detail": "event timestamp in milliseconds since epoch."
+    },
+    {
+      "name": "st lists its codes (>= 3 of N,S,C,R)",
+      "passed": true,
+      "weight": 2,
+      "detail": "order status code (n=new, s=shipped, r=returned, c=cancelled)."
+    },
+    {
+      "name": "seg lists SMB/ENT/CONS",
+      "passed": true,
+      "weight": 1,
+      "detail": "customer segment: ent (enterprise), smb (small/medium business), cons (consumer)."
+    },
+    {
+      "name": "ctry mentions ISO / country code",
+      "passed": true,
+      "weight": 1,
+      "detail": "iso country code of the customer."
+    },
+    {
+      "name": "payload identified as JSON",
+      "passed": true,
+      "weight": 1,
+      "detail": "json payload with additional event details."
+    },
+    {
+      "name": "flg_act identified as boolean/active",
+      "passed": true,
+      "weight": 1,
+      "detail": "indicates whether the customer is currently active."
+    },
+    {
+      "name": "flags what is inferred/unverified (epistemic honesty)",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "reports how application was verified",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 195
+}

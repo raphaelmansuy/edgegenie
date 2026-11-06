@@ -1,0 +1,66 @@
+{
+  "mission": "X1",
+  "title": "HELD-OUT: weekly cohort retention matrix",
+  "variant": "V1",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "x5e37e",
+  "batch": "heldout_v1_gemini",
+  "runner_log": "EXIT=0 SECONDS=156\n67569 events.jsonl",
+  "tool_calls": 14,
+  "steps": 12,
+  "tokens": 188443,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbsql_execute_sql",
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_list_warehouses",
+    "dbxnb_dbx_whoami"
+  ],
+  "tool_errors": 0,
+  "answer": "### SQL Query Used\n\n```sql\nCREATE OR REPLACE TABLE workspace.exam_x5e37e.x1_retention AS\nWITH cohorts AS (\n  SELECT \n    cast(date_trunc('WEEK', signup_date) as DATE) AS cohort_week,\n    user_id,\n    signup_date\n  FROM workspace.exam_x5e37e.signups\n),\ncohort_sizes AS (\n  SELECT \n    cohort_week,\n    count(distinct user_id) AS cohort_size\n  FROM cohorts\n  GROUP BY cohort_week\n),\nweeks AS (\n  SELECT explode(sequence(0, 4)) AS week_n\n),\ncohort_grid AS (\n  SELECT \n    cs.cohort_week,\n    cs.cohort_size,\n    w.week_n\n  FROM cohort_sizes cs\n  CROSS JOIN weeks w\n),\nuser_activity_weeks AS (\n  SELECT DISTINCT\n    c.cohort_week,\n    c.user_id,\n    cast(floor(datediff(a.activity_date, c.signup_date) / 7) as INT) AS week_n\n  FROM cohorts c\n  JOIN workspace.exam_x5e37e.activity a\n    ON c.user_id = a.user_id\n  WHERE a.activity_date >= c.signup_date\n    AND floor(datediff(a.activity_date, c.signup_date) / 7) BETWEEN 0 AND 4\n),\ncohort_week_activity AS (\n  SELECT \n    cohort_week,\n    week_n,\n    count(distinct user_id) AS active_users\n  FROM user_activity_weeks\n  GROUP BY cohort_week, week_n\n)\nSELECT \n  cg.cohort_week,\n  cg.cohort_size,\n  cg.week_n,\n  coalesce(cwa.active_users, 0) AS active_users,\n  round(100.0 * coalesce(cwa.active_users, 0) / cg.cohort_size, 1) AS retention_pct\nFROM cohort_grid cg\nLEFT JOIN cohort_week_activity cwa\n  ON cg.cohort_week = cwa.cohort_week\n  AND cg.week_n = cwa.week_n\nORDER BY cg.cohort_week, cg.week_n;\n```\n\n### Earliest Cohort Retention\n\nFor the earliest cohort (`cohort_week = 2026-08-03`) at `week_n = 2`:\n- **`retention_pct`**: **91.8** (67 / 73 active users)",
+  "score": 11,
+  "total": 11,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['cohort_week', 'cohort_size', 'week_n', 'active_users', 'retention_pct']"
+    },
+    {
+      "name": "row count matches golden (5 rows per cohort)",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 35, want 35"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 5,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports the earliest cohort week-2 retention",
+      "passed": true,
+      "weight": 1,
+      "detail": "want 91.8"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 195
+}

@@ -1,0 +1,92 @@
+{
+  "mission": "M4",
+  "title": "Notebook editing: fix loud + silent bugs minimally",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x08b57",
+  "batch": "v4_gptoss",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=187\n42480 events.jsonl",
+  "tool_calls": 10,
+  "steps": 15,
+  "tokens": 166593,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_read_notebook",
+    "dbxnb_dbx_run_notebook",
+    "dbxnb_dbx_run_sql",
+    "dbxnb_dbx_write_notebook",
+    "invalid"
+  ],
+  "tool_errors": 0,
+  "answer": "**Done**  \n- Updated notebook `/Users/raphael.mansuy@gmail.com/exams/x08b57/m4_fare_report` to correctly compute the highest fare\u2011per\u2011mile zip.  \n- Notebook now exits with `{\"zip\": 10119, \"fare_per_mile\": 4.7843}`.  \n\n**Evidence**  \n- Notebook run result: `exit_value = {\"zip\": 10119, \"fare_per_mile\": 4.7843}` (run ID\u202f278597247681780).  \n- Independent SQL query result: `pickup_zip = 10119`, `fare_per_mile = 4.784304295879953`, `n = 500`. Rounded to 4 decimals matches notebook output.  \n\n**Assumptions and unverified**  \n- None. All computed values verified against the source table.  \n\n**Anything odd or suspicious**  \n- None.  \n**Audit Evidence**\n\n| # | Requirement / Explicit Constraint | Tool call that proves it was satisfied | Relevant result excerpt |\n|---|-----------------------------------|----------------------------------------|------------------------|\n| 1 | *Make the smallest change that fixes the problem: do not rewrite the notebook, keep the cell structure, comments, MIN_TRIPS and the final exit cell as they are.* | `dbxnb_dbx_write_notebook` (the edit that overwrote the notebook) | Returned `{ \"cells\": 5, \"markdown_cells\": 1, \"code_cells\": 4 }` and the source shown contains the original markdown, the original `MIN_TRIPS = 100` line, and the original `dbutils.notebook.exit` call unchanged. The only modifications are the three buggy lines (filter, column name, selection) \u2013 no cells were added, removed, or reordered. |\n| 2 | *Run it on serverless compute after your fix and show me the exit value.* | `dbxnb_dbx_run_notebook` (run after edit) | Result: `\"exit_value\": \"{\\\"zip\\\": 10119, \\\"fare_per_mile\\\": 4.7843}\"` (run_id\u202f278597247681780, `result\":\"SUCCESS\"`). |\n| 3 | *Verify the exit value independently with a SQL query against samples.nyctaxi.trips and tell me whether the two agree.* | `dbxnb_dbx_run_sql` (stand\u2011alone SQL) | Query returned `[ \"10119\", \"4.784304295879953\", \"500\" ]`. Rounded to 4 decimals \u2192 `4.7843`, matching the notebook\u2019s exit value. |\n| 4 | *List every defect you found, including any that did not raise an error.* | Evidence of defects comes from the **original notebook source** (read via `dbxnb_dbx_read_notebook`) and the **corrected notebook source** (written by the `dbxnb_dbx_write_notebook` call). | Original source showed: <br>\u2022 `long_trips = df.filter(F.col(\"trip_distance\") < 1)` \u2013 wrong direction (should be `> 1`). <br>\u2022 `F.sum(\"fare\")` \u2013 non\u2011existent column (`fare_amount` exists). <br>\u2022 `best = eligible.first()` \u2013 selects arbitrary row, not the highest fare\u2011per\u2011mile. <br>Corrected source (write call) shows the three lines fixed accordingly. |\n\n**Summary of Defects (original notebook)**  \n\n1. **Filter condition reversed** \u2013 used `< 1` instead of `> 1`.  \n2. **Incorrect column name** \u2013 aggregated `F.sum(\"fare\")` which does not exist; should be `fare_amount`.  \n3. **Selection logic flawed** \u2013 `.first()` without ordering could return any zip; needed ordering by `fare_per_mile` descending.  \n\nAll three were corrected while preserving the notebook\u2019s overall structure, comments, `MIN_TRIPS`, and exit cell, as required. The notebook now produces the correct result, which is independently confirmed by SQL.\n**Audit Evidence**\n\n| # | Requirement / Explicit Constraint | Tool call that proves it was satisfied | Relevant result excerpt |\n|---|-----------------------------------|----------------------------------------|------------------------|\n| 1 | *Make the smallest change that fixes the problem: do not rewrite the notebook, keep the cell structure, comments,\u202f`MIN_TRIPS`\u202fand the final `dbutils.notebook.exit` cell as they are.* | **`dbxnb_dbx_write_notebook`** (the edit that overwrote the notebook) | `{\"cells\":5,\"markdown_cells\":1,\"code_cells\":4}` \u2013 the notebook still has the original 1 markdown cell and 4 code cells; only three lines were altered (filter direction, column name, ordering). No cells were added, removed, or reordered. |\n|   | (Evidence of preserving original content) | **`dbxnb_dbx_read_notebook`",
+  "score": 18,
+  "total": 18,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "notebook still exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "runs successfully on serverless",
+      "passed": true,
+      "weight": 2,
+      "detail": "SUCCESS None"
+    },
+    {
+      "name": "exit value equals the golden answer (all 3 defects fixed)",
+      "passed": true,
+      "weight": 5,
+      "detail": "got {'zip': 10119, 'fare_per_mile': 4.7843}; want zip=10119 fpm=4.7843"
+    },
+    {
+      "name": "protected lines preserved verbatim",
+      "passed": true,
+      "weight": 1,
+      "detail": "3/3"
+    },
+    {
+      "name": "minimal diff (<= 12 changed lines)",
+      "passed": true,
+      "weight": 2,
+      "detail": "11 changed lines"
+    },
+    {
+      "name": "cell structure preserved",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "no hard-coded answer",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "lists all three defects (fare column, < 1 filter, unordered first)",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "reports an independent SQL verification",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 234
+}

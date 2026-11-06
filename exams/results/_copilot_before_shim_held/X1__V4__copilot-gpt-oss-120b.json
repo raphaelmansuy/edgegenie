@@ -1,0 +1,63 @@
+{
+  "mission": "X1",
+  "title": "HELD-OUT: weekly cohort retention matrix",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "copilot",
+  "tag": "copilot-gpt-oss-120b",
+  "run_id": "xe9d20",
+  "batch": "copilot_heldout_v4_gptoss",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=47\n78841 events.jsonl",
+  "tool_calls": 2,
+  "steps": 3,
+  "tokens": 0,
+  "api_errors": 5,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb-dbx_run_sql"
+  ],
+  "tool_errors": 0,
+  "answer": "",
+  "score": 10,
+  "total": 11,
+  "pct": 90.9,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['cohort_week', 'cohort_size', 'week_n', 'active_users', 'retention_pct']"
+    },
+    {
+      "name": "row count matches golden (5 rows per cohort)",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 35, want 35"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 5,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports the earliest cohort week-2 retention",
+      "passed": false,
+      "weight": 1,
+      "detail": "want 91.8"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 80
+}

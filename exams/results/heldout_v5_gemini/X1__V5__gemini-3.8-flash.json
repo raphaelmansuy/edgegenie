@@ -1,0 +1,64 @@
+{
+  "mission": "X1",
+  "title": "HELD-OUT: weekly cohort retention matrix",
+  "variant": "V5",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "x26e68",
+  "batch": "heldout_v5_gemini",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=436\n133745 events.jsonl",
+  "tool_calls": 29,
+  "steps": 31,
+  "tokens": 803228,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "skill"
+  ],
+  "tool_errors": 0,
+  "answer": "### SQL Used\n\n```sql\nCREATE OR REPLACE TABLE workspace.exam_x26e68.x1_retention AS\nWITH cohorts AS (\n  SELECT\n    trunc(signup_date, 'WEEK') AS cohort_week,\n    count(distinct user_id) AS cohort_size\n  FROM workspace.exam_x26e68.signups\n  GROUP BY trunc(signup_date, 'WEEK')\n),\nweeks AS (\n  SELECT explode(sequence(0, 4)) AS week_n\n),\ncohort_grid AS (\n  SELECT\n    c.cohort_week,\n    c.cohort_size,\n    w.week_n\n  FROM cohorts c\n  CROSS JOIN weeks w\n),\nuser_activity AS (\n  SELECT\n    s.user_id,\n    trunc(s.signup_date, 'WEEK') AS cohort_week,\n    floor(datediff(a.activity_date, s.signup_date) / 7) AS week_n\n  FROM workspace.exam_x26e68.signups s\n  JOIN workspace.exam_x26e68.activity a\n    ON s.user_id = a.user_id\n   AND a.activity_date >= s.signup_date\n  WHERE floor(datediff(a.activity_date, s.signup_date) / 7) BETWEEN 0 AND 4\n),\nactive_by_cohort_week AS (\n  SELECT\n    cohort_week,\n    week_n,\n    count(distinct user_id) AS active_users\n  FROM user_activity\n  GROUP BY cohort_week, week_n\n)\nSELECT\n  cg.cohort_week,\n  cg.cohort_size,\n  cg.week_n,\n  coalesce(a.active_users, 0) AS active_users,\n  round(100.0 * coalesce(a.active_users, 0) / cg.cohort_size, 1) AS retention_pct\nFROM cohort_grid cg\nLEFT JOIN active_by_cohort_week a\n  ON cg.cohort_week = a.cohort_week\n AND cg.week_n = a.week_n\nORDER BY cg.cohort_week, cg.week_n;\n```\n\n**retention_pct of the earliest cohort for week_n = 2:** `91.8`\n\n---\n\n### Audit Proof for Each Requirement\n\n1. **Table name and exact column names (`workspace.exam_x26e68.x1_retention` with columns `cohort_week, cohort_size, week_n, active_users, retention_pct`)**:\n   - **Tool call**: `databricks experimental aitools tools query \"DESCRIBE TABLE workspace.exam_x26e68.x1_retention\"`\n   - **Real result**: Returned exact column names and types: `cohort_week` (`date`), `cohort_size` (`bigint`), `week_n` (`int`), `active_users` (`bigint`), `retention_pct` (`decimal(26,1)`).\n\n2. **`cohort_week` = the Monday of the week of `signup_date` (a DATE)**:\n   - **Tool call**: `databricks experimental aitools tools query \"SELECT distinct cohort_week, date_format(cohort_week, 'EEEE') as day_name FROM workspace.exam_x26e68.x1_retention ORDER BY cohort_week\"`\n   - **Real result**: Every distinct `cohort_week` returned `day_name: \"Monday\"`.\n\n3. **`cohort_size` = number of users who signed up in that week**:\n   - **Tool call**: `databricks experimental aitools tools query \"SELECT r.cohort_week, r.cohort_size as reported, s.actual FROM (SELECT DISTINCT cohort_week, cohort_size FROM workspace.exam_x26e68.x1_retention) r JOIN (SELECT trunc(signup_date, 'WEEK') as cohort_week, count(distinct user_id) as actual FROM workspace.exam_x26e68.signups GROUP BY 1) s ON r.cohort_week = s.cohort_week WHERE r.cohort_size != s.actual\"`\n   - **Real result**: `[]` (0 mismatches across all cohorts).\n\n4. **`week_n` = whole weeks since user signup date: `floor(days between signup_date and activity_date / 7)`, only counting 0 to 4, ignoring activity prior to signup**:\n   - **Tool call**: `databricks experimental aitools tools query \"WITH expected AS (SELECT trunc(s.signup_date, 'WEEK') AS cohort_week, floor(datediff(a.activity_date, s.signup_date) / 7) AS week_n, count(distinct s.user_id) AS expected_active FROM workspace.exam_x26e68.signups s JOIN workspace.exam_x26e68.activity a ON s.user_id = a.user_id AND a.activity_date >= s.signup_date WHERE floor(datediff(a.activity_date, s.signup_date) / 7) BETWEEN 0 AND 4 GROUP BY 1, 2) SELECT r.cohort_week, r.week_n, r.active_users, coalesce(e.expected_active, 0) as expected_active FROM workspace.exam_x26e68.x1_retention r LEFT JOIN expected e ON r.cohort_week = e.cohort_week AND r.week_n = e.week_n WHERE r.active_users != coalesce(e.expected_active, 0)\"`\n   - **Real result**: `[]` (0 mismatches across all 35 rows).\n\n5. **`active_users` = distinct users of cohort with >= 1 activity in that `week_n`**:\n   - **Tool call**: `databricks experimental aitools tools query \"SELECT count(distinct s.user_id) as active_u",
+  "score": 11,
+  "total": 11,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['cohort_week', 'cohort_size', 'week_n', 'active_users', 'retention_pct']"
+    },
+    {
+      "name": "row count matches golden (5 rows per cohort)",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 35, want 35"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 5,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports the earliest cohort week-2 retention",
+      "passed": true,
+      "weight": 1,
+      "detail": "want 91.8"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 471
+}

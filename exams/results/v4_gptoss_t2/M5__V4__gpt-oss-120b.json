@@ -1,0 +1,82 @@
+{
+  "mission": "M5",
+  "title": "ETL pipeline: medallion job, idempotent, scheduled run",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "xcc8ed",
+  "batch": "v4_gptoss_t2",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=158\n50619 events.jsonl",
+  "tool_calls": 23,
+  "steps": 29,
+  "tokens": 334975,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_create_job",
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_list_notebooks",
+    "dbxnb_dbx_run_job",
+    "dbxnb_dbx_run_sql",
+    "dbxnb_dbx_search_tables",
+    "dbxnb_dbx_skill",
+    "dbxnb_dbx_write_notebook"
+  ],
+  "tool_errors": 2,
+  "answer": "**Done**  \n- Created notebooks `/Users/raphael.mansuy@gmail.com/exams/xcc8ed/m5_etl/silver_events` and `/Users/raphael.mansuy@gmail.com/exams/xcc8ed/m5_etl/gold_daily`.  \n- Defined Databricks Job **xcc8ed_etl** with two tasks: `silver` \u2192 `gold`.  \n- Ran the job twice (run IDs **545600047345121** and **88019822048249**) \u2013 both succeeded.  \n- Final table row counts:  \n\n| Table | Row Count |\n|-------|-----------|\n| `workspace.exam_xcc8ed.silver_events` | 2761 |\n| `workspace.exam_xcc8ed.silver_rejects` | 239 |\n| `workspace.exam_xcc8ed.gold_daily` | 14 |\n\n**Evidence**  \n- Job creation response includes job_id **299900764407329**.  \n- Job run responses show `SUCCESS` for both tasks and appropriate `exit_value`.  \n- SQL queries after each run returned the counts shown above, confirming idempotency (counts unchanged on second run).  \n\n**Assumptions and unverified**  \n- None. All objects were created and verified directly via workspace APIs.  \n\n**Anything odd or suspicious**  \n- none.",
+  "score": 17,
+  "total": 17,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "silver_events equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "silver_rejects equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 2,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "gold_daily equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 3,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "job named xcc8ed_etl exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "job has >= 2 tasks with a dependency",
+      "passed": true,
+      "weight": 1,
+      "detail": "2 tasks"
+    },
+    {
+      "name": "latest run succeeded",
+      "passed": true,
+      "weight": 2,
+      "detail": "{'life_cycle_state': 'TERMINATED', 'result_state': 'SUCCESS', 'state_message': '', 'user_cancelled_or_timedout': False}"
+    },
+    {
+      "name": "grader re-runs the job: still succeeds and counts unchanged (idempotent)",
+      "passed": true,
+      "weight": 2,
+      "detail": "before={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} after={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} state=SUCCESS"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 220
+}

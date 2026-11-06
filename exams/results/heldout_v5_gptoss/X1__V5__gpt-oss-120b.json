@@ -1,0 +1,65 @@
+{
+  "mission": "X1",
+  "title": "HELD-OUT: weekly cohort retention matrix",
+  "variant": "V5",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x4260e",
+  "batch": "heldout_v5_gptoss",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: audit pass 1\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=184\n68778 events.jsonl",
+  "tool_calls": 16,
+  "steps": 22,
+  "tokens": 421743,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "invalid",
+    "skill"
+  ],
+  "tool_errors": 0,
+  "answer": "**Audit Report \u2013 Requirement Evidence**\n\n| # | Requirement / Explicit Constraint | Tool call that provides concrete proof (real result) |\n|---|-----------------------------------|------------------------------------------------------|\n| 1 | Table **workspace.exam_x4260e.x1_retention** exists with **exact** columns `cohort_week, cohort_size, week_n, active_users, retention_pct`. | `databricks experimental aitools tools query \"DESCRIBE TABLE workspace.exam_x4260e.x1_retention\"` \u2192 returned rows for those five column names (and only them as data columns). |\n| 2 | `cohort_week` is the **Monday** of the signup week (DATE). | `databricks experimental aitools tools query \"SELECT cohort_week, date_format(cohort_week, 'EEEE') AS day_name FROM (SELECT DISTINCT cohort_week FROM workspace.exam_x4260e.x1_retention) LIMIT 5;\"` \u2192 `day_name` = **Monday** for every cohort_week. |\n| 3 | `cohort_size` equals **number of distinct users** who signed up in that week. | `databricks experimental aitools tools query \"SELECT r.cohort_week, r.cohort_size, s.cnt FROM workspace.exam_x4260e.x1_retention r JOIN (SELECT DATE_TRUNC('WEEK', signup_date) AS cohort_week, COUNT(DISTINCT user_id) AS cnt FROM workspace.exam_x4260e.signups GROUP BY DATE_TRUNC('WEEK', signup_date)) s ON r.cohort_week = s.cohort_week WHERE r.cohort_size <> s.cnt LIMIT 10;\"` \u2192 returned **[]**, meaning every `cohort_size` matches the signup count. |\n| 4 | `week_n` = **floor(days between signup_date and activity_date\u202f/\u202f7)**, limited to **0\u20114**, and **activity before signup is ignored**. | Creation query used `FLOOR(DATEDIFF(a.activity_date, c.signup_date) / 7) AS week_n` and filtered with `a.activity_date >= c.signup_date` and `WHERE week_n BETWEEN 0 AND 4`. Evidence of the limit: `databricks experimental aitools tools query \"SELECT DISTINCT week_n FROM workspace.exam_x4260e.x1_retention ORDER BY week_n;\"` \u2192 returned 0,1,2,3,4 only. No week_n <\u202f0, confirming pre\u2011signup activity is excluded. |\n| 5 | `active_users` = **distinct users** of the cohort with at least one activity in that `week_n`. | Verification query: `databricks experimental aitools tools query \"SELECT r.cohort_week, r.week_n, r.active_users, cnt FROM workspace.exam_x4260e.x1_retention r JOIN (SELECT DATE_TRUNC('WEEK', c.signup_date) AS cohort_week, FLOOR(DATEDIFF(a.activity_date, c.signup_date)/7) AS week_n, COUNT(DISTINCT a.user_id) AS cnt FROM workspace.exam_x4260e.signups c JOIN workspace.exam_x4260e.activity a ON a.user_id = c.user_id AND a.activity_date >= c.signup_date WHERE FLOOR(DATEDIFF(a.activity_date, c.signup_date)/7) BETWEEN 0 AND 4 GROUP BY DATE_TRUNC('WEEK', c.signup_date), FLOOR(DATEDIFF(a.activity_date, c.signup_date)/7)) calc ON r.cohort_week = calc.cohort_week AND r.week_n = calc.week_n WHERE r.active_users <> calc.cnt LIMIT 10;\"` \u2192 returned **[]**, confirming `active_users` equals the distinct count of users with activity in that week. |\n| 6 | `retention_pct` = **100\u202f\u00d7\u202factive_users\u202f/\u202fcohort_size**, rounded to **1 decimal**. | `databricks experimental aitools tools query \"SELECT r.cohort_week, r.week_n, r.active_users, r.cohort_size, r.retention_pct, ROUND(100.0 * r.active_users / r.cohort_size,1) AS expected FROM workspace.exam_x4260e.x1_retention r WHERE r.cohort_week = (SELECT MIN(cohort_week) FROM workspace.exam_x4260e.x1_retention) ORDER BY r.week_n LIMIT 5;\"` \u2192 `retention_pct` matches `expected` for every week (e.g., 90.4, 91.8, \u2026). |\n| 7 | **Every cohort has exactly five rows** (week_n 0\u20114), including weeks with zero activity. | `databricks experimental aitools tools query \"SELECT cohort_week, COUNT(*) AS rows FROM workspace.exam_x4260e.x1_retention GROUP BY cohort_week HAVING COUNT(*) <> 5;\"` \u2192 returned **[]**, confirming 5 rows per cohort. |\n| 8 | The **earliest cohort\u2019s week\u202f2 retention_pct** (required output). | `databricks experimental aitools tools query \"SELECT cohort_week, retention_pct FROM workspace.exam_x4260e.x1_retention WHERE week_n = 2 ORDER BY cohort_week LIMIT 1;\"` \u2192 returned `cohor",
+  "score": 11,
+  "total": 11,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['cohort_week', 'cohort_size', 'week_n', 'active_users', 'retention_pct']"
+    },
+    {
+      "name": "row count matches golden (5 rows per cohort)",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 35, want 35"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 5,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports the earliest cohort week-2 retention",
+      "passed": true,
+      "weight": 1,
+      "detail": "want 91.8"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 216
+}

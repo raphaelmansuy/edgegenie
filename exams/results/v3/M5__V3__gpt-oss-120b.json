@@ -1,0 +1,81 @@
+{
+  "mission": "M5",
+  "title": "ETL pipeline: medallion job, idempotent, scheduled run",
+  "variant": "V3",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "xa16eb",
+  "batch": "v3",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=233\n39418 events.jsonl",
+  "tool_calls": 14,
+  "steps": 20,
+  "tokens": 209320,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_create_job",
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_list_notebooks",
+    "dbxnb_dbx_read_notebook",
+    "dbxnb_dbx_run_job",
+    "dbxnb_dbx_run_sql",
+    "dbxnb_dbx_write_notebook"
+  ],
+  "tool_errors": 1,
+  "answer": "**Done**\n- Created notebooks:\n  - `/Users/raphael.mansuy@gmail.com/exams/xa16eb/m5_etl/silver_etl`\n  - `/Users/raphael.mansuy@gmail.com/exams/xa16eb/m5_etl/gold_etl`\n- Created Databricks job **xa16eb_etl** (job_id\u202f=\u202f1084483456081314) with tasks `silver` \u2192 `gold`.\n- Ran the job (run_id\u202f=\u202f361345303789463) \u2013 both tasks succeeded.\n- Produced tables in schema `workspace.exam_xa16eb`:\n  - `silver_events` \u2013 2\u202f761 rows\n  - `silver_rejects` \u2013 239 rows\n  - `gold_daily` \u2013 14 rows\n\n**Evidence**\n- Job run result shows `SUCCESS` for both tasks.\n- Row counts returned by SQL queries:\n  - `SELECT COUNT(*) FROM workspace.exam_xa16eb.silver_events` \u2192 2761\n  - `SELECT COUNT(*) FROM workspace.exam_xa16eb.silver_rejects` \u2192 239\n  - `SELECT COUNT(*) FROM workspace.exam_xa16eb.gold_daily` \u2192 14\n\n**Assumptions and unverified**\n- None.\n\n**Anything odd or suspicious**\n- None.",
+  "score": 17,
+  "total": 17,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "silver_events equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "silver_rejects equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 2,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "gold_daily equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 3,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "job named xa16eb_etl exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "job has >= 2 tasks with a dependency",
+      "passed": true,
+      "weight": 1,
+      "detail": "2 tasks"
+    },
+    {
+      "name": "latest run succeeded",
+      "passed": true,
+      "weight": 2,
+      "detail": "{'life_cycle_state': 'TERMINATED', 'result_state': 'SUCCESS', 'state_message': '', 'user_cancelled_or_timedout': False}"
+    },
+    {
+      "name": "grader re-runs the job: still succeeds and counts unchanged (idempotent)",
+      "passed": true,
+      "weight": 2,
+      "detail": "before={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} after={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} state=SUCCESS"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 294
+}

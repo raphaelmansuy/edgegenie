@@ -1,0 +1,108 @@
+{
+  "mission": "M3",
+  "title": "Notebook authoring: demand-pattern analysis",
+  "variant": "V5",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "x0b40a",
+  "batch": "v5_gemini",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=331\n255967 events.jsonl",
+  "tool_calls": 32,
+  "steps": 35,
+  "tokens": 1226084,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "read",
+    "skill",
+    "write"
+  ],
+  "tool_errors": 0,
+  "answer": "### Done\nCreated and validated the Databricks Python notebook (SOURCE format) at `/Users/raphael.mansuy@gmail.com/exams/x0b40a/m3_taxi_analysis` (Notebook ID: `1560416787592520`).\n\nThe notebook satisfies all structured analysis and reporting requirements on `samples.nyctaxi.trips`:\n- First markdown cell covering title, business questions, and data source.\n- Separate analysis sections preceded by explanatory markdown cells:\n  1. Trips by hour of day (0\u201323).\n  2. Fare behavior across trip-distance buckets (0\u20131 mi, 1\u20132 mi, 2\u20135 mi, 5\u201310 mi, 10+ mi).\n  3. Top 10 pickup zip codes by trip count.\n- Two Matplotlib visual charts (hourly demand profile and distance bucket pricing analysis).\n- A final markdown \"Findings\" cell quoting empirical figures computed directly by the notebook.\n- A final execution cell invoking `dbutils.notebook.exit()` with dynamically computed metrics.\n\nThe notebook ran to completion on Databricks serverless compute (Run ID: `10300660415657` under one-time Job ID: `423101829493906`).\n\n**Exit value:**\n```json\n{\"n_trips\": 21932, \"peak_hour\": 18, \"avg_fare_per_mile\": 4.3}\n```\n\n---\n\n### Evidence\n\nFor each numbered requirement and explicit constraint from the prompt, the real result and verifying tool call are as follows:\n\n1. **Workspace path and SOURCE format (`/Users/raphael.mansuy@gmail.com/exams/x0b40a/m3_taxi_analysis`)**:\n   - **Tool call:** `bash` executing `databricks workspace list /Users/raphael.mansuy@gmail.com/exams/x0b40a`\n   - **Real result:**\n     ```\n     ID                Type      Language  Path\n     1560416787592520  NOTEBOOK  PYTHON    /Users/raphael.mansuy@gmail.com/exams/x0b40a/m3_taxi_analysis\n     ```\n\n2. **First markdown cell with title, business question, and data source (`samples.nyctaxi.trips`)**:\n   - **Tool call:** `bash` executing `databricks workspace export /Users/raphael.mansuy@gmail.com/exams/x0b40a/m3_taxi_analysis --format SOURCE`\n   - **Real result:** Cell 1 begins with:\n     ```markdown\n     # MAGIC # NYC Taxi Demand & Fare Analysis\n     # MAGIC ### Business Question\n     # MAGIC ### Data Source\n     # MAGIC - **Catalog & Schema:** `samples.nyctaxi`\n     # MAGIC - **Table:** `samples.nyctaxi.trips`\n     ```\n\n3. **Analysis cells, each preceded by a short markdown cell saying what it shows, covering (a) trips by hour of day, (b) fare behaviour by trip-distance bucket, and (c) top 10 pickup zips by trip count**:\n   - **Tool call:** `bash` executing `databricks workspace export /Users/raphael.mansuy@gmail.com/exams/x0b40a/m3_taxi_analysis --format SOURCE`\n   - **Real result:**\n     - *(a) Trips by hour:* Cell 4 markdown (`# MAGIC ## 1. Trips by Hour of Day`) precedes Cell 5 code (`hourly_df = (trips_df.withColumn(\"pickup_hour\", F.hour(\"tpep_pickup_datetime\")).groupBy(\"pickup_hour\").agg(...).orderBy(\"pickup_hour\"))`).\n     - *(b) Fare behaviour by distance bucket:* Cell 8 markdown (`# MAGIC ## 2. Fare Behaviour by Trip-Distance Bucket`) precedes Cell 9 code categorizing trips into buckets `0-1 miles`, `1-2 miles`, `2-5 miles`, `5-10 miles`, and `10+ miles`, computing `trip_count`, `avg_distance`, `avg_fare`, and `fare_per_mile`.\n     - *(c) Top 10 pickup zips:* Cell 12 markdown (`# MAGIC ## 3. Top 10 Pickup Zip Codes by Trip Count`) precedes Cell 13 code (`top_zips_df = (trips_df.groupBy(\"pickup_zip\").agg(...).orderBy(F.col(\"trip_count\").desc(), F.col(\"pickup_zip\").asc()).limit(10))`).\n\n4. **At least two visualizations (display() charts or matplotlib)**:\n   - **Tool call:** `bash` executing `databricks workspace export /Users/raphael.mansuy@gmail.com/exams/x0b40a/m3_taxi_analysis --format SOURCE`\n   - **Real result:**\n     - Visualization 1 (Cell 7): Matplotlib dual-axis chart showing total trip volume (bar chart) and average distance (line plot) across hours 0\u201323 (`fig, ax1 = plt.subplots(...)`, `ax1.bar(...)`, `ax2.plot(...)`, `plt.show()`).\n     - Visualization 2 (Cell 11): Matplotlib grouped bar chart comparing `avg_fare` vs. `fare_per_mile` across distance buckets (`bars1 = ax1.",
+  "score": 20,
+  "total": 20,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "notebook exists at the requested path",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "is a Databricks SOURCE notebook with >= 8 cells",
+      "passed": true,
+      "weight": 1,
+      "detail": "15 cells"
+    },
+    {
+      "name": "first cell is markdown (title/question/source)",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": ">= 5 markdown cells (narrative, not just code)",
+      "passed": true,
+      "weight": 1,
+      "detail": "8 md"
+    },
+    {
+      "name": "reads samples.nyctaxi.trips",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": ">= 2 visualizations",
+      "passed": true,
+      "weight": 1,
+      "detail": "11 viz calls"
+    },
+    {
+      "name": "covers hour, distance bucket, top-10 zips",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "ends with dbutils.notebook.exit",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "does not hard-code the exit values",
+      "passed": true,
+      "weight": 1,
+      "detail": "hard-coded: []"
+    },
+    {
+      "name": "executes end to end on serverless",
+      "passed": true,
+      "weight": 4,
+      "detail": "SUCCESS None"
+    },
+    {
+      "name": "exit JSON values equal the golden numbers",
+      "passed": true,
+      "weight": 4,
+      "detail": "got {'n_trips': 21932, 'peak_hour': 18, 'avg_fare_per_mile': 4.3} want {'n_trips': '21932', 'peak_hour': '18', 'avg_fare_per_mile': '4.3'}"
+    },
+    {
+      "name": "agent reported an exit value / evidence of running",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 391
+}

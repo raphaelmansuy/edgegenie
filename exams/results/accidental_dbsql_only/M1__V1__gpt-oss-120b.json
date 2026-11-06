@@ -1,0 +1,61 @@
+{
+  "mission": "M1",
+  "title": "Complex SQL: windowed revenue ranking",
+  "variant": "V1",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "run_id": "xb34ad",
+  "batch": "baseline",
+  "runner_log": "EXIT=0 SECONDS=32\n8897 events.jsonl",
+  "tool_calls": 3,
+  "steps": 4,
+  "tokens": 34147,
+  "tools_used": [
+    "dbsql_execute_sql",
+    "invalid"
+  ],
+  "tool_errors": 0,
+  "answer": "**SQL used**\n\n```sql\nCREATE OR REPLACE TABLE workspace.exam_xb34ad.m1_top_zips AS\nWITH filtered AS (\n  SELECT pickup_zip,\n         COUNT(*) AS trips,\n         SUM(fare_amount) AS total_fare\n  FROM samples.nyctaxi.trips\n  WHERE pickup_zip IS NOT NULL\n  GROUP BY pickup_zip\n  HAVING COUNT(*) >= 200\n),\ntotal_rev AS (\n  SELECT SUM(total_fare) AS grand_total\n  FROM filtered\n),\nbusiest AS (\n  SELECT pickup_zip,\n         hour(tpep_pickup_datetime) AS hr,\n         COUNT(*) AS cnt,\n         ROW_NUMBER() OVER (\n           PARTITION BY pickup_zip\n           ORDER BY COUNT(*) DESC, hour(tpep_pickup_datetime) ASC\n         ) AS rn\n  FROM samples.nyctaxi.trips\n  WHERE pickup_zip IS NOT NULL\n  GROUP BY pickup_zip, hour(tpep_pickup_datetime)\n),\nranked AS (\n  SELECT f.pickup_zip,\n         f.trips,\n         ROUND(f.total_fare, 2) AS total_fare,\n         DENSE_RANK() OVER (ORDER BY f.total_fare DESC) AS fare_rank,\n         ROUND(\n           SUM(f.total_fare) OVER (\n             ORDER BY f.total_fare DESC, f.pickup_zip ASC\n           ) / (SELECT grand_total FROM total_rev) * 100,\n           2\n         ) AS cumulative_share_pct,\n         b.hr AS busiest_hour\n  FROM filtered f\n  JOIN total_rev tr ON 1 = 1\n  JOIN (\n    SELECT pickup_zip, hr\n    FROM busiest\n    WHERE rn = 1\n  ) b ON f.pickup_zip = b.pickup_zip\n)\nSELECT\n  pickup_zip,\n  trips,\n  total_fare,\n  fare_rank,\n  cumulative_share_pct,\n  busiest_hour\nFROM ranked\nWHERE fare_rank <= 10\nORDER BY fare_rank;\n```\n\n**Row count**\n\nThe resulting table `workspace.exam_xb34ad.m1_top_zips` contains **10 rows**.",
+  "score": 10,
+  "total": 10,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['pickup_zip', 'trips', 'total_fare', 'fare_rank', 'cumulative_share_pct', 'busiest_hour']"
+    },
+    {
+      "name": "row count matches golden",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 10, want 10"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports SQL and row count",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 54
+}

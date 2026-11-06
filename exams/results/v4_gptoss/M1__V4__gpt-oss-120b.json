@@ -1,0 +1,65 @@
+{
+  "mission": "M1",
+  "title": "Complex SQL: windowed revenue ranking",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x893c3",
+  "batch": "v4_gptoss",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nSUPERVISOR: empty final answer, continuing (attempt 3)\nEXIT=0 SECONDS=95\n46470 events.jsonl",
+  "tool_calls": 17,
+  "steps": 21,
+  "tokens": 252708,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_run_sql",
+    "invalid"
+  ],
+  "tool_errors": 0,
+  "answer": "**Done**  \n- Table **workspace.exam_x893c3.m1_top_zips** has been created.  \n- It contains exactly the top\u202f10 pickup zip codes by revenue, with all required columns and calculations.  \n\n**Evidence**\n\n| # | Requirement (as stated) | Tool call that proves it | Result excerpt |\n|---|--------------------------|--------------------------|----------------|\n|\u202f1\ufe0f\u20e3| Build ranking from **samples.nyctaxi.trips** and save as **workspace.exam_x893c3.m1_top_zips** | `dbx_run_sql`\u202f( CREATE\u202fOR\u202fREPLACE\u202fTABLE \u2026 FROM\u202fsamples.nyctaxi.trips \u2026 ) | Table created (no errors) |\n|\u202f2\ufe0f\u20e3| Ignore trips where `pickup_zip`\u202fis\u202fNULL | `dbx_run_sql`\u202f`SELECT COUNT(*) AS null_count FROM workspace.exam_x893c3.m1_top_zips WHERE pickup_zip IS NULL` | `null_count = 0` |\n|\u202f3\ufe0f\u20e3| Only consider zips with\u202f\u2265\u202f200 trips | `dbx_run_sql`\u202f`SELECT MIN(trips) AS min_trips FROM workspace.exam_x893c3.m1_top_zips` | `min_trips = 429` (\u2265\u202f200) |\n|\u202f4\ufe0f\u20e3| Exact columns `pickup_zip, trips, total_fare, fare_rank, cumulative_share_pct, busiest_hour` (total_fare rounded 2\u202fdp) | `dbx_describe_table` on the new table | Columns listed with correct types; `total_fare` is DOUBLE (rounded values shown later) |\n|\u202f4a| `total_fare` rounded to 2\u202fdp | `dbx_run_sql`\u202f`SELECT pickup_zip, total_fare FROM workspace.exam_x893c3.m1_top_zips LIMIT 3` | Values like `19209.5`, `14798.84`, `13028.01` (all two\u2011decimal) |\n|\u202f5\ufe0f\u20e3| `fare_rank` is **DENSE_RANK** descending by `total_fare` | `dbx_run_sql`\u202f`SELECT pickup_zip, total_fare, fare_rank FROM workspace.exam_x893c3.m1_top_zips ORDER BY fare_rank` | Ranks 1\u201110 correspond to descending `total_fare` |\n|\u202f6\ufe0f\u20e3| `cumulative_share_pct` = running\u2011sum\u202f\u00f7\u202ftotal\u202f\u00d7\u202f100, rounded 2\u202fdp | `dbx_run_sql`\u202f`SELECT pickup_zip, total_fare, cumulative_share_pct FROM workspace.exam_x893c3.m1_top_zips ORDER BY fare_rank LIMIT 5` | First rows: (11422,\u202f19209.5,\u202f8.22), (11371,\u202f14798.84,\u202f14.55), \u2026 matching the formula (checked against full 31\u2011zip set in the earlier ranking query) |\n|\u202f7\ufe0f\u20e3| `busiest_hour` = hour with most trips, ties \u2192 smaller hour | `dbx_run_sql`\u202f`SELECT pickup_zip, busiest_hour FROM workspace.exam_x893c3.m1_top_zips ORDER BY fare_rank LIMIT 5` | Hours: 15,\u202f23,\u202f20,\u202f19,\u202f18 \u2013 derived from `ROW_NUMBER() \u2026 ORDER BY COUNT(*) DESC, hour ASC` in the creation query |\n|\u202f8\ufe0f\u20e3| Keep only rows with `fare_rank\u00a0\u2264\u00a010` | `dbx_run_sql`\u202f`SELECT COUNT(*) FROM workspace.exam_x893c3.m1_top_zips` | Count =\u202f10; `fare_rank` column values range 1\u201110 only |\n|\u202f9\ufe0f\u20e3| Table resides in workspace **exam_x893c3** (prefix allowed) | `dbx_describe_table` shows full name `workspace.exam_x893c3.m1_top_zips` | Confirmed location |\n\n**Assumptions and unverified**  \n- None. All explicit constraints have been demonstrated with live tool outputs.\n\n**Anything odd or suspicious**  \n- None.",
+  "score": 10,
+  "total": 10,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['pickup_zip', 'trips', 'total_fare', 'fare_rank', 'cumulative_share_pct', 'busiest_hour']"
+    },
+    {
+      "name": "row count matches golden",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 10, want 10"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports SQL and row count",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 117
+}

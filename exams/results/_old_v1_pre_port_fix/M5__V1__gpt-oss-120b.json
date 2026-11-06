@@ -1,0 +1,75 @@
+{
+  "mission": "M5",
+  "title": "ETL pipeline: medallion job, idempotent, scheduled run",
+  "variant": "V1",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "run_id": "xabf5c",
+  "batch": "baseline",
+  "runner_log": "EXIT=0 SECONDS=30\n14185 events.jsonl",
+  "tool_calls": 5,
+  "steps": 6,
+  "tokens": 67507,
+  "tools_used": [
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_list_warehouses",
+    "dbxnb_dbx_whoami",
+    "dbxnb_dbx_write_notebook"
+  ],
+  "tool_errors": 0,
+  "answer": "",
+  "score": 2,
+  "total": 17,
+  "pct": 11.8,
+  "checks": [
+    {
+      "name": "silver_events equals golden",
+      "passed": false,
+      "weight": 4,
+      "detail": "missing"
+    },
+    {
+      "name": "silver_rejects equals golden",
+      "passed": false,
+      "weight": 2,
+      "detail": "missing"
+    },
+    {
+      "name": "gold_daily equals golden",
+      "passed": false,
+      "weight": 3,
+      "detail": "missing"
+    },
+    {
+      "name": "job named xabf5c_etl exists",
+      "passed": false,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "job has >= 2 tasks with a dependency",
+      "passed": false,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "latest run succeeded",
+      "passed": false,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "re-running the job is idempotent",
+      "passed": false,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 42
+}

@@ -1,0 +1,64 @@
+{
+  "mission": "M1",
+  "title": "Complex SQL: windowed revenue ranking",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "copilot",
+  "tag": "copilot-gpt-oss-120b",
+  "run_id": "xd7b1a",
+  "batch": "copilot_shim_v4_gptoss",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: audit pass 1\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=82\n159643 events.jsonl",
+  "tool_calls": 5,
+  "steps": 11,
+  "tokens": 0,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb-dbx_describe_table",
+    "dbxnb-dbx_run_sql"
+  ],
+  "tool_errors": 0,
+  "answer": "**Final Report**\n\n**Done**  \n- Table **workspace.exam_xd7b1a.m1_top_zips** created with the required ranking data.  \n- 10 rows stored (top\u201110 zip codes by revenue).\n\n**Evidence by Requirement**\n\n| # | Requirement | Tool call that proves it |\n|---|-------------|--------------------------|\n|1|Saved as `workspace.exam_xd7b1a.m1_top_zips`|`dbx_run_sql`\u202f(creation) \u2013 the `CREATE OR REPLACE TABLE workspace.exam_xd7b1a.m1_top_zips AS \u2026` statement.|\n|2|Ignored trips where `pickup_zip` is NULL|Same creation call \u2013 `WHERE pickup_zip IS NOT NULL` appears in the query.|\n|3|Revenue = sum of `fare_amount`|Same creation call \u2013 `SUM(fare_amount)` used to compute `total_fare`.|\n|4|Only zips with \u2265\u202f200 trips|Creation call \u2013 `HAVING COUNT(*) >= 200`.  Verified by `dbx_run_sql`\u202f(`SELECT MIN(trips) \u2026`) which returned **429** (\u2265\u202f200).|\n|5|Exact columns (`pickup_zip, trips, total_fare, fare_rank, cumulative_share_pct, busiest_hour`)|`dbx_describe_table` on the new table lists exactly those six columns.|\n|6|`total_fare` rounded to\u202f2\u202fdecimals|Creation call \u2013 `ROUND(SUM(fare_amount),2) AS total_fare`.  Sample rows from `dbx_run_sql` (`SELECT * \u2026`) show values like **19209.50**, **14798.84**, etc., i.e., two\u2011decimal precision.|\n|7|`fare_rank` is a dense rank descending by `total_fare`|Creation call \u2013 `DENSE_RANK() OVER (ORDER BY z.total_fare DESC) AS fare_rank`.  Result rows show a dense sequence 1\u201110 with no gaps.|\n|8|`cumulative_share_pct` computed as running\u2011sum of `total_fare` over total eligible revenue, expressed as a percent and rounded to\u202f2\u202fdecimals|Creation call \u2013 `ROUND(SUM(z.total_fare) OVER (ORDER BY z.total_fare DESC, z.pickup_zip ASC) / t.total * 100, 2) AS cumulative_share_pct`.  Result rows display percentages (e.g., **8.22**, **14.55**, \u2026) matching that formula.|\n|9|`busiest_hour` = hour of day with most trips per zip, tie\u2011break smaller hour|Creation call \u2013 sub\u2011query `busiest` uses `ROW_NUMBER() OVER (PARTITION BY pickup_zip ORDER BY COUNT(*) DESC, hour(tpep_pickup_datetime) ASC)`.  The joined column `b.hr AS busiest_hour` in the final result confirms the rule.|\n|10|Only rows with `fare_rank\u202f<=\u202f10` kept|Creation call \u2013 final `WHERE fare_rank <= 10`.  Verified by `dbx_run_sql` (`SELECT COUNT(*) \u2026`) returning **10** rows and the `fare_rank` column maxing at **10**.|\n\n**Anything odd or suspicious**  \nNone.\n\n**Number of rows in the table**: **10**.",
+  "score": 10,
+  "total": 10,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['pickup_zip', 'trips', 'total_fare', 'fare_rank', 'cumulative_share_pct', 'busiest_hour']"
+    },
+    {
+      "name": "row count matches golden",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 10, want 10"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports SQL and row count",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 110
+}

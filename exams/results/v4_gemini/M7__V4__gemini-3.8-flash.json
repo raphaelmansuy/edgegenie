@@ -1,0 +1,119 @@
+{
+  "mission": "M7",
+  "title": "Governance: document UC tables from the data",
+  "variant": "V4",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "x25a26",
+  "batch": "v4_gemini",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=273\n219553 events.jsonl",
+  "tool_calls": 66,
+  "steps": 57,
+  "tokens": 1378825,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_run_sql",
+    "dbxnb_dbx_whoami"
+  ],
+  "tool_errors": 0,
+  "answer": "### Done\nAdded Unity Catalog documentation to all 3 tables and all 18 columns in schema `workspace.exam_x25a26`:\n- `workspace.exam_x25a26.cust` (7 columns: `cid`, `cname`, `ctry`, `ltv_c`, `ts_cr`, `flg_act`, `seg`)\n- `workspace.exam_x25a26.ord` (6 columns: `oid`, `cid`, `amt_c`, `ccy`, `st`, `ts`)\n- `workspace.exam_x25a26.evt_log` (5 columns: `eid`, `cid`, `ev`, `ts_ms`, `payload`)\n\n#### Requirement-by-Requirement Proof Mapping:\n\n1. **Table comment on each of the 3 tables (>= 40 characters, stating what one row represents)**:\n   - **Tool call**: `dbx_run_sql(sql=\"SELECT table_name, length(comment) as len, comment FROM system.information_schema.tables WHERE table_catalog = 'workspace' AND table_schema = 'exam_x25a26' ORDER BY table_name\")`\n   - **Result**:\n     - `cust`: len = 154, comment = `\"Customer master table containing customer profile records, country, segment, and lifetime value. Each row represents a single registered customer account.\"`\n     - `evt_log`: len = 161, comment = `\"Application clickstream event log table recording user web interaction events, sessions, and timestamps. Each row represents a single web user interaction event.\"`\n     - `ord`: len = 161, comment = `\"Purchase order transaction table tracking placed orders, monetary totals, currency, and fulfillment status. Each row represents a single customer purchase order.\"`\n     All 3 comments are >= 40 characters and explicitly state what one row represents.\n\n2. **Column comment on EVERY column of every table (all 18 columns)**:\n   - **Tool call**: `dbx_run_sql(sql=\"SELECT table_name, column_name, data_type, length(comment) as comment_len, comment FROM system.information_schema.columns WHERE table_catalog = 'workspace' AND table_schema = 'exam_x25a26' ORDER BY table_name, ordinal_position\")`\n   - **Result**: Returned exactly 18 rows, with 0 null comments:\n     - `cust.cid` (len 94), `cust.cname` (len 128), `cust.ctry` (len 141), `cust.ltv_c` (len 179), `cust.ts_cr` (len 144), `cust.flg_act` (len 143), `cust.seg` (len 164)\n     - `evt_log.eid` (len 130), `evt_log.cid` (len 170), `evt_log.ev` (len 149), `evt_log.ts_ms` (len 176), `evt_log.payload` (len 178)\n     - `ord.oid` (len 121), `ord.cid` (len 161), `ord.amt_c` (len 169), `ord.ccy` (len 151), `ord.st` (len 164), `ord.ts` (len 156)\n\n3. **Ground each comment in actual data (ranges, samples, units, formats, code lists)**:\n   - **Tool calls**: Profiled via `dbx_run_sql` and verified via `dbx_run_sql` on `system.information_schema.columns`:\n     - Ranges: `cust.cid` (1 to 300), `ord.oid` (1 to 800), `evt_log.eid` (1 to 1500), `ord.amt_c` (1,112 to 49,926), `cust.ltv_c` (441 to 896,257)\n     - Units: `ts_ms` in Unix epoch milliseconds (13 digits); `amt_c` and `ltv_c` in integer minor currency units / cents\n     - Formats: `cname` as `'Customer <cid>'`; `payload` as `{\"sid\":\"<session_id>\",\"ua\":\"<user_agent>\"}`; `ts` on the hour (`:00:00 UTC`); `ts_cr` at midnight (`00:00:00 UTC`)\n     - Code lists: `cust.ctry` (FR, DE, BR, JP, US); `cust.seg` (ENT, SMB, CONS); `ord.ccy` (JPY, USD, EUR); `ord.st` (R, S, C, N); `evt_log.ev` (checkout, add_to_cart, login, view)\n\n4. **Do not change any data or column definitions**:\n   - **Tool call**: `dbx_run_sql(sql=\"SELECT (SELECT count(*) FROM workspace.exam_x25a26.cust) as cust_cnt, (SELECT count(*) FROM workspace.exam_x25a26.ord) as ord_cnt, (SELECT count(*) FROM workspace.exam_x25a26.evt_log) as evt_cnt\")`\n   - **Result**: `cust_cnt = 300`, `ord_cnt = 800`, `evt_cnt = 1500`, exactly matching initial pre-comment table row counts and schemas.\n\n### Evidence\nApplied comments were verified via two independent routes:\n\n1. **System Information Schema Check**:\n   - **Tool call**:\n     ```sql\n     SELECT \n       (SELECT count(*) FROM system.information_schema.columns \n        WHERE table_schema = 'exam_x25a26' and table_catalog = 'workspace' and (comment is null or length(comment) = 0)) as missing_col_comments,\n       (SELECT count(*) FROM system.information_schema.tables \n      ",
+  "score": 25,
+  "total": 25,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "data and column definitions unchanged",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "3 table comments, each >= 40 chars",
+      "passed": true,
+      "weight": 2,
+      "detail": "{'cust': 154, 'ord': 161, 'evt_log': 161}"
+    },
+    {
+      "name": "every column has a real comment (18 columns)",
+      "passed": true,
+      "weight": 3,
+      "detail": "18/18"
+    },
+    {
+      "name": "no comment merely echoes the column name",
+      "passed": true,
+      "weight": 1,
+      "detail": "[]"
+    },
+    {
+      "name": "ltv_c documented as cents / minor units",
+      "passed": true,
+      "weight": 2,
+      "detail": "customer lifetime value: historical monetary value in minor currency units (cents), integer amount ranging from 441 to 896,257 (mean ~447,490; e.g. 896257 = 8,962.57 major units)."
+    },
+    {
+      "name": "amt_c documented as cents / minor units",
+      "passed": true,
+      "weight": 2,
+      "detail": "order total amount in minor currency units (cents): integer amount ranging from 1,112 to 49,926 (mean ~25,537; e.g. 27681 represents 276.81 in the transaction currency)."
+    },
+    {
+      "name": "ts_ms documented as epoch MILLISECONDS",
+      "passed": true,
+      "weight": 2,
+      "detail": "event timestamp in unix epoch milliseconds (bigint, 13 digits; range: 1760002959167 to 1762999906731, corresponding to 2025-10-09 09:42:39 utc through 2025-11-13 02:11:46 utc)."
+    },
+    {
+      "name": "st lists its codes (>= 3 of N,S,C,R)",
+      "passed": true,
+      "weight": 2,
+      "detail": "order status single-letter code (string; valid codes: 'r' for returned/refunded [213], 's' for shipped [199], 'c' for completed/cancelled [197], 'n' for new [191])."
+    },
+    {
+      "name": "seg lists SMB/ENT/CONS",
+      "passed": true,
+      "weight": 1,
+      "detail": "customer market segment code (string; valid categories: 'ent' for enterprise [110 rows], 'smb' for small/medium business [103 rows], 'cons' for consumer [87 rows])."
+    },
+    {
+      "name": "ctry mentions ISO / country code",
+      "passed": true,
+      "weight": 1,
+      "detail": "country code: 2-letter iso 3166-1 alpha-2 country code of the customer (string; observed codes: fr [70], de [61], br [59], jp [57], us [53])."
+    },
+    {
+      "name": "payload identified as JSON",
+      "passed": true,
+      "weight": 1,
+      "detail": "event session payload in json format formatted as '{\"sid\":\"<session_id>\",\"ua\":\"<user_agent>}' (string; 'sid' is session identifier ranging s1-s50, 'ua' is device platform 'web')."
+    },
+    {
+      "name": "flg_act identified as boolean/active",
+      "passed": true,
+      "weight": 1,
+      "detail": "active customer flag: boolean status indicator where true denotes an active account (214 rows) and false denotes an inactive account (86 rows)."
+    },
+    {
+      "name": "flags what is inferred/unverified (epistemic honesty)",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "reports how application was verified",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 315
+}

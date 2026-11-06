@@ -1,0 +1,71 @@
+{
+  "mission": "X2",
+  "title": "HELD-OUT: diagnose and fix a failing job (1 loud + 1 silent bug)",
+  "variant": "V6",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "x21c3b",
+  "batch": "heldout_v6_gemini",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=599\n165249 events.jsonl",
+  "tool_calls": 45,
+  "steps": 48,
+  "tokens": 1206019,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_job_run_status",
+    "dbxnb_dbx_read_notebook",
+    "dbxnb_dbx_run_job",
+    "dbxnb_dbx_run_notebook",
+    "dbxnb_dbx_run_sql",
+    "dbxnb_dbx_whoami",
+    "dbxnb_dbx_write_notebook"
+  ],
+  "tool_errors": 1,
+  "answer": "### Audit Verification of Requirements\n\n| # | Requirement / Explicit Constraint | Tool Call | Tool Call Real Result Proving Completion |\n|---|---|---|---|\n| 1 | **Find out why it fails** | `dbx_run_notebook(path=\"/Users/raphael.mansuy@gmail.com/exams/x21c3b/x2_revenue\")` | Returned: `[CAST_INVALID_INPUT] The value 'N/A' of the type \"STRING\" cannot be cast to \"DOUBLE\" because it is malformed. Use try_cast to tolerate malformed input and return NULL instead. SQLSTATE: 22018`. Additionally, query `SELECT count(*) FROM workspace.exam_x21c3b.x2_orders WHERE customer_id NOT IN (SELECT customer_id FROM workspace.exam_x21c3b.x2_customers)` proved 91 orders lacked customer records and were dropped by the inner join. |\n| 2 | **Fix the notebook (change only what is necessary, keep the structure)** | `dbx_read_notebook(path=\"/Users/raphael.mansuy@gmail.com/exams/x21c3b/x2_revenue\")` | Returned exact 4-cell structure (`cells: 4, code_cells: 3, markdown_cells: 1`). Preserved all markdown, table loading, cell boundaries, and `dbutils.notebook.exit(\"ok\")`, updating only `cast` to `coalesce(try_cast, 0.0)` and join to `left` with `.fillna({\"country\": \"UNKNOWN\"})`. |\n| 3 | **Do not create a new job** | `bash(command=\"databricks jobs list -o json\")` | Returned only the two original jobs (`452468512238256` for `x21c3b_x2_revenue` and `924340526860667` for `m4_fare_report_job`). No other job exists. |\n| 4 | **Run the job again and make sure the latest run succeeds** | `bash(command=\"databricks jobs list-runs --job-id 452468512238256 --limit 1 -o json\")` | Returned run ID `1005086651106833` with `life_cycle_state: \"TERMINATED\"`, `result_state: \"SUCCESS\"`. |\n| 5 | **Output table `workspace.exam_x21c3b.x2_revenue` exists and is correct per markdown description** | `dbx_run_sql(sql=\"SELECT country, revenue, orders FROM workspace.exam_x21c3b.x2_revenue ORDER BY country\")` | Returned: `DE` (26980.0, 185), `FR` (8749.0, 62), `JP` (12748.0, 83), `UNKNOWN` (12913.0, 91), `US` (10154.0, 79). Sum of orders = 500, sum of revenue = 71544.0. Both independent two-way `EXCEPT` queries returned 0 rows. |\n| 6 | **Report the root cause(s) found** | Stated below | (1) Malformed `'N/A'` string values causing ANSI `[CAST_INVALID_INPUT]` failure; (2) `inner` join discarding 91 orders whose customers were not in `x2_customers`. |\n\n---\n\n### Done\n\n- Fixed notebook `/Users/raphael.mansuy@gmail.com/exams/x21c3b/x2_revenue` in place while preserving its 4-cell structure:\n  - Replaced strict ANSI cast with `F.coalesce(F.expr(\"try_cast(amount as double)\"), F.lit(0.0))` to treat non-numeric values as 0.\n  - Replaced `inner` join with `left` join and `.fillna({\"country\": \"UNKNOWN\"})` to assign unmatched customers to country `UNKNOWN`.\n- Triggered existing nightly job `x21c3b_x2_revenue` (Job ID: `452468512238256`).\n- Created and validated target table `workspace.exam_x21c3b.x2_revenue`.\n\n---\n\n### Evidence\n\n1. **Job Run State**:\n   - `databricks jobs list-runs --job-id 452468512238256 --limit 1 -o json` shows run ID `1005086651106833` with `result_state: \"SUCCESS\"` and `life_cycle_state: \"TERMINATED\"`.\n2. **Table Schema and Contents**:\n   - Table `workspace.exam_x21c3b.x2_revenue` contains columns `country STRING`, `revenue DOUBLE`, `orders BIGINT`.\n   - Table rows:\n     - `DE`: revenue `26980.0`, orders `185`\n     - `FR`: revenue `8749.0`, orders `62`\n     - `JP`: revenue `12748.0`, orders `83`\n     - `UNKNOWN`: revenue `12913.0`, orders `91`\n     - `US`: revenue `10154.0`, orders `79`\n3. **Independent Double-Checks**:\n   - Total rows: `500` orders across all countries matches `SELECT count(*) FROM workspace.exam_x21c3b.x2_orders` (500).\n   - Total revenue: `71544.0` matches `SELECT round(sum(case when amount = 'N/A' then 0.0 else cast(amount as double) end), 2) FROM workspace.exam_x21c3b.x2_orders` (71544.0).\n   - `SELECT * FROM workspace.exam_x21c3b.x2_revenue EXCEPT ...` and reverse `EXCEPT` returned 0 rows in both directions.\n\n---\n\n### Assumptions and unverified\n\nnone\n\n---\n\n#",
+  "score": 14,
+  "total": 14,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "the original job still exists (no replacement job)",
+      "passed": true,
+      "weight": 1,
+      "detail": "1 jobs"
+    },
+    {
+      "name": "latest run of the job succeeded",
+      "passed": true,
+      "weight": 3,
+      "detail": "{'life_cycle_state': 'TERMINATED', 'result_state': 'SUCCESS', 'state_message': '', 'user_cancelled_or_timedout': False}"
+    },
+    {
+      "name": "x2_revenue equals golden (incl. UNKNOWN row, N/A ignored)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "minimal edit: markdown cell kept, <= 12 changed lines",
+      "passed": true,
+      "weight": 2,
+      "detail": "8 changed lines"
+    },
+    {
+      "name": "answer names both root causes",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 631
+}

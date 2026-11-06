@@ -1,0 +1,86 @@
+{
+  "mission": "M5",
+  "title": "ETL pipeline: medallion job, idempotent, scheduled run",
+  "variant": "V6",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "xd17d3",
+  "batch": "v6_gemini",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=578\n189273 events.jsonl",
+  "tool_calls": 55,
+  "steps": 58,
+  "tokens": 1593245,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "dbxnb_dbx_create_job",
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_job_run_status",
+    "dbxnb_dbx_list_notebooks",
+    "dbxnb_dbx_list_tables",
+    "dbxnb_dbx_run_job",
+    "dbxnb_dbx_run_notebook",
+    "dbxnb_dbx_run_sql",
+    "dbxnb_dbx_skill",
+    "dbxnb_dbx_whoami",
+    "dbxnb_dbx_write_notebook"
+  ],
+  "tool_errors": 0,
+  "answer": "### Done\n1. Created and deployed two serverless notebooks:\n   - `/Users/raphael.mansuy@gmail.com/exams/xd17d3/m5_etl/silver`\n   - `/Users/raphael.mansuy@gmail.com/exams/xd17d3/m5_etl/gold`\n2. Created Databricks multi-task Job `xd17d3_etl` (`job_id: 599297971221015`) with task `silver` and dependent task `gold`.\n3. Created and populated three tables in `workspace.exam_xd17d3`:\n   - `silver_events`: 2,761 rows\n   - `silver_rejects`: 239 rows\n   - `gold_daily`: 14 rows\n4. Successfully ran the job twice (`run_id: 598908252166815` and `run_id: 71305546104266`), confirming full idempotency and pipeline stability.\n\n---\n\n### Evidence\n\nBelow is each explicit requirement and constraint mapped to the exact tool call and returned result proving compliance:\n\n1. **Table `workspace.exam_xd17d3.silver_events` schema and filtering**\n   - *Requirement*: Columns `(event_id, user_id, event_ts TIMESTAMP, event_type, amount DOUBLE)`. Deduplicate by keeping latest `ingested_at` per `event_id`, then keep rows with non-NULL `user_id` and parseable `event_ts`.\n   - *Tool Call*: `dbx_run_sql(\"SELECT column_name, data_type FROM workspace.information_schema.columns WHERE table_schema = 'exam_xd17d3' AND table_name = 'silver_events' ORDER BY ordinal_position\")`\n     - *Result*: Columns and types: `event_id: STRING`, `user_id: STRING`, `event_ts: TIMESTAMP`, `event_type: STRING`, `amount: DOUBLE`.\n   - *Tool Call*: `dbx_run_sql(\"SELECT * FROM workspace.exam_xd17d3.silver_events WHERE event_id = 'e645'\")`\n     - *Result*: `['e645', 'u60', '2026-10-02T21:40:36.000Z', 'purchase', '42.95']`. Shows that between raw duplicates (41.95 at 2026-10-20 vs corrected 42.95 at 2026-10-21), the latest correction was retained.\n   - *Tool Call*: `dbx_run_sql(\"SELECT count(*) FROM workspace.exam_xd17d3.silver_events WHERE user_id IS NULL OR event_ts IS NULL\")`\n     - *Result*: `0`.\n\n2. **Table `workspace.exam_xd17d3.silver_rejects` schema, exclusivity, and priority**\n   - *Requirement*: Columns `(event_id, reject_reason)`. De-duplicated rows excluded from silver with `reject_reason = 'null_user_id'` (checked first) or `'bad_timestamp'`.\n   - *Tool Call*: `dbx_run_sql(\"SELECT column_name, data_type FROM workspace.information_schema.columns WHERE table_schema = 'exam_xd17d3' AND table_name = 'silver_rejects' ORDER BY ordinal_position\")`\n     - *Result*: Columns and types: `event_id: STRING`, `reject_reason: STRING`.\n   - *Tool Call*: `dbx_run_sql(\"SELECT r.event_id, r.reject_reason FROM workspace.exam_xd17d3.silver_rejects r JOIN workspace.exam_xd17d3.raw_events raw ON r.event_id = raw.event_id WHERE raw.user_id IS NULL AND try_to_timestamp(raw.event_ts) IS NULL\")`\n     - *Result*: All dual-failure rows (`e1006`, `e2296`, `e2824`, `e752`) returned `reject_reason = 'null_user_id'`, proving priority order.\n   - *Tool Call*: `dbx_run_sql(\"SELECT (SELECT count(*) FROM workspace.exam_xd17d3.silver_events) + (SELECT count(*) FROM workspace.exam_xd17d3.silver_rejects) AS total_processed, (SELECT count(distinct event_id) FROM workspace.exam_xd17d3.raw_events) AS total_distinct_raw\")`\n     - *Result*: Both equal `3000` (2,761 + 239 = 3,000).\n\n3. **Table `workspace.exam_xd17d3.gold_daily` schema and aggregation**\n   - *Requirement*: Columns `(event_date DATE, active_users, purchases, revenue rounded to 2 decimals, 0 if none)` derived from `silver_events`.\n   - *Tool Call*: `dbx_run_sql(\"SELECT column_name, data_type FROM workspace.information_schema.columns WHERE table_schema = 'exam_xd17d3' AND table_name = 'gold_daily' ORDER BY ordinal_position\")`\n     - *Result*: Columns and types: `event_date: DATE`, `active_users: LONG`, `purchases: LONG`, `revenue: DOUBLE`.\n   - *Tool Call*: Bidirectional SQL `EXCEPT` between `gold_daily` and raw calculation from `silver_events`.\n     - *Result*: Both returned 0 differing rows.\n\n4. **Job Orchestration**\n   - *Requirement*: Job named exactly `xd17d3_etl`, silver task and gold task depending on silver, notebooks under `/Users/raphael.mansuy@gmail.co",
+  "score": 17,
+  "total": 17,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "silver_events equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "silver_rejects equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 2,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "gold_daily equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 3,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "job named xd17d3_etl exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "job has >= 2 tasks with a dependency",
+      "passed": true,
+      "weight": 1,
+      "detail": "2 tasks"
+    },
+    {
+      "name": "latest run succeeded",
+      "passed": true,
+      "weight": 2,
+      "detail": "{'life_cycle_state': 'TERMINATED', 'result_state': 'SUCCESS', 'state_message': '', 'user_cancelled_or_timedout': False}"
+    },
+    {
+      "name": "grader re-runs the job: still succeeds and counts unchanged (idempotent)",
+      "passed": true,
+      "weight": 2,
+      "detail": "before={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} after={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} state=SUCCESS"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 653
+}

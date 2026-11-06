@@ -1,0 +1,67 @@
+{
+  "mission": "X2",
+  "title": "HELD-OUT: diagnose and fix a failing job (1 loud + 1 silent bug)",
+  "variant": "V1",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x55baf",
+  "batch": "heldout_v1_gptoss",
+  "runner_log": "EXIT=0 SECONDS=26\n8599 events.jsonl",
+  "tool_calls": 5,
+  "steps": 6,
+  "tokens": 57318,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_list_notebooks",
+    "dbxnb_dbx_list_warehouses",
+    "dbxnb_dbx_read_notebook",
+    "dbxnb_dbx_whoami",
+    "edit"
+  ],
+  "tool_errors": 1,
+  "answer": "",
+  "score": 3,
+  "total": 14,
+  "pct": 21.4,
+  "checks": [
+    {
+      "name": "the original job still exists (no replacement job)",
+      "passed": true,
+      "weight": 1,
+      "detail": "1 jobs"
+    },
+    {
+      "name": "latest run of the job succeeded",
+      "passed": false,
+      "weight": 3,
+      "detail": "None"
+    },
+    {
+      "name": "x2_revenue equals golden (incl. UNKNOWN row, N/A ignored)",
+      "passed": false,
+      "weight": 4,
+      "detail": "missing"
+    },
+    {
+      "name": "minimal edit: markdown cell kept, <= 12 changed lines",
+      "passed": false,
+      "weight": 2,
+      "detail": "0 changed lines"
+    },
+    {
+      "name": "answer names both root causes",
+      "passed": false,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 51
+}

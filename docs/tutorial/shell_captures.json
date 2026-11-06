@@ -1,0 +1,44 @@
+[
+ {
+  "title": "What is on the machine before we start",
+  "command": "uname -sm; databricks --version; node --version; opencode --version 2>&1 | tail -1",
+  "output": "Linux x86_64\nDatabricks CLI v1.23.0\nv24.22.1\nopencode: not installed yet",
+  "seconds": "1 s"
+ },
+ {
+  "title": "Install the agent",
+  "command": "bash templates/setup_agent.sh",
+  "output": "[1/5] Installing the OpenCode agent (no root needed)\nadded 3 packages in 9s\n      opencode 1.19.5\n[2/5] Creating the Python environment for the tool server\n      python packages ok\n[3/5] Writing the agent config (model + tool server + safety switches)\n[4/5] Copying the rules file and skills\n[5/5] Checking the token against the workspace\n      signed in as you@example.com\n\nREADY. Next:  cd /home/sandbox-agent/agent-work && bash start_mcp.sh <catalog.schema> <workspace-folder>",
+  "seconds": "15 s"
+ },
+ {
+  "title": "Start the tool server (the fence)",
+  "command": "bash start_mcp.sh workspace.agent_scratch /Workspace/Users/you/agent_scratch",
+  "output": "tool server is up\n  can write tables in : workspace.agent_scratch\n  can write files in  : /Workspace/Users/you@example.com/agent_scratch/\n  can create jobs named: agent_*",
+  "seconds": "3 s"
+ },
+ {
+  "title": "The tools the agent can use",
+  "command": "python -c '... list tools from http://127.0.0.1:8765/mcp ...'",
+  "output": "19 tools the agent can use:\n\n  dbx_whoami                 Return the authenticated identity and workspace host.\n  dbx_list_tables            List tables and views in a schema with comments.\n  dbx_describe_table         Describe a table: columns, types, comments, partitioning, owner.\n  dbx_search_tables          Search table and column names for a substring.\n  dbx_run_sql                Execute SQL on a SQL warehouse and return rows.\n  dbx_list_notebooks         List a workspace directory (notebooks, files, directories, repos).\n  dbx_read_notebook          Export a notebook's source, with paging.\n  dbx_grep_notebook          Search a notebook's source with a regex and return matching lines.\n  dbx_write_notebook         Create or overwrite a notebook.\n  dbx_run_notebook           Run a notebook ONCE on serverless compute and wait for the result.\n  dbx_create_job             Create a Databricks Job whose tasks are notebooks, on serverless compute.\n  dbx_run_job                Trigger a job run. With wait_seconds > 0 wait for it and return per-task\n  dbx_job_run_status         State of a run, plus per-task exit values and error text once finished.\n  dbx_write_file             Write a plain workspace FILE (app.py, app.yaml, requirements.txt, .md ...),\n  dbx_lakebase_create        Create a Lakebase (managed Postgres) instance and wait until AVAILABLE.\n  dbx_lakebase_status        State, host and capacity of a Lakebase instance.\n  dbx_lakebase_sql           Run SQL on a Lakebase (Postgres) instance using a short-lived credential.\n  dbx_create_app             Try to create (and deploy) a Databricks App. Returns the platform's answer\n  dbx_skill                  Read a how-to skill. Call with no name to list the skills (one line each),",
+  "seconds": "2 s"
+ },
+ {
+  "title": "Ask a question from the shell",
+  "command": "bash ask.sh \"How many trips are in samples.nyctaxi.trips, and over what date range?\"",
+  "output": "supervisor: audit pass 1\nsupervisor: audit pass 2\n\n=== FINAL ANSWER ===\n**Done**  \n- Determined the total number of trips in `samples.nyctaxi.trips`.  \n- Determined the earliest and latest pickup timestamps (date range) for those trips.  \n\n**Evidence**  \n| Requirement | Tool Call | Result |\n|-------------|-----------|--------|\n| Count of trips | `dbxnb_dbx_run_sql` with `SELECT COUNT(*) AS cnt, MIN(tpep_pickup_datetime) AS min_pickup, MAX(tpep_pickup_datetime) AS max_pickup FROM samples.nyctaxi.trips` | Row: `[\"21932\", \"2016-01-01T00:04:30.000Z\", \"2016-02-29T23:51:20.000Z\"]` \u2013 `cnt = 21932` |\n| Date range (earliest & latest pickup) | Same `dbxnb_dbx_run_sql` call as above | `min_pickup = 2016-01-01T00:04:30.000Z`, `max_pickup = 2016-02-29T23:51:20.000Z` |\n| (Corroborating metadata) | `dbxnb_dbx_describe_table` for `samples.nyctaxi.trips` | Property `spark.sql.statistics.numRows = \"21932\"`; column stats show `tpep_pickup_datetime.min = \"2016-01-01 00:04:30.000000\"` and `tpep_pickup_datetime.max = \"2016-02-29 23:51:20.000000\"` |\n\n**Assumptions and unverified**  \n- none  \n\n**Anything odd or suspicious**  \n- none\n\n--- the agent made 2 tool calls: dbx_describe_table, dbx_run_sql",
+  "seconds": "31 s"
+ },
+ {
+  "title": "The log shows every tool call",
+  "command": "python3 -c '... read events.jsonl ...'",
+  "output": "dbxnb_dbx_describe_table completed  {\"full_name\": \"samples.nyctaxi.trips\"}\ndbxnb_dbx_run_sql        completed  {\"sql\": \"SELECT COUNT(*) AS cnt, MIN(tpep_pickup_datetime) AS min_pick",
+  "seconds": "1 s"
+ },
+ {
+  "title": "Use the Databricks CLI directly (same token, no agent)",
+  "command": "databricks current-user me; databricks workspace list /Users/you",
+  "output": "userName : you@example.com\nactive   : True\n\nfirst folders in your workspace:\nID                Type       Language  Path\n3954973140519577  DIRECTORY            /Users/you@example.com/edgequake-app\n2249045220081799  DIRECTORY            /Users/you@example.com/.assistant\n2249045220081803  DIRECTORY            /Users/you@example.com/databricks-toolbox\n2249045220081791  DIRECTORY            /Users/you@example.com/.db_internal\n917069049903578   DIRECTORY            /Users/you@example.com/.databricks",
+  "seconds": "2 s"
+ }
+]

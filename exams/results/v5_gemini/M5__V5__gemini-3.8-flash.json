@@ -1,0 +1,77 @@
+{
+  "mission": "M5",
+  "title": "ETL pipeline: medallion job, idempotent, scheduled run",
+  "variant": "V5",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "x85d0a",
+  "batch": "v5_gemini",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=540\n267403 events.jsonl",
+  "tool_calls": 44,
+  "steps": 47,
+  "tokens": 1790463,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "skill",
+    "write"
+  ],
+  "tool_errors": 0,
+  "answer": "1. **Done**:\n- Workspace notebooks created and imported under `/Users/raphael.mansuy@gmail.com/exams/x85d0a/m5_etl/`:\n  - `/Users/raphael.mansuy@gmail.com/exams/x85d0a/m5_etl/silver`\n  - `/Users/raphael.mansuy@gmail.com/exams/x85d0a/m5_etl/gold`\n- Databricks Job created and executed:\n  - Job Name: `x85d0a_etl`\n  - Job ID: `868308056151841`\n  - Run ID: `711555351443565` (Status: `SUCCESS`)\n  - Second Run ID for idempotency verification: `710745096678153` (Status: `SUCCESS`)\n- Managed Unity Catalog tables in `workspace.exam_x85d0a`:\n  - `workspace.exam_x85d0a.silver_events` (2,761 rows)\n  - `workspace.exam_x85d0a.silver_rejects` (239 rows)\n  - `workspace.exam_x85d0a.gold_daily` (14 rows)\n\n2. **Evidence**:\n\n- **Requirement 1 (`silver_events` table schema and filtering logic)**:\n  - Schema proof:\n    - Tool call: `bash` -> `databricks experimental aitools tools discover-schema workspace.exam_x85d0a.silver_events`\n    - Result: `COLUMNS: event_id: string, user_id: string, event_ts: timestamp, event_type: string, amount: double`\n  - Filtering logic & Deduplication proof:\n    - Tool call: `bash` -> `databricks experimental aitools tools query \"SELECT COUNT(*) as total_rows, COUNT(DISTINCT event_id) as distinct_event_ids, COUNT(CASE WHEN user_id IS NULL THEN 1 END) as null_user_ids, COUNT(CASE WHEN event_ts IS NULL THEN 1 END) as null_event_ts FROM workspace.exam_x85d0a.silver_events\"`\n    - Result: `[{\"distinct_event_ids\": \"2761\", \"null_event_ts\": \"0\", \"null_user_ids\": \"0\", \"total_rows\": \"2761\"}]`\n\n- **Requirement 2 (`silver_rejects` table schema and reason ordering logic)**:\n  - Schema proof:\n    - Tool call: `bash` -> `databricks experimental aitools tools discover-schema workspace.exam_x85d0a.silver_rejects`\n    - Result: `COLUMNS: event_id: string, reject_reason: string`\n  - Reason ordering proof:\n    - Tool call: `bash` -> `databricks experimental aitools tools query \"SELECT reject_reason, COUNT(*) as cnt, COUNT(DISTINCT event_id) as distinct_event_ids FROM workspace.exam_x85d0a.silver_rejects GROUP BY reject_reason\"`\n    - Result: `[{\"cnt\": \"143\", \"distinct_event_ids\": \"143\", \"reject_reason\": \"null_user_id\"}, {\"cnt\": \"96\", \"distinct_event_ids\": \"96\", \"reject_reason\": \"bad_timestamp\"}]` (Total rejects: 239; total deduped rows: 2761 + 239 = 3000).\n\n- **Requirement 3 (`gold_daily` table schema and aggregation derivation)**:\n  - Schema proof:\n    - Tool call: `bash` -> `databricks experimental aitools tools discover-schema workspace.exam_x85d0a.gold_daily`\n    - Result: `COLUMNS: event_date: date, active_users: bigint, purchases: bigint, revenue: double`\n  - Derivation verification proof:\n    - Tool call: `bash` -> `databricks experimental aitools tools query \"SELECT gold.event_date, gold.active_users, gold.purchases, gold.revenue, exp.active_users AS exp_active_users, exp.purchases AS exp_purchases, exp.revenue AS exp_revenue FROM workspace.exam_x85d0a.gold_daily gold JOIN (SELECT CAST(event_ts AS DATE) AS event_date, COUNT(DISTINCT user_id) AS active_users, COUNT(CASE WHEN event_type = 'purchase' THEN 1 END) AS purchases, ROUND(COALESCE(SUM(CASE WHEN event_type = 'purchase' THEN amount END), 0.0), 2) AS revenue FROM workspace.exam_x85d0a.silver_events GROUP BY CAST(event_ts AS DATE)) exp ON gold.event_date = exp.event_date WHERE gold.active_users != exp.active_users OR gold.purchases != exp.purchases OR gold.revenue != exp.revenue;\"`\n    - Result: `[]` (0 discrepancies across all dates).\n\n- **Orchestration Requirement 1 (Job naming, DAG structure, notebook location, serverless compute)**:\n  - Tool call: `bash` -> `databricks jobs get 868308056151841`\n  - Result: `name: \"x85d0a_etl\"`, task `silver` running notebook `/Users/raphael.mansuy@gmail.com/exams/x85d0a/m5_etl/silver`, task `gold` running notebook `/Users/raphael.mansuy@gmail.com/exams/x85d0a/m5_etl/gold` with `depends_on: [{\"task_key\": \"silver\"}]`.\n  - Tool call: `bash` -> `databricks jobs get-run 711555351443565`\n  - Result: `effective_performance_target: \"PERFORMANCE_OPT",
+  "score": 17,
+  "total": 17,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "silver_events equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "silver_rejects equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 2,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "gold_daily equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 3,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "job named x85d0a_etl exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "job has >= 2 tasks with a dependency",
+      "passed": true,
+      "weight": 1,
+      "detail": "2 tasks"
+    },
+    {
+      "name": "latest run succeeded",
+      "passed": true,
+      "weight": 2,
+      "detail": "{'life_cycle_state': 'TERMINATED', 'result_state': 'SUCCESS', 'state_message': '', 'user_cancelled_or_timedout': False}"
+    },
+    {
+      "name": "grader re-runs the job: still succeeds and counts unchanged (idempotent)",
+      "passed": true,
+      "weight": 2,
+      "detail": "before={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} after={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} state=SUCCESS"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 614
+}

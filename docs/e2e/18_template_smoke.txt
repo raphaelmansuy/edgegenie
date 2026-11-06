@@ -1,0 +1,9 @@
+Experiment 18 - the shipped templates, used exactly as docs/02 says (2026-11-06)
+Files:   templates/run_agent.sh, templates/opencode.gpt-oss.json, exams/agents_v5.md as AGENTS.md,
+         official skills copied to .claude/skills (databricks aitools install --path)
+Task:    "Use the databricks CLI to compute 1+1 with SQL and tell me the number it returned."
+Model:   gpt-oss-120b via the AI Gateway
+Result:  skills loaded: databricks-core, databricks-data-discovery
+         command run: databricks experimental aitools tools query "SELECT 1+1 AS result"
+         answer: 2; supervisor audit passed; four-heading final report produced
+         occurrences of a token pattern in the transcript: 0

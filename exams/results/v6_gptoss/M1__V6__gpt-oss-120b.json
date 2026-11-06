@@ -1,0 +1,64 @@
+{
+  "mission": "M1",
+  "title": "Complex SQL: windowed revenue ranking",
+  "variant": "V6",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "xc43e9",
+  "batch": "v6_gptoss",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=162\n39516 events.jsonl",
+  "tool_calls": 12,
+  "steps": 16,
+  "tokens": 267278,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_run_sql"
+  ],
+  "tool_errors": 0,
+  "answer": "**Done**  \nTable **workspace.exam_xc43e9.m1_top_zips** has been created and populated with the ranking of pickup ZIP codes by revenue, meeting every explicit requirement.\n\n**Evidence \u2013 Mapping each requirement to a concrete tool\u2011call result**\n\n| # | Requirement / Explicit Constraint | Tool call that proves it (result) |\n|---|-----------------------------------|-----------------------------------|\n| 1 | Use the Unity Catalog table **samples.nyctaxi.trips** as the source. | **dbx_run_sql** (first call) \u2013 `CREATE OR REPLACE TABLE workspace.exam_xc43e9.m1_top_zips AS \u2026 FROM samples.nyctaxi.trips`. The SQL text shows the source table. |\n| 2 | **Ignore trips where `pickup_zip` is NULL**. | **dbx_run_sql** \u2013 `SELECT COUNT(*) AS null_zip_rows \u2026 WHERE pickup_zip IS NULL` returned **0** rows. |\n| 3 | **Revenue = sum of `fare_amount`** (used in `total_fare`). | Implicit in the `CREATE TABLE` SQL: `ROUND(SUM(fare_amount), 2) AS total_fare`. Verified by the fact that `total_fare` values are sums of `fare_amount` (see rows output). |\n| 4 | **Only consider ZIPs with at least 200 trips**. | **dbx_run_sql** \u2013 `SELECT MIN(trips) AS min_trips \u2026` returned **429**, confirming every retained ZIP has \u2265\u202f200 trips (the HAVING clause enforces this). |\n| 5 | Output **exact columns** in this order: `pickup_zip, trips, total_fare, fare_rank, cumulative_share_pct, busiest_hour`. | **dbx_run_sql** \u2013 `SELECT * FROM workspace.exam_xc43e9.m1_top_zips \u2026` returned rows with those six columns in the required order. |\n| 6 | `total_fare` **rounded to 2 decimals**. | **dbx_run_sql** \u2013 `SELECT COUNT(*) FROM \u2026 WHERE total_fare != ROUND(total_fare,2)` returned **0**, proving all values are 2\u2011decimal rounded. |\n| 7 | `fare_rank` is a **dense rank** of `total_fare` descending. | **dbx_run_sql** \u2013 `SELECT MIN(fare_rank), MAX(fare_rank), COUNT(DISTINCT fare_rank) FROM \u2026` returned **1,\u202f10,\u202f10**, confirming a dense sequential rank from 1 to 10. |\n| 8 | `cumulative_share_pct` = running\u2011sum share of total revenue of all eligible ZIPs, **rounded to 2 decimals**. | *Verification*: <br>\u2022 **dbx_run_sql** \u2013 `SELECT SUM(total_fare) AS sum_table \u2026` = **123\u202f360.36** (sum of top\u201110). <br>\u2022 **dbx_run_sql** \u2013 `SELECT SUM(ROUND(total_fare,2)) AS grand_total \u2026` = **233\u202f763.97** (total revenue of all ZIPs meeting the 200\u2011trip filter). <br>\u2022 **dbx_run_sql** \u2013 `SELECT MAX(cumulative_share_pct) AS max_share \u2026` = **52.77**, which equals `123360.36 / 233763.97 * 100 \u2248 52.78` after rounding, confirming the formula and rounding. |\n| 9 | `busiest_hour` = hour (0\u201123) with most trips per ZIP; ties broken by the **smaller hour**. | **dbx_run_sql** \u2013 `SELECT MIN(busiest_hour), MAX(busiest_hour) FROM \u2026` returned **11** and **23**, both within 0\u201123. The creation SQL uses `RANK() \u2026 ORDER BY cnt DESC, hour ASC` and then `MIN(hour)` to enforce the tie\u2011break rule. |\n|10| **Keep only rows with `fare_rank`\u202f\u2264\u202f10**. | **dbx_run_sql** \u2013 `SELECT COUNT(*) FROM workspace.exam_xc43e9.m1_top_zips` returned **10** rows, and the CREATE statement includes `WHERE c.fare_rank <= 10`. |\n|11| **Save the result as table `workspace.exam_xc43e9.m1_top_zips`**. | **dbx_run_sql** (first call) created the table at that fully\u2011qualified name; subsequent queries (`SELECT * FROM workspace.exam_xc43e9.m1_top_zips`) succeed, confirming existence. |\n\n**SQL used (the CREATE statement that produced the table)**\n\n```sql\nCREATE OR REPLACE TABLE workspace.exam_xc43e9.m1_top_zips AS\nWITH zip_agg AS (\n  SELECT\n    pickup_zip,\n    COUNT(*) AS trips,\n    ROUND(SUM(fare_amount), 2) AS total_fare\n  FROM samples.nyctaxi.trips\n  WHERE pickup_zip IS NOT NULL\n  GROUP BY pickup_zip\n  HAVING COUNT(*) >= 200\n),\ntotal_revenue AS (\n  SELECT SUM(total_fare) AS grand_total FROM zip_agg\n),\nranked AS (\n  SELECT\n    z.*,\n    DENSE_RANK() OVER (ORDER BY total_fare DESC) AS fare_rank,\n    SUM(total_fare) OVER (\n      ORDER BY total_fare DESC, pickup_zip ASC\n      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n    ) AS cumulative_fare\n  FROM zip_agg z\n),\nwith_cum",
+  "score": 10,
+  "total": 10,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['pickup_zip', 'trips', 'total_fare', 'fare_rank', 'cumulative_share_pct', 'busiest_hour']"
+    },
+    {
+      "name": "row count matches golden",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 10, want 10"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports SQL and row count",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 184
+}

@@ -1,0 +1,85 @@
+{
+  "mission": "M5",
+  "title": "ETL pipeline: medallion job, idempotent, scheduled run",
+  "variant": "V4",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "xd98bf",
+  "batch": "v4_gemini",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=299\n145910 events.jsonl",
+  "tool_calls": 40,
+  "steps": 43,
+  "tokens": 845434,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_create_job",
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_job_run_status",
+    "dbxnb_dbx_list_notebooks",
+    "dbxnb_dbx_list_tables",
+    "dbxnb_dbx_run_job",
+    "dbxnb_dbx_run_notebook",
+    "dbxnb_dbx_run_sql",
+    "dbxnb_dbx_skill",
+    "dbxnb_dbx_whoami",
+    "dbxnb_dbx_write_notebook"
+  ],
+  "tool_errors": 0,
+  "answer": "## Done\n- Created notebooks under `/Users/raphael.mansuy@gmail.com/exams/xd98bf/m5_etl/`:\n  - `01_silver` (id: `1560416787592549`)\n  - `02_gold` (id: `1560416787592550`)\n- Created Databricks Job `xd98bf_etl` (Job ID: `145053306692664`) with task `silver` and dependent task `gold`.\n- Executed Job `xd98bf_etl` successfully (Run ID: `505205461206379`, and verified idempotency on Run ID: `753410051425116`).\n- Created and populated Unity Catalog tables in `workspace.exam_xd98bf`:\n  - `workspace.exam_xd98bf.silver_events`: 2,761 rows\n  - `workspace.exam_xd98bf.silver_rejects`: 239 rows\n  - `workspace.exam_xd98bf.gold_daily`: 14 rows\n\n## Evidence\n- **Requirement 1 (`silver_events` schema, deduplication by latest `ingested_at`, filtering):**\n  - Tool call `dbx_describe_table(full_name='workspace.exam_xd98bf.silver_events')` returned columns `event_id` (STRING), `user_id` (STRING), `event_ts` (TIMESTAMP), `event_type` (STRING), `amount` (DOUBLE).\n  - Tool call `dbx_run_sql(sql=\"SELECT * FROM workspace.exam_xd98bf.silver_events WHERE event_id = 'e380'\")` returned row `['e380', 'u27', '2026-10-03T12:41:38.000Z', 'purchase', 29.7]`, proving that the corrected amount from the later ingestion date (`2026-10-21`) was retained over the earlier record (`2026-10-20` with amount `28.70`).\n- **Requirement 2 (`silver_rejects` schema, exclusions, reason priority):**\n  - Tool call `dbx_describe_table(full_name='workspace.exam_xd98bf.silver_rejects')` returned columns `event_id` (STRING), `reject_reason` (STRING).\n  - Tool call `dbx_run_sql` on reject reasons showed distinct counts: 143 rows for `'null_user_id'` and 96 rows for `'bad_timestamp'`.\n  - Tool call `dbx_run_sql` verifying the 4 records with both null user and unparseable timestamp confirmed they were classified as `'null_user_id'` because it is evaluated first.\n  - Tool call `dbx_run_sql` with `INTERSECT` confirmed 0 overlapping `event_id` values between `silver_events` and `silver_rejects`.\n- **Requirement 3 (`gold_daily` schema, metrics aggregation from `silver_events`):**\n  - Tool call `dbx_describe_table(full_name='workspace.exam_xd98bf.gold_daily')` returned columns `event_date` (DATE), `active_users` (LONG), `purchases` (LONG), `revenue` (DOUBLE).\n  - Tool call `dbx_run_sql` executing a bidirectional `EXCEPT` between `workspace.exam_xd98bf.gold_daily` and an independent SQL aggregation directly on `silver_events` returned 0 differing rows in both directions.\n- **Orchestration Requirement (Job named `xd98bf_etl`, task dependencies, execution, idempotence, table counts):**\n  - Tool call `dbx_create_job(name='xd98bf_etl', tasks=[{'task_key': 'silver', ...}, {'task_key': 'gold', 'depends_on': ['silver'], ...}])` returned `job_id: 145053306692664`, `name: 'xd98bf_etl'`, `tasks: ['silver', 'gold']`.\n  - Tool call `dbx_job_run_status(run_id=505205461206379)` returned `life_cycle: 'TERMINATED'`, `result: 'SUCCESS'`, with task exits `{\"silver_count\": 2761, \"rejects_count\": 239}` and `{\"gold_count\": 14}`.\n  - Tool call `dbx_job_run_status(run_id=753410051425116)` returned `life_cycle: 'TERMINATED'`, `result: 'SUCCESS'` with identical output counts, proving pipeline idempotency.\n  - Tool call `dbx_run_sql` querying row counts returned:\n    - `silver_events`: 2,761\n    - `silver_rejects`: 239\n    - `gold_daily`: 14\n\n## Assumptions and unverified\n- none\n\n## Anything odd or suspicious\n- none",
+  "score": 17,
+  "total": 17,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "silver_events equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "silver_rejects equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 2,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "gold_daily equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 3,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "job named xd98bf_etl exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "job has >= 2 tasks with a dependency",
+      "passed": true,
+      "weight": 1,
+      "detail": "2 tasks"
+    },
+    {
+      "name": "latest run succeeded",
+      "passed": true,
+      "weight": 2,
+      "detail": "{'life_cycle_state': 'TERMINATED', 'result_state': 'SUCCESS', 'state_message': '', 'user_cancelled_or_timedout': False}"
+    },
+    {
+      "name": "grader re-runs the job: still succeeds and counts unchanged (idempotent)",
+      "passed": true,
+      "weight": 2,
+      "detail": "before={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} after={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} state=SUCCESS"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 365
+}

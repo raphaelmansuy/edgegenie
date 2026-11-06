@@ -4,4 +4,9 @@ __pycache__/
 .venv/
 docs/e2e/.storage_state.json
 docs/e2e/screenshots/*.png
+!docs/e2e/screenshots/tutorial/*.png
 .DS_Store
+
+exams/.tok
+exams/.sandbox_id
+exams/*.log

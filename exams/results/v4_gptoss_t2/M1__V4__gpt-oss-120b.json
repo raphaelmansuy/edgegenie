@@ -1,0 +1,66 @@
+{
+  "mission": "M1",
+  "title": "Complex SQL: windowed revenue ranking",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x90a96",
+  "batch": "v4_gptoss_t2",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=213\n71121 events.jsonl",
+  "tool_calls": 32,
+  "steps": 38,
+  "tokens": 480858,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_run_sql",
+    "dbxnb_dbx_search_tables",
+    "invalid"
+  ],
+  "tool_errors": 0,
+  "answer": "**Done**  \n- Table **`workspace.exam_x90a96.m1_top_zips`** created with the required ranking of pickup zip codes by revenue, containing exactly the specified columns and 10 rows.\n\n**Evidence**\n\n| # | Requirement / Explicit Constraint | Tool call that proves it (real result) |\n|---|----------------------------------|----------------------------------------|\n|1 | **Ignore trips where `pickup_zip` is NULL** | `dbxnb_dbx_run_sql` \u2013 `SELECT COUNT(*) AS null_zip FROM workspace.exam_x90a96.m1_top_zips WHERE pickup_zip IS NULL` \u2192 `null_zip = 0` |\n|2 | **Only consider zips with at least 200 trips** | `dbxnb_dbx_run_sql` \u2013 `SELECT MIN(trips) AS min_trips FROM workspace.exam_x90a96.m1_top_zips` \u2192 `min_trips = 429` (\u2265\u202f200) |\n|3 | **Exact column list: `pickup_zip`, `trips`, `total_fare`, `fare_rank`, `cumulative_share_pct`, `busiest_hour`** | `dbxnb_dbx_describe_table` \u2013 description of `workspace.exam_x90a96.m1_top_zips` shows those six columns with correct types. |\n|4 | **`total_fare` rounded to 2 decimals** | `dbxnb_dbx_run_sql` \u2013 `SELECT COUNT(*) AS diff FROM workspace.exam_x90a96.m1_top_zips WHERE ROUND(total_fare,2) != total_fare` \u2192 `diff = 0` |\n|5 | **`fare_rank` is a dense rank on descending `total_fare` and only rows with rank\u202f\u2264\u202f10 are kept** | \u2022 `dbxnb_dbx_run_sql` \u2013 `SELECT MAX(fare_rank) AS max_rank FROM workspace.exam_x90a96.m1_top_zips` \u2192 `max_rank = 10` <br>\u2022 `SELECT COUNT(DISTINCT fare_rank) AS distinct_ranks, COUNT(*) AS total FROM workspace.exam_x90a96.m1_top_zips` \u2192 `distinct_ranks = 10`, `total = 10` |\n|6 | **`cumulative_share_pct` = running sum of `total_fare` (ordered by `total_fare`\u202fDESC, `pickup_zip`\u202fASC) \u00f7 total revenue of **all** eligible zips, \u00d7\u202f100, rounded to 2\u202fdecimals** | \u2022 Grand\u2011total of all eligible zips: `dbxnb_dbx_run_sql` \u2013 `SELECT SUM(total_fare) AS grand_total FROM (SELECT pickup_zip, SUM(fare_amount) AS total_fare FROM samples.nyctaxi.trips WHERE pickup_zip IS NOT NULL GROUP BY pickup_zip HAVING COUNT(*) >= 200) base` \u2192 `grand_total = 233\u202f763.97` <br>\u2022 Per\u2011row check: `dbxnb_dbx_run_sql` \u2013 `SELECT ROUND((SUM(total_fare) OVER (ORDER BY total_fare DESC, pickup_zip ASC))/233763.97*100,2) AS calc_pct FROM workspace.exam_x90a96.m1_top_zips ORDER BY fare_rank` \u2192 values `8.22, 14.55, 20.12, 25.67, 30.94, 35.88, 40.34, 44.67, 48.72, 52.77` which exactly match the stored `cumulative_share_pct` column. |\n|7 | **`busiest_hour` = hour of day (0\u201123) with most trips in that zip; tie\u2011break by smaller hour** | \u2022 Sample\u202f1 (zip\u202f11371): <br>`dbxnb_dbx_run_sql` \u2013 `SELECT busiest_hour FROM workspace.exam_x90a96.m1_top_zips WHERE pickup_zip = 11371` \u2192 `23` <br>`SELECT pickup_zip, HOUR(tpep_pickup_datetime) AS hour, COUNT(*) AS cnt \u2026 GROUP BY hour ORDER BY cnt DESC, hour ASC LIMIT 1` \u2192 `hour = 23` <br>\u2022 Sample\u202f2 (zip\u202f10001): same pattern \u2192 `busiest_hour = 20`, verified by raw query.<br>\u2022 Tie\u2011break proof: a zip with a tie was identified (`pickup_zip = 10115`). <br>`dbxnb_dbx_run_sql` \u2013 `WITH per_zip AS (SELECT pickup_zip, HOUR(tpep_pickup_datetime) AS hour, COUNT(*) AS cnt FROM samples.nyctaxi.trips WHERE pickup_zip = 10115 GROUP BY hour), ranked AS (SELECT hour, cnt, ROW_NUMBER() OVER (ORDER BY cnt DESC, hour ASC) AS rn FROM per_zip) SELECT hour FROM ranked WHERE rn = 1` \u2192 `hour = 16`, i.e., the smallest hour among those with the maximum count, confirming the tie\u2011break rule used in the table creation. |\n|8 | **Rows limited to `fare_rank`\u202f\u2264\u202f10** | `dbxnb_dbx_run_sql` \u2013 `SELECT COUNT(*) AS row_count FROM workspace.exam_x90a96.m1_top_zips` \u2192 `row_count = 10` |\n|9 | **Table created in the correct workspace/schema (`workspace.exam_x90a96`)** | `dbxnb_dbx_run_sql` \u2013 `CREATE OR REPLACE TABLE workspace.exam_x90a96.m1_top_zips \u2026` executed successfully (no error) and subsequent reads use that fully\u2011qualified name. |\n|10|**All numeric columns are rounded to two decimals where required** (both `total_fare` and `cumulative_share_pct`) | `total_fare` rounding checked in #4. <br>`cumulative_share_pct` rounding verified in #6 (calc_pct value",
+  "score": 10,
+  "total": 10,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['pickup_zip', 'trips', 'total_fare', 'fare_rank', 'cumulative_share_pct', 'busiest_hour']"
+    },
+    {
+      "name": "row count matches golden",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 10, want 10"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports SQL and row count",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 241
+}

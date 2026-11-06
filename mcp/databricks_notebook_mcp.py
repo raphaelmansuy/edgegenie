@@ -67,6 +67,25 @@ WAREHOUSE_ID = os.environ.get("NBMCP_WAREHOUSE_ID", "")
 
 mcp = FastMCP("databricks-notebook-tools")
 
+# Tool profile. A coding agent advertises every MCP tool on every request, so
+# fewer, better tools beat many. `core` registers the ~20 tools the exam suite
+# showed are actually needed; `full` also registers the rarely-used lookups.
+PROFILE = os.environ.get("NBMCP_PROFILE", "full")
+_CORE = {
+    "dbx_whoami", "dbx_list_tables", "dbx_describe_table", "dbx_search_tables", "dbx_run_sql",
+    "dbx_list_notebooks", "dbx_read_notebook", "dbx_grep_notebook", "dbx_write_notebook",
+    "dbx_write_file", "dbx_run_notebook", "dbx_create_job", "dbx_run_job", "dbx_job_run_status",
+    "dbx_lakebase_create", "dbx_lakebase_status", "dbx_lakebase_sql", "dbx_create_app", "dbx_skill",
+}
+
+
+def tool():
+    def deco(fn):
+        if PROFILE == "full" or fn.__name__ in _CORE:
+            return mcp.tool()(fn)
+        return fn
+    return deco
+
 
 # --------------------------------------------------------------------------
 # plumbing
@@ -89,22 +108,47 @@ def _trim(payload: Any) -> str:
     return text[:MAX_CHARS] + f"\n... [truncated, {len(text)} chars total]"
 
 
+def _retry(fn, *, idempotent: bool):
+    """Retry transient failures. GETs retry on connection errors and 429/5xx.
+    POSTs retry only on 429/503, where the request was provably not processed,
+    so a retried runs/submit can never double-launch."""
+    import time
+    delay = 1.5
+    for attempt in range(4):
+        try:
+            return fn()
+        except httpx.HTTPStatusError as e:
+            code = e.response.status_code
+            retryable = code in (429, 503) or (idempotent and code in (500, 502, 504))
+            if not retryable or attempt == 3:
+                raise
+        except (httpx.TransportError, ConnectionError, OSError):
+            if not idempotent or attempt == 3:
+                raise
+        time.sleep(delay)
+        delay *= 2
+
+
 def _get(path: str, params: dict | None = None) -> Any:
-    with _client() as c:
-        r = c.get(path, params=params)
-        r.raise_for_status()
-        return r.json()
+    def go():
+        with _client() as c:
+            r = c.get(path, params=params)
+            r.raise_for_status()
+            return r.json()
+    return _retry(go, idempotent=True)
 
 
 def _post(path: str, body: dict | None = None) -> Any:
-    with _client() as c:
-        r = c.post(path, json=body or {})
-        if r.headers.get("content-type", "").startswith("application/json"):
-            data = r.json()
-        else:
-            data = {"raw": r.text}
-        r.raise_for_status()
-        return data
+    def go():
+        with _client() as c:
+            r = c.post(path, json=body or {})
+            if r.headers.get("content-type", "").startswith("application/json"):
+                data = r.json()
+            else:
+                data = {"raw": r.text}
+            r.raise_for_status()
+            return data
+    return _retry(go, idempotent=False)
 
 
 def _need_writes() -> None:
@@ -114,10 +158,67 @@ def _need_writes() -> None:
         )
 
 
+# Write scope: even with writes enabled, the server only lets an agent mutate
+# objects inside an allow-list. This is enforced here, not by the model.
+#   NBMCP_WRITE_SCHEMAS  comma list of  catalog.schema   (SQL DDL/DML)
+#   NBMCP_WRITE_PATHS    comma list of  /Workspace/... or /Users/... prefixes
+WRITE_SCHEMAS = [s.strip().lower() for s in os.environ.get("NBMCP_WRITE_SCHEMAS", "").split(",") if s.strip()]
+WRITE_PATHS = [p.strip() for p in os.environ.get("NBMCP_WRITE_PATHS", "").split(",") if p.strip()]
+
+_ID = r"`?[A-Za-z_][\w-]*`?"
+_NAME = rf"({_ID})(?:\.({_ID}))?(?:\.({_ID}))?"
+# Write *targets* only: sources of a CTAS (FROM/JOIN) are reads and stay free.
+_TARGETS = re.compile(
+    r"(?i)\b(?:"
+    r"create\s+(?:or\s+replace\s+)?(?:temp(?:orary)?\s+)?(?:external\s+)?(?:table|view|materialized\s+view|streaming\s+table|schema|volume|function)"
+    r"(?:\s+if\s+not\s+exists)?"
+    r"|insert\s+(?:into|overwrite)(?:\s+table)?"
+    r"|merge\s+into|update|delete\s+from|truncate\s+table|copy\s+into"
+    r"|drop\s+(?:table|view|schema|volume|function)(?:\s+if\s+exists)?"
+    r"|alter\s+(?:table|view|schema)"
+    r"|comment\s+on\s+(?:table|schema|column)"
+    r"|optimize|vacuum"
+    r")\s+" + _NAME
+)
+
+
+def _check_sql_scope(sql: str) -> str | None:
+    """Return an error string if any write target is outside the write scope."""
+    if not WRITE_SCHEMAS:
+        return None
+    targets = _TARGETS.findall(sql)
+    if not targets:
+        return "write blocked: could not identify a write target; use plain CREATE/INSERT/MERGE/ALTER statements"
+    for a, b, c in targets:
+        parts = [x.strip("`").lower() for x in (a, b, c) if x]
+        if len(parts) == 2 and f"{parts[0]}.{parts[1]}" in WRITE_SCHEMAS:
+            continue  # schema-level target e.g. CREATE SCHEMA cat.sch
+        if len(parts) == 3 and f"{parts[0]}.{parts[1]}" in WRITE_SCHEMAS:
+            continue
+        # COMMENT ON COLUMN cat.sch.tbl.col is matched as 3 parts, still fine.
+        return (f"write blocked: target {'.'.join(parts)} is not inside allowed schemas "
+                f"{WRITE_SCHEMAS}; use fully qualified catalog.schema.name")
+    return None
+
+
+JOB_PREFIX = os.environ.get("NBMCP_WRITE_JOB_PREFIX", "")
+INSTANCE_PREFIX = os.environ.get("NBMCP_WRITE_INSTANCE_PREFIX", "")
+
+
+def _check_prefix(kind: str, name: str, prefix: str) -> None:
+    if prefix and not name.startswith(prefix):
+        raise PermissionError(f"write blocked: {kind} name must start with '{prefix}' (got '{name}')")
+
+
+def _check_path_scope(path: str) -> None:
+    if WRITE_PATHS and not any(path.startswith(p) for p in WRITE_PATHS):
+        raise PermissionError(f"write blocked: {path} outside allowed paths {WRITE_PATHS}")
+
+
 # --------------------------------------------------------------------------
 # identity & catalog
 # --------------------------------------------------------------------------
-@mcp.tool()
+@tool()
 def dbx_whoami() -> str:
     """Return the authenticated identity and workspace host."""
     me = _get("/api/2.0/preview/scim/v2/Me")
@@ -131,7 +232,7 @@ def dbx_whoami() -> str:
     )
 
 
-@mcp.tool()
+@tool()
 def dbx_list_catalogs() -> str:
     """List Unity Catalog catalogs visible to the caller."""
     data = _get("/api/2.1/unity-catalog/catalogs")
@@ -143,7 +244,7 @@ def dbx_list_catalogs() -> str:
     )
 
 
-@mcp.tool()
+@tool()
 def dbx_list_schemas(catalog: str) -> str:
     """List schemas in a catalog."""
     data = _get("/api/2.1/unity-catalog/schemas", {"catalog_name": catalog})
@@ -152,7 +253,7 @@ def dbx_list_schemas(catalog: str) -> str:
     )
 
 
-@mcp.tool()
+@tool()
 def dbx_list_tables(catalog: str, schema: str, limit: int = 100) -> str:
     """List tables and views in a schema with comments."""
     data = _get(
@@ -172,7 +273,7 @@ def dbx_list_tables(catalog: str, schema: str, limit: int = 100) -> str:
     )
 
 
-@mcp.tool()
+@tool()
 def dbx_describe_table(full_name: str) -> str:
     """Describe a table: columns, types, comments, partitioning, owner.
 
@@ -201,7 +302,7 @@ def dbx_describe_table(full_name: str) -> str:
     )
 
 
-@mcp.tool()
+@tool()
 def dbx_search_tables(needle: str, catalog: str = "", limit: int = 40) -> str:
     """Search table and column names for a substring.
 
@@ -250,7 +351,7 @@ def dbx_search_tables(needle: str, catalog: str = "", limit: int = 40) -> str:
     return _trim(hits)
 
 
-@mcp.tool()
+@tool()
 def dbx_table_lineage(full_name: str, direction: str = "both") -> str:
     """Return Unity Catalog lineage edges for a table.
 
@@ -270,7 +371,7 @@ def dbx_table_lineage(full_name: str, direction: str = "both") -> str:
     return _trim(out)
 
 
-@mcp.tool()
+@tool()
 def dbx_grants(securable_type: str, full_name: str) -> str:
     """List Unity Catalog grants on an object (catalog/schema/table/volume)."""
     return _trim(_get(f"/api/2.1/unity-catalog/permissions/{securable_type}/{full_name}"))
@@ -279,7 +380,7 @@ def dbx_grants(securable_type: str, full_name: str) -> str:
 # --------------------------------------------------------------------------
 # SQL
 # --------------------------------------------------------------------------
-@mcp.tool()
+@tool()
 def dbx_run_sql(sql: str, warehouse_id: str = "", limit: int = 100) -> str:
     """Execute SQL on a SQL warehouse and return rows.
 
@@ -290,6 +391,14 @@ def dbx_run_sql(sql: str, warehouse_id: str = "", limit: int = 100) -> str:
     head = sql.strip().split(None, 1)[0].upper() if sql.strip() else ""
     if head not in ("SELECT", "SHOW", "DESCRIBE", "DESC", "WITH", "EXPLAIN") and not ALLOW_WRITES:
         return json.dumps({"error": f"statement type {head} blocked (read-only server)"})
+    if head not in ("SELECT", "SHOW", "DESCRIBE", "DESC", "EXPLAIN"):
+        # WITH ... SELECT is read-only, but WITH ... INSERT is not; scope-check
+        # anything that is not an obvious read.
+        is_read = head == "WITH" and not re.search(r"(?i)\b(insert|merge|update|delete)\b", sql)
+        if not is_read:
+            err = _check_sql_scope(sql)
+            if err:
+                return json.dumps({"error": err})
     wh = warehouse_id or WAREHOUSE_ID
     if not wh:
         whs = _get("/api/2.0/sql/warehouses").get("warehouses", [])
@@ -318,7 +427,7 @@ def dbx_run_sql(sql: str, warehouse_id: str = "", limit: int = 100) -> str:
     return _trim({"columns": cols, "rows": rows[:limit], "row_count": len(rows)})
 
 
-@mcp.tool()
+@tool()
 def dbx_sample_rows(full_name: str, n: int = 5) -> str:
     """Return n sample rows from a table (read-only)."""
     return dbx_run_sql(f"SELECT * FROM {full_name} LIMIT {int(n)}")
@@ -327,7 +436,7 @@ def dbx_sample_rows(full_name: str, n: int = 5) -> str:
 # --------------------------------------------------------------------------
 # workspace files / notebooks
 # --------------------------------------------------------------------------
-@mcp.tool()
+@tool()
 def dbx_list_notebooks(path: str = "/") -> str:
     """List a workspace directory (notebooks, files, directories, repos)."""
     data = _get("/api/2.0/workspace/list", {"path": path})
@@ -339,7 +448,7 @@ def dbx_list_notebooks(path: str = "/") -> str:
     )
 
 
-@mcp.tool()
+@tool()
 def dbx_read_notebook(path: str, offset: int = 0, max_chars: int = 0) -> str:
     """Export a notebook's source, with paging.
 
@@ -388,7 +497,7 @@ def _normalise_pattern(pattern: str) -> str:
     return pattern
 
 
-@mcp.tool()
+@tool()
 def dbx_grep_notebook(path: str, pattern: str, context: int = 2) -> str:
     """Search a notebook's source with a regex and return matching lines.
 
@@ -442,12 +551,93 @@ def dbx_grep_notebook(path: str, pattern: str, context: int = 2) -> str:
     return _trim(payload)
 
 
-@mcp.tool()
-def dbx_write_notebook(path: str, source: str, language: str = "PYTHON", overwrite: bool = True) -> str:
-    """Create or overwrite a notebook. Requires NBMCP_ALLOW_WRITES=1."""
+def _cells_to_source(cells: list[dict], language: str) -> str:
+    """Assemble Databricks SOURCE format from [{type: markdown|code|sql, source: str|[str]}]."""
+    bodies = []
+    for c in cells:
+        kind = (c.get("type") or c.get("cell_type") or "code").lower()
+        src = c.get("source", "")
+        if isinstance(src, list):                      # ipynb style: list of lines
+            src = "".join(src)
+        src = src.rstrip("\n")
+        if kind in ("markdown", "md"):
+            body = "\n".join("# MAGIC " + ln if ln else "# MAGIC" for ln in ("%md\n" + src).split("\n"))
+        elif kind == "sql":
+            body = "\n".join("# MAGIC " + ln if ln else "# MAGIC" for ln in ("%sql\n" + src).split("\n"))
+        else:
+            body = src
+        bodies.append(body)
+    return "# Databricks notebook source\n\n" + "\n\n# COMMAND ----------\n\n".join(bodies) + "\n"
+
+
+def _maybe_ipynb(source: str) -> list[dict] | None:
+    """Models often emit Jupyter JSON. Accept it instead of writing it verbatim as one cell."""
+    t = source.lstrip()
+    if not t or t[0] not in "[{":
+        return None
+    try:
+        data = json.loads(t)
+    except Exception:  # noqa: BLE001
+        return None
+    cells = data.get("cells") if isinstance(data, dict) else data
+    if isinstance(cells, list) and cells and all(isinstance(c, dict) and ("source" in c) for c in cells):
+        return cells
+    return None
+
+
+_BARE_MAGIC = re.compile(r"^\s*%(md|sql|sh|python|scala|r)\b[ \t]*\n?", re.I)
+
+
+def _normalise_source(source: str) -> str:
+    """Be liberal in what we accept: a cell whose first line is a bare `%md` /
+    `%sql` is rewritten to the `# MAGIC` form Databricks SOURCE format needs."""
+    parts = re.split(r"\n# COMMAND ----------\n", source)
+    fixed = []
+    for part in parts:
+        m = _BARE_MAGIC.match(part.lstrip("\n"))
+        if m and "# MAGIC" not in part.split("\n", 2)[0]:
+            body = part.lstrip("\n")[m.end():]
+            lang = m.group(1).lower()
+            lines = [f"# MAGIC %{lang}"] + [("# MAGIC " + ln) if ln.strip() else "# MAGIC" for ln in body.rstrip("\n").split("\n")]
+            part = "\n".join(lines)
+        fixed.append(part)
+    return "\n# COMMAND ----------\n".join(fixed)
+
+
+@tool()
+def dbx_write_notebook(path: str, cells: list[dict] | None = None, source: str = "", language: str = "PYTHON",
+                       overwrite: bool = True, cells_json: str = "") -> str:
+    """Create or overwrite a notebook.
+
+    PREFERRED: pass `cells`, a list of objects, which guarantees correct notebook
+    structure (do not stringify it):
+      cells=[{"type": "markdown", "source": "# Title\\nWhy this notebook exists"},
+             {"type": "code",     "source": "df = spark.table('a.b.c')\\ndisplay(df)"},
+             {"type": "sql",      "source": "SELECT 1"}]
+    Or pass `source` as plain Python, splitting cells with '# COMMAND ----------'
+    lines (a cell starting with a bare %md / %sql is fixed up for you). Jupyter-style
+    JSON in `source` is converted. The reply says how many markdown/code cells were
+    written: check it matches your intent. Requires NBMCP_ALLOW_WRITES=1 and a path
+    inside the allowed paths.
+    """
     _need_writes()
-    if not source.startswith("# Databricks notebook source"):
-        source = "# Databricks notebook source\n" + source
+    _check_path_scope(path)
+    if cells is None and cells_json.strip():
+        try:
+            cells = json.loads(cells_json)
+        except Exception as e:  # noqa: BLE001
+            return _trim({"error": f"cells_json is not valid JSON ({e}). Pass `cells` as a native list of "
+                                   "{type, source} objects instead of a JSON string."})
+    converted = False
+    if cells is None:
+        cells = _maybe_ipynb(source)
+        converted = cells is not None
+    if cells is not None:
+        source = _cells_to_source(cells, language)
+    else:
+        source = _normalise_source(source)
+        if not source.startswith("# Databricks notebook source"):
+            source = "# Databricks notebook source\n" + source
     body = {
         "path": path,
         "format": "SOURCE",
@@ -455,13 +645,23 @@ def dbx_write_notebook(path: str, source: str, language: str = "PYTHON", overwri
         "content": base64.b64encode(source.encode()).decode(),
         "overwrite": overwrite,
     }
-    return _trim(_post("/api/2.0/workspace/import", body))
+    _post("/api/2.0/workspace/mkdirs", {"path": path.rsplit("/", 1)[0]})
+    r = _post("/api/2.0/workspace/import", body)
+    n_cells = source.count("\n# COMMAND ----------\n") + 1
+    n_md = source.count("# MAGIC %md")
+    out = {"path": path, "object_id": r.get("object_id"), "cells": n_cells, "markdown_cells": n_md,
+           "code_cells": n_cells - n_md}
+    if converted:
+        out["note"] = "converted from Jupyter-style JSON"
+    if n_md == 0:
+        out["warning"] = "0 markdown cells. If the task asks for narrative/documentation, add markdown cells."
+    return _trim(out)
 
 
 # --------------------------------------------------------------------------
 # jobs / pipelines
 # --------------------------------------------------------------------------
-@mcp.tool()
+@tool()
 def dbx_list_jobs(limit: int = 25) -> str:
     """List jobs with their latest run state."""
     data = _get("/api/2.1/jobs/list", {"limit": limit, "expand_tasks": "false"})
@@ -477,37 +677,138 @@ def dbx_list_jobs(limit: int = 25) -> str:
     )
 
 
-@mcp.tool()
-def dbx_run_job(job_id: int) -> str:
-    """Trigger a job run. Requires NBMCP_ALLOW_WRITES=1."""
+def _task_outputs(run: dict) -> list[dict]:
+    """Per-task state + notebook exit value + error text. The exit value and the
+    error are what an agent needs to decide its next step, so return them."""
+    out = []
+    for t in run.get("tasks", []) or []:
+        st = t.get("state") or {}
+        item = {"task_key": t.get("task_key"), "state": st.get("life_cycle_state"),
+                "result": st.get("result_state"), "message": st.get("state_message") or None}
+        if st.get("life_cycle_state") == "TERMINATED":
+            try:
+                o = _get("/api/2.1/jobs/runs/get-output", {"run_id": t["run_id"]})
+                nb = o.get("notebook_output") or {}
+                if nb.get("result") is not None:
+                    item["exit_value"] = nb["result"][:2000]
+                if o.get("error"):
+                    item["error"] = str(o["error"])[:1200]
+                if o.get("error_trace"):
+                    item["error_trace_tail"] = str(o["error_trace"])[-1200:]
+            except Exception as e:  # noqa: BLE001
+                item["output_error"] = str(e)[:200]
+        out.append(item)
+    return out
+
+
+def _wait_run(run_id: int, wait_seconds: int) -> dict:
+    import time
+    t0 = time.time()
+    while True:
+        d = _get("/api/2.1/jobs/runs/get", {"run_id": run_id})
+        if (d.get("state") or {}).get("life_cycle_state") in ("TERMINATED", "SKIPPED", "INTERNAL_ERROR"):
+            return d
+        if time.time() - t0 >= wait_seconds:
+            return d
+        time.sleep(5)
+
+
+def _run_summary(run_id: int, d: dict) -> str:
+    state = d.get("state") or {}
+    finished = state.get("life_cycle_state") in ("TERMINATED", "SKIPPED", "INTERNAL_ERROR")
+    payload = {"run_id": run_id, "life_cycle": state.get("life_cycle_state"),
+               "result": state.get("result_state"), "message": state.get("state_message") or None,
+               "finished": finished, "tasks": _task_outputs(d) if finished else
+               [{"task_key": t.get("task_key"), "state": (t.get("state") or {}).get("life_cycle_state")}
+                for t in d.get("tasks", []) or []]}
+    if not finished:
+        payload["hint"] = "still running: call dbx_job_run_status(run_id) again to wait/poll"
+    elif state.get("result_state") == "SUCCESS" and not any("exit_value" in t for t in payload["tasks"]):
+        payload["note"] = ("run succeeded but no task returned an exit value: the notebook never called "
+                           "dbutils.notebook.exit(...). If the task required one, the notebook is incomplete.")
+    return _trim(payload)
+
+
+@tool()
+def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int = 240) -> str:
+    """Run a notebook ONCE on serverless compute and wait for the result.
+
+    Returns the state, the dbutils.notebook.exit() value and, on failure, the
+    error and the tail of the stack trace. If it is still running after
+    wait_seconds you get finished=false and a run_id to poll with
+    dbx_job_run_status. Path must be inside the allowed workspace paths.
+    """
     _need_writes()
-    return _trim(_post("/api/2.1/jobs/run-now", {"job_id": job_id}))
+    _check_path_scope(path)
+    task: dict = {"task_key": "t", "notebook_task": {"notebook_path": path}}
+    params = json.loads(parameters_json or "{}")
+    if params:
+        task["notebook_task"]["base_parameters"] = {k: str(v) for k, v in params.items()}
+    run_id = _post("/api/2.1/jobs/runs/submit", {"run_name": "nbmcp-run", "tasks": [task]})["run_id"]
+    return _run_summary(run_id, _wait_run(run_id, wait_seconds))
 
 
-@mcp.tool()
-def dbx_job_run_status(run_id: int) -> str:
-    """Get the state and result of a job run."""
-    data = _get("/api/2.1/jobs/runs/get", {"run_id": run_id})
-    state = data.get("state") or {}
-    return _trim(
-        {
-            "run_id": run_id,
-            "life_cycle": state.get("life_cycle_state"),
-            "result": state.get("result_state"),
-            "message": state.get("state_message"),
-            "tasks": [
-                {
-                    "task_key": t.get("task_key"),
-                    "state": (t.get("state") or {}).get("life_cycle_state"),
-                    "result": (t.get("state") or {}).get("result_state"),
-                }
-                for t in data.get("tasks", [])
-            ],
-        }
-    )
+@tool()
+def dbx_create_job(name: str, tasks: list[dict] | None = None, cron: str = "", timezone: str = "UTC",
+                   max_retries: int = 0, tasks_json: str = "") -> str:
+    """Create a Databricks Job whose tasks are notebooks, on serverless compute.
+
+    `tasks` is a list of objects (native list, not a string), in any order:
+      [{"task_key": "silver", "notebook_path": "/Users/me/x/silver", "depends_on": []},
+       {"task_key": "gold",   "notebook_path": "/Users/me/x/gold",   "depends_on": ["silver"]}]
+    cron is an optional Quartz expression ("0 0 6 * * ?"). The job name must
+    start with the allowed prefix. Returns job_id; run it with dbx_run_job.
+    """
+    _need_writes()
+    _check_prefix("job", name, JOB_PREFIX)
+    if tasks is None and tasks_json.strip():
+        try:
+            tasks = json.loads(tasks_json)
+        except Exception as e:  # noqa: BLE001
+            return _trim({"error": f"tasks_json is not valid JSON ({e}). Pass `tasks` as a native list."})
+    if not tasks:
+        return _trim({"error": "no tasks given"})
+    built = []
+    for t in tasks:
+        _check_path_scope(t["notebook_path"])
+        item: dict = {"task_key": t["task_key"], "notebook_task": {"notebook_path": t["notebook_path"]}}
+        if t.get("depends_on"):
+            item["depends_on"] = [{"task_key": k} for k in t["depends_on"]]
+        if max_retries:
+            item["max_retries"] = max_retries
+        built.append(item)
+    tasks = built
+    body: dict = {"name": name, "tasks": tasks}
+    if cron:
+        body["schedule"] = {"quartz_cron_expression": cron, "timezone_id": timezone, "pause_status": "PAUSED"}
+    data = _post("/api/2.1/jobs/create", body)
+    return _trim({"job_id": data.get("job_id"), "name": name, "tasks": [t["task_key"] for t in tasks],
+                  "schedule": "created PAUSED" if cron else None,
+                  "next": "call dbx_run_job(job_id, wait_seconds=300) to run it"})
 
 
-@mcp.tool()
+@tool()
+def dbx_run_job(job_id: int, wait_seconds: int = 0) -> str:
+    """Trigger a job run. With wait_seconds > 0 wait for it and return per-task
+    results (exit values, errors). Requires NBMCP_ALLOW_WRITES=1."""
+    _need_writes()
+    job = _get("/api/2.1/jobs/get", {"job_id": job_id})
+    _check_prefix("job", (job.get("settings") or {}).get("name", ""), JOB_PREFIX)
+    run_id = _post("/api/2.1/jobs/run-now", {"job_id": job_id})["run_id"]
+    if wait_seconds > 0:
+        return _run_summary(run_id, _wait_run(run_id, wait_seconds))
+    return _trim({"run_id": run_id, "hint": "poll with dbx_job_run_status(run_id)"})
+
+
+@tool()
+def dbx_job_run_status(run_id: int, wait_seconds: int = 0) -> str:
+    """State of a run, plus per-task exit values and error text once finished.
+    wait_seconds > 0 blocks until it finishes or the time is up."""
+    return _run_summary(run_id, _wait_run(run_id, wait_seconds) if wait_seconds else
+                        _get("/api/2.1/jobs/runs/get", {"run_id": run_id}))
+
+
+@tool()
 def dbx_list_pipelines(limit: int = 25) -> str:
     """List Lakeflow Spark Declarative Pipelines."""
     data = _get("/api/2.0/pipelines", {"max_results": limit})
@@ -518,7 +819,7 @@ def dbx_list_pipelines(limit: int = 25) -> str:
     )
 
 
-@mcp.tool()
+@tool()
 def dbx_list_warehouses() -> str:
     """List SQL warehouses and their state."""
     data = _get("/api/2.0/sql/warehouses")
@@ -527,6 +828,128 @@ def dbx_list_warehouses() -> str:
           "size": w.get("cluster_size"), "type": w.get("warehouse_type")}
          for w in data.get("warehouses", [])]
     )
+
+
+# --------------------------------------------------------------------------
+# workspace files, Lakebase, Apps
+# --------------------------------------------------------------------------
+@tool()
+def dbx_write_file(path: str, content: str, overwrite: bool = True) -> str:
+    """Write a plain workspace FILE (app.py, app.yaml, requirements.txt, .md ...),
+    not a notebook. Parent folders are created. Path must be in the allowed paths."""
+    _need_writes()
+    _check_path_scope(path)
+    _post("/api/2.0/workspace/mkdirs", {"path": path.rsplit("/", 1)[0]})
+    _post("/api/2.0/workspace/import", {"path": path, "format": "AUTO", "overwrite": overwrite,
+                                        "content": base64.b64encode(content.encode()).decode()})
+    info = _get("/api/2.0/workspace/get-status", {"path": path})
+    return _trim({"path": path, "object_type": info.get("object_type"), "bytes": len(content.encode())})
+
+
+@tool()
+def dbx_lakebase_create(name: str, capacity: str = "CU_1", wait_seconds: int = 180) -> str:
+    """Create a Lakebase (managed Postgres) instance and wait until AVAILABLE.
+    Idempotent: if it exists, returns its state. Name must start with the allowed prefix."""
+    _need_writes()
+    _check_prefix("instance", name, INSTANCE_PREFIX)
+    import time
+    try:
+        _get(f"/api/2.0/database/instances/{name}")
+    except httpx.HTTPStatusError:
+        _post("/api/2.0/database/instances", {"name": name, "capacity": capacity})
+    t0 = time.time()
+    while True:
+        d = _get(f"/api/2.0/database/instances/{name}")
+        if d.get("state") == "AVAILABLE" or time.time() - t0 > wait_seconds:
+            break
+        time.sleep(8)
+    return _trim({"name": name, "state": d.get("state"), "capacity": d.get("capacity"),
+                  "host": d.get("read_write_dns"), "database": "databricks_postgres",
+                  "hint": None if d.get("state") == "AVAILABLE" else "not AVAILABLE yet: call dbx_lakebase_status"})
+
+
+@tool()
+def dbx_lakebase_status(name: str) -> str:
+    """State, host and capacity of a Lakebase instance."""
+    d = _get(f"/api/2.0/database/instances/{name}")
+    return _trim({"name": name, "state": d.get("state"), "capacity": d.get("capacity"),
+                  "host": d.get("read_write_dns"), "database": "databricks_postgres"})
+
+
+@tool()
+def dbx_lakebase_sql(instance: str, sql: str, database: str = "databricks_postgres", limit: int = 100) -> str:
+    """Run SQL on a Lakebase (Postgres) instance using a short-lived credential.
+    Multiple statements allowed. Returns rows for queries, or the row count."""
+    _need_writes()
+    _check_prefix("instance", instance, INSTANCE_PREFIX)
+    import uuid
+    import psycopg2
+    d = _get(f"/api/2.0/database/instances/{instance}")
+    cred = _post("/api/2.0/database/credentials", {"request_id": str(uuid.uuid4()), "instance_names": [instance]})
+    me = _get("/api/2.0/preview/scim/v2/Me").get("userName")
+    conn = psycopg2.connect(host=d["read_write_dns"], port=5432, dbname=database, user=me,
+                            password=cred["token"], sslmode="require", connect_timeout=20)
+    conn.autocommit = True
+    try:
+        cur = conn.cursor()
+        cur.execute(sql)
+        if cur.description:
+            cols = [c.name for c in cur.description]
+            rows = cur.fetchall()
+            return _trim({"columns": cols, "rows": [[str(v) for v in r] for r in rows[:limit]], "row_count": len(rows)})
+        return _trim({"ok": True, "rowcount": cur.rowcount})
+    except Exception as e:  # noqa: BLE001
+        return _trim({"error": str(e)[:600]})
+    finally:
+        conn.close()
+
+
+@tool()
+def dbx_create_app(name: str, source_code_path: str = "") -> str:
+    """Try to create (and deploy) a Databricks App. Returns the platform's answer
+    verbatim, including refusals (some workspaces require a Git repository for
+    Apps). Report that text to the user exactly; never claim a deploy that failed."""
+    _need_writes()
+    _check_prefix("app", name, INSTANCE_PREFIX)
+    if source_code_path:
+        _check_path_scope(source_code_path)
+    with _client() as c:
+        r = c.post("/api/2.0/apps", json={"name": name})
+        if not r.is_success:
+            return _trim({"created": False, "http_status": r.status_code, "platform_error": r.text[:800]})
+        app = r.json()
+        if source_code_path:
+            dep = c.post(f"/api/2.0/apps/{name}/deployments", json={"source_code_path": source_code_path})
+            return _trim({"created": True, "app": app.get("name"), "url": app.get("url"),
+                          "deploy_http_status": dep.status_code, "deploy": dep.text[:600]})
+        return _trim({"created": True, "app": app.get("name"), "url": app.get("url")})
+
+
+# --------------------------------------------------------------------------
+# skills (progressive disclosure: the index is cheap, a skill is read on demand)
+# --------------------------------------------------------------------------
+SKILLS_DIR = os.environ.get("NBMCP_SKILLS_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills"))
+
+
+@tool()
+def dbx_skill(name: str = "") -> str:
+    """Read a how-to skill. Call with no name to list the skills (one line each),
+    then call with a name BEFORE starting that kind of task. Skills hold exact
+    formats and workspace-specific facts that are easy to get wrong from memory."""
+    import glob
+    paths = sorted(glob.glob(os.path.join(SKILLS_DIR, "*.md")))
+    index = {}
+    for p in paths:
+        stem = os.path.splitext(os.path.basename(p))[0]
+        with open(p) as f:
+            first = f.readline().strip().lstrip("# ").strip()
+        index[stem] = first
+    if not name:
+        return _trim({"skills": index, "usage": "dbx_skill(name='<skill>')"})
+    if name not in index:
+        return _trim({"error": f"unknown skill '{name}'", "skills": index})
+    with open(os.path.join(SKILLS_DIR, name + ".md")) as f:
+        return f.read()
 
 
 if __name__ == "__main__":

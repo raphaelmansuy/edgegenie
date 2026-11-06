@@ -1,0 +1,81 @@
+{
+  "mission": "M5",
+  "title": "ETL pipeline: medallion job, idempotent, scheduled run",
+  "variant": "V6",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x77d9a",
+  "batch": "v6_gptoss",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nEXIT=0 SECONDS=231\n65981 events.jsonl",
+  "tool_calls": 20,
+  "steps": 25,
+  "tokens": 491385,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_create_job",
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_run_job",
+    "dbxnb_dbx_run_sql",
+    "dbxnb_dbx_write_notebook",
+    "invalid",
+    "skill"
+  ],
+  "tool_errors": 0,
+  "answer": "**Done**\n- Created two notebooks under the required workspace path:\n  - `/Users/raphael.mansuy@gmail.com/exams/x77d9a/m5_etl/silver_task` (deduplicates raw events, creates `silver_events` and `silver_rejects`).\n  - `/Users/raphael.mansuy@gmail.com/exams/x77d9a/m5_etl/gold_task` (aggregates `silver_events` into `gold_daily`).\n- Created a Databricks Job **x77d9a_etl** with two tasks (`silver` \u2192 `gold`) that run on serverless compute.\n- Executed the job three times; each run succeeded.\n- Verified table existence, schema, row counts, and data quality:\n  - `silver_events`: 2,761 rows, no NULL `user_id`, no NULL/invalid `event_ts`.\n  - `silver_rejects`: 239 rows, reject reasons correctly split (`null_user_id`\u202f=\u202f143, `bad_timestamp`\u202f=\u202f96).\n  - `gold_daily`: 14 rows.\n\n**Evidence per numbered requirement / explicit constraint**\n\n| # | Requirement / Constraint | Tool call proving completion (real result) |\n|---|--------------------------|--------------------------------------------|\n| 1 | **silver_events** table: deduplicate on `event_id` (latest `ingested_at`), keep rows with non\u2011NULL `user_id` and parseable `event_ts` (TIMESTAMP). | `dbx_write_notebook` (silver_task) \u2013 notebook contains SQL with `ROW_NUMBER() OVER (PARTITION BY event_id ORDER BY ingested_at DESC)` and `WHERE user_id IS NOT NULL AND TRY_TO_TIMESTAMP(event_ts) IS NOT NULL`. <br> `dbx_run_sql` \u2013 `SELECT COUNT(*) FROM workspace.exam_x77d9a.silver_events` \u2192 **2761** rows. <br> `dbx_run_sql` \u2013 `SELECT COUNT(*) FROM ...silver_events WHERE user_id IS NULL` \u2192 **0**. <br> `dbx_run_sql` \u2013 `SELECT COUNT(*) FROM ...silver_events WHERE event_ts IS NULL` \u2192 **0**. |\n| 2 | **silver_rejects** table with `reject_reason` = `'null_user_id'` (checked first) or `'bad_timestamp'`. | `dbx_write_notebook` (silver_task) \u2013 notebook creates `silver_rejects` with CASE logic that yields the two reasons. <br> `dbx_run_sql` \u2013 `SELECT COUNT(*) FROM workspace.exam_x77d9a.silver_rejects` \u2192 **239** rows. <br> `dbx_run_sql` \u2013 `SELECT DISTINCT reject_reason, COUNT(*) FROM ...silver_rejects GROUP BY reject_reason` \u2192 rows: `'null_user_id'`\u202f=\u202f143, `'bad_timestamp'`\u202f=\u202f96. |\n| 3 | **gold_daily** table with daily aggregates, distinct active users, purchase count, revenue rounded to 2\u202fdecimals (0 if none). | `dbx_write_notebook` (gold_task) \u2013 notebook contains the required aggregation SQL (`DATE(event_ts)`, `COUNT(DISTINCT user_id)`, conditional `SUM` for purchases, `ROUND(...,2)`). <br> `dbx_run_sql` \u2013 `SELECT COUNT(*) FROM workspace.exam_x77d9a.gold_daily` \u2192 **14** rows. |\n| 4 | Job name exactly **x77d9a_etl**. | `dbx_create_job` \u2013 response `\"name\": \"x77d9a_etl\"`. |\n| 5 | Job has **at least two tasks** (silver, gold). | `dbx_create_job` \u2013 `\"tasks\"` list contains `\"silver\"` and `\"gold\"`. |\n| 6 | **Gold task depends on silver**. | `dbx_create_job` \u2013 `\"gold\"` task includes `\"depends_on\":[\"silver\"]`. |\n| 7 | Notebook tasks stored under `/Users/raphael.mansuy@gmail.com/exams/x77d9a/m5_etl/`. | `dbx_write_notebook` calls show paths `/Users/raphael.mansuy@gmail.com/exams/x77d9a/m5_etl/silver_task` and `/.../gold_task`. |\n| 8 | Tasks run on **serverless compute** (no explicit cluster config). | `dbx_create_job` task definitions omit any `new_cluster` or `existing_cluster_id`; by platform convention this means serverless notebook execution. |\n| 9 | **Idempotent** \u2013 running the job twice yields identical tables (no double\u2011counting). | First run: `dbx_run_job` \u2192 run_id **563904696614331** (SUCCESS). <br> Second run: `dbx_run_job` \u2192 run_id **749447649547008** (SUCCESS). <br> After second run, `dbx_run_sql` queries return the same row counts as after first run (silver\u202f=\u202f2761, rejects\u202f=\u202f239, gold\u202f=\u202f14). |\n| 10 | Run the job **at least once**, wait, and **report job id, run id, row counts**. | `dbx_run_job` (first execution) returned `job_id` **20825245229242**, `run_id` **563904696614331**, result **SUCCESS**. <br> Row counts obtained via three `dbx_run_sql` calls (see rows above). |\n\n**Assumptions and unverified**\n- Serverl",
+  "score": 17,
+  "total": 17,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "silver_events equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "silver_rejects equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 2,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "gold_daily equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 3,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "job named x77d9a_etl exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "job has >= 2 tasks with a dependency",
+      "passed": true,
+      "weight": 1,
+      "detail": "2 tasks"
+    },
+    {
+      "name": "latest run succeeded",
+      "passed": true,
+      "weight": 2,
+      "detail": "{'life_cycle_state': 'TERMINATED', 'result_state': 'SUCCESS', 'state_message': '', 'user_cancelled_or_timedout': False}"
+    },
+    {
+      "name": "grader re-runs the job: still succeeds and counts unchanged (idempotent)",
+      "passed": true,
+      "weight": 2,
+      "detail": "before={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} after={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} state=SUCCESS"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 287
+}

@@ -1,0 +1,120 @@
+{
+  "mission": "M7",
+  "title": "Governance: document UC tables from the data",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x25c88",
+  "batch": "v4_gptoss",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=283\n123589 events.jsonl",
+  "tool_calls": 38,
+  "steps": 44,
+  "tokens": 814086,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_run_sql",
+    "dbxnb_dbx_search_tables",
+    "invalid"
+  ],
+  "tool_errors": 0,
+  "answer": "**Done**  \n- Added a table comment and column comments to all three tables in the `workspace.exam_x25c88` schema (cust\u202f7\u202fcols, ord\u202f6\u202fcols, evt_log\u202f5\u202fcols\u202f=\u202f18 column comments).  \n- Comments describe the purpose of each row, units, formats, and code lists where observable.  \n\n**Evidence**  \n- `DESCRIBE TABLE workspace.exam_x25c88.cust` shows the table comment and comments on all 7 columns.  \n- `DESCRIBE TABLE workspace.exam_x25c88.ord` shows the table comment and comments on all 6 columns.  \n- `DESCRIBE TABLE workspace.exam_x25c88.evt_log` shows the table comment and comments on all 5 columns.  \n\n**Assumptions and unverified**  \n- Column `ltv_c` stores lifetime value in **cents** \u2013 inferred from magnitude (hundreds\u2011thousands) and typical practice.  \n- Column `st` status codes mapped as R\u202f=\u202fReturned, N\u202f=\u202fNew, C\u202f=\u202fCancelled \u2013 inferred from observed values.  \n- Column `ev` event types are limited to the few observed values (view, checkout, login); the full code list may be larger.  \n\n**Anything odd or suspicious**  \n- None. All comments were applied successfully and are now visible via the `DESCRIBE` calls.\n**Audit Mapping**\n\n| # | Requirement (as stated) | Tool call(s) that prove it was satisfied | How the result meets the requirement |\n|---|--------------------------|------------------------------------------|--------------------------------------|\n| 1 | *Add a table comment on each of the 3 tables (\u2265\u202f40\u202fchars, describing a single row)* | \u2022 `dbxnb_dbx_run_sql` \u2013 `COMMENT ON TABLE workspace.exam_x25c88.cust \u2026`  <br>\u2022 `dbxnb_dbx_run_sql` \u2013 `COMMENT ON TABLE workspace.exam_x25c88.ord \u2026`  <br>\u2022 `dbxnb_dbx_run_sql` \u2013 `COMMENT ON TABLE workspace.exam_x25c88.evt_log \u2026`  <br>\u2022 `dbxnb_dbx_describe_table` (after comments) \u2013 shows the comment text for each table | The three `COMMENT ON TABLE` statements executed without error (empty result) and the subsequent `DESCRIBE TABLE` calls returned the exact comment strings, each well over 40\u202fcharacters and describing the meaning of a single row. |\n| 2 | *Add a column comment on **every** column of every table (total 18 columns)* | \u2022 `dbxnb_dbx_run_sql` \u2013 7\u202f\u00d7\u202f`COMMENT ON COLUMN \u2026 cust \u2026` statements  <br>\u2022 `dbxnb_dbx_run_sql` \u2013 6\u202f\u00d7\u202f`COMMENT ON COLUMN \u2026 ord \u2026` statements  <br>\u2022 `dbxnb_dbx_run_sql` \u2013 5\u202f\u00d7\u202f`COMMENT ON COLUMN \u2026 evt_log \u2026` statements  <br>\u2022 `dbxnb_dbx_describe_table` (after comments) \u2013 shows a non\u2011null `comment` field for each of the 7\u202f+\u202f6\u202f+\u202f5 columns | All 18 `COMMENT ON COLUMN` statements executed successfully (empty result). The subsequent `DESCRIBE TABLE` calls list a populated `comment` attribute for every column, confirming that each column now carries a description. |\n| 3 | *Ground each comment in the actual data \u2013 look at value ranges / samples and state units, formats, code lists when data reveals them* | \u2022 `dbxnb_dbx_run_sql` \u2013 `SELECT * FROM workspace.exam_x25c88.cust LIMIT 10` (sample rows)  <br>\u2022 `dbxnb_dbx_run_sql` \u2013 `SELECT * FROM workspace.exam_x25c88.ord LIMIT 10` (sample rows)  <br>\u2022 `dbxnb_dbx_run_sql` \u2013 `SELECT * FROM workspace.exam_x25c88.evt_log LIMIT 10` (sample rows) | The three SELECT queries returned real sample data (e.g., `ltv_c` values in the hundreds\u2011thousands, `st` values \u201cR\u201d, \u201cN\u201d, \u201cC\u201d, timestamps in ISO\u20118601 UTC, `ts_ms` large 13\u2011digit numbers). Those samples were used to craft the comments (units in cents, ISO\u20118601 timestamps, status codes, millisecond epoch). |\n| 4 | *Do not change any data or column definitions* | \u2022 All executed statements were `COMMENT ON \u2026` only (shown by the `dbxnb_dbx_run_sql` call logs). No `ALTER TABLE \u2026 SET/DROP COLUMN`, `INSERT`, `UPDATE`, or schema\u2011changing DDL was issued. | Because only comment\u2011adding DDL was run, the underlying data and column definitions remain untouched. |\n| 5 | *In the final answer, list which comments are inferences that could not be fully verified from the data, and report how you verified that all comments were applied* | \u2022 The final answer (this report) lists the inference notes (ltv_c\u202f=\u202fcents; st\u202fcode",
+  "score": 25,
+  "total": 25,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "data and column definitions unchanged",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "3 table comments, each >= 40 chars",
+      "passed": true,
+      "weight": 2,
+      "detail": "{'cust': 151, 'ord': 114, 'evt_log': 101}"
+    },
+    {
+      "name": "every column has a real comment (18 columns)",
+      "passed": true,
+      "weight": 3,
+      "detail": "18/18"
+    },
+    {
+      "name": "no comment merely echoes the column name",
+      "passed": true,
+      "weight": 1,
+      "detail": "[]"
+    },
+    {
+      "name": "ltv_c documented as cents / minor units",
+      "passed": true,
+      "weight": 2,
+      "detail": "customer lifetime value in cents (numeric)"
+    },
+    {
+      "name": "amt_c documented as cents / minor units",
+      "passed": true,
+      "weight": 2,
+      "detail": "order amount in cents (numeric)"
+    },
+    {
+      "name": "ts_ms documented as epoch MILLISECONDS",
+      "passed": true,
+      "weight": 2,
+      "detail": "event timestamp in milliseconds since unix epoch (utc)"
+    },
+    {
+      "name": "st lists its codes (>= 3 of N,S,C,R)",
+      "passed": true,
+      "weight": 2,
+      "detail": "order status code (r=returned, n=new, c=cancelled)"
+    },
+    {
+      "name": "seg lists SMB/ENT/CONS",
+      "passed": true,
+      "weight": 1,
+      "detail": "customer segment code (e.g., cons, smb, ent)"
+    },
+    {
+      "name": "ctry mentions ISO / country code",
+      "passed": true,
+      "weight": 1,
+      "detail": "iso country code (2-letter) of the customer"
+    },
+    {
+      "name": "payload identified as JSON",
+      "passed": true,
+      "weight": 1,
+      "detail": "json payload with additional details (e.g., session id, user agent)"
+    },
+    {
+      "name": "flg_act identified as boolean/active",
+      "passed": true,
+      "weight": 1,
+      "detail": "active flag: true if customer is active"
+    },
+    {
+      "name": "flags what is inferred/unverified (epistemic honesty)",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "reports how application was verified",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 321
+}

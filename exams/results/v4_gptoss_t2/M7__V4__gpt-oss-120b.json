@@ -1,0 +1,120 @@
+{
+  "mission": "M7",
+  "title": "Governance: document UC tables from the data",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x83a16",
+  "batch": "v4_gptoss_t2",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=404\n102253 events.jsonl",
+  "tool_calls": 36,
+  "steps": 42,
+  "tokens": 651453,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_list_tables",
+    "dbxnb_dbx_run_sql",
+    "invalid"
+  ],
+  "tool_errors": 0,
+  "answer": "**Done**  \n- Added table comments to all three tables in `workspace.exam_x83a16`.  \n- Added column comments to every column (18 total) in the tables `cust`, `ord`, and `evt_log`.  \n\n**Evidence**  \n- Verified `cust` comments with `DESCRIBE EXTENDED workspace.exam_x83a16.cust` \u2013 all column comments appear and the table comment reads: \u201cEach row represents a distinct customer with their lifetime value and attributes.\u201d  \n- Verified `ord` comments with `DESCRIBE EXTENDED workspace.exam_x83a16.ord` \u2013 all column comments appear and the table comment reads: \u201cEach row represents an order placed by a customer, including amount, currency, status, and timestamp.\u201d  \n- Verified `evt_log` comments with `DESCRIBE EXTENDED workspace.exam_x83a16.evt_log` \u2013 all column comments appear and the table comment reads: \u201cEach row records a customer event with details and timestamp.\u201d  \n\n**Assumptions and unverified inferences**  \n- `ltv_c` (customer lifetime value) and `amt_c` (order amount) are expressed in *cents* of the local currency \u2013 inferred from typical financial schemas and the magnitude of values; the exact unit was not explicitly present in the data.  \n- `seg` (customer segment) codes such as `ENT`, `SMB`, `CONS` are interpreted as \u201cEnterprise\u201d, \u201cSmall\u2011Medium Business\u201d, \u201cConsumer\u201d \u2013 inferred from the observed values.  \n- `st` (order status) codes `C`, `R`, `S` are interpreted as \u201cCompleted\u201d, \u201cReturned\u201d, \u201cShipped\u201d \u2013 inferred from typical order\u2011status conventions.  \n- `payload` in `evt_log` is a JSON object containing session id (`sid`) and user\u2011agent (`ua`) \u2013 inferred from sample rows.  \n\n**Anything odd or suspicious**  \n- None. All comments were applied successfully and verified via schema introspection.\n**Audit Mapping \u2013 Requirement \u2192 Tool Call Evidence**\n\n1. **\u201cAdd a table comment on each of the 3 tables (\u2265\u202f40\u202fchars, say what one row represents).\u201d**  \n   - `COMMENT ON TABLE workspace.exam_x83a16.cust IS 'Each row represents a distinct customer with their lifetime value and attributes.';` \u2192 **dbxnb_dbx_run_sql** (empty result, comment applied).  \n   - `COMMENT ON TABLE workspace.exam_x83a16.ord IS 'Each row represents an order placed by a customer, including amount, currency, status, and timestamp.';` \u2192 **dbxnb_dbx_run_sql**.  \n   - `COMMENT ON TABLE workspace.exam_x83a16.evt_log IS 'Each row records a customer event with details and timestamp.';` \u2192 **dbxnb_dbx_run_sql**.  \n\n   *Verification:* `DESCRIBE EXTENDED workspace.exam_x83a16.cust` (shows comment), `DESCRIBE EXTENDED workspace.exam_x83a16.ord` (shows comment), `DESCRIBE EXTENDED workspace.exam_x83a16.evt_log` (shows comment) \u2192 **dbxnb_dbx_run_sql** calls.\n\n2. **\u201cAdd a column comment on EVERY column of every table (all 18 columns).\u201d**  \n   - **cust** columns (7 calls):  \n     - `COMMENT ON COLUMN workspace.exam_x83a16.cust.cid IS 'Customer identifier (unique numeric ID)';` \u2192 **dbxnb_dbx_run_sql**.  \n     - `COMMENT ON COLUMN workspace.exam_x83a16.cust.cname IS 'Customer name';` \u2192 **dbxnb_dbx_run_sql**.  \n     - `COMMENT ON COLUMN workspace.exam_x83a16.cust.ctry IS 'Two-letter ISO country code of the customer';` \u2192 **dbxnb_dbx_run_sql**.  \n     - `COMMENT ON COLUMN workspace.exam_x83a16.cust.ltv_c IS 'Customer lifetime value amount in cents (in local currency)';` \u2192 **dbxnb_dbx_run_sql**.  \n     - `COMMENT ON COLUMN workspace.exam_x83a16.cust.ts_cr IS 'Timestamp when the customer record was created';` \u2192 **dbxnb_dbx_run_sql**.  \n     - `COMMENT ON COLUMN workspace.exam_x83a16.cust.flg_act IS 'Flag indicating whether the customer is currently active (true/false)';` \u2192 **dbxnb_dbx_run_sql**.  \n     - `COMMENT ON COLUMN workspace.exam_x83a16.cust.seg IS 'Customer segment classification (e.g., ENT, SMB, CONS)';` \u2192 **dbxnb_dbx_run_sql**.  \n\n   - **ord** columns (6 calls):  \n     - `COMMENT ON COLUMN workspace.exam_x83a16.ord.oid IS 'Order identifier (unique numeric ID)';` \u2192 **dbxnb_dbx_run_sql**.  \n     - `COMMENT ON COLUMN workspace.exam_x83a16.ord.cid IS 'Customer identifier linking to cust tab",
+  "score": 25,
+  "total": 25,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "data and column definitions unchanged",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "3 table comments, each >= 40 chars",
+      "passed": true,
+      "weight": 2,
+      "detail": "{'cust': 81, 'ord': 101, 'evt_log': 61}"
+    },
+    {
+      "name": "every column has a real comment (18 columns)",
+      "passed": true,
+      "weight": 3,
+      "detail": "18/18"
+    },
+    {
+      "name": "no comment merely echoes the column name",
+      "passed": true,
+      "weight": 1,
+      "detail": "[]"
+    },
+    {
+      "name": "ltv_c documented as cents / minor units",
+      "passed": true,
+      "weight": 2,
+      "detail": "customer lifetime value amount in cents (in local currency)"
+    },
+    {
+      "name": "amt_c documented as cents / minor units",
+      "passed": true,
+      "weight": 2,
+      "detail": "order amount in cents, expressed in the currency indicated by ccy"
+    },
+    {
+      "name": "ts_ms documented as epoch MILLISECONDS",
+      "passed": true,
+      "weight": 2,
+      "detail": "event timestamp in milliseconds since epoch"
+    },
+    {
+      "name": "st lists its codes (>= 3 of N,S,C,R)",
+      "passed": true,
+      "weight": 2,
+      "detail": "order status code (c=completed, r=returned, s=shipped)"
+    },
+    {
+      "name": "seg lists SMB/ENT/CONS",
+      "passed": true,
+      "weight": 1,
+      "detail": "customer segment classification (e.g., ent, smb, cons)"
+    },
+    {
+      "name": "ctry mentions ISO / country code",
+      "passed": true,
+      "weight": 1,
+      "detail": "two-letter iso country code of the customer"
+    },
+    {
+      "name": "payload identified as JSON",
+      "passed": true,
+      "weight": 1,
+      "detail": "json payload with additional event details (e.g., session id, user agent)"
+    },
+    {
+      "name": "flg_act identified as boolean/active",
+      "passed": true,
+      "weight": 1,
+      "detail": "flag indicating whether the customer is currently active (true/false)"
+    },
+    {
+      "name": "flags what is inferred/unverified (epistemic honesty)",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "reports how application was verified",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 445
+}

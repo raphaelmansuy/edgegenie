@@ -1,0 +1,109 @@
+{
+  "mission": "M3",
+  "title": "Notebook authoring: demand-pattern analysis",
+  "variant": "V5",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x879e6",
+  "batch": "v5_gptoss",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=264\n29064 events.jsonl",
+  "tool_calls": 8,
+  "steps": 13,
+  "tokens": 199798,
+  "api_errors": 1,
+  "rate_limited": 1,
+  "tools_used": [
+    "bash",
+    "edit",
+    "glob",
+    "skill",
+    "write"
+  ],
+  "tool_errors": 0,
+  "answer": "",
+  "score": 10,
+  "total": 20,
+  "pct": 50.0,
+  "checks": [
+    {
+      "name": "notebook exists at the requested path",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "is a Databricks SOURCE notebook with >= 8 cells",
+      "passed": true,
+      "weight": 1,
+      "detail": "15 cells"
+    },
+    {
+      "name": "first cell is markdown (title/question/source)",
+      "passed": false,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": ">= 5 markdown cells (narrative, not just code)",
+      "passed": true,
+      "weight": 1,
+      "detail": "5 md"
+    },
+    {
+      "name": "reads samples.nyctaxi.trips",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": ">= 2 visualizations",
+      "passed": true,
+      "weight": 1,
+      "detail": "17 viz calls"
+    },
+    {
+      "name": "covers hour, distance bucket, top-10 zips",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "ends with dbutils.notebook.exit",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "does not hard-code the exit values",
+      "passed": true,
+      "weight": 1,
+      "detail": "hard-coded: []"
+    },
+    {
+      "name": "executes end to end on serverless",
+      "passed": false,
+      "weight": 4,
+      "detail": "FAILED SyntaxError: invalid syntax (command-4901037225310952-2867489566, line 3)"
+    },
+    {
+      "name": "exit JSON values equal the golden numbers",
+      "passed": false,
+      "weight": 4,
+      "detail": "no exit value"
+    },
+    {
+      "name": "agent reported an exit value / evidence of running",
+      "passed": false,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 345
+}

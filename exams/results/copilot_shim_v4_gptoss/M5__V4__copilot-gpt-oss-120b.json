@@ -1,0 +1,81 @@
+{
+  "mission": "M5",
+  "title": "ETL pipeline: medallion job, idempotent, scheduled run",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "copilot",
+  "tag": "copilot-gpt-oss-120b",
+  "run_id": "x8073a",
+  "batch": "copilot_shim_v4_gptoss",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: audit pass 1\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=257\n223676 events.jsonl",
+  "tool_calls": 17,
+  "steps": 23,
+  "tokens": 0,
+  "api_errors": 8,
+  "rate_limited": 8,
+  "tools_used": [
+    "dbxnb-dbx_create_job",
+    "dbxnb-dbx_list_notebooks",
+    "dbxnb-dbx_read_notebook",
+    "dbxnb-dbx_run_job",
+    "dbxnb-dbx_run_sql",
+    "dbxnb-dbx_write_notebook",
+    "edit"
+  ],
+  "tool_errors": 2,
+  "answer": "**Done**  \n- Created notebooks `/Users/raphael.mansuy@gmail.com/exams/x8073a/m5_etl/silver_etl` and `/Users/raphael.mansuy@gmail.com/exams/x8073a/m5_etl/gold_etl`.  \n- Defined Unity Catalog tables in schema `workspace.exam_x8073a`:  \n  - `silver_events` (de\u2011duplicated, filtered, with `try_to_timestamp`).  \n  - `silver_rejects` (rejections with reasons).  \n  - `gold_daily` (daily aggregates).  \n- Created Databricks Job **x8073a_etl** with tasks `silver` \u2192 `gold`.  \n- Ran the job (run_id\u202f=\u202f843517121033129, job_id\u202f=\u202f280848593322958) successfully.  \n\n**Evidence**  \n- `silver_events` row count: **2761**  \n- `silver_rejects` row count: **239**  \n- `gold_daily` row count: **14**  \n(All queries executed via `dbx_run_sql` after the job completed.)  \n\n**Assumptions and unverified**  \n- No additional columns or constraints were required beyond those specified.  \n- The raw table `workspace.exam_x8073a.raw_events` exists and is accessible.  \n\n**Anything odd or suspicious**  \n- Notebooks do not call `dbutils.notebook.exit(...)`; the job still succeeded because exit values are optional for this task.  \n\nThe ETL pipeline is idempotent and the tables reflect the expected state.",
+  "score": 17,
+  "total": 17,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "silver_events equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "silver_rejects equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 2,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "gold_daily equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 3,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "job named x8073a_etl exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "job has >= 2 tasks with a dependency",
+      "passed": true,
+      "weight": 1,
+      "detail": "2 tasks"
+    },
+    {
+      "name": "latest run succeeded",
+      "passed": true,
+      "weight": 2,
+      "detail": "{'life_cycle_state': 'TERMINATED', 'result_state': 'SUCCESS', 'state_message': '', 'user_cancelled_or_timedout': False}"
+    },
+    {
+      "name": "grader re-runs the job: still succeeds and counts unchanged (idempotent)",
+      "passed": true,
+      "weight": 2,
+      "detail": "before={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} after={'silver_events': '2761', 'silver_rejects': '239', 'gold_daily': '14'} state=SUCCESS"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 326
+}

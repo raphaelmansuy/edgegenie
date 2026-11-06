@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "dbx/system.ai.gpt-oss-120b",
+  "provider": {
+    "dbx": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Databricks AI Gateway",
+      "options": {
+        "baseURL": "https://YOUR-WORKSPACE.cloud.databricks.com/ai-gateway/openai/v1",
+        "apiKey": "{env:DATABRICKS_TOKEN}"
+      },
+      "models": {
+        "system.ai.gpt-oss-120b": { "name": "gpt-oss-120b", "limit": { "context": 128000, "output": 24000 } }
+      }
+    }
+  }
+}

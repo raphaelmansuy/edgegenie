@@ -1,0 +1,136 @@
+{
+  "profile": "core",
+  "tools": [
+    "dbx_create_app",
+    "dbx_create_job",
+    "dbx_describe_table",
+    "dbx_grep_notebook",
+    "dbx_job_run_status",
+    "dbx_lakebase_create",
+    "dbx_lakebase_sql",
+    "dbx_lakebase_status",
+    "dbx_list_notebooks",
+    "dbx_list_tables",
+    "dbx_read_notebook",
+    "dbx_run_job",
+    "dbx_run_notebook",
+    "dbx_run_sql",
+    "dbx_search_tables",
+    "dbx_whoami",
+    "dbx_write_file",
+    "dbx_write_notebook"
+  ],
+  "n_tools": 18,
+  "passed": 17,
+  "total": 18,
+  "cases": [
+    {
+      "tool": "dbx_run_sql",
+      "expect": "write inside scope allowed",
+      "passed": true,
+      "excerpt": "{\n  \"columns\": [\n    \"num_affected_rows\",\n    \"num_inserted_rows\"\n  ],\n  \"rows\": [],\n  \"row_count\": 0\n}"
+    },
+    {
+      "tool": "dbx_run_sql",
+      "expect": "write outside scope REFUSED",
+      "passed": true,
+      "excerpt": "{\"error\": \"write blocked: target workspace.edgequake.nothing is not inside allowed schemas ['workspace.exam_t38538']; use fully qualified catalog.schema.name\"}"
+    },
+    {
+      "tool": "dbx_run_sql",
+      "expect": "unqualified write REFUSED",
+      "passed": true,
+      "excerpt": "{\"error\": \"write blocked: target t_unqualified is not inside allowed schemas ['workspace.exam_t38538']; use fully qualified catalog.schema.name\"}"
+    },
+    {
+      "tool": "dbx_write_notebook",
+      "expect": "cells_json -> 4 cells, 2 markdown (correct SOURCE structure)",
+      "passed": true,
+      "excerpt": "{\n  \"path\": \"/Users/raphael.mansuy@gmail.com/exams/t38538/cells_nb\",\n  \"object_id\": 3241276912517829,\n  \"cells\": 4,\n  \"markdown_cells\": 2,\n  \"code_cells\": 2,\n  \"note\": null\n}"
+    },
+    {
+      "tool": "dbx_write_notebook",
+      "expect": "Jupyter-style JSON in `source` is converted, not stored verbatim",
+      "passed": true,
+      "excerpt": "{\n  \"path\": \"/Users/raphael.mansuy@gmail.com/exams/t38538/ipynb_nb\",\n  \"object_id\": 3241276912517830,\n  \"cells\": 2,\n  \"markdown_cells\": 1,\n  \"code_cells\": 1,\n  \"note\": \"converted from Jupyter-style JSON\"\n}"
+    },
+    {
+      "tool": "dbx_run_notebook",
+      "expect": "success without exit() is flagged (no exit_value note)",
+      "passed": true,
+      "excerpt": "{\n  \"run_id\": 206922124113809,\n  \"life_cycle\": \"TERMINATED\",\n  \"result\": \"SUCCESS\",\n  \"message\": null,\n  \"finished\": true,\n  \"tasks\": [\n    {\n      \"task_key\": \"t\",\n      \"state\": \"TERMINATED\",\n      \"result\": \"SUCCESS\",\n      \"message\": null\n    }\n  ],\n  \"not"
+    },
+    {
+      "tool": "dbx_write_notebook",
+      "expect": "notebook write outside path scope REFUSED",
+      "passed": true,
+      "excerpt": "Error executing tool dbx_write_notebook: write blocked: /Users/raphael.mansuy@gmail.com/not_mine_nb outside allowed paths ['/Users/raphael.mansuy@gmail.com/exams/t38538/']"
+    },
+    {
+      "tool": "dbx_write_file",
+      "expect": "write_file inside scope creates a FILE",
+      "passed": true,
+      "excerpt": "{\n  \"path\": \"/Users/raphael.mansuy@gmail.com/exams/t38538/app/app.yaml\",\n  \"object_type\": \"FILE\",\n  \"bytes\": 26\n}"
+    },
+    {
+      "tool": "dbx_write_file",
+      "expect": "write_file outside scope REFUSED",
+      "passed": true,
+      "excerpt": "Error executing tool dbx_write_file: write blocked: /Users/raphael.mansuy@gmail.com/escape.txt outside allowed paths ['/Users/raphael.mansuy@gmail.com/exams/t38538/']"
+    },
+    {
+      "tool": "dbx_write_notebook",
+      "expect": "write notebook inside scope",
+      "passed": true,
+      "excerpt": "{\n  \"path\": \"/Users/raphael.mansuy@gmail.com/exams/t38538/nb\",\n  \"object_id\": 3241276912517833,\n  \"cells\": 1,\n  \"markdown_cells\": 0,\n  \"code_cells\": 1,\n  \"note\": null\n}"
+    },
+    {
+      "tool": "dbx_run_notebook",
+      "expect": "run notebook on serverless, return exit value",
+      "passed": false,
+      "excerpt": "Error executing tool dbx_run_notebook: [Errno 54] Connection reset by peer"
+    },
+    {
+      "tool": "dbx_write_notebook",
+      "expect": "write failing notebook",
+      "passed": true,
+      "excerpt": "{\n  \"path\": \"/Users/raphael.mansuy@gmail.com/exams/t38538/bad\",\n  \"object_id\": 3241276912517834,\n  \"cells\": 1,\n  \"markdown_cells\": 0,\n  \"code_cells\": 1,\n  \"note\": null\n}"
+    },
+    {
+      "tool": "dbx_run_notebook",
+      "expect": "failing run returns the error text",
+      "passed": true,
+      "excerpt": "{\n  \"run_id\": 272695680151937,\n  \"life_cycle\": \"INTERNAL_ERROR\",\n  \"result\": \"FAILED\",\n  \"message\": \"Task t failed with message: Workload failed, see run output for details.\",\n  \"finished\": true,\n  \"tasks\": [\n    {\n      \"task_key\": \"t\",\n      \"state\": \"TERMIN"
+    },
+    {
+      "tool": "dbx_create_job",
+      "expect": "create 2-task job with dependency",
+      "passed": true,
+      "excerpt": "{\n  \"job_id\": 469508044586782,\n  \"name\": \"t38538_job\",\n  \"tasks\": [\n    \"a\",\n    \"b\"\n  ],\n  \"schedule\": null,\n  \"next\": \"call dbx_run_job(job_id, wait_seconds=300) to run it\"\n}"
+    },
+    {
+      "tool": "dbx_create_job",
+      "expect": "job without the prefix REFUSED",
+      "passed": true,
+      "excerpt": "Error executing tool dbx_create_job: write blocked: job name must start with 't38538_' (got 'other_job')"
+    },
+    {
+      "tool": "dbx_run_job",
+      "expect": "run job and wait for per-task results",
+      "passed": true,
+      "excerpt": "{\n  \"run_id\": 1110322897008345,\n  \"life_cycle\": \"TERMINATED\",\n  \"result\": \"SUCCESS\",\n  \"message\": null,\n  \"finished\": true,\n  \"tasks\": [\n    {\n      \"task_key\": \"a\",\n      \"state\": \"TERMINATED\",\n      \"result\": \"SUCCESS\",\n      \"message\": null,\n      \"exit_val"
+    },
+    {
+      "tool": "dbx_lakebase_create",
+      "expect": "instance without the prefix REFUSED",
+      "passed": true,
+      "excerpt": "Error executing tool dbx_lakebase_create: write blocked: instance name must start with 't38538-' (got 'someoneelse-lb')"
+    },
+    {
+      "tool": "dbx_create_app",
+      "expect": "app create surfaces the platform refusal verbatim",
+      "passed": true,
+      "excerpt": "{\n  \"created\": false,\n  \"http_status\": 400,\n  \"platform_error\": \"{\\\"error_code\\\":\\\"INVALID_PARAMETER_VALUE\\\",\\\"message\\\":\\\"Git repository is required for Databricks Apps in this workspace. Please specify a Git repository for your app and try again.\\\",\\\"details"
+    }
+  ]
+}

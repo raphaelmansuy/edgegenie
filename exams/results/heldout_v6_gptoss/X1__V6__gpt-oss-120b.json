@@ -1,0 +1,64 @@
+{
+  "mission": "X1",
+  "title": "HELD-OUT: weekly cohort retention matrix",
+  "variant": "V6",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x1bd0b",
+  "batch": "heldout_v6_gptoss",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: audit pass 1\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=115\n50540 events.jsonl",
+  "tool_calls": 13,
+  "steps": 19,
+  "tokens": 340774,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_run_sql"
+  ],
+  "tool_errors": 0,
+  "answer": "**Done** \u2013 All numbered requirements and explicit constraints from the original task are satisfied and proven by concrete tool\u2011call results.\n\n### Evidence per requirement / constraint\n\n| # | Requirement / Constraint | Tool call proving it (real result) |\n|---|--------------------------|-----------------------------------|\n| 1 | Table `workspace.exam_x1bd0b.x1_retention` exists with **exact** columns `cohort_week, cohort_size, week_n, active_users, retention_pct`. | `dbxnb_dbx_describe_table` on `workspace.exam_x1bd0b.x1_retention` shows the five columns with correct names and types. |\n| 2 | `cohort_week` is the **Monday** of the signup week (a DATE). | `dbxnb_dbx_run_sql` query `SELECT signup_date, date_trunc('week', signup_date) AS expected, r.cohort_week \u2026` returned matching `expected = cohort_week` for sampled rows (see result). |\n| 3 | `cohort_size` equals the **number of users who signed up** in that week. | `dbxnb_dbx_run_sql` query comparing `cohort_size` to a direct count `direct_count` (`SELECT DISTINCT r.cohort_week, r.cohort_size, (SELECT count(distinct user_id) \u2026) AS direct_count \u2026`) returned identical values for every cohort. |\n| 4 | `week_n` = whole weeks since signup (`floor(days/7)`), only **0\u20114**, and **ignores activity before signup**. | \u2022 `dbxnb_dbx_run_sql` `SELECT MIN(week_n), MAX(week_n) \u2026` returned `0` and `4`. <br>\u2022 The join condition `a.activity_date >= c.signup_date` in the creation SQL guarantees pre\u2011signup activity is excluded (validated by matching `active_users` to a direct calculation that also uses this condition). |\n| 5 | `active_users` = distinct users of the cohort with at least one activity in that `week_n`. | `dbxnb_dbx_run_sql` query `SELECT \u2026, r.active_users, (SELECT count(distinct a.user_id) \u2026) AS direct_active \u2026` shows `active_users` equals `direct_active` for every cohort/week_n row. |\n| 6 | `retention_pct` = `100 * active_users / cohort_size`, **rounded to 1 decimal**. | `dbxnb_dbx_run_sql` query for the earliest cohort week\u202f2 calculated `calc_retention = round(100.0*active_users/cohort_size,1)` and got `91.8`, identical to the stored `retention_pct`. |\n| 7 | **Exactly five rows per cohort** (week_n 0\u20114), including weeks with zero activity. | `dbxnb_dbx_run_sql` `SELECT cohort_week, COUNT(*) AS rows_per_cohort \u2026 GROUP BY cohort_week` returned `5` rows for each of the 7 cohorts. |\n| 8 | Provide **retention_pct of the earliest cohort for week_n\u202f=\u202f2**. | `dbxnb_dbx_run_sql` `SELECT cohort_week, week_n, retention_pct \u2026 WHERE week_n = 2 \u2026` returned `91.8`. |\n\n### Retention percentage requested\n- Earliest cohort (Monday\u202f2026\u201108\u201103) week\u202f2 retention: **91.8**.\n\n### Assumptions and unverified\n- None. Every requirement is backed by a concrete tool\u2011call result.\n\n### Anything odd or suspicious\n- None.",
+  "score": 11,
+  "total": 11,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['cohort_week', 'cohort_size', 'week_n', 'active_users', 'retention_pct']"
+    },
+    {
+      "name": "row count matches golden (5 rows per cohort)",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 35, want 35"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 5,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports the earliest cohort week-2 retention",
+      "passed": true,
+      "weight": 1,
+      "detail": "want 91.8"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 147
+}

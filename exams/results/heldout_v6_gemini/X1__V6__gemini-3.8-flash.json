@@ -1,0 +1,65 @@
+{
+  "mission": "X1",
+  "title": "HELD-OUT: weekly cohort retention matrix",
+  "variant": "V6",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "xff22c",
+  "batch": "heldout_v6_gemini",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=196\n132594 events.jsonl",
+  "tool_calls": 29,
+  "steps": 32,
+  "tokens": 782798,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_run_sql",
+    "dbxnb_dbx_whoami"
+  ],
+  "tool_errors": 0,
+  "answer": "### Audit of Requirements with Tool-Call Evidence\n\n1. **Target table creation and exact column names (`workspace.exam_xff22c.x1_retention` with columns `cohort_week, cohort_size, week_n, active_users, retention_pct`)**:\n   - **Tool Call**: `dbx_describe_table(full_name='workspace.exam_xff22c.x1_retention')`\n   - **Result**: Table exists with exact columns and types:\n     - `cohort_week` (`DATE`)\n     - `cohort_size` (`LONG`)\n     - `week_n` (`INT`)\n     - `active_users` (`LONG`)\n     - `retention_pct` (`DECIMAL`)\n\n2. **`cohort_week` is the Monday of the week of `signup_date` (a DATE)**:\n   - **Tool Call**: `dbx_run_sql(sql=\"SELECT cohort_week, date_format(cohort_week, 'E') AS day_name, typeof(cohort_week) AS col_type FROM workspace.exam_xff22c.x1_retention GROUP BY cohort_week ORDER BY cohort_week\")`\n   - **Result**: All 7 cohorts (`2026-08-03`, `2026-08-10`, `2026-08-17`, `2026-08-24`, `2026-08-31`, `2026-09-07`, `2026-09-14`) have `day_name = 'Mon'` and `col_type = 'date'`.\n\n3. **`cohort_size` is the number of users who signed up in that week**:\n   - **Tool Call**: `dbx_run_sql(sql=\"SELECT r.cohort_week, max(r.cohort_size) AS retention_table_cohort_size, count(distinct s.user_id) AS signups_actual_cohort_size, max(r.cohort_size) - count(distinct s.user_id) AS diff FROM workspace.exam_xff22c.x1_retention r JOIN workspace.exam_xff22c.signups s ON trunc(s.signup_date, 'WEEK') = r.cohort_week GROUP BY r.cohort_week ORDER BY r.cohort_week\")`\n   - **Result**: `diff = 0` across all cohorts. Sizes: 73, 79, 89, 84, 87, 99, 89.\n\n4. **`week_n` = whole weeks since user's own `signup_date` (`floor(days between signup_date and activity_date / 7)`), counting only 0 to 4 and ignoring pre-signup activity**:\n   - **Tool Call**: `dbx_run_sql(sql=\"WITH raw_counts AS (SELECT trunc(s.signup_date, 'WEEK') AS cohort_week, cast(floor(datediff(a.activity_date, s.signup_date) / 7.0) as int) AS week_n, count(distinct s.user_id) AS expected_active_users FROM workspace.exam_xff22c.signups s JOIN workspace.exam_xff22c.activity a ON s.user_id = a.user_id WHERE a.activity_date >= s.signup_date AND datediff(a.activity_date, s.signup_date) BETWEEN 0 AND 34 GROUP BY 1, 2) SELECT r.cohort_week, r.week_n, r.active_users, rc.expected_active_users FROM workspace.exam_xff22c.x1_retention r LEFT JOIN raw_counts rc ON r.cohort_week = rc.cohort_week AND r.week_n = rc.week_n WHERE r.active_users != coalesce(rc.expected_active_users, 0)\")`\n   - **Result**: `0` rows returned, confirming identical active user counts for every cohort-week cell.\n\n5. **`active_users` = distinct users of the cohort with at least one activity in that week_n**:\n   - **Tool Call**: `dbx_run_sql(sql=\"SELECT * FROM workspace.exam_xff22c.x1_retention EXCEPT SELECT * FROM expected\")` and reverse `EXCEPT`\n   - **Result**: `0` rows returned in both directions when compared to independent recalculation.\n\n6. **`retention_pct` = 100 * active_users / cohort_size, rounded to 1 decimal**:\n   - **Tool Call**: `dbx_run_sql(sql=\"SELECT cohort_week, week_n, cohort_size, active_users, retention_pct, round(100.0 * active_users / cohort_size, 1) AS expected_pct FROM workspace.exam_xff22c.x1_retention WHERE retention_pct != round(100.0 * active_users / cohort_size, 1)\")`\n   - **Result**: `0` rows returned, verifying all 35 rows match the rounding and calculation rule.\n\n7. **Every cohort has exactly 5 rows (`week_n` 0 to 4), including weeks with zero active users**:\n   - **Tool Call**: `dbx_run_sql(sql=\"SELECT cohort_week, count(*) AS row_count, min(week_n) AS min_week, max(week_n) AS max_week, collect_list(week_n) AS week_list FROM workspace.exam_xff22c.x1_retention GROUP BY cohort_week ORDER BY cohort_week\")`\n   - **Result**: Each of the 7 cohorts has `row_count = 5`, `min_week = 0`, `max_week = 4`, and `week_list = [\"0\",\"1\",\"2\",\"3\",\"4\"]` (35 rows total).\n\n8. **Retention percentage of the earliest cohort for `week_n = 2`**:\n   - **Tool Call**: `dbx_run_sql(sql=\"SELECT cohort_week, cohort_size, week_n, active_users",
+  "score": 11,
+  "total": 11,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['cohort_week', 'cohort_size', 'week_n', 'active_users', 'retention_pct']"
+    },
+    {
+      "name": "row count matches golden (5 rows per cohort)",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 35, want 35"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 5,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports the earliest cohort week-2 retention",
+      "passed": true,
+      "weight": 1,
+      "detail": "want 91.8"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 231
+}

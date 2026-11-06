@@ -1,0 +1,59 @@
+{
+  "mission": "X3",
+  "title": "HELD-OUT: data-quality audit (read-only on the source)",
+  "variant": "V6",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "x2b425",
+  "batch": "heldout_v6_gemini",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=144\n94025 events.jsonl",
+  "tool_calls": 27,
+  "steps": 28,
+  "tokens": 583493,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb_dbx_describe_table",
+    "dbxnb_dbx_run_sql",
+    "dbxnb_dbx_whoami"
+  ],
+  "tool_errors": 0,
+  "answer": "1. **Done**:\n- Created Delta table `workspace.exam_x2b425.dq_report` with schema `check_name STRING, failing_rows BIGINT`.\n- Populated the table with exactly the six required rows:\n  - `future_order_date`: 22\n  - `duplicate_order_id`: 20\n  - `orphan_customer`: 20\n  - `null_amount`: 15\n  - `invalid_status`: 10\n  - `negative_amount`: 8\n- Key result: The check with the most failing rows is **`future_order_date`** (22 failing rows).\n\n2. **Evidence**:\n- **Requirement: Create table `workspace.exam_x2b425.dq_report` with columns `check_name (STRING)` and `failing_rows (BIGINT)`**\n  - Tool call: `dbx_describe_table(full_name='workspace.exam_x2b425.dq_report')`\n  - Real result: `columns: [{name: 'check_name', type: 'STRING'}, {name: 'failing_rows', type: 'LONG'}]` (`LONG` is the Unity Catalog / Spark representation of `BIGINT`).\n- **Requirement: Exactly six rows with the required check names and counts**\n  - Tool call: `dbx_run_sql(sql=\"SELECT check_name, failing_rows FROM workspace.exam_x2b425.dq_report ORDER BY failing_rows DESC, check_name ASC\")`\n  - Real result: `rows: [['future_order_date', '22'], ['duplicate_order_id', '20'], ['orphan_customer', '20'], ['null_amount', '15'], ['invalid_status', '10'], ['negative_amount', '8']]`, `row_count: 6`.\n- **Requirement: `null_amount` check (rows where amount IS NULL)**\n  - Tool call: `dbx_run_sql(sql=\"SELECT COUNT(*) FROM workspace.exam_x2b425.dq_orders WHERE amount IS NULL\")`\n  - Real result: `rows: [['15']]`.\n- **Requirement: `negative_amount` check (rows where amount < 0)**\n  - Tool call: `dbx_run_sql(sql=\"SELECT COUNT(*) FROM workspace.exam_x2b425.dq_orders WHERE amount < 0\")`\n  - Real result: `rows: [['8']]`.\n- **Requirement: `duplicate_order_id` check (total rows minus distinct order_id)**\n  - Tool call: `dbx_run_sql(sql=\"SELECT COUNT(*) AS total_rows, COUNT(order_id) AS non_null_orders, COUNT(DISTINCT order_id) AS distinct_orders, COUNT(*) - COUNT(DISTINCT order_id) AS diff FROM workspace.exam_x2b425.dq_orders\")`\n  - Real result: `total_rows: 400`, `distinct_orders: 380`, `diff: 20`.\n- **Requirement: `orphan_customer` check (customer_id does not exist in `dq_customers`)**\n  - Tool call: `dbx_run_sql(sql=\"SELECT COUNT(*) FROM workspace.exam_x2b425.dq_orders WHERE customer_id NOT IN (SELECT customer_id FROM workspace.exam_x2b425.dq_customers WHERE customer_id IS NOT NULL)\")`\n  - Real result: `rows: [['20']]`.\n- **Requirement: `future_order_date` check (rows where order_date is after 2026-11-01)**\n  - Tool call: `dbx_run_sql(sql=\"SELECT COUNT_IF(order_date > DATE '2026-11-01') AS strictly_after, COUNT_IF(order_date >= DATE '2026-11-01') AS on_or_after, COUNT_IF(order_date = DATE '2026-11-01') AS on_date FROM workspace.exam_x2b425.dq_orders\")`\n  - Real result: `strictly_after: 22`, `on_or_after: 22`, `on_date: 0`.\n- **Requirement: `invalid_status` check (status not in new, paid, shipped, cancelled)**\n  - Tool call: `dbx_run_sql(sql=\"SELECT status, COUNT(*) FROM workspace.exam_x2b425.dq_orders GROUP BY status\")`\n  - Real result: `rows: [['unknwn', '10'], ['shipped', '97'], ['cancelled', '96'], ['paid', '103'], ['new', '94']]`. Total invalid: 10 (`unknwn`).\n- **Requirement: Independent verification by a second route**\n  - Tool call: `dbx_run_sql` with bidirectional `EXCEPT` queries between `workspace.exam_x2b425.dq_report` and independent scalar/group-by subqueries.\n  - Real result: Both directional `EXCEPT` statements returned `row_count: 0`.\n- **Explicit Constraint: Do NOT modify, delete or clean `dq_orders` or `dq_customers`**\n  - Tool call: `dbx_run_sql(sql=\"DESCRIBE HISTORY workspace.exam_x2b425.dq_orders LIMIT 1\")`\n  - Real result: Table is at initial `version: 0`, operation `CREATE OR REPLACE TABLE AS SELECT`, row count 400.\n  - Tool call: `dbx_run_sql(sql=\"DESCRIBE HISTORY workspace.exam_x2b425.dq_customers LIMIT 1\")`\n  - Real result: Table is at initial `version: 0`, operation `CREATE OR REPLACE TABLE AS SELECT`, row count 60.\n- **Requirement: Reply with which check has the most ",
+  "score": 12,
+  "total": 12,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "dq_report has exactly the 6 named checks",
+      "passed": true,
+      "weight": 2,
+      "detail": "6 rows"
+    },
+    {
+      "name": "every count equals golden",
+      "passed": true,
+      "weight": 5,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "source tables untouched (audit only)",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "answer names the check with the most failing rows",
+      "passed": true,
+      "weight": 1,
+      "detail": "want future_order_date"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 182
+}

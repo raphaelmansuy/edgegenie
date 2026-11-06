@@ -1,0 +1,62 @@
+{
+  "mission": "M1",
+  "title": "Complex SQL: windowed revenue ranking",
+  "variant": "V1",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "run_id": "xfde2b",
+  "batch": "baseline",
+  "runner_log": "EXIT=0 SECONDS=26\n9817 events.jsonl",
+  "tool_calls": 4,
+  "steps": 5,
+  "tokens": 49016,
+  "tools_used": [
+    "dbsql_execute_sql",
+    "dbxnb_dbx_list_warehouses",
+    "dbxnb_dbx_whoami"
+  ],
+  "tool_errors": 0,
+  "answer": "**SQL used**\n\n```sql\nCREATE OR REPLACE TABLE workspace.exam_xfde2b.m1_top_zips AS\nWITH base AS (\n  SELECT pickup_zip,\n         COUNT(*) AS trips,\n         SUM(fare_amount) AS total_fare\n  FROM samples.nyctaxi.trips\n  WHERE pickup_zip IS NOT NULL\n  GROUP BY pickup_zip\n  HAVING COUNT(*) >= 200\n),\nhour_counts AS (\n  SELECT pickup_zip,\n         hour(tpep_pickup_datetime) AS hour,\n         COUNT(*) AS cnt\n  FROM samples.nyctaxi.trips\n  WHERE pickup_zip IS NOT NULL\n  GROUP BY pickup_zip, hour(tpep_pickup_datetime)\n),\nb AS (\n  SELECT pickup_zip,\n         hour,\n         cnt,\n         ROW_NUMBER() OVER (PARTITION BY pickup_zip ORDER BY cnt DESC, hour ASC) AS rn\n  FROM hour_counts\n),\njoined AS (\n  SELECT b.pickup_zip,\n         base.trips,\n         ROUND(base.total_fare, 2) AS total_fare,\n         b.hour AS busiest_hour\n  FROM base\n  JOIN b\n    ON base.pickup_zip = b.pickup_zip\n   AND b.rn = 1\n),\nranked AS (\n  SELECT *,\n         DENSE_RANK() OVER (ORDER BY total_fare DESC) AS fare_rank\n  FROM joined\n)\nSELECT pickup_zip,\n       trips,\n       total_fare,\n       fare_rank,\n       ROUND(\n         SUM(total_fare) OVER (ORDER BY total_fare DESC, pickup_zip ASC) /\n         (SELECT SUM(total_fare) FROM ranked) * 100,\n         2) AS cumulative_share_pct,\n       busiest_hour\nFROM ranked\nWHERE fare_rank <= 10\nORDER BY fare_rank;\n```\n\n**Rows created**\n\nThe resulting table `workspace.exam_xfde2b.m1_top_zips` contains **10 rows**.",
+  "score": 10,
+  "total": 10,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['pickup_zip', 'trips', 'total_fare', 'fare_rank', 'cumulative_share_pct', 'busiest_hour']"
+    },
+    {
+      "name": "row count matches golden",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 10, want 10"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports SQL and row count",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 41
+}

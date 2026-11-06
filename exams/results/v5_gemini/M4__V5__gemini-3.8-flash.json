@@ -1,0 +1,90 @@
+{
+  "mission": "M4",
+  "title": "Notebook editing: fix loud + silent bugs minimally",
+  "variant": "V5",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "x5ca92",
+  "batch": "v5_gemini",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=137\n121816 events.jsonl",
+  "tool_calls": 16,
+  "steps": 19,
+  "tokens": 515019,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "read",
+    "skill",
+    "write"
+  ],
+  "tool_errors": 0,
+  "answer": "### Done\nThe notebook at `/Users/raphael.mansuy@gmail.com/exams/x5ca92/m4_fare_report` was fixed in place, executed on Databricks serverless compute, and verified against an independent SQL query.\n\n**Serverless Run Exit Value:**\n```json\n{\"zip\": 10119, \"fare_per_mile\": 4.7843}\n```\n\n---\n\n### Evidence\n\n#### 1. Fix in place retaining cell structure, comments, MIN_TRIPS, and exit cell\n- **Action tool calls**:\n  - `write` to `/tmp/opencode/m4_fare_report.py`\n  - `databricks workspace import \"/Users/raphael.mansuy@gmail.com/exams/x5ca92/m4_fare_report\" --file /tmp/opencode/m4_fare_report.py --format SOURCE --language PYTHON --overwrite`\n  - `databricks workspace export \"/Users/raphael.mansuy@gmail.com/exams/x5ca92/m4_fare_report\" --format SOURCE --file /tmp/opencode/verify_notebook.py`\n  - `read` of `/tmp/opencode/verify_notebook.py`\n- **Result verification**: The exported workspace notebook has all original cells, cell comments, `MIN_TRIPS = 100`, and `dbutils.notebook.exit(...)` unchanged:\n  ```python\n  # Databricks notebook source\n  # MAGIC %md\n  # MAGIC # Fare per mile report\n  # MAGIC Which pickup zip has the highest fare per mile, among zips with enough long trips?\n\n  # COMMAND ----------\n  import json\n  from pyspark.sql import functions as F\n\n  MIN_TRIPS = 100\n  df = spark.table(\"samples.nyctaxi.trips\")\n\n  # COMMAND ----------\n  # Fare per mile per pickup zip, counting only trips LONGER than one mile\n  long_trips = df.filter(F.col(\"trip_distance\") > 1)\n  agg = (long_trips.groupBy(\"pickup_zip\")\n         .agg((F.sum(\"fare_amount\") / F.sum(\"trip_distance\")).alias(\"fare_per_mile\"),\n              F.count(\"*\").alias(\"n\")))\n\n  # COMMAND ----------\n  # Keep only zips with at least MIN_TRIPS long trips, then pick the HIGHEST fare per mile\n  eligible = agg.filter(F.col(\"n\") >= MIN_TRIPS)\n  best = eligible.orderBy(F.col(\"fare_per_mile\").desc()).first()\n\n  # COMMAND ----------\n  dbutils.notebook.exit(json.dumps({\"zip\": best[\"pickup_zip\"], \"fare_per_mile\": round(best[\"fare_per_mile\"], 4)}))\n  ```\n\n#### 2. Execution on serverless compute & exit value\n- **Action tool calls**:\n  - `databricks jobs submit --json @/tmp/opencode/run.json`\n    - Result: `run_id: 238036636292129`, task `run_id: 204081552513419`, `effective_performance_target: \"PERFORMANCE_OPTIMIZED\"`, `state: {\"life_cycle_state\": \"TERMINATED\", \"result_state\": \"SUCCESS\"}`\n  - `databricks jobs get-run-output 204081552513419`\n    - Result:\n      ```json\n      \"notebook_output\": {\n        \"result\": \"{\\\"zip\\\": 10119, \\\"fare_per_mile\\\": 4.7843}\",\n        \"truncated\": false\n      }\n      ```\n\n#### 3. Independent verification via SQL query\n- **Action tool call**:\n  - `databricks experimental aitools tools query \"SELECT pickup_zip AS zip, round(sum(fare_amount) / sum(trip_distance), 4) AS fare_per_mile FROM samples.nyctaxi.trips WHERE trip_distance > 1 GROUP BY pickup_zip HAVING count(*) >= 100 ORDER BY sum(fare_amount) / sum(trip_distance) DESC LIMIT 1\"`\n    - Result:\n      ```json\n      [\n        {\n          \"fare_per_mile\": \"4.7843\",\n          \"zip\": \"10119\"\n        }\n      ]\n      ```\n- **Agreement**: Both independent calculations yield `zip: 10119` and `fare_per_mile: 4.7843`.\n\n#### 4. Defects Found\n1. **Wrong comparison operator (`trip_distance < 1`)**: Filtered for trips shorter than one mile instead of strictly longer than one mile (`> 1`). *(Did not raise a runtime error, but computed incorrect results)*.\n2. **Incorrect column name (`\"fare\"`)**: `samples.nyctaxi.trips` contains `fare_amount`. Using `\"fare\"` triggered an unresolved column `AnalysisException` at runtime.\n3. **Missing descending sort before `.first()`**: `eligible.first()` returned an arbitrary record from the filtered aggregation rather than the pickup zip with the maximum `fare_per_mile`. *(Did not raise a runtime error, but produced an arbitrary, incorrect zip)*.\n\n---\n\n### Assumptions and unverified\n- none\n\n---\n\n### Anything odd or suspicious\n- none\n### Done\nThe notebook `/Users/raphael.mansuy@gmail.com/exams/x5ca",
+  "score": 18,
+  "total": 18,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "notebook still exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "runs successfully on serverless",
+      "passed": true,
+      "weight": 2,
+      "detail": "SUCCESS None"
+    },
+    {
+      "name": "exit value equals the golden answer (all 3 defects fixed)",
+      "passed": true,
+      "weight": 5,
+      "detail": "got {'zip': 10119, 'fare_per_mile': 4.7843}; want zip=10119 fpm=4.7843"
+    },
+    {
+      "name": "protected lines preserved verbatim",
+      "passed": true,
+      "weight": 1,
+      "detail": "3/3"
+    },
+    {
+      "name": "minimal diff (<= 12 changed lines)",
+      "passed": true,
+      "weight": 2,
+      "detail": "6 changed lines"
+    },
+    {
+      "name": "cell structure preserved",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "no hard-coded answer",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "lists all three defects (fare column, < 1 filter, unordered first)",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "reports an independent SQL verification",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 184
+}

@@ -1,0 +1,66 @@
+{
+  "mission": "X2",
+  "title": "HELD-OUT: diagnose and fix a failing job (1 loud + 1 silent bug)",
+  "variant": "V5",
+  "model": "gemini-3.8-flash",
+  "agent": "opencode",
+  "tag": "gemini-3.8-flash",
+  "run_id": "xb055e",
+  "batch": "heldout_v5_gemini",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=210\n203159 events.jsonl",
+  "tool_calls": 34,
+  "steps": 37,
+  "tokens": 1163222,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "read",
+    "skill",
+    "write"
+  ],
+  "tool_errors": 0,
+  "answer": "### Audit Pass: Requirement-by-Requirement Evidence Mapping\n\n1. **Requirement: Find out why the nightly job fails**\n   - **Evidence Tool Call**: `databricks jobs get-run-output 599400471613615`\n   - **Real Result**: `NumberFormatException: [CAST_INVALID_INPUT] The value 'N/A' of the type \"STRING\" cannot be cast to \"DOUBLE\" because it is malformed. Correct the value as per the syntax, or change its target type. Use try_cast to tolerate malformed input and return NULL instead. SQLSTATE: 22018`.\n   - **Secondary Cause**: Reading lines 4\u20135 of the notebook via `databricks workspace export` showed that unmapped customers were being filtered out by an `inner` join instead of reported under country `'UNKNOWN'`.\n\n2. **Requirement: Fix the notebook (change only what is necessary, keep the structure) at `/Users/raphael.mansuy@gmail.com/exams/xb055e/x2_revenue`**\n   - **Evidence Tool Call**: `databricks workspace import /Users/raphael.mansuy@gmail.com/exams/xb055e/x2_revenue --file /tmp/opencode/x2_revenue_fixed.py --format SOURCE --language PYTHON --overwrite` followed by `databricks workspace export /Users/raphael.mansuy@gmail.com/exams/xb055e/x2_revenue --file /tmp/opencode/x2_revenue_exported_back.py --format SOURCE && cat /tmp/opencode/x2_revenue_exported_back.py`\n   - **Real Result**: The notebook preserved all original 4 cells and imports, updating only:\n     - Amount parsing: `F.coalesce(F.expr(\"try_cast(amount as double)\"), F.lit(0.0))`\n     - Customer mapping: `o.join(customers, \"customer_id\", \"left\").withColumn(\"country\", F.coalesce(F.col(\"country\"), F.lit(\"UNKNOWN\")))`\n\n3. **Requirement: Do not create a new job**\n   - **Evidence Tool Call**: `databricks jobs list --name xb055e_x2_revenue`\n   - **Real Result**: Exactly one job returned: `575794794346868  xb055e_x2_revenue`. No other job was created.\n\n4. **Requirement: Run the job again and make sure the latest run succeeds**\n   - **Evidence Tool Call**: `databricks jobs list-runs --job-id 575794794346868 --limit 5`\n   - **Real Result**: Latest run ID `805415120614708` has `Result State: SUCCESS`. Task run output from `databricks jobs get-run-output 5059480347833` returned `{result: \"ok\", truncated: false}`.\n\n5. **Requirement: Make sure `workspace.exam_xb055e.x2_revenue` is correct according to the notebook's description**\n   - **Evidence Tool Call**: `databricks experimental aitools tools query \"<validation query comparing actual table to raw orders/customers logic>\"`\n   - **Real Result**:\n     - `DE`: actual 185 orders, 26980.0 revenue (matches expected)\n     - `FR`: actual 62 orders, 8749.0 revenue (matches expected)\n     - `JP`: actual 83 orders, 12748.0 revenue (matches expected)\n     - `UNKNOWN`: actual 91 orders, 12913.0 revenue (matches expected)\n     - `US`: actual 79 orders, 10154.0 revenue (matches expected)\n     - `matches: \"true\"` for all rows.\n\n---\n\n### Final Report\n\n1. **Done**:\n   - Workspace notebook `/Users/raphael.mansuy@gmail.com/exams/xb055e/x2_revenue` updated and preserved in structure.\n   - Job `xb055e_x2_revenue` (ID: `575794794346868`) re-run (Run ID: `805415120614708`, Task Run ID: `5059480347833`).\n   - Delta table `workspace.exam_xb055e.x2_revenue` populated with 5 rows.\n\n2. **Evidence**:\n   - `databricks jobs get-run 805415120614708` returned `result_state: \"SUCCESS\"` and `life_cycle_state: \"TERMINATED\"`.\n   - `databricks jobs get-run-output 5059480347833` returned task state `SUCCESS` with notebook output `\"ok\"`.\n   - Full outer join query between `workspace.exam_xb055e.x2_revenue` and independent aggregation on `workspace.exam_xb055e.x2_orders` + `workspace.exam_xb055e.x2_customers` confirmed 100% match on all 5 country buckets (`DE`, `FR`, `JP`, `UNKNOWN`, `US`), 500 total orders, and 71,544.0 total revenue.\n\n3. **Assumptions and unverified**:\n   - none\n\n4. **Anything odd or suspicious**:\n   - none\n### Requirement Audit & Real Result Evidence\n\n1. **Find out why the job fails**\n   - **Tool Call**: `databricks jobs get-run-output 599400471613615`\n ",
+  "score": 12,
+  "total": 14,
+  "pct": 85.7,
+  "checks": [
+    {
+      "name": "the original job still exists (no replacement job)",
+      "passed": true,
+      "weight": 1,
+      "detail": "1 jobs"
+    },
+    {
+      "name": "latest run of the job succeeded",
+      "passed": true,
+      "weight": 3,
+      "detail": "{'life_cycle_state': 'TERMINATED', 'result_state': 'SUCCESS', 'state_message': '', 'user_cancelled_or_timedout': False}"
+    },
+    {
+      "name": "x2_revenue equals golden (incl. UNKNOWN row, N/A ignored)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "minimal edit: markdown cell kept, <= 12 changed lines",
+      "passed": false,
+      "weight": 2,
+      "detail": "15 changed lines"
+    },
+    {
+      "name": "answer names both root causes",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 240
+}

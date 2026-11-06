@@ -1,0 +1,64 @@
+{
+  "mission": "M1",
+  "title": "Complex SQL: windowed revenue ranking",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "copilot",
+  "tag": "copilot-gpt-oss-120b",
+  "run_id": "xa6d3d",
+  "batch": "copilot_v4_gptoss",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=44\n64000 events.jsonl",
+  "tool_calls": 3,
+  "steps": 4,
+  "tokens": 0,
+  "api_errors": 2,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "dbxnb-dbx_run_sql"
+  ],
+  "tool_errors": 0,
+  "answer": "**SQL Used**\n\n```sql\nCREATE OR REPLACE TABLE workspace.exam_xa6d3d.m1_top_zips AS\nWITH zip_stats AS (\n  SELECT\n    pickup_zip,\n    COUNT(*) AS trips,\n    SUM(fare_amount) AS total_fare_raw\n  FROM samples.nyctaxi.trips\n  WHERE pickup_zip IS NOT NULL\n  GROUP BY pickup_zip\n  HAVING COUNT(*) >= 200\n),\nbusiest_hour_cte AS (\n  SELECT\n    pickup_zip,\n    hour(tpep_pickup_datetime) AS hour_of_day,\n    COUNT(*) AS cnt,\n    ROW_NUMBER() OVER (PARTITION BY pickup_zip\n                       ORDER BY COUNT(*) DESC, hour(tpep_pickup_datetime) ASC) AS rn\n  FROM samples.nyctaxi.trips\n  WHERE pickup_zip IS NOT NULL\n  GROUP BY pickup_zip, hour(tpep_pickup_datetime)\n),\nbusiest AS (\n  SELECT pickup_zip, hour_of_day AS busiest_hour\n  FROM busiest_hour_cte\n  WHERE rn = 1\n),\ntotal_rev AS (\n  SELECT SUM(total_fare_raw) AS grand_total FROM zip_stats\n),\nranked AS (\n  SELECT\n    z.pickup_zip,\n    z.trips,\n    ROUND(z.total_fare_raw, 2) AS total_fare,\n    DENSE_RANK() OVER (ORDER BY z.total_fare_raw DESC) AS fare_rank,\n    ROUND(\n      SUM(z.total_fare_raw) OVER (ORDER BY z.total_fare_raw DESC, z.pickup_zip ASC)\n      / t.grand_total * 100,\n      2\n    ) AS cumulative_share_pct,\n    b.busiest_hour\n  FROM zip_stats z\n  JOIN busiest b ON z.pickup_zip = b.pickup_zip\n  CROSS JOIN total_rev t\n)\nSELECT\n  pickup_zip,\n  trips,\n  total_fare,\n  fare_rank,\n  cumulative_share_pct,\n  busiest_hour\nFROM ranked\nWHERE fare_rank <= 10\nORDER BY fare_rank;\n```\n\n**Result**\n\nThe table `workspace.exam_xa6d3d.m1_top_zips` now contains **10 rows**.",
+  "score": 10,
+  "total": 10,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['pickup_zip', 'trips', 'total_fare', 'fare_rank', 'cumulative_share_pct', 'busiest_hour']"
+    },
+    {
+      "name": "row count matches golden",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 10, want 10"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 4,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports SQL and row count",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 72
+}

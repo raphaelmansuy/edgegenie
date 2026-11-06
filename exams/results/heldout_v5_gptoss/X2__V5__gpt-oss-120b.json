@@ -1,0 +1,66 @@
+{
+  "mission": "X2",
+  "title": "HELD-OUT: diagnose and fix a failing job (1 loud + 1 silent bug)",
+  "variant": "V5",
+  "model": "gpt-oss-120b",
+  "agent": "opencode",
+  "tag": "gpt-oss-120b",
+  "run_id": "x72c92",
+  "batch": "heldout_v5_gptoss",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: empty final answer, continuing (attempt 4)\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=229\n78743 events.jsonl",
+  "tool_calls": 22,
+  "steps": 28,
+  "tokens": 537133,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "bash",
+    "edit",
+    "read",
+    "skill"
+  ],
+  "tool_errors": 3,
+  "answer": "",
+  "score": 5,
+  "total": 14,
+  "pct": 35.7,
+  "checks": [
+    {
+      "name": "the original job still exists (no replacement job)",
+      "passed": true,
+      "weight": 1,
+      "detail": "1 jobs"
+    },
+    {
+      "name": "latest run of the job succeeded",
+      "passed": false,
+      "weight": 3,
+      "detail": "{'life_cycle_state': 'INTERNAL_ERROR', 'result_state': 'FAILED', 'state_message': 'Task main failed with message: Workload failed, see run output for details.', 'user_cancelled_or_timedout': False}"
+    },
+    {
+      "name": "x2_revenue equals golden (incl. UNKNOWN row, N/A ignored)",
+      "passed": false,
+      "weight": 4,
+      "detail": "missing"
+    },
+    {
+      "name": "minimal edit: markdown cell kept, <= 12 changed lines",
+      "passed": true,
+      "weight": 2,
+      "detail": "7 changed lines"
+    },
+    {
+      "name": "answer names both root causes",
+      "passed": false,
+      "weight": 2,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 257
+}

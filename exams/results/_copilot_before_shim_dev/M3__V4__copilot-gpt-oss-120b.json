@@ -1,0 +1,109 @@
+{
+  "mission": "M3",
+  "title": "Notebook authoring: demand-pattern analysis",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "copilot",
+  "tag": "copilot-gpt-oss-120b",
+  "run_id": "x2823b",
+  "batch": "copilot_v4_gptoss",
+  "runner_log": "SUPERVISOR: audit pass 1\nSUPERVISOR: audit pass 2\nEXIT=0 SECONDS=136\n142213 events.jsonl",
+  "tool_calls": 7,
+  "steps": 8,
+  "tokens": 0,
+  "api_errors": 2,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb-dbx_describe_table",
+    "dbxnb-dbx_list_tables",
+    "dbxnb-dbx_run_notebook",
+    "dbxnb-dbx_write_notebook",
+    "edit"
+  ],
+  "tool_errors": 1,
+  "answer": "**Done**  \nCreated notebook `/Users/raphael.mansuy@gmail.com/exams/x2823b/m3_taxi_analysis` with the required markdown, analysis cells, two visualizations, findings section, and final `dbutils.notebook.exit()`.\n\n**Evidence**  \nExecuted the notebook (`run_id: 376527096929598`) on serverless compute. It completed successfully with exit value:\n```json\n{\"n_trips\": 21932, \"peak_hour\": 18, \"avg_fare_per_mile\": 4.3}\n```\n\n**Assumptions and unverified**  \nNone.\n\n**Anything odd or suspicious**  \nNone.",
+  "score": 20,
+  "total": 20,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "notebook exists at the requested path",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "is a Databricks SOURCE notebook with >= 8 cells",
+      "passed": true,
+      "weight": 1,
+      "detail": "10 cells"
+    },
+    {
+      "name": "first cell is markdown (title/question/source)",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": ">= 5 markdown cells (narrative, not just code)",
+      "passed": true,
+      "weight": 1,
+      "detail": "5 md"
+    },
+    {
+      "name": "reads samples.nyctaxi.trips",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": ">= 2 visualizations",
+      "passed": true,
+      "weight": 1,
+      "detail": "17 viz calls"
+    },
+    {
+      "name": "covers hour, distance bucket, top-10 zips",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "ends with dbutils.notebook.exit",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "does not hard-code the exit values",
+      "passed": true,
+      "weight": 1,
+      "detail": "hard-coded: []"
+    },
+    {
+      "name": "executes end to end on serverless",
+      "passed": true,
+      "weight": 4,
+      "detail": "SUCCESS None"
+    },
+    {
+      "name": "exit JSON values equal the golden numbers",
+      "passed": true,
+      "weight": 4,
+      "detail": "got {'n_trips': 21932, 'peak_hour': 18, 'avg_fare_per_mile': 4.3} want {'n_trips': '21932', 'peak_hour': '18', 'avg_fare_per_mile': '4.3'}"
+    },
+    {
+      "name": "agent reported an exit value / evidence of running",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 192
+}

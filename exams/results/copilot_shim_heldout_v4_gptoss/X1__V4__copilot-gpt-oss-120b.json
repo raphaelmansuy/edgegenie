@@ -1,0 +1,64 @@
+{
+  "mission": "X1",
+  "title": "HELD-OUT: weekly cohort retention matrix",
+  "variant": "V4",
+  "model": "gpt-oss-120b",
+  "agent": "copilot",
+  "tag": "copilot-gpt-oss-120b",
+  "run_id": "x37527",
+  "batch": "copilot_shim_heldout_v4_gptoss",
+  "runner_log": "SUPERVISOR: empty final answer, continuing (attempt 1)\nSUPERVISOR: empty final answer, continuing (attempt 2)\nSUPERVISOR: empty final answer, continuing (attempt 3)\nSUPERVISOR: audit pass 1\nSUPERVISOR: empty final answer, continuing (attempt 5)\nEXIT=0 SECONDS=71\n145242 events.jsonl",
+  "tool_calls": 5,
+  "steps": 11,
+  "tokens": 0,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "dbxnb-dbx_describe_table",
+    "dbxnb-dbx_run_sql"
+  ],
+  "tool_errors": 0,
+  "answer": "**SQL used**\n\n```sql\nCREATE OR REPLACE TABLE workspace.exam_x37527.x1_retention AS\nWITH signups AS (\n  SELECT user_id,\n         DATE_TRUNC('WEEK', signup_date) AS cohort_week,\n         signup_date\n  FROM workspace.exam_x37527.signups\n),\nactivity AS (\n  SELECT a.user_id,\n         a.activity_date,\n         FLOOR(DATEDIFF(a.activity_date, s.signup_date) / 7) AS week_n,\n         s.cohort_week\n  FROM workspace.exam_x37527.activity a\n  JOIN signups s ON a.user_id = s.user_id\n  WHERE a.activity_date >= s.signup_date\n    AND FLOOR(DATEDIFF(a.activity_date, s.signup_date) / 7) BETWEEN 0 AND 4\n),\ncohort_sizes AS (\n  SELECT cohort_week, COUNT(DISTINCT user_id) AS cohort_size\n  FROM signups\n  GROUP BY cohort_week\n),\nactive AS (\n  SELECT cohort_week,\n         week_n,\n         COUNT(DISTINCT user_id) AS active_users\n  FROM activity\n  GROUP BY cohort_week, week_n\n)\nSELECT cs.cohort_week,\n       cs.cohort_size,\n       n.week_n,\n       COALESCE(a.active_users,0) AS active_users,\n       ROUND(100.0 * COALESCE(a.active_users,0) / cs.cohort_size, 1) AS retention_pct\nFROM cohort_sizes cs\nCROSS JOIN (SELECT 0 AS week_n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4) n\nLEFT JOIN active a\n  ON cs.cohort_week = a.cohort_week AND n.week_n = a.week_n\nORDER BY cs.cohort_week, n.week_n;\n```\n\n**Retention\u202f% of earliest cohort for week\u202f2**\n\n- Cohort week:\u202f2026\u201108\u201103  \n- Retention\u202fpct (week\u202f2):\u202f**91.8\u202f%**",
+  "score": 11,
+  "total": 11,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "result table exists",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "columns exactly as specified",
+      "passed": true,
+      "weight": 1,
+      "detail": "got ['cohort_week', 'cohort_size', 'week_n', 'active_users', 'retention_pct']"
+    },
+    {
+      "name": "row count matches golden (5 rows per cohort)",
+      "passed": true,
+      "weight": 1,
+      "detail": "got 35, want 35"
+    },
+    {
+      "name": "every value equals golden (EXCEPT both ways)",
+      "passed": true,
+      "weight": 5,
+      "detail": "0 differing rows"
+    },
+    {
+      "name": "answer reports the earliest cohort week-2 retention",
+      "passed": true,
+      "weight": 1,
+      "detail": "want 91.8"
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 105
+}
