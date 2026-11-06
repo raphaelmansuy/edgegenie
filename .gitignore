@@ -27,3 +27,8 @@ specs/001-databricks-coding-agents/e2e/screenshots/*.png
 
 # databricks bundle state
 .databricks/
+
+# live credentials - never commit these
+.venv2
+.env
+*.tok
