@@ -2,7 +2,7 @@
 
 # E2E screenshots
 
-Ten states of the running application, captured by [`apps/coding-agent/web/scripts/shoot.mjs`](../../../apps/coding-agent/web/scripts/shoot.mjs).
+States of the running application, captured by [`apps/coding-agent/web/scripts/shoot.mjs`](../../../apps/coding-agent/web/scripts/shoot.mjs).
 The script starts its own server, drives a real browser, and fails if the browser logs an error.
 
 **These are screenshots of the application UI, not of the Databricks workspace around it** (the workspace uses single

@@ -28,7 +28,7 @@ apps/coding-agent/
 │   ├── src/domain/        events.ts (mirrors the Python vocabulary) + pure reduce()
 │   ├── src/hooks/         useSessionStream.ts (SSE with replay)
 │   ├── src/components/    Transcript · Markdown · Chrome (composer, approval, inspector, empty state)
-│   └── scripts/           shoot.mjs (captures every UI state) · one.mjs · debug-one.mjs
+│   └── scripts/           genie-e2e.mjs (19-step live run) · shoot.mjs (UI states) · deployed-e2e.mjs
 ├── tests/                 68 Python tests (unit, contract, API)
 ├── app.yaml               Databricks App runtime contract
 └── databricks.yml         bundle, including user_api_scopes
