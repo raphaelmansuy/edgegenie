@@ -228,6 +228,60 @@ async def stream(
     )
 
 
+# -- workspace tree ----------------------------------------------------------
+def _browser(request: Request):
+    return request.app.state.workspace
+
+
+def _user_token(request: Request) -> str | None:
+    """The signed-in user's token, forwarded by the Databricks proxy. Never stored."""
+    headers = {k.lower(): v for k, v in request.headers.items()}
+    return headers.get("x-forwarded-access-token") or getattr(request.app.state, "dev_token", None)
+
+
+@router.get("/workspace")
+async def workspace_dir(request: Request, path: str | None = None, depth: int = 1) -> dict:
+    """List a workspace folder (one level by default). The tree loads lazily as the user expands."""
+    browser = _browser(request)
+    user = _user(request)
+    target = path or f"/Users/{user}"
+    try:
+        node = await browser.tree(target, _user_token(request), depth=max(1, min(depth, 3)))
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except RuntimeError as exc:
+        log.warning("workspace list failed for %s: %s", target, exc)
+        raise HTTPException(502, str(exc)) from exc
+    return {"node": node.to_dict(), "root": target}
+
+
+@router.get("/workspace/roots")
+async def workspace_roots(request: Request) -> dict:
+    """The places worth showing first: the user's home, Shared, Repos.
+
+    A root that does not exist for this user is not shown: an entry that opens onto nothing is
+    worse than an absent entry. The user's own home is always first when it exists.
+    """
+    user = _user(request)
+    home = f"/Users/{user}"
+    repo_owner = user.split("@")[0].replace(".", "_")
+    candidates = [
+        {"path": home, "name": "My home", "kind": "directory"},
+        {"path": "/Shared", "name": "Shared", "kind": "directory"},
+        {"path": f"/Repos/{repo_owner}", "name": "Repos", "kind": "repo"},
+        {"path": "/Repos", "name": "All repos", "kind": "repo"},
+    ]
+    out = []
+    for c in candidates:
+        try:
+            children = await _browser(request).list_dir(c["path"], _user_token(request))
+        except (PermissionError, RuntimeError):
+            continue
+        if children or c["path"] == home:
+            out.append({**c, "childCount": len(children)})
+    return {"roots": out or [{"path": "/", "name": "Workspace", "kind": "directory"}]}
+
+
 # -- misc --------------------------------------------------------------------
 @router.get("/health")
 async def health() -> dict:

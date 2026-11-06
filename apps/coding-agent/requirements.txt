@@ -14,3 +14,6 @@ httpx==0.28.1
 anyio==4.16.0
 starlette==1.10.0
 pydantic-core==2.50.4
+
+# The tool server (tools/databricks_notebook_mcp.py) needs the MCP SDK.
+mcp<2

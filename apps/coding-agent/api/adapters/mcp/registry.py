@@ -11,7 +11,21 @@ import os
 import socket
 from pathlib import Path
 
-TOOL_SERVER = Path(__file__).resolve().parents[4].parent / "mcp" / "databricks_notebook_mcp.py"
+# Look in the app's own tree first (a deployment ships only its source folder), then in the
+# repository (local development). The app folder carries a copy at tools/ for exactly this reason.
+def _find_server() -> Path:
+    """Locate the tool server. Walk up from this file: a deployment ships only the app folder, and
+    a relative path here once pointed at api/tools/, which does not exist."""
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        for candidate in (parent / "tools" / "databricks_notebook_mcp.py",
+                          parent / "mcp" / "databricks_notebook_mcp.py"):
+            if candidate.exists():
+                return candidate
+    return here.parents[3] / "tools" / "databricks_notebook_mcp.py"
+
+
+TOOL_SERVER = _find_server()
 
 
 def free_port() -> int:
@@ -25,6 +39,7 @@ class SubprocessToolRegistry:
         self._server = server or TOOL_SERVER
         self._python = python
         self._procs: dict[str, tuple[asyncio.subprocess.Process, str]] = {}
+        self._stderr: str = ""
 
     async def start(self, session_id: str, folder: str, schema: str | None) -> str:
         port = free_port()
@@ -39,6 +54,7 @@ class SubprocessToolRegistry:
             "NBMCP_WRITE_PATHS": folder.rstrip("/") + "/",
             "NBMCP_WRITE_JOB_PREFIX": f"agent_{session_id[:8]}_",
             "NBMCP_WRITE_INSTANCE_PREFIX": f"agent-{session_id[:8]}-",
+            "NBMCP_SKILLS_DIR": str(self._server.parent / "skills"),
         }
         proc = await asyncio.create_subprocess_exec(
             self._python,
@@ -50,11 +66,19 @@ class SubprocessToolRegistry:
         url = f"http://127.0.0.1:{port}/mcp"
         self._procs[session_id] = (proc, url)
         for _ in range(20):
+            if proc.returncode is not None:
+                out, err = await proc.communicate()
+                stderr_tail = (err or out or b"").decode(errors="replace")
+                break
             if await self.health(url) > 0:
                 return url
             await asyncio.sleep(0.25)
+        else:
+            stderr_tail = getattr(self, "_stderr", "")
         await self.stop(session_id)
-        raise RuntimeError("the tool server did not start (see INFRA in the runbook)")
+        raise RuntimeError(
+            f"the tool server did not start (server={self._server}, exists={self._server.exists()}). "
+            f"Last output: {stderr_tail.strip()[:300] or '(none)'}")
 
     async def health(self, url: str) -> int:
         try:

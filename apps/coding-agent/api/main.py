@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .adapters.acp.runtime import AcpAgentRuntime
+from .adapters.databricks.workspace import WorkspaceBrowser
 from .adapters.mcp.registry import NullToolRegistry, SubprocessToolRegistry
 from .adapters.memory.store import MemoryEventStore
 from .config import Settings
@@ -72,6 +73,11 @@ def build(settings: Settings | None = None) -> FastAPI:
     app.state.models = models
     app.state.orchestrator = orch
     app.state.idempotency = {}
+    app.state.workspace = WorkspaceBrowser(
+        os.environ.get("DATABRICKS_HOST", ""),
+        lambda: os.environ.get("DATABRICKS_TOKEN") or None,
+    )
+    app.state.dev_token = os.environ.get("APP_DEV_TOKEN") or os.environ.get("DATABRICKS_TOKEN")
 
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Approval, SessionView } from "../domain/events";
 import { api } from "../api/client";
+import { WorkspaceTree } from "./WorkspaceTree";
 
 export function Composer({ disabled, busy, onSend, onStop }: {
   disabled?: boolean; busy: boolean; onSend: (text: string) => Promise<void>; onStop: () => void;
@@ -99,16 +100,19 @@ export function ApprovalSheet({ approval, sessionId, onDecided }: {
 }
 
 export function Inspector({ session }: { session: SessionView }) {
-  const [tab, setTab] = useState<"context" | "audit">("context");
+  const [tab, setTab] = useState<"context" | "files" | "audit">("context");
   const calls = session.turns.flatMap((t) => t.tools);
   return (
     <aside className="pane inspector">
       <div className="insp-head" role="tablist" aria-label="Inspector">
         <button className="tab" role="tab" aria-selected={tab === "context"} onClick={() => setTab("context")}>Context</button>
+        <button className="tab" role="tab" aria-selected={tab === "files"} onClick={() => setTab("files")}>Files</button>
         <button className="tab" role="tab" aria-selected={tab === "audit"} onClick={() => setTab("audit")}>Audit</button>
       </div>
       <div className="insp-body">
-        {tab === "context" ? (
+        {tab === "files" ? (
+          <WorkspaceTree selected={session.folder} />
+        ) : tab === "context" ? (
           <>
             <div className="fieldset">
               <legend>Working scope</legend>
