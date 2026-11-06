@@ -1,11 +1,13 @@
 # Databricks App runtime contract (see specs/001 15, RB-02/03/04).
 # - command is an array and is NOT run through a shell; only $DATABRICKS_APP_PORT is substituted.
 # - the app must bind 0.0.0.0 and exit within 15 s of SIGTERM.
-command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "10", "--workers", "2"]
+# One process: uvicorn serves the API and the built front end, and spawns `opencode acp` per session.
+command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "10"]
 env:
   - name: APP_AGENT_MODE
     value: stdio
   - name: APP_AGENT_COMMAND
+    # The binary is installed at build time by the root package.json (see scripts/prepare-app.sh).
     value: opencode acp
   - name: APP_TOOL_MODE
     value: subprocess

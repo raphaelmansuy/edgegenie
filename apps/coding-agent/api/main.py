@@ -30,6 +30,11 @@ def build(settings: Settings | None = None) -> FastAPI:
     models = StaticModelCatalog(cfg)
     identity = ForwardedIdentity(cfg)
 
+    # A deployed app installs the agent with npm; its binary lives in node_modules/.bin.
+    local_bin = Path(__file__).resolve().parents[1] / "node_modules" / ".bin"
+    if local_bin.is_dir():
+        os.environ["PATH"] = f"{local_bin}{os.pathsep}{os.environ.get('PATH', '')}"
+
     if cfg.agent_mode == "fake":
         # The interpreter running this app (the container may not have `python3` on PATH), and our
         # package root on PYTHONPATH: the child's cwd is the user's working folder, not the app.

@@ -1,0 +1,16 @@
+# Pinned runtime dependencies for the Databricks App.
+#
+# The app crashed on its first deployment with `ModuleNotFoundError: No module named
+# 'pydantic_settings'`: the platform installs Python dependencies from requirements.txt (or from
+# pyproject.toml only when a uv.lock is present). A pyproject.toml alone installs nothing.
+# Keep this file in step with pyproject.toml; tests/test_packaging.py enforces it.
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.3
+pydantic-settings==2.16.2
+httpx==0.28.1
+
+# Transitive pins that matter for a reproducible build (see /tmp/freeze.txt for the full tree).
+anyio==4.16.0
+starlette==1.10.0
+pydantic-core==2.50.4

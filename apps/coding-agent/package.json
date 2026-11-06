@@ -1,0 +1,11 @@
+{
+  "name": "databricks-coding-agents-app",
+  "private": true,
+  "description": "Build hook for Databricks Apps: a root package.json makes the platform run npm install + npm run build.",
+  "scripts": {
+    "build": "bash scripts/prepare-app.sh"
+  },
+  "dependencies": {
+    "opencode-ai": "^1.18.19"
+  }
+}

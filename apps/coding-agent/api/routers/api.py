@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -13,6 +14,7 @@ from pydantic import BaseModel, Field
 from ..domain.session import DomainError, Session
 from ..services.orchestrator import Orchestrator
 
+log = logging.getLogger("app.api")
 router = APIRouter(prefix="/api")
 
 
@@ -83,6 +85,8 @@ async def create_session(request: Request, body: CreateSession) -> dict:
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - provisioning failures are 503, never a 200
+        # Log it: in a deployed app the only diagnostic channel is stdout.
+        log.exception("session provisioning failed")
         raise HTTPException(503, f"the agent did not start: {exc}") from exc
     return _session_json(s)
 
