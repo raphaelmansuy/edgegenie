@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import collections
 import os
+import re
 import shlex
 from collections.abc import AsyncIterator
 
@@ -13,6 +15,9 @@ from .jsonrpc import StdioChannel, TransportError
 from .mapper import from_permission, from_update, model_options, turn_end_from_prompt_response
 
 CLIENT_INFO = {"name": "databricks-coding-agents", "version": "0.1"}
+# ACP has no "the model call failed" signal: when the endpoint errors, some agents log to stderr and
+# never end the turn. Without this guard a turn hangs forever (observed with a 403 from the gateway).
+IDLE_TURN_TIMEOUT = float(os.environ.get("APP_TURN_IDLE_TIMEOUT", "180"))
 
 
 class AcpAgentRuntime:
@@ -23,6 +28,8 @@ class AcpAgentRuntime:
         self._extra_env = extra_env or {}
         self._procs: dict[str, tuple[asyncio.subprocess.Process, StdioChannel]] = {}
         self._by_agent: dict[str, str] = {}  # agent session id -> our session id
+        self._stderr: dict[str, collections.deque[str]] = {}
+        self._stderr_tasks: dict[str, asyncio.Task] = {}
         self._capabilities: dict[str, Capabilities] = {}
         self._turn_ends: dict[str, asyncio.Queue] = {}
         self._turn_ids: dict[str, str] = {}
@@ -58,6 +65,12 @@ class AcpAgentRuntime:
             ) from exc
         assert proc.stdin and proc.stdout
         ch = StdioChannel(proc.stdout, proc.stdin)
+        # An unread stderr pipe fills its buffer and blocks the agent forever. That deadlocked a
+        # real opencode session, with no error anywhere: the turn simply never produced an event.
+        self._stderr[spec.session_id] = collections.deque(maxlen=200)
+        if proc.stderr:
+            self._stderr_tasks[spec.session_id] = asyncio.create_task(
+                self._drain_stderr(spec.session_id, proc.stderr))
         self._procs[spec.session_id] = (proc, ch)
         self._turn_ends[spec.session_id] = asyncio.Queue()
 
@@ -110,8 +123,53 @@ class AcpAgentRuntime:
         self._by_agent[agent_sid] = spec.session_id
         return RuntimeHandle(session_id=agent_sid, capabilities=caps, models=models, current_model=current)
 
+    async def _drain_stderr(self, session_id: str, stream: asyncio.StreamReader) -> None:
+        """Keep the agent's stderr flowing and remember the tail, for diagnosis."""
+        try:
+            while True:
+                line = await stream.readline()
+                if not line:
+                    return
+                self._stderr[session_id].append(line.decode(errors="replace").rstrip())
+        except (asyncio.CancelledError, ConnectionResetError):
+            return
+
+    def stderr_tail(self, session_id: str, lines: int = 6) -> str:
+        """The single most useful error line from the agent's stderr.
+
+        Model failures arrive as pretty-printed JSON plus log lines, so a raw tail shows a truncated
+        object. Ranking, best first:
+          1. a sentence that names a cause (limit, denied, quota, not enabled);
+          2. an explicit `message: "..."` field (the longest one: nested objects have short ones);
+          3. any ERROR line, cleaned of timestamps and ids;
+          4. the last line.
+        """
+        rows = list(self._stderr.get(session_id, []))
+        if not rows:
+            return ""
+        cause = re.compile(r"(limit|denied|quota|not enabled|unauthor|expired|invalid|forbidden)", re.I)
+        named = [r.strip()[:300] for r in rows if cause.search(r)]
+        if named:
+            return max(named, key=len)
+        msgs: list[str] = []
+        for r in rows:
+            m = re.search(r'message["\s:=]+"(.{15,400}?)"\s*[,}]?\s*$', r.strip())
+            if m:
+                msgs.append(m.group(1))
+        if msgs:
+            return max(msgs, key=len)
+        errs = [r.strip()[:300] for r in rows if re.search(r"\b(ERROR|Error:)\b", r)]
+        if errs:
+            line = re.sub(r"^timestamp=\S+\s+(level=\S+\s+)?(run=\S+\s+)?", "", errs[-1])
+            return line[:300]
+        return rows[-1][:300]
+
     async def close(self, h: RuntimeHandle) -> None:
-        proc, ch = self._procs.pop(self._ours(h), (None, None))
+        ours = self._ours(h)
+        t = self._stderr_tasks.pop(ours, None)
+        if t:
+            t.cancel()
+        proc, ch = self._procs.pop(ours, (None, None))
         if ch:
             await ch.close()
         if proc and proc.returncode is None:
@@ -226,7 +284,8 @@ class AcpAgentRuntime:
           final tool_call_update (and the whole reasoning trace) can arrive first.
         """
         ch = self._channel(h)
-        ends = self._turn_ends[self._ours(h)]
+        ours = self._ours(h)
+        ends = self._turn_ends[ours]
         read: asyncio.Task | None = None
         end: tuple | None = None
         try:
@@ -234,7 +293,20 @@ class AcpAgentRuntime:
                 if read is None:
                     read = asyncio.create_task(ch.next_notification())
                 fin = asyncio.create_task(ends.get())
-                done, _ = await asyncio.wait({read, fin}, return_when=asyncio.FIRST_COMPLETED)
+                try:
+                    done, _ = await asyncio.wait({read, fin}, timeout=IDLE_TURN_TIMEOUT,
+                                                 return_when=asyncio.FIRST_COMPLETED)
+                except asyncio.CancelledError:
+                    raise
+                if not done:
+                    tail = self.stderr_tail(ours, 4)
+                    if tail:
+                        # Lead with the cause when we have one: "the model call failed" is what the
+                        # user needs; "no event for 180s" is only the symptom.
+                        yield ("error", f"the model or agent failed: {tail}")
+                    else:
+                        yield ("error", f"the agent sent nothing for {IDLE_TURN_TIMEOUT:.0f}s")
+                    return
                 if fin in done:
                     got = fin.result()
                     end = ("end", got) if hasattr(got, "stop_reason") else got

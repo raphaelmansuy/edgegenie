@@ -44,6 +44,7 @@ Read in this order the first time. Each document is self-contained and cross-lin
 | 14 | [Decisions and risks](14-decisions-risks.md) | What did we decide, and what is still open? | All |
 | 15 | [**Roadblock register**](15-roadblocks.md) | What is in the way, which official doc says so, what does it cost us? | All |
 | 16 | [**Implementation**](16-implementation.md) | What is built, what did running it teach us, what is still open? | All |
+| 17 | [**Deployment**](17-deployment.md) | Did it deploy? What did that find? | All |
 | — | [E2E screenshots](e2e/README.md) | What does it actually look like? | UX |
 
 ## The seven lenses, and where each one bites

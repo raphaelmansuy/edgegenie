@@ -50,6 +50,15 @@ def test_a_demo_marker_is_not_a_requirement():
     assert all("scenario:" not in r.text for r in reqs)
 
 
+def test_a_failed_turn_always_has_a_reason():
+    from api.domain.events import turn_ended
+    for kind in ("cancelled", "interrupted", "failed"):
+        ev = turn_ended("s", "t", kind)
+        assert ev.payload["reason"].strip(), f"{kind} produced an empty reason"
+    ev = turn_ended("s", "t", "failed", "the model or agent failed: free daily limit")
+    assert "free daily limit" in ev.payload["reason"]
+
+
 def test_parse_evidence_prefers_json_block():
     text = 'EVIDENCE\n```json\n[{"requirement":"a","tool":"dbx_run_sql","summary":"3 rows"}]\n```'
     rows = parse_evidence_block(text)

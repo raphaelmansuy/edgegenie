@@ -125,7 +125,7 @@ export function Inspector({ session }: { session: SessionView }) {
               <legend>Session</legend>
               <dl className="kv">
                 <dt>agent</dt><dd>{session.agent || "starting"} {session.agentVersion && `v${session.agentVersion}`}</dd>
-                <dt>tools</dt><dd>{session.tools > 0 ? `${session.tools} available` : "none (demo mode)"}</dd>
+                <dt>tools</dt><dd>{session.tools > 0 ? `${session.tools} available` : "none configured"}</dd>
                 <dt>model</dt><dd>{session.model}</dd>
                 <dt>turns</dt><dd>{session.turns.length}</dd>
               </dl>

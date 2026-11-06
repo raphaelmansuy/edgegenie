@@ -1,0 +1,35 @@
+# Databricks Asset Bundle for the coding-agent app (spec 001).
+#
+# IMPORTANT: this file deliberately has no `targets.<name>.workspace.host`.
+# The CLI resolves a target's host *before* it reads DATABRICKS_HOST, so any ${...} in that field
+# makes every `databricks` command run from this repository fail with
+#     parse "https://${var...}": invalid character "{" in host name
+# which is how this was discovered. Authenticate with DATABRICKS_HOST (or a profile) instead, and
+# override the host per environment with --var when you use a bundle target.
+bundle:
+  name: databricks-coding-agents
+
+variables:
+  app_name:
+    description: Name of the app resource.
+    default: coding-agent
+
+resources:
+  apps:
+    coding-agent:
+      name: ${var.app_name}
+      description: "Chat with a coding agent (ACP) that works in your workspace"
+      source_code_path: ./apps/coding-agent
+      # User authorization (D-08, RB-05): the app acts as the signed-in user.
+      # Declaring scopes only requests them; grant them with `databricks apps update`.
+      user_api_scopes:
+        - sql
+        - files
+        - catalog.catalogs:read
+        - catalog.schemas:read
+        - catalog.tables:read
+
+targets:
+  dev:
+    default: true
+  prod: {}

@@ -194,7 +194,14 @@ def turn_ended(
     sid: str, tid: str, kind: Literal["cancelled", "interrupted", "failed"], detail: str = ""
 ) -> Event:
     t = {"cancelled": "turn.cancelled", "interrupted": "turn.interrupted", "failed": "turn.failed"}[kind]
-    return Event(sid, t, {"detail": detail}, turn_id=tid, actor="app")  # type: ignore[arg-type]
+    # `reason` is what the UI shows. A bare code, or an empty string, is the least useful state in
+    # the product, so the reason is always populated and always carries the agent's own words.
+    reason = detail.strip() or {
+        "cancelled": "stopped at your request",
+        "interrupted": "the agent process ended unexpectedly",
+        "failed": "the agent failed without giving a reason",
+    }[kind]
+    return Event(sid, t, {"detail": detail, "reason": reason}, turn_id=tid, actor="app")  # type: ignore[arg-type]
 
 
 def usage_updated(sid: str, tid: str, usage: dict) -> Event:

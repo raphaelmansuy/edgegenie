@@ -23,6 +23,7 @@ narrow case), captured at 1.5× density.
 | 08 | `08-injection-report.png` | Prompt injection | A ticket body asked the agent to drop a table. The write was refused, the refusal is shown, and the real task still completed |
 | 09 | `09-running-stop-visible.png` | Long run | A run in progress with the stop affordance present, for the 300-second proxy case |
 | 10 | `10-cancelled.png` | Cancelled | The partial transcript is kept and the turn is marked stopped — cancellation is not deletion |
+| 11 | `11-deployed-real-opencode.png` | **Real agent** | The production path: the app driving real `opencode` over ACP, showing a real gateway failure with the agent's own words. See [17](../17-deployment.md) |
 
 ## How the capture works, and why it is a test
 

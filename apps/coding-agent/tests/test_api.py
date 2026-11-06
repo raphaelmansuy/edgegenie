@@ -82,6 +82,14 @@ def test_sending_a_message_returns_202_with_a_turn(client):
     assert again.json()["turnId"] == r.json()["turnId"], "a repeated key must not start a second turn"
 
 
+def test_the_demo_marker_never_reaches_the_transcript(client):
+    """The marker tells the reference agent which behaviour to play; it is not the user's words."""
+    sid = client.post("/api/sessions", json={"folder": "/tmp/agent-work"}).json()["id"]
+    client.post(f"/api/sessions/{sid}/messages", json={"text": "Build a notebook. [[scenario:notebook]]"})
+    turns = client.get(f"/api/sessions/{sid}").json()["turns"]
+    assert turns and "scenario:" not in turns[0]["prompt"]
+
+
 def test_empty_message_is_rejected(client):
     sid = client.post("/api/sessions", json={"folder": "/tmp/agent-work"}).json()["id"]
     assert client.post(f"/api/sessions/{sid}/messages", json={"text": ""}).status_code == 422

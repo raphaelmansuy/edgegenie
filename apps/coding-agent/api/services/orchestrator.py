@@ -25,7 +25,7 @@ from ..domain.events import (
     turn_ended,
     turn_started,
 )
-from ..domain.evidence import ToolCall, extract_requirements
+from ..domain.evidence import DEMO_MARKER, ToolCall, extract_requirements
 from ..domain.scope import Scope, describe
 from ..domain.session import (
     DomainError,
@@ -192,6 +192,7 @@ class Orchestrator:
         if len(live.state.turns) >= MAX_TURNS:
             raise DomainError(f"this session reached its limit of {MAX_TURNS} turns")
         running = live.state.running()
+        text = DEMO_MARKER.sub(" ", text).strip()     # never store a demo hint as the user's words
         turn = live.state.new_turn(text)
         await self._store.append(turn_started(session_id, turn.id, text, live.state.session.model))
         if running is None:

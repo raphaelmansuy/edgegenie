@@ -1,0 +1,9 @@
+{
+  "name": "coding-agent",
+  "description": "Chat with a coding agent (ACP) that works in your workspace",
+  "source_code_path": "apps/coding-agent",
+  "git_repository": {
+    "url": "https://github.com/raphaelmansuy/edgegenie",
+    "provider": "gitHub"
+  }
+}

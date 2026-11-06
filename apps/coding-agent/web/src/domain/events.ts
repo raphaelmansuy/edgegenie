@@ -192,9 +192,15 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
       return { ...s, status: "ready", turns: s.turns.map((t) =>
         t.id === e.turnId ? { ...t, status: "cancelled" } : t) };
     case "turn.interrupted":
-    case "turn.failed":
+    case "turn.failed": {
+      // A failed turn must say why: a bare "failed" is the least useful state in the product.
+      const reason = String(e.reason ?? e.detail ?? "the agent stopped unexpectedly");
       return { ...s, status: "blocked", turns: s.turns.map((t) =>
-        t.id === e.turnId ? { ...t, status: e.type === "turn.failed" ? "failed" : "interrupted" } : t) };
+        t.id === e.turnId
+          ? { ...t, status: e.type === "turn.failed" ? "failed" : "interrupted",
+              blocked: { reason, missing: [], attempted: [] } }
+          : t) };
+    }
     case "usage.updated":
       return s;
     default:

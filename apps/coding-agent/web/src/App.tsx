@@ -109,7 +109,7 @@ export function App() {
                 <span>·</span>
                 <span>{toolCalls} tool {toolCalls === 1 ? "call" : "calls"}</span>
                 <span>·</span>
-                <span>{session.tools > 0 ? `${session.tools} tools available` : "no tool server (demo)"}</span>
+                <span>{session.tools > 0 ? `${session.tools} tools available` : "no tool server"}</span>
                 <span>·</span>
                 <span>{session.folder}</span>
                 {error && <span style={{ color: "var(--pink-700)", marginLeft: "auto" }}>{error}</span>}

@@ -145,6 +145,22 @@ def test_model_options_are_read_from_config_options():
     assert models == ["a", "b"] and current == "a"
 
 
+def test_stderr_tail_prefers_the_cause_over_a_truncated_object(tmp_path):
+    """opencode logs a pretty-printed JSON object; the useful sentence is one field inside it."""
+    from api.adapters.acp.runtime import AcpAgentRuntime
+    import collections
+    rt = AcpAgentRuntime(command="true")
+    rt._stderr["s"] = collections.deque([
+        "  code: -32603,", '  message: "Internal error: Bad Request: BAD_REQUEST: Sorry, cannot run '
+        'or query foundation model endpoints because you have hit your free daily limit.",',
+        "  data: {", '    errorName: "APIError",', "  }", "}",
+        "timestamp=2026 level=ERROR run=ab message=process error=\"Bad Request\"",
+    ], maxlen=50)
+    tail = rt.stderr_tail("s")
+    assert "free daily limit" in tail
+    assert "errorName" not in tail
+
+
 def test_no_model_selector_yields_empty():
     assert model_options({}) == ([], "")
 
@@ -204,6 +220,73 @@ async def test_model_switch_uses_the_bare_string_shape(fake_cmd, tmp_path):
     h = await rt.start(SessionSpec("s1", str(tmp_path), "fake/model-a", "", env={"PYTHONPATH": str(ROOT)}))
     await rt.set_model(h, "fake/model-b")
     await rt.close(h)
+
+
+async def test_a_chatty_agent_on_stderr_does_not_deadlock(tmp_path):
+    """Regression: stderr was piped and never read, so an agent that logs filled the pipe buffer
+    and blocked forever. A real opencode session hung with no error at all."""
+    import textwrap
+    chatty = tmp_path / "chatty.py"
+    chatty.write_text(textwrap.dedent("""
+        import json, sys
+        for _ in range(4000):
+            sys.stderr.write("noise " * 40 + "\\n")
+        sys.stderr.flush()
+        for line in sys.stdin:
+            msg = json.loads(line)
+            if msg.get("method") == "initialize":
+                print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {
+                    "protocolVersion": 1, "agentInfo": {"name": "Chatty", "version": "1"},
+                    "agentCapabilities": {}}}), flush=True)
+            elif msg.get("method") == "session/new":
+                print(json.dumps({"jsonrpc": "2.0", "id": msg["id"],
+                                  "result": {"sessionId": "s"}}), flush=True)
+    """))
+    rt = AcpAgentRuntime(command=f"{sys.executable} {chatty}")
+    h = await asyncio.wait_for(rt.start(SessionSpec("s1", str(tmp_path), "m", "")), timeout=20)
+    assert h.capabilities.agent == "Chatty"
+    await rt.close(h)
+
+
+async def test_a_turn_with_no_events_fails_instead_of_hanging(tmp_path):
+    """Regression: when the model endpoint returns 403, opencode logs to stderr and never ends the
+    ACP turn, so the UI showed "working" forever. The adapter now has an idle guard."""
+    import textwrap
+    mute = tmp_path / "mute.py"
+    mute.write_text(textwrap.dedent("""
+        import json, sys, time
+        for line in sys.stdin:
+            msg = json.loads(line)
+            if msg.get("method") == "initialize":
+                print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {
+                    "protocolVersion": 1, "agentInfo": {"name": "Mute", "version": "1"},
+                    "agentCapabilities": {}}}), flush=True)
+            elif msg.get("method") == "session/new":
+                print(json.dumps({"jsonrpc": "2.0", "id": msg["id"],
+                                  "result": {"sessionId": "s"}}), flush=True)
+            elif msg.get("method") == "session/prompt":
+                sys.stderr.write("Error: free daily limit\\n"); sys.stderr.flush()
+                time.sleep(30)          # never answers
+    """))
+    import api.adapters.acp.runtime as rt_mod
+    old = rt_mod.IDLE_TURN_TIMEOUT
+    rt_mod.IDLE_TURN_TIMEOUT = 1.0
+    try:
+        rt = AcpAgentRuntime(command=f"{sys.executable} {mute}")
+        h = await rt.start(SessionSpec("s1", str(tmp_path), "m", ""))
+        rt.set_turn("s1", "t1")
+        await rt.prompt_in_background(h, "hello")
+        end = None
+        async for item in rt.events(h):
+            if isinstance(item, tuple):
+                end = item
+                break
+        assert end and end[0] == "error"
+        assert "the model or agent failed" in end[1]
+        assert "free daily limit" in end[1], "the agent's stderr must reach the error"
+        await rt.close(h)
+    finally:
+        rt_mod.IDLE_TURN_TIMEOUT = old
 
 
 async def test_agent_that_cannot_start_raises_a_typed_error(tmp_path):
