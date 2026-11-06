@@ -26,6 +26,7 @@ documents are generated from the saved result files, so they cannot drift from t
 | Decide what to deploy | [Decision guide](docs/07-decision-guide.md) |
 | Look up a term | [Glossary](docs/glossary.md) |
 | Go deep: the first, longer study | [Original specification](docs/genie-code-replacement-spec.md) (1,060 lines) |
+| **Build the product**: a Databricks App that hosts coding agents (React + FastAPI + ACP) | [Spec 001: Databricks Coding Agents](specs/001-databricks-coding-agents/README.md) |
 
 ## Headline results
 
@@ -121,6 +122,8 @@ templates/                     the kit you copy into the sandbox
   AGENTS.rules.md              the working agreement given to the agent
 notebooks/
   launch_agent_from_notebook.py    the whole tutorial as one notebook (no local shell needed)
+specs/                         product specifications
+  001-databricks-coding-agents/  the Databricks App that hosts ACP agents (React + FastAPI)
 mcp/
   databricks_notebook_mcp.py   the tool server: 26 tools, 19 in the default profile, scoped writes
   skills/                      four short how-to skills the agent can read on demand

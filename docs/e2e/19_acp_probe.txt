@@ -1,0 +1,47 @@
+Experiment 19 - opencode as an ACP agent (protocol probe). 2026-11-06
+Sandbox: mas-sbx-1e3f0ae566ea42c3a874a46d (serverless, opencode 1.19.5, python 3.12)
+Client:  experiments/acp_probe.py (newline-delimited JSON-RPC over the child's stdin/stdout)
+
+1) initialize
+   -> {"protocolVersion": 1,
+       "agentCapabilities": {"loadSession": true, "mcpCapabilities": {"http": true, "sse": true},
+                             "promptCapabilities": {"embeddedContext": true, "image": true},
+                             "sessionCapabilities": {"close": {}, "fork": {}, "list": {}, "resume": {}}},
+       "authMethods": [{"id": "opencode-login", ...}], "agentInfo": {"name": "OpenCode", "version": "1.19.5"}}
+   Meaning: ACP **v1**, not v2. HTTP MCP servers accepted => we can inject our own tool server.
+
+2) session/new  {cwd, mcpServers: [{type: http, name: dbxnb, url: http://127.0.0.1:8811/mcp}]}
+   -> sessionId "ses_..." + configOptions: a "model" select whose currentValue is our config's
+      "dbx/system.ai.gpt-oss-120b" and whose options are the provider catalogue.
+   Meaning: the model can be switched over the protocol (session/set_config_option),
+      so the app does not need one agent process per model.
+
+3) session/prompt (a REQUEST, not a notification)
+   -> {"stopReason": "end_turn",
+       "usage": {"inputTokens": 1149, "outputTokens": 23, "totalTokens": 11700, "cachedReadTokens": 10528}}
+      11 session/update notifications, 14 s wall clock for "how many rows in samples.nyctaxi.trips?"
+   Meaning: ACP v1 returns the stop reason AND token usage on the prompt response.
+      (Contrast: GitHub Copilot CLI's JSON output gave us no token counts at all.)
+
+4) Update shapes observed (this is what the app must render):
+   available_commands_update  -> [{name: customize-opencode}, {name: init}, {name: review}]
+   tool_call                  -> {toolCallId, title, kind: "other", status: "pending", locations, rawInput}
+   tool_call_update           -> {toolCallId, status: "in_progress"|"completed"|"error", rawInput, ...}
+   agent_thought_chunk        -> {messageId, content: {type: text, text: "We need to answer query..."}}
+   agent_message_chunk        -> streamed answer text
+
+5) DEFECT FOUND (tool naming). MCP tools are exposed as <serverName>_<toolName>:
+      server "dbxnb" + tool "dbx_run_sql"  ->  "dbxnb_dbx_run_sql"
+   The model called "dbxnb_run_sql" (dropping the inner dbx_) and got:
+      "Model tried to call unavailable tool 'dbxnb_run_sql'. Available tools: bash, dbxnb_dbx_create_app, ..."
+   Design consequence: choose the server name so the concatenation reads well, and/or drop the
+   dbx_ prefix from tool names when they are served over ACP. Do not ship double prefixes.
+
+6) DEFECT FOUND (duplicate registration). The probe registered the same MCP server twice
+   (names dbxnb and dbxnb2) to test header support. Result: every tool appeared twice
+   (dbxnb_dbx_* and dbxnb2_dbx_*), doubling the tool surface in the model's context.
+   Design consequence: the app must de-duplicate MCP servers per session and cap the tool count.
+
+Not exercised: session/set_config_option (model switch), session/request_permission (no permission
+prompt was raised because the failing call was rejected before execution), session/load, session/fork,
+session/list. Those are documented in the ACP v2 schema and MUST be covered by the app's E2E tests.
