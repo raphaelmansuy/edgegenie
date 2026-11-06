@@ -2,7 +2,8 @@
 
 # 02 · Setup in the Databricks shell
 
-> **New here?** The [step-by-step tutorial](tutorial.md) does all of this from one notebook, with screenshots. This page is the reference version with the reasons behind each step.
+> **New here?** The [step-by-step tutorial](tutorial.md) does all of this from one notebook, with screenshots. It is the
+> shortest verified path: `git clone` of this repository plus three commands. This page is the reference version with the reasons behind each step.
 
 This is a hands-on runbook. It takes you from an empty sandbox to a coding agent that can do
 Databricks work. Every step was run for real; the table below says where.

@@ -120,12 +120,13 @@ The "kit" is the small set of files from this repository that the agent needs: s
 |---|---|---|
 | How | `git clone` inside the sandbox | `put_tree(...)` reads a Git folder under `/Workspace` |
 | Good when | The repository is public and already contains the kit | Your copy is private or has your own changes |
-| What we ran | not run yet, see the note | **this one** |
+| What we verified | `git clone` plus the whole flow below, on 6 Nov 2026 | the screenshots in this page |
 
 ![Step 3](e2e/screenshots/tutorial/03-step-3-put-the-agent-kit-in-the-sandbox.png)
 
-> **Note:** We ran Option B, copying from a folder, because the kit files were not pushed to GitHub yet when we captured this.
-> Option A is one plain `git clone`, but we have not run it against a repository that contains the kit.
+> **Both options work.** The screenshots below show Option B, because the kit was not on GitHub yet when we captured them.
+> We then pushed it and re-ran the whole tutorial from a fresh sandbox with a plain `git clone` of Option A: install, fence,
+> question, answer, all fine. If your copy is private, use Option B.
 > `put_tree` never copies secrets: it skips `.env`, `.git` and caches, and it only takes the `templates` and `mcp` folders.
 
 ## Step 4 · Give the agent your token
@@ -427,6 +428,7 @@ This is not the agent; it is you, using the tool Databricks preinstalls. It matt
 ## What this tutorial does not prove
 
 - **Real browser screenshots.** The steps that are clicks (import, token, menus) have no pictures. [`docs/e2e/capture.py`](e2e/capture.py) can capture those pages after a one-time manual sign-in.
+- **One screenshot per step, not one per route.** The Step 3 pictures come from the folder-copy route; the `git clone` route was verified separately, in text only.
 - **The notebook running inside Databricks.** We ran its real code from a laptop, with stand-ins for the notebook's two built-in objects, against a live workspace. The earlier, shorter launcher did run on serverless ([evidence](e2e/17_notebook_launcher.txt)); this extended version has not been run there yet.
 - **Real screenshots of the Databricks web page.** Single sign-on blocked our automation. The steps that are clicks are described in words, and [`docs/e2e/capture.py`](e2e/capture.py) can capture those pages after a one-time manual sign-in.
 - **Whether the notebook's own session token can drive the model.** We used a personal access token for the agent. The notebook's session token created the sandbox in an earlier test, but we have not tried it for model calls.
