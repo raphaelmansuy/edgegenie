@@ -165,6 +165,13 @@ outside the data-governance blast radius.
 At those volumes a CU_1 Lakebase instance is comfortable; the first real constraint will be the 30-day payload window,
 which keeps the table small.
 
+**Connection budget ([official](https://docs.databricks.com/aws/en/oltp/projects/manage-computes)):** 1 CU allows **218**
+connections; under autoscaling the limit is the *smaller* of the maximum CU and **8 × the minimum CU**, and the range
+`max − min` may not exceed 16 CU. A 0.5→8 CU range is invalid. The app asserts `pool_size × instances ≤ 0.8 × limit` at
+startup and refuses to serve traffic otherwise
+([RB-21](15-roadblocks.md#rb-21--lakebase-connection-ceiling-and-autoscaling-constraints-resource)). Never a connection per SSE
+stream.
+
 ## Edge cases in the data layer
 
 | Edge case | Handling |

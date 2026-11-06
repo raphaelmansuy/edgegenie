@@ -106,11 +106,11 @@ test is an open bug.**
 
 | ID | Situation | Expected | Test |
 |---|---|---|---|
-| E-41 | Model switch mid-session | next turn uses it; each message labelled with its model | E2E |
+| E-41 | Model switch mid-session, with the **bare-string** value (the documented union is rejected) | next turn uses it; a rejected switch leaves the session usable | E2E ([RB-10](15-roadblocks.md#rb-10--sessionsetconfigoption-rejects-the-documented-union-shape-protocol--verified-defect)) |
 | E-42 | "Retry with another model" | `session/fork`, new branch, original kept | integration |
 | E-43 | Resume after process restart | history intact, next prompt continues | integration |
 | E-44 | Usage reported as 0 or missing | UI shows "usage unavailable", never a fake 0 | unit |
-| E-45 | Model not in the allowed list | refused at creation and at switch, with the allowed list | unit |
+| E-45 | Model not in the allowed list, including a catalogue entry the workspace cannot reach | refused before the switch, with the allowed list; no `getaddrinfo` surprise later | unit + nightly model health probe ([RB-11](15-roadblocks.md#rb-11--switching-to-a-catalogue-model-the-gateway-cannot-serve-fails-late-protocol--verified-defect)) |
 | E-48 | Attachment too large | rejected client-side and server-side with a limit message | E2E |
 | E-49 | Message with only whitespace | send disabled | unit |
 | E-50 | Model output contains `<script>` or a `javascript:` link | rendered inert; no execution | E2E security test |
@@ -125,7 +125,7 @@ test is an open bug.**
 
 | ID | Situation | Expected | Test |
 |---|---|---|---|
-| E-57 | App cold start | page served < 90 s; a "starting" state if not | deploy timing in CI |
+| E-57 | App cold start, including installing the agent | page served < 90 s; a "starting" state if not | deploy timing in CI ([RB-04](15-roadblocks.md#rb-04--unprivileged-container-no-apt-and-the-agent-binary-must-be-installed-at-build-platform)) |
 | E-58 | Lakebase unreachable | read-only mode with a banner; no data loss | integration: block the port |
 | E-59 | Disk full in the container (agent logs) | log rotation; the session survives | chaos |
 | E-60 | Agent process leak | janitor kills processes with no session after 10 min | unit on the janitor |

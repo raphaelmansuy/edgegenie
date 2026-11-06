@@ -119,6 +119,9 @@ Three things matter here:
 
 ### 4 · The update shapes the UI must render
 
+> Verified later: `usage_update` and `config_option_update` also arrive. The adapter maps both and ignores unknown update
+> types ([BE-01](07-backend.md#the-event-model-one-vocabulary-for-everything)).
+
 | `sessionUpdate` | Fields we use | UI |
 |---|---|---|
 | `available_commands_update` | `availableCommands[] {name, description}` | slash palette ([FR-18](01-product-requirements.md)) |
@@ -151,7 +154,25 @@ This is not cosmetic: a doubled prefix invites exactly this error, and every fai
 - R-ACP-04: a tool-not-found error is **expected traffic**, not an incident: it must not page anyone, and it must be visible
   in the trace as a normal red card.
 
-### Defect 2 · Duplicate MCP registration doubles the tool surface
+### Defect 2 · `session/set_config_option` rejects the documented shape
+
+The schema defines the value as a discriminated union (`{"type":"id","value":"..."}`). OpenCode 1.19.5 answers `-32602
+Invalid params` for that **and** for `{"type":"string",...}`, but accepts a **bare string**, then returns the updated
+`configOptions` plus a `config_option_update` notification
+([20](../../docs/e2e/20_acp_config_probe.txt)).
+
+**Rules:**
+- R-ACP-08: send a bare string for `select` options; on `-32602`, retry once with the primitive shape.
+- R-ACP-09: a rejected config change MUST NOT break the session; the UI shows the model as unchanged.
+- R-ACP-10: the model list rendered to the user is the **intersection** of the agent's catalogue and a workspace allow-list
+  that has passed a health check. Switching to `databricks/databricks-claude-haiku-4-5` produced
+  `-32603 Internal error: getaddrinfo ENOTFOUND https` on the next prompt: a catalogue entry the workspace cannot serve
+  ([RB-11](15-roadblocks.md#rb-11--switching-to-a-catalogue-model-the-gateway-cannot-serve-fails-late-protocol--verified-defect)).
+
+Also verified in that probe: `session/list` returns the agent's own sessions with cwd, title and `updatedAt`; we use it only
+to reconcile after a restart.
+
+### Defect 3 · Duplicate MCP registration doubles the tool surface
 
 Our probe registered the same server twice (`dbxnb` and `dbxnb2`) to test header support. The result: every tool appeared
 twice in the available list — 40+ tools where 20 were intended. Every duplicate costs context on **every** turn

@@ -1,0 +1,39 @@
+Experiment 20 - ACP session/request_permission, and session/set_config_option. 2026-11-06
+Sandbox: mas-sbx-de9d5e03486f43c29c5463e1 (opencode 1.19.5)
+Script:  experiments/acp_probe_config.py
+
+A) session/set_config_option - the DOCUMENTED union shape is rejected
+   request: {"sessionId": sid, "configId": "model", "value": {"type": "id", "value": "databricks/databricks-claude-haiku-4-5"}}
+   response: -32602 Invalid params
+             data.value._errors: ["expected boolean, received object", "expected string, received object"]
+
+   Same with {"type":"string","value":...}  -> -32602 again.
+
+B) A PLAIN STRING works
+   request: {"sessionId": sid, "configId": "model", "value": "databricks/databricks-claude-haiku-4-5"}
+   response: result.configOptions[0].currentValue == "databricks/databricks-claude-haiku-4-5"
+             and a `config_option_update` session/update was emitted.
+
+   DEFECT: the ACP v2 schema says the value is a discriminated union (type: id | boolean);
+   opencode 1.19.5 accepts a bare string and rejects the union. An adapter written from the
+   schema alone breaks here. Rule for the app: send a bare string for `select` options, and
+   treat `-32602` as "fall back to the primitive shape", never as a fatal error.
+
+C) Switching to a model the gateway cannot serve fails LATE and confusingly
+   After the switch, session/prompt returned:
+     -32603 Internal error: getaddrinfo ENOTFOUND https
+   Interpretation: the selected catalogue entry ("databricks/databricks-claude-haiku-4-5")
+   resolves to a provider the sandbox cannot reach, and the failure surfaces as a DNS error
+   during the model call, not as a refusal at switch time.
+   Consequence: the app MUST validate a model choice against an allow-list of models that are
+   known to work in THIS workspace, before switching, and MUST surface the underlying error
+   text rather than "internal error".
+
+D) session/list works and is useful
+   {"sessions": [{"sessionId": "ses_...", "cwd": "/home/sandbox-agent/proj",
+                  "title": "New session - 2026-11-06T09:51:14.155Z", "updatedAt": "..."}]}
+   The agent keeps its own session store, so the app can reconcile after a restart
+   (E-04/E-43) instead of relying only on its database.
+
+Not exercised: session/request_permission (no permission prompt was raised in this probe),
+session/load, session/fork, session/close. Those remain must-test items.

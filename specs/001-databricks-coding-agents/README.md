@@ -38,6 +38,7 @@ Read in this order the first time. Each document is self-contained and cross-lin
 | 12 | [Operations](12-operations.md) | How does it run, scale, cost and fail? | SRE |
 | 13 | [Lens reviews](13-lens-reviews.md) | What does each specialist object to, and what changed? | All seven |
 | 14 | [Decisions and risks](14-decisions-risks.md) | What did we decide, and what is still open? | All |
+| 15 | [**Roadblock register**](15-roadblocks.md) | What is in the way, which official doc says so, what does it cost us? | All |
 
 ## The seven lenses, and where each one bites
 
@@ -71,21 +72,22 @@ trade-off.
 
 Who depends on what. A change in a row means re-reading the columns marked ●.
 
-| ↓ depends on → | 00 | 01 | 02 | 03 | 04 | 05 | 06 | 07 | 08 | 09 | 10 | 11 | 12 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **00 Why** | — | ● | | | | | | | | | | | |
-| **01 Product** | ● | — | | ● | ● | ● | | | | ● | ● | ● | ● |
-| **02 Architecture** | ● | ● | — | ● | ● | | ● | ● | ● | ● | | | ● |
-| **03 ACP** | | | ● | — | ● | ● | ● | ● | ● | ● | | ● | ● |
-| **04 Tools** | | ● | ● | ● | — | ● | | ● | ● | ● | | ● | ● |
-| **05 UX** | | ● | | ● | ● | — | ● | | | ● | | ● | |
-| **06 Front end** | | | ● | ● | | ● | — | ● | | ● | | ● | |
-| **07 Back end** | | | ● | ● | ● | | ● | — | ● | ● | | ● | ● |
-| **08 Data** | | ● | ● | ● | ● | | | ● | — | ● | | ● | ● |
-| **09 Security** | ● | ● | ● | ● | ● | ● | ● | ● | ● | — | ● | ● | ● |
-| **10 Plan** | ● | ● | ● | ● | ● | ● | ● | ● | ● | ● | — | ● | ● |
-| **11 Testing** | | ● | ● | ● | ● | ● | ● | ● | ● | ● | ● | — | ● |
-| **12 Operations** | | ● | ● | ● | | | | ● | ● | ● | ● | ● | — |
+| ↓ depends on → | 00 | 01 | 02 | 03 | 04 | 05 | 06 | 07 | 08 | 09 | 10 | 11 | 12 | 15 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **00 Why** | — | ● | | | | | | | | | | | | ● |
+| **01 Product** | ● | — | | ● | ● | ● | | | | ● | ● | ● | ● | ● |
+| **02 Architecture** | ● | ● | — | ● | ● | | ● | ● | ● | ● | | | ● | ● |
+| **03 ACP** | | | ● | — | ● | ● | ● | ● | ● | ● | | ● | ● | ● |
+| **04 Tools** | | ● | ● | ● | — | ● | | ● | ● | ● | | ● | ● | ● |
+| **05 UX** | | ● | | ● | ● | — | ● | | | ● | | ● | | ● |
+| **06 Front end** | | | ● | ● | | ● | — | ● | | ● | | ● | | |
+| **07 Back end** | | | ● | ● | ● | | ● | — | ● | ● | | ● | ● | ● |
+| **08 Data** | | ● | ● | ● | ● | | | ● | — | ● | | ● | ● | ● |
+| **09 Security** | ● | ● | ● | ● | ● | ● | ● | ● | ● | — | ● | ● | ● | ● |
+| **10 Plan** | ● | ● | ● | ● | ● | ● | ● | ● | ● | ● | — | ● | ● | ● |
+| **11 Testing** | | ● | ● | ● | ● | ● | ● | ● | ● | ● | ● | — | ● | ● |
+| **12 Operations** | | ● | ● | ● | | | | ● | ● | ● | ● | ● | — | ● |
+| **15 Roadblocks** | ● | ● | ● | ● | ● | ● | | ● | ● | ● | ● | ● | ● | — |
 
 ## The design in one picture
 
@@ -134,6 +136,14 @@ Details, alternatives and rejected options: [02 Architecture](02-architecture.md
 | ACP exposes the model as a session `configOptions` select | **verified** | same probe |
 | MCP tool names are exposed as `<serverName>_<toolName>`, and a model will mangle a doubled prefix | **verified defect** | same probe |
 | Registering one MCP server twice doubles the tool list in context | **verified defect** | same probe |
+| `session/set_config_option` rejects the documented union value and accepts a bare string | **verified defect** | [`docs/e2e/20_acp_config_probe.txt`](../../docs/e2e/20_acp_config_probe.txt) |
+| Switching to a catalogue model the workspace cannot serve fails late with `getaddrinfo ENOTFOUND` | **verified defect** | same probe |
+| `session/list` exposes the agent's own sessions | **verified** | same probe |
+| Apps: 15 s SIGTERM→SIGKILL, no shell in `command`, no `apt`, 10 MB file limit, 10-min start budget | documented | [app-runtime](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/app-runtime), [best practices](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/best-practices) |
+| Apps: no GA idle auto-stop; billed while Running | documented | [community answer](https://community.databricks.com/t5/data-engineering/query-on-databricks-apps-idle-time-out/td-p/174694) |
+| Lakebase: 218 connections at 1 CU; autoscale limit = min(max CU, 8×min CU); range ≤ 16 CU | documented | [manage computes](https://docs.databricks.com/aws/en/oltp/projects/manage-computes) |
+| ACP permission kinds are exactly allow_once / allow_always / reject_once / reject_always; cancel voids pending requests | documented | [ACP schema](https://agentclientprotocol.com/protocol/v2/schema) |
+| OpenCode's built-in shell and file tools work over ACP too | documented | [OpenCode ACP](https://opencode.ai/docs/acp/) |
 | Databricks Apps proxy: streamed responses work, but are cut at 300 s; Spaces apps reject WebSocket upgrades | documented by Databricks' own agent-skills platform guide | [12 §Streaming](12-operations.md#streaming-and-timeouts) |
 | User identity: `x-forwarded-access-token` + `user_api_scopes`, scopes enforced per API | documented | [09 §Identity](09-security-security.md#identity-who-is-the-agent-acting-for) |
 | Our MCP server's tools are good enough to score 94% on 8 graded Databricks tasks | verified in this repo | [`docs/06-results-and-lessons.md`](../../docs/06-results-and-lessons.md) |

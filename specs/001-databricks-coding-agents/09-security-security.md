@@ -62,6 +62,9 @@ fence. Three defences, in order of strength:
 | 2. **MCP server enforces capabilities per session**, not per token | each session's server instance only permits the objects it was started with; a call for anything else is refused and audited | a bug in the check |
 | 3. **Agent's built-in shell disabled by default** | `enable_builtin_bash: false`; enabling it requires a session in a scratch folder | user enables it knowingly |
 
+> See [RB-15](15-roadblocks.md#rb-15--the-agents-own-shell-and-file-tools-bypass-our-fence-protocol): OpenCode documents that its
+> built-in tools (file operations, terminal) work over ACP too, so this hole is a protocol-level certainty, not a theory.
+
 > **Not yet built:** defence 1 and 2 are straightforward; the current MCP server enforces scope by *environment variables at
 > start* (`NBMCP_WRITE_SCHEMAS`, `NBMCP_WRITE_PATHS`), which is exactly the per-session capability model. The gap is that it
 > currently reads `DATABRICKS_TOKEN` from its own environment — the app must pass the **user's** token per session instead,
@@ -110,6 +113,11 @@ flowchart TB
 | Use a model outside the allowed list | deny | deny |
 
 Approval requests expire after 10 minutes (E-31) and are recorded as `expired`, not `deny`, so the audit trail is honest.
+
+ACP offers exactly four permission option kinds — `allow_once`, `allow_always`, `reject_once`, `reject_always`
+([schema](https://agentclientprotocol.com/protocol/v2/schema)) — which map onto our three buttons plus "never ask again for
+this class". A request still pending when a turn is cancelled MUST be treated as **not approved**, per the same schema
+([RB-13](15-roadblocks.md#rb-13--a-permission-request-is-a-blocking-round-trip-into-a-human-protocol)).
 
 ## Prompt injection: defence in depth
 

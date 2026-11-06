@@ -30,18 +30,21 @@ Likelihood × impact, with a named mitigation and an owner. **Bold** rows are th
 
 | ID | Risk | L | I | Mitigation | Owner | Residual |
 |---|---|---|---|---|---|---|
-| **R-01** | **The fence is bypassed** through the agent's shell or a bug | M | **Critical** | scoped token; built-in bash off; per-session capabilities; E-30/E-39 tests; `fence.refusals_total` alert | Security | Medium: a determined agent with a broad token could still act |
+| **R-01** | **The fence is bypassed** ([RB-15](15-roadblocks.md#rb-15--the-agents-own-shell-and-file-tools-bypass-our-fence-protocol)) through the agent's shell or a bug | M | **Critical** | scoped token; built-in bash off; per-session capabilities; E-30/E-39 tests; `fence.refusals_total` alert | Security | Medium: a determined agent with a broad token could still act |
 | **R-02** | **A confident wrong answer** reaches a decision | H | **High** | evidence verification; blocked state; graded missions | AI | Medium: prose can still mislead |
 | **R-03** | ACP changes under us (v2 or an agent upgrade) | M | High | mapper + contract tests + pinned version | Coding agent | Low |
-| R-04 | Process-per-session is unstable at load | M | High | cap, janitor, restart counter, path to a separate service | Full-stack | Low |
+| R-04 | Process-per-session is unstable at load ([RB-06](15-roadblocks.md#rb-06--the-apps-compute-is-for-ui-and-orchestration-not-heavy-work-platform)) | M | High | cap, janitor, restart counter, path to a separate service | Full-stack | Low |
 | R-05 | Cost per task is higher than expected | M | Medium | tool budget, skills on demand, model allow-list, visible cost | AI + PO | Medium |
-| R-06 | The 300 s proxy limit produces a bad experience | H | Medium | heartbeat, replay, resume, "leave the page" copy | Ops | Low |
+| R-06 | The 300 s proxy limit produces a bad experience ([RB-01](15-roadblocks.md#rb-01--the-proxy-cuts-streamed-responses-at-300-s-and-plain-responses-at-60-s-platform)) | H | Medium | heartbeat, replay, resume, "leave the page" copy | Ops | Low |
 | R-07 | Users compare it with Genie Code and find the semantic layer missing | H | Medium | be explicit in the UI; link out to Genie for definitions | PO | Medium |
 | R-08 | Approval fatigue trains users to click Allow | M | High | blast-radius copy, deny prominence, per-class grants, measure in the pilot | UX | Medium |
 | R-09 | Lakebase app-creation flow is fragile | H | Medium | keep M6 out of the v1 gate; degrade to "instructions" | Full-stack | Medium |
 | R-10 | Secret leaks into a trace or an export | L | **Critical** | redaction middleware, CI scan, `redactions_total` alert | Security | Low |
 | R-11 | The spec's assumptions about platform streaming are wrong in our workspace | L | High | phase 0 measures it on day one, before building on it | Ops | Low |
 | R-12 | Model choice is dictated by what the gateway exposes | M | Medium | allow-list; document how to add an external model path | AI | Medium |
+
+Every risk below is traced to a roadblock with an official source in [15](15-roadblocks.md), which is the document to read
+when a mitigation needs justifying to a reviewer.
 
 ## Open questions (blocking or near-blocking)
 

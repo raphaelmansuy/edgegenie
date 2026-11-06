@@ -14,7 +14,13 @@ These are properties of Databricks Apps, not of our code. They are **[documented
 | WebSocket | works on container apps, **rejected on Spaces apps** | we do not use WebSockets ([02](02-architecture.md)) |
 | Start-up budget | must start within 10 min | our target < 90 s |
 | Proxy-generated errors | never appear in app logs | we log our own timing, and treat an HTML error body as a proxy timeout |
-| Containers | no root, no GPU | no privileged tooling; model calls go to the gateway |
+| Containers | no root, no GPU, no `apt`; dependencies install **at build** | all agent packages declared in `package.json` ([RB-04](15-roadblocks.md#rb-04--unprivileged-container-no-apt-and-the-agent-binary-must-be-installed-at-build-platform)) |
+| `app.yaml` `command` | an array, **never run through a shell**; only `DATABRICKS_APP_PORT` is substituted | the app spawns the agent itself with an explicit env ([RB-03](15-roadblocks.md#rb-03--command-is-not-run-through-a-shell-only-databricksappport-is-substituted-platform)) |
+| Graceful shutdown | `SIGTERM`, then `SIGKILL` after **15 s** | checkpoint every event; drain budget 10 s ([RB-02](15-roadblocks.md#rb-02--sigterm--sigkill-after-15-seconds-and-no-scale-to-zero-platform)) |
+| Idle | **no auto-stop**; billed while Running | scheduled stop/start job, or accept the cost |
+| Egress | deny-by-default when a restricted network policy is set | allow-list PyPI, npm and the workspace host; restart the app after a policy change ([RB-05](15-roadblocks.md#rb-05--egress-may-be-denied-by-default-a-policy-change-needs-a-restart-resource)) |
+| Logs | stdout/stderr only; one instance per log view | structured JSON with a trace id; app telemetry tables for correlation |
+| Source files | no file over **10 MB**; 100 apps per workspace | vendor at build, never commit `node_modules` |
 
 ## Streaming and timeouts
 
@@ -55,8 +61,12 @@ Rules:
 | `GET /api/ready` | Postgres reachable **and** one MCP probe succeeds | readiness / deploy gate |
 | `GET /api/version` | build sha, agent version, model default | humans, incident response |
 
-**Graceful shutdown:** stop accepting turns, let in-flight turns finish or persist their interruption, close agent
-processes, close the pool. Budget: 25 s. Anything still running is re-queued ([E-04](11-testing-edge-cases.md)).
+**Graceful shutdown:** the platform gives **15 seconds** between `SIGTERM` and `SIGKILL`
+([Databricks best practices](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/best-practices), confirmed by the
+[builder's guide](https://www.databricks.com/blog/builders-guide-scaling-databricks-apps)). Stop accepting turns immediately,
+persist the interruption, close agent processes and the pool, and set Uvicorn's `--timeout-graceful-shutdown` to **10** so a
+long request cannot eat the checkpoint window. Anything still running is re-queued ([E-04](11-testing-edge-cases.md)).
+See [RB-02](15-roadblocks.md#rb-02--sigterm--sigkill-after-15-seconds-and-no-scale-to-zero-platform).
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#E8F0FE','primaryTextColor':'#1F2937','primaryBorderColor':'#A8C0E8','lineColor':'#94A3B8'}}}%%
@@ -64,7 +74,7 @@ stateDiagram-v2
     [*] --> Starting
     Starting --> Ready: /ready 200
     Ready --> Draining: SIGTERM
-    Draining --> Draining: finish in-flight turns (<= 25 s)
+    Draining --> Draining: persist in-flight turns (<= 10 s, platform kills at 15 s)
     Draining --> Stopped: processes closed, pool closed
     Starting --> Failed: schema mismatch / config invalid
     Failed --> [*]
