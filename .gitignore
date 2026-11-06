@@ -24,3 +24,6 @@ __pycache__/
 .ruff_cache/
 specs/001-databricks-coding-agents/e2e/screenshots/*.png
 !specs/001-databricks-coding-agents/e2e/screenshots/*.png
+
+# databricks bundle state
+.databricks/
