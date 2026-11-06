@@ -180,11 +180,16 @@ const CARDS = [
     prompt: "A job is failing. Read its last run, find the cause, fix the notebook, re-run the job and show me the successful run." },
 ];
 
-export function EmptyState({ models, defaultModel, onStart }: {
-  models: { id: string; name: string }[]; defaultModel: string;
+/** The default working folder: a real workspace path under the user's home. */
+export const USER_SCRATCH = "/Users/me/agent_scratch";
+
+export function EmptyState({ models, defaultModel, onStart, scratch }: {
+  models: { id: string; name: string }[];
+  defaultModel: string;
+  scratch: string;
   onStart: (prompt: string, folder: string, model: string) => Promise<void>;
 }) {
-  const [folder, setFolder] = useState("/tmp/agent-work");
+  const [folder, setFolder] = useState(scratch || USER_SCRATCH);
   const [model, setModel] = useState(defaultModel);
   const [starting, setStarting] = useState(false);
   return (

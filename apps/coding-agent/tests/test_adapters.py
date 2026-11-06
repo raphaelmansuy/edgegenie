@@ -289,6 +289,54 @@ async def test_a_turn_with_no_events_fails_instead_of_hanging(tmp_path):
         rt_mod.IDLE_TURN_TIMEOUT = old
 
 
+async def test_the_end_signal_is_not_swallowed_by_a_cancelled_waiter(tmp_path):
+    """Regression: the `ends.get()` waiter was recreated every iteration, so a cancelled one could
+    consume the end signal and the turn never finished. A real prompt answered but stayed 'running'."""
+    import textwrap
+    slow = tmp_path / "slow_end.py"
+    slow.write_text(textwrap.dedent("""
+        import json, sys
+        for line in sys.stdin:
+            msg = json.loads(line)
+            m = msg.get("method")
+            if m == "initialize":
+                print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {
+                    "protocolVersion": 1, "agentInfo": {"name": "Slow", "version": "1"},
+                    "agentCapabilities": {}}}), flush=True)
+            elif m == "session/new":
+                print(json.dumps({"jsonrpc": "2.0", "id": msg["id"],
+                                  "result": {"sessionId": "s"}}), flush=True)
+            elif m == "session/prompt":
+                for i in range(6):          # updates first, then the response: the order that broke it
+                    print(json.dumps({"jsonrpc": "2.0", "method": "session/update", "params": {
+                        "sessionId": "s", "update": {"sessionUpdate": "agent_message_chunk",
+                                                     "content": {"type": "text", "text": f"p{i}"}}}}),
+                          flush=True)
+                print(json.dumps({"jsonrpc": "2.0", "id": msg["id"],
+                                  "result": {"stopReason": "end_turn", "usage": {"totalTokens": 7}}}),
+                      flush=True)
+    """))
+    rt = AcpAgentRuntime(command=f"{sys.executable} {slow}")
+    h = await rt.start(SessionSpec("s1", str(tmp_path), "m", ""))
+    rt.set_turn("s1", "t1")
+    await rt.prompt_in_background(h, "go")
+
+    async def drain():
+        types, end = [], None
+        async for item in rt.events(h):
+            if isinstance(item, tuple):
+                end = item
+                break
+            types.append(item.type)
+        return types, end
+
+    types, end = await asyncio.wait_for(drain(), timeout=15)
+    await rt.close(h)
+    assert end is not None, "the turn never ended: the end signal was lost"
+    assert end[0] == "end" and end[1].stop_reason == "end_turn"
+    assert types.count("message.delta") == 6, f"updates were lost: {types}"
+
+
 async def test_agent_that_cannot_start_raises_a_typed_error(tmp_path):
     rt = AcpAgentRuntime(command="/nonexistent/agent")
     with pytest.raises(AgentCrashed):
@@ -371,6 +419,28 @@ async def test_a_second_message_is_queued_not_interleaved(tmp_path):
     await orch.cancel(s.id)
     await _wait(live)
     assert first.id != second.id
+
+
+async def test_a_queued_turn_runs_after_the_running_one_ends(tmp_path):
+    """Regression: a second message stayed 'queued' for ever because nothing started it after the
+    first turn reached a terminal state."""
+    orch = await _orchestrator(tmp_path, "notebook", delay=0.02)
+    s = await orch.create("u", str(tmp_path), "fake/model-a", None)
+    live = orch.get(s.id)
+    await orch.submit(s.id, "First task: build a notebook.")
+    second = await orch.submit(s.id, "Second task: build another notebook.")
+    assert second.status is TurnStatus.QUEUED
+
+    # Wait for the FIRST turn to finish, then for the second one to leave QUEUED.
+    for _ in range(400):
+        first_done = live.state.turns[0].status.value in ("completed", "blocked", "failed", "cancelled")
+        if first_done and live.state.turns[1].status is not TurnStatus.QUEUED:
+            break
+        await asyncio.sleep(0.05)
+    assert live.state.turns[0].status.value in ("completed", "blocked", "failed", "cancelled")
+    assert live.state.turns[1].status is not TurnStatus.QUEUED, (
+        f"the queued turn never started: {live.state.turns[1].status}; "
+        f"states={[(t.index, t.status.value) for t in live.state.turns]}")
 
 
 async def test_model_switch_is_reflected_in_the_session(tmp_path):

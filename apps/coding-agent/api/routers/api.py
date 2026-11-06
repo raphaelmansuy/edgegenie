@@ -64,6 +64,13 @@ def _user(request: Request) -> str:
 
 
 # -- sessions ----------------------------------------------------------------
+@router.get("/me")
+async def whoami(request: Request) -> dict:
+    """The signed-in user and the folder this app suggests as scratch space."""
+    user = _user(request)
+    return {"user": user, "scratch": f"/Users/{user}/agent_scratch"}
+
+
 @router.get("/models")
 async def models(request: Request) -> dict:
     return {

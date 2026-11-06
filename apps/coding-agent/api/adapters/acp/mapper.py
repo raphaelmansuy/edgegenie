@@ -95,7 +95,7 @@ def from_update(sid: str, tid: str | None, update: dict) -> list[Event]:
             if isinstance(raw, dict)
             else raw
         )
-        args = _summarise(shown, 120) if shown else ""
+        args = _summarise(shown, 160) if shown else ""
         return [
             tool_updated(
                 sid,

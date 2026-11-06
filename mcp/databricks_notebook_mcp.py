@@ -730,13 +730,16 @@ def _run_summary(run_id: int, d: dict) -> str:
 
 
 @tool()
-def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int = 240) -> str:
+def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int = 45) -> str:
     """Run a notebook ONCE on serverless compute and wait for the result.
 
     Returns the state, the dbutils.notebook.exit() value and, on failure, the
     error and the tail of the stack trace. If it is still running after
     wait_seconds you get finished=false and a run_id to poll with
-    dbx_job_run_status. Path must be inside the allowed workspace paths.
+    dbx_job_run_status.
+
+    Kept short on purpose: a tool that blocks for minutes produces no ACP events, so the turn looks
+    dead and the app's idle guard fires. Poll instead.
     """
     _need_writes()
     _check_path_scope(path)
@@ -745,7 +748,29 @@ def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int =
     if params:
         task["notebook_task"]["base_parameters"] = {k: str(v) for k, v in params.items()}
     run_id = _post("/api/2.1/jobs/runs/submit", {"run_name": "nbmcp-run", "tasks": [task]})["run_id"]
-    return _run_summary(run_id, _wait_run(run_id, wait_seconds))
+    summary = _run_summary(run_id, _wait_run(run_id, wait_seconds))
+    # On failure, hand back the tables the notebook reads and their real columns: a failed run is
+    # exactly when the agent needs the truth, and making it guess again wastes a whole turn.
+    if '"result": "FAILED"' in summary or '"life_cycle": "INTERNAL_ERROR"' in summary:
+        try:
+            import re as _re
+            source = ""
+            exported = _get("/api/2.0/workspace/export", {"path": path, "format": "SOURCE"})
+            import base64 as _b64
+            source = _b64.b64decode(exported.get("content") or "").decode(errors="replace")
+            tables = sorted(set(_re.findall(r"\b(?:from|join)\s+([\w.]+)", source, _re.I)))[:3]
+            hints = []
+            for t in tables:
+                if t.count(".") == 2:
+                    cols = _get(f"/api/2.1/unity-catalog/tables/{t}").get("columns") or []
+                    hints.append({"table": t, "columns": [c.get("name") for c in cols]})
+            if hints:
+                summary += ("\n\nSCHEMA HINT (the notebook failed; these are the real columns):\n"
+                            + json.dumps(hints, indent=1)
+                            + "\nFix the code using exactly these names, then run it again.")
+        except Exception:  # noqa: BLE001 - a hint is a bonus, never a reason to fail the tool
+            pass
+    return summary
 
 
 @tool()
@@ -788,7 +813,7 @@ def dbx_create_job(name: str, tasks: list[dict] | None = None, cron: str = "", t
 
 
 @tool()
-def dbx_run_job(job_id: int, wait_seconds: int = 0) -> str:
+def dbx_run_job(job_id: int, wait_seconds: int = 45) -> str:
     """Trigger a job run. With wait_seconds > 0 wait for it and return per-task
     results (exit values, errors). Requires NBMCP_ALLOW_WRITES=1."""
     _need_writes()
@@ -847,7 +872,7 @@ def dbx_write_file(path: str, content: str, overwrite: bool = True) -> str:
 
 
 @tool()
-def dbx_lakebase_create(name: str, capacity: str = "CU_1", wait_seconds: int = 180) -> str:
+def dbx_lakebase_create(name: str, capacity: str = "CU_1", wait_seconds: int = 45) -> str:
     """Create a Lakebase (managed Postgres) instance and wait until AVAILABLE.
     Idempotent: if it exists, returns its state. Name must start with the allowed prefix."""
     _need_writes()

@@ -135,7 +135,7 @@ class HttpAcpAgentRuntime:
                 "session/new",
                 {
                     "cwd": spec.cwd,
-                    "mcpServers": [{"type": "http", "name": "dbx", "url": spec.mcp_url, "headers": []}],
+                    "mcpServers": [{"type": "http", "name": "db", "url": spec.mcp_url, "headers": []}],
                 },
                 timeout=90,
             )

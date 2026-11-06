@@ -90,6 +90,17 @@ def test_the_demo_marker_never_reaches_the_transcript(client):
     assert turns and "scenario:" not in turns[0]["prompt"]
 
 
+def test_a_workspace_folder_is_not_used_as_the_process_cwd(client):
+    """Regression: the session folder was passed as the agent's cwd, so a workspace path like
+    /Users/me/x made session creation fail with Permission denied."""
+    r = client.post("/api/sessions", json={"folder": "/Users/nobody@example.com/agent_scratch",
+                                          "schema": "workspace.agent_scratch"})
+    assert r.status_code == 201, r.text
+    live = client.app.state.orchestrator.get(r.json()["id"])
+    assert live.agent_cwd and not live.agent_cwd.startswith("/Users/"), live.agent_cwd
+    assert live.workspace_folder == "/Users/nobody@example.com/agent_scratch"
+
+
 def test_empty_message_is_rejected(client):
     sid = client.post("/api/sessions", json={"folder": "/tmp/agent-work"}).json()["id"]
     assert client.post(f"/api/sessions/{sid}/messages", json={"text": ""}).status_code == 422

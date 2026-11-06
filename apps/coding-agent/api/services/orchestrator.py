@@ -7,6 +7,8 @@ BEFORE it is published, so a reconnecting browser can always fetch what it saw.
 from __future__ import annotations
 
 import asyncio
+import os
+import tempfile
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -36,6 +38,7 @@ from ..domain.session import (
     TurnStatus,
     updated,
 )
+from ..adapters.acp.agent_config import config_for
 from ..ports import AgentRuntime, RuntimeHandle, SessionSpec, ToolRegistry
 
 MAX_TURNS = 200
@@ -47,6 +50,11 @@ class Live:
     """Everything belonging to one running session. Rebuilt on restart; the store is truth."""
 
     state: SessionState
+    #: The folder the agent may write to in the WORKSPACE (the fence), e.g. /Users/me/agent_scratch.
+    #: Distinct from the agent process's local cwd; conflating them made the fence meaningless.
+    workspace_folder: str = ""
+    #: The agent process's own working directory on the local filesystem.
+    agent_cwd: str = ""
     handle: RuntimeHandle | None = None
     mcp_url: str = ""
     tools: int = 0
@@ -115,7 +123,7 @@ class Orchestrator:
         self._models.check(user_id, model)
         sid = uuid4().hex[:16]
         session = Session(id=sid, user_id=user_id, folder=folder, schema=schema, model=model, title=title)
-        live = Live(state=SessionState(session=session))
+        live = Live(state=SessionState(session=session), workspace_folder=folder)
         self._live[sid] = live
         await self._store.append(session_created(sid, folder, model, schema))
         try:
@@ -127,10 +135,31 @@ class Orchestrator:
         return live.state.session
 
     async def _provision(self, live: Live) -> None:
+        """Prepare everything a session needs, in the order each thing is needed.
+
+        Two different paths matter here and were once conflated:
+          * `workspace_folder` is the fence: a WORKSPACE path that the tool server enforces;
+          * `agent_cwd` is a real LOCAL directory the agent process runs in.
+        A workspace path cannot be a process cwd, and conflating them broke session creation.
+        """
         s = live.state.session
-        live.mcp_url = await self._tools.start(s.id, s.folder, s.schema)
+        cwd = os.environ.get("APP_AGENT_CWD") or tempfile.mkdtemp(prefix=f"agent-{s.id[:8]}-")
+        os.makedirs(cwd, exist_ok=True)
+        live.agent_cwd = cwd
+        live.workspace_folder = live.workspace_folder or s.folder
+
+        # 1. The agent needs a provider config and its working rules, or it starts and never answers.
+        try:
+            config_for(s.model, os.environ.get("DATABRICKS_HOST", "")).write(cwd)
+        except OSError:
+            pass  # a read-only cwd is not fatal; the agent will report the failure
+
+        # 2. The tool server, fenced to the workspace folder the user chose.
+        live.mcp_url = await self._tools.start(s.id, live.workspace_folder, s.schema)
         live.tools = TOOL_COUNT_CORE if live.mcp_url else 0
-        spec = SessionSpec(session_id=s.id, cwd=s.folder, model=s.model, mcp_url=live.mcp_url)
+
+        # 3. The agent process itself.
+        spec = SessionSpec(session_id=s.id, cwd=cwd, model=s.model, mcp_url=live.mcp_url)
         live.handle = await self._rt.start(spec)
         live.state.session = s.transition(SessionStatus.READY)
         live.state.session = updated(
@@ -140,14 +169,8 @@ class Orchestrator:
             tools=live.tools,
         )
         await self._store.append(
-            session_ready(
-                s.id,
-                live.tools,
-                live.handle.capabilities.agent,
-                live.handle.capabilities.version,
-                live.handle.capabilities.raw,
-            )
-        )
+            session_ready(s.id, live.tools, live.handle.capabilities.agent,
+                          live.handle.capabilities.version, live.handle.capabilities.raw))
 
     async def model_options(self, session_id: str) -> dict:
         live = self.get(session_id)
@@ -159,6 +182,11 @@ class Orchestrator:
     async def set_model(self, session_id: str, model: str) -> dict:
         live = self.get(session_id)
         self._models.check(live.state.session.user_id, model)
+        try:
+            config_for(model, os.environ.get("DATABRICKS_HOST", "")).write(
+                live.agent_cwd or tempfile.mkdtemp(prefix="agent-model-"))
+        except OSError:
+            pass
         if live.handle:
             await self._rt.set_model(live.handle, model)
         live.state.session = updated(live.state.session, model=model)
@@ -270,11 +298,13 @@ class Orchestrator:
             self._finish(live, turn.finish(TurnStatus.CANCELLED))
             await self._store.append(turn_ended(sid, turn.id, "cancelled"))
             live.state.session = live.state.session.transition(SessionStatus.READY)
+            self._start_next(live)
             return
         if "error" in ended:
             self._finish(live, turn.finish(TurnStatus.FAILED, error=ended["error"][:400]))
             await self._store.append(turn_ended(sid, turn.id, "failed", ended["error"][:400]))
             live.state.session = live.state.session.transition(SessionStatus.BLOCKED)
+            self._start_next(live)
             return
 
         decision = supervisor.decide(
@@ -299,10 +329,12 @@ class Orchestrator:
             await self._store.append(evidence_proposed(sid, turn.id, list(decision.evidence)))
         if decision.verdict is supervisor.Verdict.DONE:
             self._finish(live, turn.finish(TurnStatus.COMPLETED, ended.get("stop", "end_turn"), usage))
+            # committed above, so _start_next sees no running turn
             await self._store.append(
                 turn_completed(sid, turn.id, ended.get("stop", "end_turn"), usage, seconds)
             )
             live.state.session = live.state.session.transition(SessionStatus.READY)
+            self._start_next(live)
             return
         self._finish(live, turn.finish(TurnStatus.BLOCKED, error=decision.message))
         attempted = [
@@ -316,6 +348,23 @@ class Orchestrator:
 
     def _finish(self, live: Live, turn: Turn) -> None:
         live.state.update(turn)
+
+    def _start_next(self, live: Live) -> None:
+        """Run the next queued turn, if any.
+
+        Called from inside the running turn's own task, so "is something running?" cannot be
+        answered by `live.task` (that is this very task). The question that matters is whether any
+        OTHER turn is already running.
+        """
+        nxt = next((t for t in live.state.turns if t.status is TurnStatus.QUEUED), None)
+        if nxt is None:
+            return
+        # Every caller has already committed this turn's terminal status, so any RUNNING/AUDITING
+        # turn here belongs to a different turn that is genuinely in flight.
+        if any(t.status in (TurnStatus.RUNNING, TurnStatus.AUDITING) for t in live.state.turns):
+            return
+        # Schedule on the loop after this turn's own settle returns, so states are consistent.
+        live.task = asyncio.get_running_loop().create_task(self._run_turn(live, nxt.id))
 
     async def _nudge(
         self, live: Live, turn: Turn, prompt: str, previous: str, continuations: int, audits: int

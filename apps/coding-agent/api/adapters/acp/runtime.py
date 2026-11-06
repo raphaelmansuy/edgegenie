@@ -107,7 +107,7 @@ class AcpAgentRuntime:
                 "session/new",
                 {
                     "cwd": spec.cwd,
-                    "mcpServers": [{"type": "http", "name": "dbx", "url": spec.mcp_url, "headers": []}],
+                    "mcpServers": [{"type": "http", "name": "db", "url": spec.mcp_url, "headers": []}],
                 },
                 timeout=90,
             )
@@ -277,22 +277,23 @@ class AcpAgentRuntime:
     async def events(self, h: RuntimeHandle) -> AsyncIterator[Event | tuple]:
         """Yields domain Events, then exactly one ("end", TurnEnd) or ("error", str).
 
-        Two ordering rules, both learned from real failures:
-        * a notification read is started once and reused, because cancelling a pending
-          queue.get() silently discards the item it was about to return;
-        * everything the agent already wrote is delivered before the end signal, because the
-          final tool_call_update (and the whole reasoning trace) can arrive first.
+        Three rules, each learned from a real hang:
+        * both waits are created ONCE and reused. Re-creating `ends.get()` every iteration meant a
+          cancelled waiter could swallow the end signal, and the turn never finished;
+        * everything the agent already wrote is delivered before the end signal, because the final
+          tool_call_update and the reasoning trace routinely arrive before the prompt response;
+        * an idle guard reports a model failure instead of hanging (ACP has no error signal).
         """
         ch = self._channel(h)
         ours = self._ours(h)
         ends = self._turn_ends[ours]
         read: asyncio.Task | None = None
+        fin: asyncio.Task | None = None
         end: tuple | None = None
         try:
             while True:
-                if read is None:
-                    read = asyncio.create_task(ch.next_notification())
-                fin = asyncio.create_task(ends.get())
+                read = read or asyncio.create_task(ch.next_notification())
+                fin = fin or asyncio.create_task(ends.get())
                 try:
                     done, _ = await asyncio.wait({read, fin}, timeout=IDLE_TURN_TIMEOUT,
                                                  return_when=asyncio.FIRST_COMPLETED)
@@ -300,36 +301,33 @@ class AcpAgentRuntime:
                     raise
                 if not done:
                     tail = self.stderr_tail(ours, 4)
-                    if tail:
-                        # Lead with the cause when we have one: "the model call failed" is what the
-                        # user needs; "no event for 180s" is only the symptom.
-                        yield ("error", f"the model or agent failed: {tail}")
-                    else:
-                        yield ("error", f"the agent sent nothing for {IDLE_TURN_TIMEOUT:.0f}s")
+                    yield (("error", f"the model or agent failed: {tail}") if tail
+                           else ("error", f"the agent sent nothing for {IDLE_TURN_TIMEOUT:.0f}s"))
                     return
                 if fin in done:
                     got = fin.result()
+                    fin = None                     # consumed: a fresh waiter next iteration
                     end = ("end", got) if hasattr(got, "stop_reason") else got
                 if read in done:
                     item = read.result()
                     read = None
-                    if item.get("method") == "$/closed" and end is None:
-                        yield ("error", "the agent process ended")
+                    if item.get("method") == "$/closed":
+                        if end is not None:
+                            yield end
+                        else:
+                            yield ("error", "the agent process ended")
                         return
                     if item.get("method") == "session/update":
                         update = (item.get("params") or {}).get("update") or {}
-                        ours = self._ours(h)
                         for ev in from_update(ours, self._turn_ids.get(ours), update):
                             yield ev
                         from .mapper import turn_end_from_state
-
                         state_end = turn_end_from_state(update)
-                        if state_end:
+                        if state_end:              # v2 agents end here instead
                             yield ("end", state_end)
                             return
                 if end is not None:
-                    # deliver anything the agent already wrote, then finish
-                    while True:
+                    while True:                    # deliver what the agent already wrote
                         try:
                             queued = ch.next_notification_nowait()
                         except LookupError:
@@ -337,14 +335,14 @@ class AcpAgentRuntime:
                         if queued.get("method") != "session/update":
                             continue
                         update = (queued.get("params") or {}).get("update") or {}
-                        ours = self._ours(h)
                         for ev in from_update(ours, self._turn_ids.get(ours), update):
                             yield ev
                     yield end
                     return
         finally:
-            if read is not None and not read.done():
-                read.cancel()
+            for t in (read, fin):
+                if t is not None and not t.done():
+                    t.cancel()
 
     def pending_approval(self) -> tuple[str, str, dict] | None:
         """(approval_id, session_id, params) of a permission request waiting for a human."""

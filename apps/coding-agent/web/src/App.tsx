@@ -9,6 +9,7 @@ export function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
+  const [scratch, setScratch] = useState("");
   const [active, setActive] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -16,10 +17,12 @@ export function App() {
 
   // stable identity: this is called from a mount effect, so it must not change per render
   const refresh = useCallback(async () => {
-    const [s, m] = await Promise.all([api.sessions(), api.models()]);
+    const [s, m, me] = await Promise.all([
+      api.sessions(), api.models(), fetch("/api/me").then((r) => r.json()).catch(() => ({}))]);
     setSessions(s.sessions);
     setModels(m.available);
     setDefaultModel(m.default);
+    setScratch(me.scratch ?? "");
   }, [setSessions, setModels, setDefaultModel]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -100,7 +103,8 @@ export function App() {
 
         <main className="pane">
           {!active ? (
-            <EmptyState models={models} defaultModel={defaultModel || models[0]?.id || ""} onStart={start} />
+            <EmptyState models={models} defaultModel={defaultModel || models[0]?.id || ""}
+              scratch={scratch} onStart={start} />
           ) : (
             <>
               <div className="strip">
