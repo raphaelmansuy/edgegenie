@@ -67,6 +67,17 @@ cd apps/coding-agent
 cd web && node scripts/shoot.mjs ../../../../specs/001-databricks-coding-agents/e2e/screenshots
 ```
 
+Against a deployed app, with the real agent (19 steps, each asserting something observable):
+
+```bash
+cd apps/coding-agent/web
+APP_URL=https://<app>.aws.databricksapps.com REAL_AGENT=1 BEARER_FILE=/path/to/token \
+  node scripts/genie-e2e.mjs ../../../../specs/001-databricks-coding-agents/e2e/screenshots/genie-deployed
+```
+
+`BEARER_FILE` is a token for the signed-in user, needed because the Databricks proxy requires an
+identity; this is a harness detail, not something the web app does.
+
 If Playwright's bundled Chromium is not installed, point `CHROME_PATH` at any Chrome binary.
 
 ## Honest limitations
