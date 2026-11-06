@@ -1,0 +1,102 @@
+{
+  "passed": 16,
+  "total": 16,
+  "results": [
+    {
+      "tool": "dbx_whoami",
+      "ok": true,
+      "seconds": 1.21,
+      "preview": "{\n  \"host\": \"https://dbc-cb61f1e1-bd8e.cloud.databricks.com\",\n  \"user\": \"raphael.mansuy@gmail.com\",\n  \"id\": \"78760067054768\",\n  \"groups\": [\n    \"users\",\n    \"users-clone-2026-08-31-1618-UTC (created by Databricks)\",\n    \"admins\"\n  ]\n}"
+    },
+    {
+      "tool": "dbx_list_catalogs",
+      "ok": true,
+      "seconds": 1.07,
+      "preview": "[\n  {\n    \"name\": \"workspace\",\n    \"type\": \"MANAGED_CATALOG\",\n    \"comment\": null\n  },\n  {\n    \"name\": \"samples\",\n    \"type\": \"SYSTEM_CATALOG\",\n    \"comment\": \"These sample datasets are made available by third party data providers as well as open data sources. You can learn more about each data set "
+    },
+    {
+      "tool": "dbx_list_schemas",
+      "ok": true,
+      "seconds": 1.01,
+      "preview": "[\n  {\n    \"name\": \"accuweather\",\n    \"comment\": null\n  },\n  {\n    \"name\": \"bakehouse\",\n    \"comment\": null\n  },\n  {\n    \"name\": \"databricks\",\n    \"comment\": null\n  },\n  {\n    \"name\": \"healthverity\",\n    \"comment\": null\n  },\n  {\n    \"name\": \"information_schema\",\n    \"comment\": \"Information schema (au"
+    },
+    {
+      "tool": "dbx_list_tables",
+      "ok": true,
+      "seconds": 1.04,
+      "preview": "[\n  {\n    \"name\": \"trips\",\n    \"type\": \"MANAGED\",\n    \"columns\": 6,\n    \"comment\": \"\"\n  }\n]"
+    },
+    {
+      "tool": "dbx_describe_table",
+      "ok": true,
+      "seconds": 1.03,
+      "preview": "{\n  \"name\": \"samples.nyctaxi.trips\",\n  \"type\": \"MANAGED\",\n  \"owner\": \"System user\",\n  \"comment\": \"\",\n  \"properties\": {\n    \"spark.sql.statistics.colStats.dropoff_zip.createdBy\": \"root\",\n    \"delta.lastCommitTimestamp\": \"1789398440000\",\n    \"spark.sql.statistics.colStats.tpep_pickup_datetime.createdA"
+    },
+    {
+      "tool": "dbx_sample_rows",
+      "ok": true,
+      "seconds": 2.88,
+      "preview": "{\n  \"columns\": [\n    \"tpep_pickup_datetime\",\n    \"tpep_dropoff_datetime\",\n    \"trip_distance\",\n    \"fare_amount\",\n    \"pickup_zip\",\n    \"dropoff_zip\"\n  ],\n  \"rows\": [\n    [\n      \"2016-02-13T21:47:53.000Z\",\n      \"2016-02-13T21:57:15.000Z\",\n      \"1.4\",\n      \"8.0\",\n      \"10103\",\n      \"10110\"\n    "
+    },
+    {
+      "tool": "dbx_search_tables",
+      "ok": true,
+      "seconds": 16.76,
+      "preview": "[\n  {\n    \"match\": \"table\",\n    \"name\": \"samples.nyctaxi.trips\",\n    \"comment\": \"\"\n  }\n]"
+    },
+    {
+      "tool": "dbx_table_lineage",
+      "ok": true,
+      "seconds": 2.77,
+      "preview": "{\n  \"table\": \"samples.nyctaxi.trips\",\n  \"upstream\": [],\n  \"downstream\": []\n}"
+    },
+    {
+      "tool": "dbx_grants",
+      "ok": true,
+      "seconds": 0.94,
+      "preview": "{}"
+    },
+    {
+      "tool": "dbx_run_sql",
+      "ok": true,
+      "seconds": 2.63,
+      "preview": "{\n  \"columns\": [\n    \"who\",\n    \"two\"\n  ],\n  \"rows\": [\n    [\n      \"raphael.mansuy@gmail.com\",\n      \"2\"\n    ]\n  ],\n  \"row_count\": 1\n}"
+    },
+    {
+      "tool": "dbx_list_notebooks",
+      "ok": true,
+      "seconds": 1.13,
+      "preview": "[\n  {\n    \"type\": \"DIRECTORY\",\n    \"path\": \"/Users/raphael.mansuy@gmail.com/.assistant\",\n    \"id\": 2249045220081799\n  },\n  {\n    \"type\": \"DIRECTORY\",\n    \"path\": \"/Users/raphael.mansuy@gmail.com/edgequake-app\",\n    \"id\": 3954973140519577\n  },\n  {\n    \"type\": \"DIRECTORY\",\n    \"path\": \"/Users/raphael."
+    },
+    {
+      "tool": "dbx_list_jobs",
+      "ok": true,
+      "seconds": 1.07,
+      "preview": "[]"
+    },
+    {
+      "tool": "dbx_list_pipelines",
+      "ok": true,
+      "seconds": 0.95,
+      "preview": "[]"
+    },
+    {
+      "tool": "dbx_list_warehouses",
+      "ok": true,
+      "seconds": 0.99,
+      "preview": "[\n  {\n    \"id\": \"50b601f08d1a858d\",\n    \"name\": \"Serverless Starter Warehouse\",\n    \"state\": \"RUNNING\",\n    \"size\": \"2X-Small\",\n    \"type\": \"PRO\"\n  }\n]"
+    },
+    {
+      "tool": "dbx_write_notebook",
+      "ok": true,
+      "seconds": 1.31,
+      "preview": "{\n  \"object_id\": 2827797323883300\n}"
+    },
+    {
+      "tool": "dbx_read_notebook",
+      "ok": true,
+      "seconds": 1.08,
+      "preview": "{\n  \"path\": \"/Users/raphael.mansuy@gmail.com/_mcp_conformance\",\n  \"language\": null,\n  \"total_chars\": 73,\n  \"offset\": 0,\n  \"returned_chars\": 73,\n  \"next_offset\": null,\n  \"source\": \"# Databricks notebook source\\nprint('written by databricks-notebook-mcp')\\n\"\n}"
+    }
+  ]
+}

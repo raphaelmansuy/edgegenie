@@ -1,0 +1,9 @@
+# source: sandbox mas-sbx-d14169ed1e854dada255e7c0
+# remote: ~/proj/s_paged.log
+# ANSI stripped, captured 2026-11-06T02:42:53Z
+----------------------------------------------------------------------
+
+> build · system.ai.gpt-oss-120b
+
+⚙ dbxnb_dbx_grep_notebook {"path":"/Users/raphael.mansuy@gmail.com/databricks-toolbox/01-schema-document-generator","pattern":"^[[:space:]]*import ","context":0}
+⚙ dbxnb_dbx_grep_notebook {"path":"/Users/raphael.mansuy@gmail.com/databricks-toolbox/01-schema-document-generator","pattern":"^[[:space:]]*from ","context":0}

@@ -1,0 +1,17 @@
+# source: sandbox mas-sbx-d14169ed1e854dada255e7c0
+# remote: ~/proj/px.log
+# ANSI stripped, captured 2026-11-06T02:42:57Z
+----------------------------------------------------------------------
+
+> build · system.ai.gpt-oss-120b
+
+⚙ dbxnb_dbx_grep_notebook {"path":"/Users/raphael.mansuy@gmail.com/databricks-toolbox/01-schema-document-generator","pattern":"^[[:space:]]*import "}
+⚙ dbxnb_dbx_list_notebooks {"path":"/Users/raphael.mansuy@gmail.com/databricks-toolbox/01-schema-document-generator"}
+⚙ dbxnb_dbx_grep_notebook {"path":"/Users/raphael.mansuy@gmail.com/databricks-toolbox/01-schema-document-generator","pattern":"^[[:space:]]+import ","context":2}
+⚙ dbxnb_dbx_read_notebook {"path":"/Users/raphael.mansuy@gmail.com/databricks-toolbox/01-schema-document-generator","offset":1,"max_chars":2000}
+⚙ dbxnb_dbx_read_notebook {"path":"/Users/raphael.mansuy@gmail.com/databricks-toolbox/01-schema-document-generator","offset":2001,"max_chars":2000}
+⚙ dbxnb_dbx_read_notebook {"path":"/Users/raphael.mansuy@gmail.com/databricks-toolbox/01-schema-document-generator","offset":4001,"max_chars":2000}
+⚙ dbxnb_dbx_read_notebook {"path":"/Users/raphael.mansuy@gmail.com/databricks-toolbox/01-schema-document-generator","offset":6001,"max_chars":2000}
+⚙ dbxnb_dbx_read_notebook {"path":"/Users/raphael.mansuy@gmail.com/databricks-toolbox/01-schema-document-generator","offset":8001,"max_chars":2000}
+✗ Grep "import " failed in /Users/raphael.mansuy@gmail.com/databricks-toolbox
+Error: ripgrep execution failed

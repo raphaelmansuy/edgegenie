@@ -1,0 +1,7 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+docs/e2e/.storage_state.json
+docs/e2e/screenshots/*.png
+.DS_Store

@@ -1,0 +1,16 @@
+# source: sandbox mas-sbx-d14169ed1e854dada255e7c0
+# remote: ~/cop/c2.log
+# ANSI stripped, captured 2026-11-06T02:42:46Z
+----------------------------------------------------------------------
+ ● execute_sql (MCP:… {"statement_id":"01f1d989-c622-1935-ac75-7852c75cd5b4","status":{"state":"S...
+
+catalog | n  
+--- | ---  
+workspace | 21932
+
+
+
+Changes    +0 -0
+Duration   4s
+Tokens     ↑ 24.6k (12.2k cached) • ↓ 119
+Resume     copilot --resume=3b31dff4-7e96-4d9d-9e63-4165d4023976

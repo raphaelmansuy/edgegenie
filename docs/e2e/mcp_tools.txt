@@ -1,0 +1,25 @@
+# MCP surface for workspace https://dbc-cb61f1e1-bd8e.cloud.databricks.com
+# captured 2026-11-06T02:39:09Z with PAT auth
+
+## /api/2.0/mcp/sql
+- execute_sql: Execute SQL queries in Databricks Unity Catalog. This tool executes SQL in Databricks SQL (DBSQL), so use DBSQL syntax. Supports SELECT, INSERT, UPDATE, CREATE TABLE, ALTER TABLE, 
+- execute_sql_read_only: Execute read-only SQL queries in Databricks Unity Catalog. This tool executes SQL in Databricks SQL (DBSQL), so use DBSQL syntax. Unity Catalog uses a three-level namespace: catalo
+- poll_sql_result: Poll for the results of a long-running SQL query using its statement ID. Use this tool when execute_sql returns a statement_id for a query that didn't complete immediately.
+
+## /ai-gateway/mcp-services/system.ai.dbsql
+- execute_sql: Execute a SQL query against Unity Catalog (Databricks SQL). Supports SELECT and, unless disabled by policy, writes (INSERT/UPDATE/CREATE/etc.). If execution is still pending, use p
+- poll_sql_result: Poll a DBSQL statement that is still pending. Pass the statement_id returned by execute_sql; continue polling while the response remains pending.
+
+## /ai-gateway/mcp-services/system.ai.sandbox
+- create_sandbox: Create a Databricks sandbox and return its sandbox_id. Delete it with delete_sandbox when finished.
+- run_code: Execute Python or shell code in an owned sandbox, creating one when sandbox_id is omitted. Reuse sandbox_id to continue Python state while its interpreter is alive.
+- delete_sandbox: Permanently delete an owned sandbox and its sandbox-local state and files.
+
+## /ai-gateway/mcp-services/system.ai.web_search
+- web_search: Search the public web for up-to-date information. Default backend uses Databricks Foundation Model API and returns a synthesized answer with citations; the `ddgs` backend is resear
+
+## /ai-gateway/mcp-services/system.ai.genie_one_mcp
+- genie_ask: Ask Databricks Genie a natural-language data question. Genie searches the user's enterprise data in Databricks, writes SQL, and returns a grounded answer with a deep link back into
+- genie_poll_response: Fetch the latest state of an in-flight or completed Genie response. Returns the current state as rendered markdown in `content` and the typed fields (status, response_id, conversat
+- genie_get_query_result: Fetch the full SQL result — column schema and rows — for a single query Genie ran in a response. Use this after `genie_poll_response` reports `status: completed`. Pass the same `co
+- genie_cancel_response: Stop a Genie response that is still being generated. Use this when the user asks to cancel/stop a question you started with `genie_ask` and were tracking with `genie_poll_response`

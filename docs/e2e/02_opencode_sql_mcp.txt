@@ -1,0 +1,15 @@
+# source: sandbox mas-sbx-d14169ed1e854dada255e7c0
+# remote: ~/proj/mcp1.log
+# ANSI stripped, captured 2026-11-06T02:42:42Z
+----------------------------------------------------------------------
+
+> build · system.ai.gpt-oss-120b
+
+⚙ dbsql_execute_sql {"query":"SELECT current_catalog() AS catalog, current_user() AS who, count(*) AS n FROM samples.nyctaxi.trips"}
+**Result**
+
+| catalog   | who                     | n    |
+|-----------|------------------------|------|
+| workspace | raphael.mansuy@gmail.com | 21932 |
+
+The query succeeded and returned the single aggregated row (the count of rows in `samples.nyctaxi.trips`). No need to run `SHOW CATALOGS`.

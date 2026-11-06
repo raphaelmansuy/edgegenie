@@ -1,0 +1,19 @@
+# source: sandbox mas-sbx-d14169ed1e854dada255e7c0
+# remote: ~/proj/gem.log
+# ANSI stripped, captured 2026-11-06T02:42:47Z
+----------------------------------------------------------------------
+
+> build · google/gemini-3.8-flash
+
+← Write gen.py
+Wrote file successfully.
+
+⚙ dbsql_execute_sql {"query":"SELECT 2+2 AS x"}
+Error: Bad Request: [{
+  "error": {
+    "code": 400,
+    "message": "Function call is missing a thought_signature in functionCall parts. This is required for tools to work correctly, and missing thought_signature may lead to degraded model performance. Additional data, function call `default_api:write` , position 2. Please refer to https://ai.google.dev/gemini-api/docs/thought-signatures for more details.",
+    "status": "INVALID_ARGUMENT"
+  }
+}
+]
