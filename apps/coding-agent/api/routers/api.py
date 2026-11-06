@@ -379,6 +379,13 @@ async def catalog_children(request: Request, catalog: str = "", schema: str = ""
     return {"items": rows}
 
 
+@router.get("/catalog/find")
+async def catalog_find(request: Request, q: str, limit: int = 8) -> dict:
+    """Table name search for the composer's @ picker, in the same shape as workspace search."""
+    items = await request.app.state.catalog.find(_user_token(request), q, max(1, min(limit, 20)))
+    return {"results": items}
+
+
 @router.get("/catalog/table")
 async def catalog_table(request: Request, name: str) -> dict:
     with _dbx_errors("catalog table"):

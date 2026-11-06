@@ -63,6 +63,19 @@ function Head({ doc, subtitle, badge, actions, busy, reload, objectId }: {
   );
 }
 
+/** Copy one cell. Reading a notebook is often the start of reusing a line from it. */
+function CellCopy({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button className="cell-copy" aria-label="Copy this cell" title="Copy this cell"
+      onClick={() => {
+        void navigator.clipboard?.writeText(text);
+        setDone(true);
+        window.setTimeout(() => setDone(false), 1200);
+      }}>{done ? "copied" : "copy"}</button>
+  );
+}
+
 export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActions }) {
   const { data, error, loading, reload } = useLoad<WsObject>(() => api.object(doc.ref), [doc.ref, doc.rev]);
   const isFile = data?.kind === "file";
@@ -81,6 +94,7 @@ export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActi
               {c.kind === "code" && <span className="cell-lang">{c.language.slice(0, 3)}</span>}
             </div>
             <div className="cell-main">
+              <CellCopy text={c.source} />
               {c.kind === "markdown" ? <Markdown text={c.source} /> : <Code text={c.source} language={c.language} />}
               {c.truncated && <p className="viewer-note">This cell is longer than the viewer shows. The agent can read all of it.</p>}
             </div>

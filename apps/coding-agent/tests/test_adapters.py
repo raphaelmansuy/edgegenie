@@ -210,7 +210,9 @@ async def test_no_event_is_lost_when_the_end_signal_arrives_first(fake_cmd, tmp_
         seen.append(item.type)
     await rt.close(h)
     assert "thought.delta" in seen, f"the reasoning trace was lost: {seen}"
-    assert seen.index("thought.delta") == 0
+    # Reasoning precedes the answer. "first of all" was over-specified: the tool-start update and
+    # the thought are two notifications, and which one is read first is up to the event loop.
+    assert seen.index("thought.delta") < seen.index("message.delta")
     assert "tool_call.started" in seen and "message.delta" in seen
 
 

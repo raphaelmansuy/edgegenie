@@ -74,6 +74,34 @@ def _summarise(value: Any, limit: int = 140) -> str:
     return s[:limit]
 
 
+MAX_COLS, MAX_ROWS = 24, 60
+
+
+def _table_of(content: Any) -> dict | None:
+    """A tool result that is a query answer (`{"columns": [...], "rows": [[...]]}`) becomes a grid.
+
+    Only this shape is promoted: the same JSON with other keys is prose for the model, not a table.
+    Values are capped and stringified so one wide cell cannot bloat the event stream.
+    """
+    import json
+
+    text = _text_of(content)
+    if not text or not text.lstrip().startswith(("{", "[")):
+        return None
+    try:
+        d = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(d, dict) or not isinstance(d.get("columns"), list) or not isinstance(d.get("rows"), list):
+        return None
+    columns = [str(c)[:60] for c in d["columns"][:MAX_COLS]]
+    if not columns or not all(isinstance(r, list) for r in d["rows"][:MAX_ROWS]):
+        return None
+    rows = [["" if v is None else str(v)[:200] for v in r[:MAX_COLS]] for r in d["rows"][:MAX_ROWS]]
+    return {"columns": columns, "rows": rows,
+            "truncated": len(d["rows"]) > MAX_ROWS or len(d["columns"]) > MAX_COLS}
+
+
 def from_update(sid: str, tid: str | None, update: dict) -> list[Event]:
     """Map one session/update's `update` object into zero or more events."""
     kind = update.get("sessionUpdate")
@@ -120,6 +148,7 @@ def from_update(sid: str, tid: str | None, update: dict) -> list[Event]:
                 summary,
                 err,
                 args,
+                _table_of(update.get("content")) if not err else None,
             )
         ]
     if kind == "plan":

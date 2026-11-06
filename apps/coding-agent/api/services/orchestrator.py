@@ -37,6 +37,7 @@ from ..domain.session import (
     SessionStatus,
     Turn,
     TurnStatus,
+    title_from,
     updated,
 )
 from ..adapters.acp.agent_config import config_for, session_rules
@@ -257,6 +258,8 @@ class Orchestrator:
         running = live.state.running()
         text = DEMO_MARKER.sub(" ", text).strip()     # never store a demo hint as the user's words
         turn = live.state.new_turn(text, context)
+        if not live.state.turns[:-1] and live.state.session.title == "New session":
+            live.state.session = updated(live.state.session, title=title_from(text))
         await self._store.append(
             turn_started(session_id, turn.id, text, live.state.session.model, attachments))
         if running is None:

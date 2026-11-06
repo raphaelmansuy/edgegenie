@@ -39,6 +39,8 @@ export interface ToolCall {
   seconds?: number;
   summary?: string;
   error?: string;
+  /** A query result, shown as a grid rather than as a sentence. */
+  table?: { columns: string[]; rows: string[][]; truncated: boolean };
 }
 
 export interface Approval {
@@ -122,6 +124,17 @@ const patchTurn = (s: SessionView, turnId: string | null | undefined, fn: (t: Tu
 /** Id prefix of a turn shown before the server has confirmed it. */
 export const PENDING = "pending:";
 
+/** Streaming text limits. Long enough for any report, short enough that the tab stays alive. */
+export const MAX_THOUGHT = 120_000;
+export const MAX_ANSWER = 200_000;
+
+/** Append a delta, keeping the newest text and saying so when the start was dropped. */
+export function append(current: string, delta: string, max: number): string {
+  const next = current + delta;
+  if (next.length <= max) return next;
+  return "…" + next.slice(next.length - max);
+}
+
 export function reduce(state: SessionView, e: AgentEvent): SessionView {
   const s = state.turns ? state : { ...state, turns: [], approvals: state.approvals ?? [] };
   switch (e.type) {
@@ -150,9 +163,9 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
       // a snapshot, like evidence: the agent re-sends the whole plan each time it changes
       return patchTurn(s, e.turnId, (t) => ({ ...t, plan: (e.entries as PlanEntry[]) ?? [] }));
     case "thought.delta":
-      return patchTurn(s, e.turnId, (t) => ({ ...t, thought: t.thought + String(e.text ?? "") }));
+      return patchTurn(s, e.turnId, (t) => ({ ...t, thought: append(t.thought, String(e.text ?? ""), MAX_THOUGHT) }));
     case "message.delta":
-      return patchTurn(s, e.turnId, (t) => ({ ...t, answer: t.answer + String(e.text ?? "") }));
+      return patchTurn(s, e.turnId, (t) => ({ ...t, answer: append(t.answer, String(e.text ?? ""), MAX_ANSWER) }));
     case "tool_call.started":
       return patchTurn(s, e.turnId, (t) => ({
         ...t,
@@ -169,7 +182,8 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
               args: e.args ? String(e.args) : c.args,
               seconds: typeof e.seconds === "number" ? e.seconds : c.seconds,
               summary: e.summary ? String(e.summary) : c.summary,
-              error: e.error ? String(e.error) : c.error }
+              error: e.error ? String(e.error) : c.error,
+              table: e.table ? (e.table as ToolCall["table"]) : c.table }
           : c)),
       }));
     case "approval.requested":

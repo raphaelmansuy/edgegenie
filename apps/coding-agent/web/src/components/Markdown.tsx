@@ -1,5 +1,5 @@
 /** Minimal, safe markdown: headings, lists, tables, code, bold, inline code. No raw HTML, ever. */
-import { useContext, type ReactNode } from "react";
+import { memo, useContext, type ReactNode } from "react";
 import { splitPaths, workspaceUrl, type Workspace } from "../domain/links";
 import { WorkspaceLinks } from "./DocContext";
 
@@ -43,7 +43,7 @@ function inline(text: string, keyBase: string, ws: Workspace | null = null): Rea
 }
 
 /** Renders a markdown subset. Any HTML in the input is displayed as text, never executed. */
-export function Markdown({ text }: { text: string }) {
+function MarkdownView({ text }: { text: string }) {
   const ws = useContext(WorkspaceLinks);
   if (!text) return null;
   const blocks: ReactNode[] = [];
@@ -105,3 +105,6 @@ export function Markdown({ text }: { text: string }) {
   }
   return <div className="answer">{blocks}</div>;
 }
+
+/** Markdown parsing is the expensive part of a streamed answer: re-parse only when the text changes. */
+export const Markdown = memo(MarkdownView);

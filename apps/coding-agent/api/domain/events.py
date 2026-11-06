@@ -118,8 +118,12 @@ def tool_updated(
     summary: str = "",
     error: str = "",
     args: str = "",
+    table: dict[str, Any] | None = None,
 ) -> Event:
     p: dict[str, Any] = {"callId": call_id, "status": status}
+    if table:
+        # A query result, kept structured so the UI can show a grid instead of a sentence.
+        p["table"] = table
     if args:
         p["args"] = args
     if seconds is not None:

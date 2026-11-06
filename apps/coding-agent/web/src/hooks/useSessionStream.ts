@@ -9,6 +9,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
 import { emptySession, newTurn, PENDING, reduce, type AgentEvent, type Attachment, type SessionView } from "../domain/events";
 
+/** How long streamed events are collected before one state update. One long answer arrives as
+ *  hundreds of deltas; rendering each one re-parses the whole markdown tree and froze the tab. */
+const BATCH_MS = 40;
+
 export type Conn = "idle" | "connecting" | "live" | "reconnecting" | "lost";
 
 const cursorKey = (id: string) => `dbc-agents:cursor:${id}`;
@@ -57,6 +61,19 @@ export function useSessionStream(sessionId: string | null) {
     seq.current = Number(localStorage.getItem(cursorKey(sessionId)) ?? 0);
     let source: EventSource | null = null;
     let stopped = false;
+    let queued: AgentEvent[] = [];
+    let timer: number | null = null;
+
+    const flush = () => {
+      timer = null;
+      if (queued.length === 0) return;
+      const batch = queued;
+      queued = [];
+      setSession((s) => batch.reduce(reduce, s));
+      // The cursor is written once per batch, not once per event: a synchronous disk write per
+      // token is what made a long turn look like a dead page.
+      try { localStorage.setItem(cursorKey(sessionId), String(seq.current)); } catch { /* private mode */ }
+    };
 
     const open = () => {
       source?.close();
@@ -70,9 +87,9 @@ export function useSessionStream(sessionId: string | null) {
         if (typeof ev.seq === "number") {
           if (ev.seq <= seq.current) return;
           seq.current = ev.seq;
-          localStorage.setItem(cursorKey(sessionId), String(ev.seq));
         }
-        setSession((s) => reduce(s, ev));
+        queued.push(ev);
+        if (timer === null) timer = window.setTimeout(flush, BATCH_MS);
       };
     };
     open();
@@ -83,6 +100,8 @@ export function useSessionStream(sessionId: string | null) {
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       stopped = true;
+      if (timer !== null) window.clearTimeout(timer);
+      queued = [];
       document.removeEventListener("visibilitychange", onVisible);
       source?.close();
     };

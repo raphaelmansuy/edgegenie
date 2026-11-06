@@ -70,6 +70,26 @@ CHANGE_RE = re.compile(
 )
 
 
+#: A verb that names something a tool could prove. "Remember this prompt", "hello", "thanks" and
+#: "carry on" have none: demanding evidence for them turned a finished answer into a red "blocked".
+ACTION_RE = re.compile(
+    r"\b(?:write|create|build|make|fix|run|execute|add|remove|update|delete|drop|rename|schedule|deploy|"
+    r"optimi[sz]e|modify|insert|save|generate|rewrite|refactor|document|profile|query|select|join|aggregate|"
+    r"plot|chart|list|find|search|check|verify|describe|explain|summari[sz]e|investigate|compare|compute|"
+    r"count|calculate|show|tell|why|how many|what|which)\b",
+    re.I,
+)
+
+
+def needs_evidence(text: str) -> bool:
+    """Whether a requirement names something a tool call can prove.
+
+    Anything else is conversation: a request to remember, acknowledge, or comment. It is answered,
+    not evidenced, and treating it as a requirement blocked perfectly good turns.
+    """
+    return bool(ACTION_RE.search(text))
+
+
 def is_constraint(text: str) -> bool:
     return bool(CONSTRAINT_RE.match(text))
 

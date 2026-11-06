@@ -64,11 +64,24 @@ export function App() {
   useEffect(() => { if (!folder && scratch) setFolder(scratch); }, [scratch, folder]);
   useEffect(() => { if (!model && defaultModel) setModel(defaultModel); }, [defaultModel, model]);
 
+  // Auto-follow the stream, but only when the reader is already at the bottom and at most once per
+  // frame: a forced scroll per token is layout work the page cannot afford during a long answer.
   const lastLen = session.turns.at(-1)?.answer.length ?? 0;
+  const follow = useRef(true);
+  const pane = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (view !== CHAT) return;
-    const id = window.setTimeout(() => bottom.current?.scrollIntoView({ block: "end" }), 60);
-    return () => window.clearTimeout(id);
+    const el = pane.current;
+    if (!el) return;
+    const onScroll = () => {
+      follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+  useEffect(() => {
+    if (view !== CHAT || !follow.current) return;
+    const id = window.requestAnimationFrame(() => bottom.current?.scrollIntoView({ block: "end" }));
+    return () => window.cancelAnimationFrame(id);
   }, [session.turns.length, lastLen, view]);
 
   // -- documents --------------------------------------------------------------------------
@@ -242,17 +255,17 @@ export function App() {
               <>
                 <div className="strip">
                   {conn !== "live" && <span className={`pill ${conn}`}>{conn === "reconnecting" ? "reconnecting…" : conn}</span>}
-                  <span>{session.turns.length} {session.turns.length === 1 ? "turn" : "turns"}</span>
-                  <span>·</span>
-                  <span>{toolCalls} tool {toolCalls === 1 ? "call" : "calls"}</span>
-                  <span>·</span>
-                  <span>{session.tools > 0 ? `${session.tools} tools available` : "no tool server"}</span>
-                  <span>·</span>
-                  <span title="The agent can write only here">{session.folder}</span>
-                  <ExtLink target={{ kind: "directory", ref: session.folder }} label="Open the working folder in Databricks" />
-                  {error && <span style={{ color: "var(--pink-700)", marginLeft: "auto" }}>{error}</span>}
+                  <span className="strip-path" title="The agent can write only here">
+                    {session.folder}
+                    <ExtLink target={{ kind: "directory", ref: session.folder }} label="Open the working folder in Databricks" />
+                  </span>
+                  <span className="strip-counts">
+                    {session.turns.length} {session.turns.length === 1 ? "turn" : "turns"} · {toolCalls} tool {toolCalls === 1 ? "call" : "calls"}
+                    {session.tools > 0 ? ` · ${session.tools} tools` : ""}
+                  </span>
+                  {error && <span className="strip-error">{error}</span>}
                 </div>
-                <div className="transcript" aria-live="polite" aria-busy={busy}>
+                <div className="transcript" ref={pane} aria-live="polite" aria-busy={busy}>
                   {turns.length === 0 && (
                     <p style={{ color: "var(--ink-3)" }}>Starting the agent… (usually 3–8 s)</p>
                   )}
@@ -264,8 +277,7 @@ export function App() {
 
             {!active && (
               <p className="composer-note">
-                {viewDoc ? "Asking starts a new session" : "Type below to start a session"} in <code>{folder || scratch}</code>.
-                The agent can write only there.
+                {viewDoc ? "New session" : "Session"} in <code>{folder || scratch}</code> — <strong>the agent can write only there</strong>.
               </p>
             )}
             <Composer

@@ -88,3 +88,15 @@ describe("optimistic turns", () => {
     expect(next.turns[0].prompt).toBe("hello");
   });
 });
+
+import { append, MAX_ANSWER } from "./events";
+describe("streamed text is bounded", () => {
+  it("keeps growing under the limit", () => {
+    expect(append("a", "b", 10)).toBe("ab");
+  });
+  it("keeps the newest text and says the start was dropped", () => {
+    const big = append("a".repeat(50), "b", 10);
+    expect(big).toBe("…" + "a".repeat(9) + "b");
+    expect(append("x".repeat(MAX_ANSWER), "y", MAX_ANSWER).length).toBe(MAX_ANSWER + 1);
+  });
+});

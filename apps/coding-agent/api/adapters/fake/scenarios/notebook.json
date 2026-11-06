@@ -95,6 +95,28 @@
     }
    },
    {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "c4",
+    "title": "dbx_run_sql",
+    "kind": "other",
+    "status": "pending",
+    "rawInput": {
+     "warehouse_id": "auto"
+    }
+   },
+   {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "c4",
+    "status": "completed",
+    "rawInput": {
+     "sql": "select hour(tpep_pickup_datetime) pickup_hour, count(*) trips from samples.nyctaxi.trips group by 1 order by 1 limit 4"
+    },
+    "content": {
+     "type": "text",
+     "text": "{\"columns\": [\"pickup_hour\", \"trips\", \"avg_fare\"], \"rows\": [[\"0\", 1421, \"13.24\"], [\"1\", 933, \"12.77\"], [\"2\", 654, \"13.01\"], [\"3\", 488, \"13.27\"]]}"
+    }
+   },
+   {
     "sessionUpdate": "plan",
     "entries": [
      {

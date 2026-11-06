@@ -37,6 +37,14 @@ async function step(name, fn) {
   catch (e) {
     results.push([false, name]);
     console.log(`  FAIL ${name}\n       ${String(e.message).split("\n")[0]}`);
+    // the state of the composer is the only context a CI log cannot guess
+    const state = await p.evaluate(() => {
+      const box = document.querySelector(".composer textarea");
+      return { value: box?.value, caret: box?.selectionStart,
+        mention: document.querySelector(".mention")?.innerText ?? null,
+        chips: [...document.querySelectorAll(".ctx-chip")].map((c) => c.textContent) };
+    }).catch(() => null);
+    console.log(`       composer: ${JSON.stringify(state)}`);
     await shot(`FAIL-${name.replace(/\W+/g, "-").slice(0, 40)}`).catch(() => {});
   }
 }
@@ -142,6 +150,54 @@ await step("@ in the composer finds a notebook and adds a chip", async () => {
   ok((await p.locator(".ctx-chip:not(.auto)").count()) === 0, "chip was not removable");
 });
 
+await step("@ also finds tables, and a table chip is a table attachment", async () => {
+  const box = p.getByRole("textbox", { name: "Message the agent" });
+  await box.fill("");
+  await box.pressSequentially("@nyctaxi.trips");
+  // textContent has no separators between the glyph, name and hint: filter on each part separately
+  const opt = p.locator(".mention-opt").filter({ hasText: "samples.nyctaxi" }).filter({ hasText: "trips" }).first();
+  await opt.waitFor({ timeout: 40000 });
+  await shot("mention-tables");
+  await p.keyboard.press("Enter");
+  const chip = p.locator(".ctx-chip:not(.auto)", { hasText: /trips/ }).first();
+  await chip.waitFor({ timeout: 5000 });
+  ok((await chip.innerText()).length > 0, "no table chip");
+  await chip.locator("button").click();
+});
+
+await step("/ opens the command list and inserts the prompt", async () => {
+  const box = p.getByRole("textbox", { name: "Message the agent" });
+  await box.fill("");
+  await box.pressSequentially("/fi");
+  await p.locator(".mention-opt", { hasText: /fix/i }).first().waitFor({ timeout: 5000 });
+  await shot("slash-commands");
+  await p.keyboard.press("Enter");
+  ok(/corrected copy/i.test(await box.inputValue()), `command not inserted: "${await box.inputValue()}"`);
+  await box.fill("");
+});
+
+await step("Up recalls the last prompt", async () => {
+  const box = p.getByRole("textbox", { name: "Message the agent" });
+  await box.fill("");
+  await box.pressSequentially("remember this prompt");
+  await p.getByRole("button", { name: "Send" }).click();
+  await p.waitForTimeout(500);
+  await box.fill("");
+  await box.press("ArrowUp");
+  ok((await box.inputValue()) === "remember this prompt", `history gave "${await box.inputValue()}"`);
+  await box.fill("");
+  await p.locator(".turn").last().waitFor({ timeout: 60000 });
+});
+
+await step("a query result is shown as a grid, not as a sentence", async () => {
+  if (REAL) return;
+  await p.locator("table.grid").first().waitFor({ timeout: 60000 });
+  const headers = await p.locator("table.grid thead th").allInnerTexts();
+  ok(headers.length >= 2, `no columns in the grid: ${headers}`);
+  ok((await p.locator("table.grid tbody tr").count()) >= 1, "no rows in the grid");
+  ok(/\d+ rows/.test(await p.locator("table.grid caption").first().innerText()), "no row count");
+});
+
 await step("a quick action starts a session with the notebook attached", async () => {
   await p.getByRole("tab", { name: new RegExp(HINT, "i") }).first().click();
   await p.getByRole("button", { name: "Explain" }).click();
@@ -168,7 +224,7 @@ await step("a finished turn shows time and token use", async () => {
 });
 
 await step("the session strip links to the working folder in Databricks", async () => {
-  const href = await p.locator(".strip a.ext-link").first().getAttribute("href");
+  const href = await p.locator(".strip .strip-path a.ext-link").first().getAttribute("href");
   ok(href && /#workspace\/Users\//.test(href), `unexpected folder link: ${href}`);
   await shot("links");
 });

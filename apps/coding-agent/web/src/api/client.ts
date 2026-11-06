@@ -56,6 +56,7 @@ export const api = {
       `/api/workspace/search?q=${encodeURIComponent(q)}${path ? `&path=${encodeURIComponent(path)}` : ""}`),
   mkdir: (path: string) => call<{ path: string }>("/api/workspace/mkdir", { method: "POST", headers: json,
     body: JSON.stringify({ path }) }),
+  findTables: (q: string) => call<{ results: CatalogItem[] }>(`/api/catalog/find?q=${encodeURIComponent(q)}`),
   catalog: (catalog = "", schema = "") =>
     call<{ items: CatalogItem[] }>(`/api/catalog?catalog=${encodeURIComponent(catalog)}&schema=${encodeURIComponent(schema)}`),
   table: (name: string) => call<TableInfo>(`/api/catalog/table?name=${encodeURIComponent(name)}`),

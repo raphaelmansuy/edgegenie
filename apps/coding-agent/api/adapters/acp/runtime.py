@@ -327,22 +327,42 @@ class AcpAgentRuntime:
                             yield ("end", state_end)
                             return
                 if end is not None:
-                    while True:                    # deliver what the agent already wrote
-                        try:
-                            queued = ch.next_notification_nowait()
-                        except LookupError:
-                            break
-                        if queued.get("method") != "session/update":
-                            continue
-                        update = (queued.get("params") or {}).get("update") or {}
-                        for ev in from_update(ours, self._turn_ids.get(ours), update):
-                            yield ev
+                    for ev in await self._drain_tail(ch, ours):
+                        yield ev
                     yield end
                     return
         finally:
             for t in (read, fin):
                 if t is not None and not t.done():
                     t.cancel()
+
+    async def _drain_tail(self, ch: StdioChannel, ours: str) -> list[Event]:
+        """Everything the agent wrote just before its end signal.
+
+        The agent writes the last text chunk and the prompt response as two lines; the reader can
+        see the response first because both are already buffered. A single non-blocking sweep lost
+        the tail of an answer (caught by a repeated test run, not by a single one), so this waits
+        briefly for the pipe to go quiet instead of assuming it is empty.
+        """
+        import asyncio as _asyncio
+
+        out: list[Event] = []
+        quiet = 0.02
+        limit = _asyncio.get_running_loop().time() + 0.5
+        while _asyncio.get_running_loop().time() < limit:
+            try:
+                queued = ch.next_notification_nowait()
+            except LookupError:
+                await _asyncio.sleep(quiet)
+                try:
+                    queued = ch.next_notification_nowait()
+                except LookupError:
+                    break                      # the pipe stayed quiet: nothing more is coming
+            if queued.get("method") != "session/update":
+                continue
+            update = (queued.get("params") or {}).get("update") or {}
+            out.extend(from_update(ours, self._turn_ids.get(ours), update))
+        return out
 
     def pending_approval(self) -> tuple[str, str, dict] | None:
         """(approval_id, session_id, params) of a permission request waiting for a human."""

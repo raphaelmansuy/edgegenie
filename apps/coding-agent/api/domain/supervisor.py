@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from .evidence import Requirement, ToolCall, dedupe, gaps, limit_to, parse_evidence_block, verify
+from .evidence import Requirement, ToolCall, dedupe, gaps, limit_to, needs_evidence, parse_evidence_block, verify
 
 
 class Verdict(str, Enum):
@@ -98,6 +98,9 @@ def decide(state: State) -> Decision:
             tuple(r.to_dict() for r in rows),
         )
     if not missing or (state.read_only and not admits):
+        return Decision(Verdict.DONE, evidence=tuple(r.to_dict() for r in rows))
+    if not any(needs_evidence(r.text) for r in state.requirements):
+        # Nothing here names work a tool could prove: the answer IS the deliverable.
         return Decision(Verdict.DONE, evidence=tuple(r.to_dict() for r in rows))
     if state.audits < MAX_AUDITS:
         return Decision(Verdict.AUDIT, AUDIT_PROMPT, tuple(missing), tuple(r.to_dict() for r in rows))

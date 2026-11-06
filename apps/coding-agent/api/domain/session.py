@@ -177,6 +177,24 @@ class SessionState:
         raise DomainError(f"no turn {turn.id}")
 
 
+def title_from(prompt: str, limit: int = 52) -> str:
+    """A session title from its first prompt: what people read in a list of sessions.
+
+    "New session" for every session is unreadable past three of them. This keeps the first clause,
+    drops the instruction fluff, and never needs a model call.
+    """
+    text = " ".join((prompt or "").split())
+    for lead in ("Please ", "Can you ", "Could you ", "I want you to ", "Write a notebook that ",
+                 "Write a notebook to ", "Create a notebook that "):
+        if text.lower().startswith(lead.lower()):
+            text = text[len(lead):]
+            break
+    if not text:
+        return "New session"
+    cut = text[:limit].rsplit(" ", 1)[0] if len(text) > limit else text
+    return (cut[:1].upper() + cut[1:]).rstrip(" .,;:")
+
+
 def updated(obj, **changes):
     """Immutable update that works on slots dataclasses (no __dict__)."""
     return replace(obj, **changes)

@@ -1,7 +1,8 @@
 /** The transcript: turns, thinking, tool cards, evidence, blocked panel. */
-import { useContext, useState } from "react";
+import { memo, useContext, useState } from "react";
 import type { Turn } from "../domain/events";
 import { touched } from "../domain/docs";
+import { stripEvidence, subject } from "../domain/toolview";
 import { OpenDoc } from "./DocContext";
 import { ExtLink } from "./ExtLink";
 import { Chip } from "./Composer";
@@ -19,8 +20,28 @@ function label(name: string): string {
   return FRIENDLY[plain] ?? plain.replace(/_/g, " ");
 }
 
-export function ToolCard({ name, args, status, seconds, summary, error }: {
+/** A query result as a real table: alignment, numbers right, one header row. */
+function Grid({ table }: { table: { columns: string[]; rows: string[][]; truncated: boolean } }) {
+  const numeric = table.columns.map((_, c) =>
+    table.rows.length > 0 && table.rows.every((r) => r[c] === "" || /^-?[\d.,]+$/.test(r[c])));
+  return (
+    <div className="grid-wrap">
+      <table className="grid">
+        <caption>{table.rows.length} row{table.rows.length === 1 ? "" : "s"}{table.truncated ? ", first ones shown" : ""}</caption>
+        <thead><tr>{table.columns.map((c, i) => <th key={i} className={numeric[i] ? "num" : ""}>{c}</th>)}</tr></thead>
+        <tbody>
+          {table.rows.map((r, ri) => (
+            <tr key={ri}>{r.map((v, ci) => <td key={ci} className={numeric[ci] ? "num" : ""}>{v}</td>)}</tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function ToolCard({ name, args, status, seconds, summary, error, table }: {
   name: string; args?: string; status: string; seconds?: number; summary?: string; error?: string;
+  table?: { columns: string[]; rows: string[][]; truncated: boolean };
 }) {
   const [open, setOpen] = useState(false);
   const openDoc = useContext(OpenDoc);
@@ -45,19 +66,25 @@ export function ToolCard({ name, args, status, seconds, summary, error }: {
           {state === "running" ? <span className="spin" /> : glyph}
         </span>
         <span className="name">{label(name)}</span>
-        <span className="args">{args}</span>
+        <span className="args" title={args}>{subject(args)}</span>
         {seconds !== undefined && <span className="time">{seconds.toFixed(1)}s</span>}
         <span className="chev" aria-hidden>▶</span>
       </button>
+      {table && state === "completed" && <Grid table={table} />}
       {open && (
         <div className="tool-body">
-          {args ? `input: ${args}\n` : ""}
+          {args ? `input: ${pretty(args)}\n` : ""}
           {summary ? `result: ${summary}` : state === "running" ? "running…" : "no summary"}
           {error ? `\nerror: ${error}` : ""}
         </div>
       )}
     </div>
   );
+}
+
+/** Arguments in full, wrapped, for the one case where the detail matters. */
+function pretty(args: string): string {
+  try { return JSON.stringify(JSON.parse(args), null, 2); } catch { return args; }
 }
 
 const PLAN_GLYPH: Record<string, string> = { completed: "✓", in_progress: "●", pending: "○" };
@@ -84,7 +111,7 @@ function Plan({ turn }: { turn: Turn }) {
 const tokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 
 function Footer({ turn }: { turn: Turn }) {
-  if (turn.status !== "completed") return null;
+  if (!["completed", "blocked", "failed", "cancelled", "interrupted"].includes(turn.status)) return null;
   const u = turn.usage;
   const parts = [
     turn.seconds ? `${turn.seconds.toFixed(1)} s` : "",
@@ -92,19 +119,25 @@ function Footer({ turn }: { turn: Turn }) {
     u && (u.input || u.output) ? `${tokens(u.output)} out` : "",
     u?.cached ? `${tokens(u.cached)} cached` : "",
   ].filter(Boolean);
-  return parts.length ? <p className="turn-foot">{parts.join(" · ")}</p> : null;
+  const word = statusWord[turn.status] ?? turn.status;
+  const label = parts.length ? `${word} · ${parts.join(" · ")}` : word;
+  return <p className={`turn-foot ${turn.status}`}>{label}</p>;
 }
 
 function Evidence({ turn }: { turn: Turn }) {
-  if (!turn.evidence.length) return null;
   const ok = turn.evidence.filter((r) => r.verified).length;
+  const [open, setOpen] = useState(false);
+  if (!turn.evidence.length) return null;
+  const allProven = ok === turn.evidence.length;
+  const shown = open || !allProven;
   return (
     <section className="evidence" aria-label="Evidence">
-      <div className="evidence-head">
-        <span aria-hidden>🛡</span> Evidence
-        <span className="count">{ok} of {turn.evidence.length} requirements proven</span>
-      </div>
-      {turn.evidence.map((r, i) => (
+      <button className="evidence-head" aria-expanded={shown} onClick={() => setOpen((o) => !o)}>
+        <span aria-hidden>{allProven ? "✓" : "!"}</span> Evidence
+        <span className="count">{allProven ? `all ${turn.evidence.length} proven` : `${ok} of ${turn.evidence.length} proven`}</span>
+        <span className="chev" aria-hidden>{shown ? "▾" : "▸"}</span>
+      </button>
+      {shown && turn.evidence.map((r, i) => (
         <div key={i} className={`evidence-row${r.verified ? "" : " unverified"}`}>
           <span className="tick" aria-hidden>{r.verified ? "✓" : "?"}</span>
           <span className="req">{r.requirement || "(unnamed requirement)"}</span>
@@ -140,12 +173,29 @@ function Blocked({ turn }: { turn: Turn }) {
   );
 }
 
+/** Tool calls, folded to a summary when there are many and none failed: reading is the point, not scrolling. */
+function ToolList({ tools }: { tools: Turn["tools"] }) {
+  const failed = tools.some((t) => t.status === "error");
+  const many = tools.length > 4;
+  const [open, setOpen] = useState(!many || failed);
+  return (
+    <>
+      <button className="who tools-head" aria-expanded={open || !many} onClick={() => many && setOpen((o) => !o)}>
+        <span className="avatar agent" aria-hidden>◧</span> Agent
+        <time>{tools.length} tool {tools.length === 1 ? "call" : "calls"}{failed ? ", one failed" : ""}</time>
+        {many && <span className="chev" aria-hidden>{open ? "▾" : "▸"}</span>}
+      </button>
+      {open && <div className="tools">{tools.map((c) => <ToolCard key={c.callId} {...c} />)}</div>}
+    </>
+  );
+}
+
 const statusWord: Record<string, string> = {
   running: "working", auditing: "checking the work", queued: "queued", completed: "done",
   blocked: "blocked", cancelled: "stopped", failed: "failed", interrupted: "interrupted",
 };
 
-export function TurnView({ turn }: { turn: Turn }) {
+function TurnViewInner({ turn }: { turn: Turn }) {
   const streamingNow = turn.status === "running" || turn.status === "auditing";
   const [showThought, setShowThought] = useState(streamingNow);
   const streaming = turn.status === "running" || turn.status === "auditing";
@@ -174,19 +224,15 @@ export function TurnView({ turn }: { turn: Turn }) {
         </div>
       )}
 
-      {turn.tools.length > 0 && (
-        <div className="who" style={{ marginTop: 18 }}>
-          <span className="avatar agent" aria-hidden>◧</span> Agent
-          <time>{turn.tools.length} tool {turn.tools.length === 1 ? "call" : "calls"}</time>
-        </div>
-      )}
-      <div className="tools">
-        {turn.tools.map((c) => <ToolCard key={c.callId} {...c} />)}
-      </div>
+      {turn.tools.length > 0 && <ToolList tools={turn.tools} />}
 
       {turn.answer && (
         <>
-          <Markdown text={turn.answer} />
+          {/* While a long answer streams, plain text: re-parsing markdown on every frame is what
+              made the tab unresponsive. The finished answer is rendered properly. */}
+          {streaming && turn.answer.length > 4000
+            ? <div className="answer streaming-plain">{turn.answer}</div>
+            : <Markdown text={turn.evidence.length ? stripEvidence(turn.answer) : turn.answer} />}
           {streaming && <span className="caret" aria-hidden />}
         </>
       )}
@@ -197,3 +243,6 @@ export function TurnView({ turn }: { turn: Turn }) {
     </article>
   );
 }
+
+/** One changed turn replaces one object, so the others skip work. */
+export const TurnView = memo(TurnViewInner);

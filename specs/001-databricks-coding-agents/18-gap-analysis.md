@@ -1,7 +1,7 @@
 # 18 · Gap analysis: Genie Code class assistant
 
 Verified on the deployed app with the real agent (OpenCode 1.19.5, 19 tools):
-15/15 end-to-end steps pass; screenshots in `e2e/screenshots/genie-deployed/`.
+19/19 end-to-end steps pass; screenshots in `e2e/screenshots/genie-deployed/`.
 
 ## Gaps found and closed
 
@@ -51,6 +51,23 @@ Set with `databricks apps update coding-agent --json '{"user_api_scopes":[...]}'
 an answer): a notebook goes to `/editor/notebooks/<id>`, a file to `/editor/files/<id>`, a folder to
 `/browse/folders/<id>`, a table to `/explore/data/<c>/<s>/<t>`. Without an id the link uses
 `/#workspace/<path>`, which needs no lookup. All open in a new tab with `noopener`.
+
+## Third round: Genie-Code surface, and what made it feel clunky
+
+| Gap or defect | Fix |
+|---|---|
+| `@` found notebooks and files but not tables | Table name search server-side (Unity Catalog has no name-search endpoint, so it walks and caches for 5 min), merged into the same picker, with the schema as its hint |
+| Only `@`; Genie Code also has `/` and history | Seven `/` commands, Up/Down prompt history kept in this browser, both pure and tested |
+| A query answer arrived as a sentence of JSON | A tool result shaped `{columns, rows}` becomes a real grid: sticky header, numeric columns right-aligned, row count, capped at 24x60 so the stream stays small |
+| Every session was called "New session" | Named from the first prompt ("Prints hello world"), never renamed later |
+| **The tab froze** during a long turn (reported on the deployed app) | EventSource delivered one render per token, and each render re-parsed the whole answer as markdown. Now: events are batched per 40 ms, the localStorage cursor is written once per batch, `Markdown` and `TurnView` are memoised, answers over 4k characters render as plain text while streaming, and auto-follow only happens when the reader is already at the bottom. Text is capped (200k answer, 120k reasoning) so a runaway model cannot grow the page forever |
+| "remember this prompt" ended in a red *blocked* | The supervisor demanded evidence for a request no tool can prove. A requirement with no actionable verb is conversation: answered, not evidenced. Real work still needs proof, and a test asserts both halves |
+| Tool rows showed raw JSON (`{"full_name": "samples.nyctaxi.trips"}`) | The one meaningful argument is shown (`samples.nyctaxi.trips`); the full JSON stays one click away |
+| The EVIDENCE table appeared twice (in the answer and in the panel) | Stripped from the prose, shown once as the Evidence panel |
+| Evidence and tool lists grew without limit | Evidence folds to one line when everything is proven; more than four tool calls fold to their summary row; a failure keeps the list open |
+| Footer overlapped the tree | Tree scrolls, footer is fixed |
+| The last text chunk could be lost when the end signal arrived first | Found by repeating a test: the drain was a single non-blocking sweep. It now waits for the pipe to go quiet (20 ms), bounded at 500 ms. Ten consecutive full runs are clean |
+| 12px hints below AA contrast | `--ink-3` darkened to #6b7280; the setup labels are `--ink-2` at 550 weight |
 
 ## Residual gaps (not done)
 

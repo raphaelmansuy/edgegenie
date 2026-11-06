@@ -530,3 +530,82 @@ def test_a_notebook_read_carries_its_object_id_for_a_direct_link():
     from api.adapters.databricks.workspace import WorkspaceObject
     o = WorkspaceObject("/Users/x/nb", "notebook", "PYTHON", 1, False, [], object_id="3849072945985182")
     assert o.to_dict()["objectId"] == "3849072945985182"
+
+
+# -- Genie-Code-class surface: table search, result grids, slash commands ------------------------
+def test_table_search_ranks_the_table_name_above_the_catalog_name():
+    from api.adapters.databricks.catalog import CatalogBrowser
+
+    class H:
+        async def get(self, path, token, params=None):
+            if path.endswith("/catalogs"):
+                return {"catalogs": [{"name": "samples"}]}
+            if path.endswith("/schemas"):
+                return {"schemas": [{"name": "nyctaxi"}]}
+            return {"tables": [{"full_name": n, "name": n.split(".")[-1]} for n in (
+                "samples.nyctaxi.trips", "samples.nyctaxi.trip_details", "samples.other.trips_copy")]}
+
+    c = CatalogBrowser("h", lambda: "t", http=H())
+    hits = run(c.find("t", "trips"))
+    assert [h["ref"] for h in hits] == ["samples.nyctaxi.trips", "samples.other.trips_copy"]
+    assert run(c.find("t", "trip"))[-1]["ref"] == "samples.nyctaxi.trip_details", "a prefix match still counts"
+    assert run(c.find("t", "x")) == [], "one letter is not a search"
+
+
+def test_a_query_result_becomes_a_grid_for_the_ui():
+    from api.adapters.acp.mapper import from_update
+    payload = '[{"type": "content", "content": {"type": "text", "text": "{\\"columns\\": [\\"hour\\", \\"n\\"], \\"rows\\": [[0, 12], [1, null]]}"}}]'
+    evs = from_update("s", "t", {"sessionUpdate": "tool_call_update", "toolCallId": "c1",
+                                 "status": "completed", "content": payload})
+    grid = evs[0].payload["table"]
+    assert grid["columns"] == ["hour", "n"] and grid["rows"] == [["0", "12"], ["1", ""]]
+    assert grid["truncated"] is False
+    prose = from_update("s", "t", {"sessionUpdate": "tool_call_update", "toolCallId": "c2",
+                                   "status": "completed", "content": [{"type": "text", "text": "wrote 3 cells"}]})
+    assert "table" not in prose[0].payload, "prose is not a grid"
+
+
+def test_a_huge_result_is_capped_so_the_stream_stays_small():
+    import json
+    from api.adapters.acp.mapper import from_update
+    body = json.dumps({"columns": [f"c{i}" for i in range(40)], "rows": [[i] * 40 for i in range(200)]})
+    ev = from_update("s", "t", {"sessionUpdate": "tool_call_update", "toolCallId": "c", "status": "completed",
+                                "content": [{"type": "text", "text": body}]})[0]
+    assert len(ev.payload["table"]["columns"]) == 24 and len(ev.payload["table"]["rows"]) == 60
+    assert ev.payload["table"]["truncated"] is True
+
+
+def test_a_session_is_named_after_its_first_prompt():
+    from api.domain.session import title_from
+    assert title_from("Write a notebook that prints hello world") == "Prints hello world"
+    assert title_from("Please explain /Users/a@b.c/x") == "Explain /Users/a@b.c/x"
+    assert title_from("Using samples.nyctaxi.trips, write a notebook with a markdown title and a chart") \
+        == "Using samples.nyctaxi.trips, write a notebook with"
+    assert len(title_from("x " * 200)) <= 52
+    assert title_from("") == "New session" and title_from("   ") == "New session"
+
+
+def test_the_first_turn_names_the_session_and_later_turns_do_not_rename_it():
+    c = make_client()
+    sid = c.post("/api/sessions", json={"folder": "/Users/x/", "model": "fake/model-a"}).json()["id"]
+    c.post(f"/api/sessions/{sid}/messages", json={"text": "Write a notebook that prints hello world"},
+           headers={"Idempotency-Key": "a"})
+    c.post(f"/api/sessions/{sid}/messages", json={"text": "now make it say goodbye"},
+           headers={"Idempotency-Key": "b"})
+    assert c.get(f"/api/sessions/{sid}").json()["title"] == "Prints hello world"
+    assert c.get("/api/sessions").json()["sessions"][0]["title"] == "Prints hello world"
+
+
+def test_a_conversational_prompt_is_answered_not_blocked():
+    """Seen on the deployed app: "remember this prompt" ended red, "requirements without verified
+    evidence", even though the agent had answered. Nothing there is provable by a tool."""
+    from api.domain.evidence import extract_requirements, needs_evidence
+    from api.domain.supervisor import State, Verdict, decide
+    reqs = extract_requirements("remember this prompt")
+    assert not any(needs_evidence(r.text) for r in reqs)
+    d = decide(State(requirements=reqs, calls=[], answer="Noted. I will keep it in mind."))
+    assert d.verdict is Verdict.DONE
+    # and real work still needs proof
+    work = extract_requirements("Write a notebook that prints hello world")
+    assert any(needs_evidence(r.text) for r in work)
+    assert decide(State(requirements=work, calls=[], answer="Sure, done.")).verdict is not Verdict.DONE
