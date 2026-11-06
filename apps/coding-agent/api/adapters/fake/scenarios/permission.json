@@ -1,0 +1,33 @@
+{
+ "models": [
+  "fake/model-a"
+ ],
+ "turn": {
+  "updates": [
+   {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "p1",
+    "title": "dbx_run_sql",
+    "kind": "other",
+    "status": "pending",
+    "rawInput": {}
+   },
+   {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "p1",
+    "status": "error",
+    "rawInput": {
+     "sql": "create table workspace.default.revenue_daily",
+     "error": "write blocked: needs approval"
+    }
+   }
+  ],
+  "answer": "I could not write the table without your approval.\n\n**Done**\n- nothing was changed\n",
+  "usage": {
+   "inputTokens": 2200,
+   "outputTokens": 90,
+   "cachedReadTokens": 0,
+   "totalTokens": 2290
+  }
+ }
+}

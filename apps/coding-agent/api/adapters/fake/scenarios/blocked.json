@@ -1,0 +1,33 @@
+{
+ "models": [
+  "fake/model-a"
+ ],
+ "turn": {
+  "updates": [
+   {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "b1",
+    "title": "dbx_describe_table",
+    "kind": "other",
+    "status": "pending",
+    "rawInput": {}
+   },
+   {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "b1",
+    "status": "error",
+    "rawInput": {
+     "full_name": "samples.nyctaxi.trips",
+     "error": "PERMISSION_DENIED: USE SCHEMA on samples"
+    }
+   }
+  ],
+  "answer": "I cannot continue.\n\n**What I could not do**\n- read `samples.nyctaxi.trips`: permission denied\n\n**What would unblock it**\n- ask an admin for USE SCHEMA on samples.\n",
+  "usage": {
+   "inputTokens": 900,
+   "outputTokens": 120,
+   "cachedReadTokens": 0,
+   "totalTokens": 1020
+  }
+ }
+}

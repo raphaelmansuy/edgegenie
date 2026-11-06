@@ -1,0 +1,84 @@
+import { describe, expect, it } from "vitest";
+import { emptySession, reduce, EVENT_TYPES, type AgentEvent } from "./events";
+
+const ev = (e: Partial<AgentEvent> & { type: string }): AgentEvent =>
+  ({ seq: 1, sessionId: "s", ...e }) as AgentEvent;
+
+describe("reducer", () => {
+  it("adds a turn and streams its answer", () => {
+    let s = emptySession("s");
+    s = reduce(s, ev({ type: "turn.started", turnId: "t1", text: "Build it", model: "m/a" }));
+    s = reduce(s, ev({ type: "message.delta", turnId: "t1", text: "Hello " }));
+    s = reduce(s, ev({ type: "message.delta", turnId: "t1", text: "world" }));
+    expect(s.turns).toHaveLength(1);
+    expect(s.turns[0].answer).toBe("Hello world");
+    expect(s.turns[0].prompt).toBe("Build it");
+  });
+
+  it("keeps tool cards in order and updates in place", () => {
+    let s = emptySession("s");
+    s = reduce(s, ev({ type: "turn.started", turnId: "t1" }));
+    s = reduce(s, ev({ type: "tool_call.started", turnId: "t1", callId: "a", name: "dbx_run_sql" }));
+    s = reduce(s, ev({ type: "tool_call.started", turnId: "t1", callId: "b", name: "dbx_write_notebook" }));
+    s = reduce(s, ev({ type: "tool_call.updated", turnId: "t1", callId: "a", status: "completed", seconds: 1.2 }));
+    expect(s.turns[0].tools.map((t) => t.callId)).toEqual(["a", "b"]);
+    expect(s.turns[0].tools[0].status).toBe("completed");
+    expect(s.turns[0].tools[0].seconds).toBe(1.2);
+  });
+
+  it("a repeated tool_call.started does not duplicate the card", () => {
+    let s = emptySession("s");
+    s = reduce(s, ev({ type: "turn.started", turnId: "t1" }));
+    s = reduce(s, ev({ type: "tool_call.started", turnId: "t1", callId: "a", name: "x" }));
+    s = reduce(s, ev({ type: "tool_call.started", turnId: "t1", callId: "a", name: "x" }));
+    expect(s.turns[0].tools).toHaveLength(1);
+  });
+
+  it("is idempotent for a replayed event", () => {
+    let s = emptySession("s");
+    s = reduce(s, ev({ type: "turn.started", turnId: "t1" }));
+    const once = reduce(s, ev({ type: "message.delta", turnId: "t1", text: "x" }));
+    const twice = reduce(once, ev({ type: "message.delta", turnId: "t1", text: "x" }));
+    expect(twice.turns[0].answer).toBe("xx"); // the stream layer drops repeats by seq
+  });
+
+  it("ignores unknown events instead of crashing", () => {
+    const s = reduce(emptySession("s"), ev({ type: "something.from.the.future" }));
+    expect(s.turns).toHaveLength(0);
+  });
+
+  it("records evidence and a blocked reason", () => {
+    let s = emptySession("s");
+    s = reduce(s, ev({ type: "turn.started", turnId: "t1" }));
+    s = reduce(s, ev({ type: "evidence.proposed", turnId: "t1",
+      rows: [{ requirement: "a", toolCallId: "c", tool: "dbx_run_sql", summary: "", verified: true }] }));
+    s = reduce(s, ev({ type: "turn.blocked", turnId: "t1", reason: "missing", missing: ["b"], attempted: [] }));
+    expect(s.turns[0].evidence[0].verified).toBe(true);
+    expect(s.turns[0].status).toBe("blocked");
+    expect(s.turns[0].blocked?.missing).toEqual(["b"]);
+  });
+
+  it("marks the session ready when a turn completes", () => {
+    let s = emptySession("s");
+    s = reduce(s, ev({ type: "session.ready", toolCount: 19, agent: "FakeAgent" }));
+    s = reduce(s, ev({ type: "turn.started", turnId: "t1" }));
+    s = reduce(s, ev({ type: "turn.completed", turnId: "t1", usage: { inputTokens: 5, outputTokens: 2 } }));
+    expect(s.status).toBe("ready");
+    expect(s.tools).toBe(19);
+    expect(s.turns[0].status).toBe("completed");
+  });
+
+  it("tracks approvals until they are decided", () => {
+    let s = emptySession("s");
+    s = reduce(s, ev({ type: "approval.requested", approvalId: "ap1", target: "workspace.default.t",
+      action: "write", reason: "needs a shared table", options: [{ optionId: "o1", kind: "allow_once", name: "Allow" }] }));
+    expect(s.approvals).toHaveLength(1);
+    s = reduce(s, ev({ type: "approval.decided", approvalId: "ap1", outcome: "deny" }));
+    expect(s.approvals[0].outcome).toBe("deny");
+  });
+
+  it("keeps every event type the server can send", async () => {
+    const py = await import("./event-parity.json");
+    expect(new Set(py.default.types)).toEqual(new Set(EVENT_TYPES));
+  });
+});

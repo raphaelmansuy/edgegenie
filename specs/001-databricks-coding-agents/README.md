@@ -3,7 +3,11 @@
 **A specification and implementation plan for Databricks Apps that work like Genie Code, built on ACP-compatible
 agents (OpenCode), MCP tools and agent skills.** React front end, FastAPI back end, Lakebase for state.
 
-> **Status:** specification, v0.2 draft · 6 November 2026
+> **Status:** specification **and a working implementation** · 6 November 2026
+> **Built and running.** The app exists in [`apps/coding-agent/`](../../apps/coding-agent): pure domain, ports and adapters,
+> FastAPI + SSE, a React UI, 68 Python tests and 16 front-end tests, and [ten real screenshots](e2e/README.md) of every UI
+> state. Nine defects were found by running it, including one that would have shipped an empty transcript —
+> see [16 Implementation](16-implementation.md).
 > **Audience:** the team that will build it (product, design, front end, back end, data, AI).
 > **Grounding:** every claim about ACP, OpenCode, Databricks Apps and our tool server is backed by a probe or a document
 > recorded in [§Grounding](#grounding-what-we-verified-and-what-we-did-not). Product claims are marked as proposals.
@@ -39,6 +43,8 @@ Read in this order the first time. Each document is self-contained and cross-lin
 | 13 | [Lens reviews](13-lens-reviews.md) | What does each specialist object to, and what changed? | All seven |
 | 14 | [Decisions and risks](14-decisions-risks.md) | What did we decide, and what is still open? | All |
 | 15 | [**Roadblock register**](15-roadblocks.md) | What is in the way, which official doc says so, what does it cost us? | All |
+| 16 | [**Implementation**](16-implementation.md) | What is built, what did running it teach us, what is still open? | All |
+| — | [E2E screenshots](e2e/README.md) | What does it actually look like? | UX |
 
 ## The seven lenses, and where each one bites
 

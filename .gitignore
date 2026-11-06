@@ -10,3 +10,17 @@ docs/e2e/screenshots/*.png
 exams/.tok
 exams/.sandbox_id
 exams/*.log
+
+# app build artifacts
+apps/coding-agent/.venv/
+apps/coding-agent/.coverage
+apps/coding-agent/.mypy_cache/
+apps/coding-agent/*.log
+apps/coding-agent/web/node_modules/
+apps/coding-agent/web/dist/
+apps/coding-agent/web/shots/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+specs/001-databricks-coding-agents/e2e/screenshots/*.png
+!specs/001-databricks-coding-agents/e2e/screenshots/*.png

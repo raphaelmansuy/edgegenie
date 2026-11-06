@@ -1,0 +1,24 @@
+{
+ "models": [
+  "fake/model-a"
+ ],
+ "turn": {
+  "updates": [
+   {
+    "sessionUpdate": "agent_thought_chunk",
+    "messageId": "s1",
+    "content": {
+     "type": "text",
+     "text": "Streaming for a while so the UI can be seen mid-flight."
+    }
+   }
+  ],
+  "answer": "I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. I am working through the request and checking each step. \n\nEVIDENCE\n\n| requirement | tool | summary |\n|---|---|---|\n| do the work | dbx_run_sql | 3 rows |\n",
+  "usage": {
+   "inputTokens": 3000,
+   "outputTokens": 400,
+   "cachedReadTokens": 0,
+   "totalTokens": 3400
+  }
+ }
+}

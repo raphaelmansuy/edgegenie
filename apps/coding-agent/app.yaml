@@ -1,0 +1,17 @@
+# Databricks App runtime contract (see specs/001 15, RB-02/03/04).
+# - command is an array and is NOT run through a shell; only $DATABRICKS_APP_PORT is substituted.
+# - the app must bind 0.0.0.0 and exit within 15 s of SIGTERM.
+command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "10", "--workers", "2"]
+env:
+  - name: APP_AGENT_MODE
+    value: stdio
+  - name: APP_AGENT_COMMAND
+    value: opencode acp
+  - name: APP_TOOL_MODE
+    value: subprocess
+  - name: APP_REQUIRE_FORWARDED_USER
+    value: "true"
+  - name: APP_DEFAULT_MODEL
+    value: databricks/system.ai.gpt-oss-120b
+  - name: APP_MAX_CONCURRENT_AGENTS
+    value: "4"

@@ -1,0 +1,27 @@
+{
+ "types": [
+  "session.created",
+  "session.ready",
+  "session.degraded",
+  "session.archived",
+  "turn.started",
+  "turn.queued",
+  "thought.delta",
+  "message.delta",
+  "tool_call.started",
+  "tool_call.updated",
+  "plan.updated",
+  "approval.requested",
+  "approval.decided",
+  "evidence.proposed",
+  "turn.auditing",
+  "turn.completed",
+  "turn.blocked",
+  "turn.cancelled",
+  "turn.interrupted",
+  "turn.failed",
+  "turn.retrying",
+  "session.compacted",
+  "usage.updated"
+ ]
+}
