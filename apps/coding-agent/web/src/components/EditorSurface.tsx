@@ -19,8 +19,10 @@ import { checkPath, describeFence } from "../domain/fence";
 import { clear as clearDraft, read as readDraft, write as writeDraft } from "../domain/drafts";
 import { Editor } from "../editor/Editor";
 import { NotebookEditor } from "./NotebookEditor";
-import { Check, Clock, Close, Lock, Save as SaveIcon, Warning } from "../components/Icons";
+import { Clock, Close, Warning } from "../components/Icons";
 import { ConflictPanel } from "./ConflictPanel";
+import { crumbsOf, DocumentBar } from "./DocumentBar";
+import type { Action } from "../domain/docs";
 
 export interface EditTarget {
   /** Workspace path, e.g. `/Users/x/agent_scratch/notes.py`. */
@@ -47,12 +49,18 @@ interface Props {
   onCells: (cells: Cell[]) => void;
   /** Ask the agent about one cell: the reason owning the editor is worth building (lens 7). */
   onAskCell?: (cell: Cell) => void;
+  /** The bar's actions. The surface does not own "ask the agent"; the app does. */
+  onAskAction?: (a: Action) => void;
+  onAttach?: () => void;
+  onOpenInDatabricks?: () => void;
+  onReload?: () => void;
 }
 
 const SAVE_DEBOUNCE = 150;
 
 export function EditorSurface({
   target, folder, sessionId, source, theme, onSaved, onCells, onAskCell,
+  onAskAction, onAttach, onOpenInDatabricks, onReload,
 }: Props) {
   useEffect(() => {
     const w = window as unknown as { __m?: string[] };
@@ -287,27 +295,28 @@ export function EditorSurface({
     ? { verdict: serverFence.verdict as "allow" | "ask" | "deny", target: target.path, reason: serverFence.reason }
     : fence;
   const chip = describeFence(effective, readOnly);
-  const Icon = readOnly ? Lock : chip.tone === "ok" ? Check : chip.tone === "warn" ? Warning : Lock;
 
   return (
     <section className="editor-surface" aria-label={`Editing ${target.name}`}>
-      <header className="editor-bar">
-        <span className={`fence-chip fence-${chip.tone}`} title={readOnly ? "this document is too large to save back safely" : fence.reason || "you can save here"}>
-          <Icon size={13} />
-          <span className="fence-text">{chip.label}</span>
-        </span>
-
-        <span className="editor-bar-spacer" />
-
-        {dirty && <span className="editor-dirty" title="unsaved changes">unsaved</span>}
-        {notice && <span className={`editor-notice is-${notice.tone}`} role="status">{notice.text}</span>}
-
-        <button className="btn primary sm" onClick={() => void save()} disabled={readOnly || saving || !dirty}
-          title={readOnly ? "this document cannot be saved" : "Save (⌘S)"}>
-          {saving ? <Clock size={14} className="icon-spin" /> : <SaveIcon size={14} />}
-          <span>Save</span>
-        </button>
-      </header>
+      {/* One bar: identity, breadcrumb, fence, ask menu, reload, Save. It used to be a 128 px header
+          above a 40 px editor bar, which put 168 px between the tab strip and the first line of code. */}
+      <DocumentBar
+        doc={{ id: target.path, kind: target.kind, ref: target.path, name: target.name, rev: 0 }}
+        crumbs={crumbsOf(target.path)}
+        language={target.language}
+        fence={{ label: chip.label, tone: chip.tone, reason: fence.reason }}
+        readOnly={readOnly}
+        dirty={dirty}
+        saving={saving}
+        busy={false}
+        notice={notice}
+        path={target.path}
+        onReload={() => onReload?.()}
+        onSave={() => void save()}
+        onAsk={(a) => onAskAction?.(a)}
+        onAttach={() => onAttach?.()}
+        onOpenInDatabricks={() => onOpenInDatabricks?.()}
+      />
 
       {restored && (
         <div className="draft-banner" role="status">

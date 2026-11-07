@@ -595,7 +595,11 @@ export function App() {
         {railShown && narrow && drawer === "rail" && (
           <nav className="pane rail is-drawer" aria-label="Navigator">{railBody}</nav>
         )}
-        {showInspector && inspectorOverlay && (
+        {/* A drawer only exists while it is OPEN. Without the `drawer === "inspector"` test this
+            rendered on every non-wide viewport the moment a session existed — an overlay panel
+            nobody asked for, which also widened the document (measured 969px in a 900px window).
+            The rail above already guarded this way; the inspector did not. */}
+        {showInspector && inspectorOverlay && drawer === "inspector" && (
           <Inspector session={session} onHide={() => openInspector(false)} className="is-drawer" />
         )}
 

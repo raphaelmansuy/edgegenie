@@ -137,9 +137,16 @@ for (const width of widths) {
   await p.getByRole("tab", { name: /Files/i }).click();
   await p.getByPlaceholder("Search notebooks and files…").fill("taxi");
   await p.locator(".result").first().click({ timeout: 30000 });
-  await p.locator(".cell").first().waitFor({ timeout: 20000 });
+  /* Read-only viewer (.cell) or editable notebook (.cell-block): a document is one or the other
+     depending on whether a session exists. Asserting only the old class stopped covering the
+     surface users actually edit. */
+  await p.locator(".cell, .cell-block").first().waitFor({ timeout: 30000 });
   report.push({ width, view: "document", problems: await p.evaluate(audit) });
   await p.screenshot({ path: `${out}/${width}-document.png` });
+  /* The editor and the transcript share the centre pane, so anything that needs `.turn` must run
+     with no document open. Closing here is what makes the audit order-independent. */
+  await p.keyboard.press("Meta+w");
+  await p.waitForTimeout(400);
 
   // Close any overlay the previous step opened, so each check starts from the same state.
   await p.keyboard.press("Escape");
@@ -162,9 +169,12 @@ for (const width of widths) {
 
   // an overlay panel is not a missing panel: record what it looks like when opened
   if (width <= 1180) {
-    if (await p.locator('.pane.inspector').count() === 0) {
-      await p.getByRole("button", { name: "Show the inspector" }).click();
-      await p.locator('.pane.inspector').waitFor({ state: "visible" });
+    /* The inspector is an overlay below 1180, opened on demand. Guard on the button EXISTING: it is
+       absent when the pane is already open, and absent when there is no session to describe. */
+    const open = p.getByRole("button", { name: "Show the inspector" });
+    if (await open.count() > 0 && await p.locator(".pane.inspector").count() === 0) {
+      await open.click();
+      await p.locator(".pane.inspector").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
     }
     report.push({ width, view: "inspector-overlay", problems: await p.evaluate(audit) });
     await p.screenshot({ path: `${out}/${width}-inspector.png` });

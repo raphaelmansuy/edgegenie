@@ -150,15 +150,22 @@ export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActi
     truncated: Boolean(data.truncated),
   } : null;
 
+  /* When the editor is available, EditorSurface renders the one document bar. The old 128 px
+     header must not also render, or the app pays for both — which is exactly what happened on the
+     first attempt at this merge (measured: still 234 px of chrome after the bar was added). */
+  const editingNow = Boolean(data && target && editable && actions.editing);
+
   return (
     <section className="viewer" aria-label={`${doc.name} viewer`}>
-      <Head doc={doc} busy={loading} reload={reload} actions={actions} objectId={data?.objectId}
-        subtitle={doc.ref} badge={data?.language ? data.language.toLowerCase() : undefined} />
+      {!editingNow && (
+        <Head doc={doc} busy={loading} reload={reload} actions={actions} objectId={data?.objectId}
+          subtitle={doc.ref} badge={data?.language ? data.language.toLowerCase() : undefined} />
+      )}
       <div className="viewer-body">
         {loading && !data && <p className="viewer-note"><span className="spin" /> opening…</p>}
         {error && <p className="viewer-error" role="alert">{error}</p>}
 
-        {data && target && editable && actions.editing && (
+        {editingNow && target && actions.editing && (
           <EditorSurface
             target={target}
             folder={actions.editing.folder}
@@ -167,6 +174,10 @@ export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActi
             theme={actions.editing.theme}
             onSaved={onSaved}
             onCells={(next) => setCells(next)}
+            onAskAction={(a) => actions.onAsk(a, doc)}
+            onAttach={() => actions.onAttach(doc)}
+            onOpenInDatabricks={() => { /* the ExtLink in Head did this; the bar uses the link */ }}
+            onReload={reload}
           />
         )}
 

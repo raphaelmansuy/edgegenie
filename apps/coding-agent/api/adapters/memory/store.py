@@ -33,6 +33,10 @@ class MemoryEventStore:
         rows = self._rows.get(session_id, [])
         return rows[-1]["seq"] if rows else 0
 
+    def subscriber_count(self, session_id: str) -> int:
+        """How many live streams this session has. The reaper treats a watcher as activity."""
+        return len(self._subs.get(session_id, []))
+
     def subscribe(self, session_id: str) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=2_000)
         self._subs[session_id].append(q)

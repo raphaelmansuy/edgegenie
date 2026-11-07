@@ -196,7 +196,21 @@ button { font: inherit; color: inherit; cursor: pointer; }
   background: var(--ink); color: var(--surface); font-size: 11px; font-weight: 700;
   border: 0; flex: none;
 }
-.topbar .meta { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 12.5px; }
+.topbar .meta {
+  margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 12.5px;
+  /* The right cluster grows when a turn starts (a status pill, a model chip) and, with no shrink
+     allowed, it widened the whole document — measured 969px in a 900px window, the moment a turn
+     began. It may now compress, and the model chip is what gives way: its value is repeated in the
+     inspector, whereas the status and the controls have no other home. */
+  min-width: 0; flex: 0 1 auto; overflow: hidden;
+}
+.topbar .meta > * { flex: none; }
+.topbar .meta .chip { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+.topbar .meta .chip select { min-width: 0; text-overflow: ellipsis; }
+@media (max-width: 1100px) {
+  /* Below this the chip is redundant: the model is in the inspector, the topbar has work to do. */
+  .topbar .meta .chip { display: none; }
+}
 .topbar select { min-height: 24px; font: inherit; font-size: 12.5px; padding: 1px 4px; border-radius: 6px;
   border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); }
 
@@ -1107,6 +1121,51 @@ button.evidence-head .count { margin-left: 0; }
    ============================================================================ */
 
 .editor-surface { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+
+/* ---- the document bar: identity, breadcrumb, fence, ask, save ----
+   One row. The previous design spent 128 px on a header and 40 px on an editor bar, putting 168 px
+   between the tab strip and the first line of code — 234 px of chrome in a 900 px window. */
+.doc-bar {
+  display: flex; align-items: center; gap: 6px; padding: 0 10px;
+  height: 40px; flex: none; border-bottom: 1px solid var(--line); background: var(--surface);
+  /* `min-width: 0` is not enough on a grid child: the bar's content (a long name, a breadcrumb, five
+     fixed controls) sets an intrinsic minimum that widened the whole grid to 969px in a 900px
+     window. `max-width: 100%` plus `overflow: hidden` caps it, and the crumb is what gives way. */
+  min-width: 0; max-width: 100%; overflow: hidden;
+}
+.doc-id { min-width: 0; flex: 0 1 auto; overflow: hidden; }
+.doc-crumbs { min-width: 0; flex: 0 1 auto; }
+/* Below 1100 the crumb is the first thing to go: the name and the controls matter more, and the
+   full path is still in the title and the clipboard. */
+@media (max-width: 1100px) { .doc-crumbs { display: none; } }
+@media (max-width: 820px) { .doc-lang { display: none; } .doc-name { max-width: 150px; } }
+.doc-id { display: flex; align-items: center; gap: 7px; min-width: 0; flex: 0 1 auto; }
+.doc-name {
+  font-size: 13px; font-weight: 620; letter-spacing: -0.01em; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;
+}
+.doc-lang {
+  font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--ink-3); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; flex: none;
+}
+/* A breadcrumb, not a raw path: the last two segments answer "where am I" at a glance, and the
+   whole path is still one click away (it is the clipboard value). */
+.doc-crumbs {
+  display: flex; align-items: center; gap: 3px; min-width: 0;
+  border: 0; background: transparent; padding: 2px 4px; border-radius: 5px;
+  font-size: 11.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden;
+}
+.doc-crumbs:hover { background: var(--surface-3); color: var(--ink-2); }
+.crumb { overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+.crumb-sep { color: var(--ink-3); opacity: 0.6; margin: 0 1px; }
+.doc-bar-spacer { flex: 1; min-width: 4px; }
+.doc-notice { font-size: 11.5px; color: var(--ink-3); flex: none; }
+.doc-notice.is-ok { color: var(--green-700); }
+.doc-notice.is-warn { color: var(--yellow-800); }
+.doc-notice.is-error { color: var(--pink-700); font-weight: 550; }
+.ask-wrap { position: relative; flex: none; }
+.ask-btn { display: inline-flex; align-items: center; gap: 3px; padding: 0 8px; height: 26px; }
+.ask-menu { right: 0; top: calc(100% + 5px); min-width: 190px; }
 
 /* ---- the bar: fence, dirty, save ---- */
 .editor-bar {

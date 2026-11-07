@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import logging
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -18,6 +21,8 @@ from .adapters.databricks.serving import ServingBrowser
 from .adapters.databricks.workspace import WorkspaceBrowser
 from .adapters.mcp.registry import NullToolRegistry, SubprocessToolRegistry
 from .adapters.memory.store import MemoryEventStore
+
+log = logging.getLogger("app.main")
 from .config import Settings
 from .config import settings as load_settings
 from .routers.api import router
@@ -66,10 +71,20 @@ def build(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        yield
-        for live in list(app.state.orchestrator._live.values()):  # noqa: SLF001 - orderly shutdown
-            if live.handle:
-                await runtime.close(live.handle)
+        # A background reaper, because `archive()` tears a session down properly but nothing called
+        # it: every session a user opened kept its agent subprocess for the life of the server. An
+        # afternoon of testing accumulated 29 live agents, which is what exhausted the machine and
+        # produced intermittent renderer crashes.
+        reaper = asyncio.create_task(_reap_loop(app))
+        try:
+            yield
+        finally:
+            reaper.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await reaper
+            for live in list(app.state.orchestrator._live.values()):  # noqa: SLF001 - orderly shutdown
+                if live.handle:
+                    await runtime.close(live.handle)
 
     app = FastAPI(title="Databricks Coding Agents", version="0.1.0", lifespan=lifespan)
     app.state.settings = cfg
@@ -121,3 +136,23 @@ def build(settings: Settings | None = None) -> FastAPI:
 
 
 app = build()
+
+
+async def _reap_loop(app: FastAPI) -> None:
+    """Archive idle sessions on a timer.
+
+    One minute is far more often than the policy needs (it reaps after 30 idle minutes) and cheap:
+    the loop only reads timestamps. Errors are logged and swallowed — a reaper that dies takes the
+    leak with it.
+    """
+    interval = 60.0
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            reaped = await app.state.orchestrator.reap_idle()
+            if reaped:
+                log.info("reaped %d idle session(s)", len(reaped))
+        except asyncio.CancelledError:
+            raise
+        except Exception:            # noqa: BLE001 - a reaper must outlive its own failures
+            log.warning("the session reaper failed once; continuing", exc_info=True)

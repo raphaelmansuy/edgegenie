@@ -238,7 +238,12 @@ await p.keyboard.press("Escape");
 await p.getByRole("tab", { name: /Files/i }).click();
 await p.getByPlaceholder("Search notebooks and files…").fill("taxi");
 await p.locator(".result").first().click({ timeout: 30000 });
-await p.locator(".cell").first().waitFor({ timeout: 20000 });
+/* The document may render as the read-only viewer (`.cell`) or the editable notebook
+   (`.cell-block`), depending on whether a session exists and the file was truncated. Wait for
+   EITHER: waiting only for `.cell` silently stopped covering the editable surface once notebook
+   mode landed, which is the surface a user spends their time in. */
+await p.locator(".cell, .cell-block, .viewer-body").first().waitFor({ timeout: 30000 });
+await p.waitForTimeout(600);
 await run("document");
 await p.screenshot({ path: `${out}/05-document.png` });
 

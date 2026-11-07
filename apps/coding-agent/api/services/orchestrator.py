@@ -64,6 +64,9 @@ class Live:
     task: asyncio.Task | None = None
     cancel: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
+    #: Epoch seconds of the last activity (a turn, a stream connect, or creation). The reaper reads
+    #: this; nothing else should. Without it a session is unreapable because "idle" is unknowable.
+    last_seen: float = 0.0
 
     def record(self, call_id: str, name: str, status: str, summary: str = "", args: str = "") -> None:
         c = self.state.calls.setdefault(call_id, {"name": name, "status": "running"})
@@ -112,6 +115,50 @@ class Orchestrator:
             reverse=True,
         )
 
+    def touch(self, session_id: str) -> None:
+        """Record activity. A turn, a stream connect, or an explicit read all count.
+
+        Without this the reaper cannot tell an idle session from an abandoned one, which is why the
+        server used to keep every agent process alive for its whole lifetime.
+        """
+        live = self._live.get(session_id)
+        if live:
+            live.last_seen = time.time()
+
+    def watchers(self, session_id: str) -> int:
+        """How many streams are attached. Non-zero means a human is looking right now."""
+        return self._store.subscriber_count(session_id) if hasattr(self._store, "subscriber_count") else 0
+
+    def idle_candidates(self, now: float) -> list[Any]:
+        """Live sessions with the fields the reaper policy needs."""
+        from ..domain.reaper import Candidate
+        return [
+            Candidate(session_id=sid, status=live.state.session.status.value,
+                      last_seen=live.last_seen or 0.0, watchers=self.watchers(sid))
+            for sid, live in self._live.items()
+        ]
+
+    async def reap_idle(self, now: float | None = None) -> list[str]:
+        """Archive sessions the policy says are finished with. Returns the ids reaped.
+
+        This is what calls `archive()`. It existed but was never called, so every session a user
+        opened held a subprocess for the life of the server.
+        """
+        from ..domain.reaper import Policy, reapable
+        now = now if now is not None else time.time()
+        policy = Policy()
+        reaped: list[str] = []
+        # The cap counts sessions still *open*, and archiving one must reduce that count — otherwise
+        # a single pass reaps everything: the guard `live_count > keep_minimum` stayed true for every
+        # candidate because nothing decremented it. Observed live with keep_minimum=2: all 8 archived.
+        open_now = sum(1 for c in self.idle_candidates(now) if c.status != "archived")
+        for c in self.idle_candidates(now):
+            if reapable(c, now=now, live_count=open_now, policy=policy) is None:
+                await self.archive(c.session_id)
+                reaped.append(c.session_id)
+                open_now -= 1
+        return reaped
+
     def scope(self, session_id: str) -> Scope:
         s = self.get(session_id).state.session
         return Scope.for_session(s.id, s.folder, s.schema)
@@ -133,7 +180,7 @@ class Orchestrator:
         sid = uuid4().hex[:16]
         session = Session(id=sid, user_id=user_id, folder=folder, schema=schema, model=model, title=title,
                           created_at=time.time())
-        live = Live(state=SessionState(session=session), workspace_folder=folder)
+        live = Live(state=SessionState(session=session), workspace_folder=folder, last_seen=time.time())
         # The user's forwarded token: the agent and the tool server act as this user, not as the app.
         live.extra["user_token"] = user_token
         self._live[sid] = live

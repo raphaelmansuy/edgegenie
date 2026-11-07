@@ -202,6 +202,7 @@ async def send_message(
         raise HTTPException(422, str(exc)) from exc
     resolved = await ctx_service.resolve(items, _browser(request), request.app.state.catalog,
                                          _user_token(request))
+    orch.touch(sid)
     try:
         turn = await orch.submit(sid, body.text, ctx.render(resolved), [a.to_dict() for a in items],
                                 user_token=_user_token(request))
@@ -252,6 +253,8 @@ async def stream(
     # Last-Event-ID covers a browser-initiated reconnect of the same EventSource.
     cursor = after or (int(last_event_id) if last_event_id and last_event_id.isdigit() else 0)
     heartbeat = request.app.state.settings.stream_heartbeat_seconds
+    # An open stream is a watcher: the reaper must never archive a session someone is looking at.
+    orch.touch(sid)
 
     async def gen() -> AsyncIterator[str]:
         queue = store.subscribe(sid)

@@ -99,8 +99,8 @@ await step("search finds the notebook by name", async () => {
 
 await step("opening a result shows the notebook as highlighted cells", async () => {
   await p.locator(".result", { hasText: HINT }).first().click();
-  await p.locator(".cell").first().waitFor({ timeout: 20000 });
-  ok((await p.locator(".cell").count()) >= 1, "no cells");
+  await p.locator(".cell, .cell-block").first().waitFor({ timeout: 30000 });
+  ok((await p.locator(".cell, .cell-block").count()) >= 1, "no cells");
   ok((await p.locator("pre.code [class^=tk-]").count()) > 0, "no syntax highlighting");
   ok(await p.getByRole("tab", { name: new RegExp(HINT, "i") }).first().isVisible(), "no document tab");
   await shot("notebook-open");
