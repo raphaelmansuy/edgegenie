@@ -41,23 +41,28 @@ def of(status: dict[str, Any] | None) -> Version | None:
     into an overwrite. `None` forces the caller to decide, and the save route treats it as "no
     version supplied" rather than "matches".
 
-    **`object_id` is deliberately not part of the token.** The only way to overwrite a notebook in
-    SOURCE format is delete-then-import (the API refuses `overwrite` with `format=SOURCE`), and that
-    mints a new `object_id` every time. Including it would make a token stale the moment it was
-    written, so every first save would 409 — which is exactly what happened before this comment
-    existed. What actually changes when the content changes is `modified_at` and `size`, and those
-    are what the token hashes.
+    **The token is `modified_at` alone, and that is a measured decision.** Three fields were tried
+    and two had to go:
+
+    * `object_id` — the only way to overwrite a notebook in SOURCE format is delete-then-import (the
+      API refuses `overwrite` with `format=SOURCE`), and that mints a new `object_id` on every save.
+      Including it made every first save 409.
+    * `size` — **`get-status` does not return `size` for a notebook at all.** It returns
+      `object_type`, `path`, `language`, `created_at`, `modified_at`, `object_id`. The *read* path
+      filled `size` from the exported bytes (35), while the *save* path called `of(status)` where
+      `size` was absent (0), so the two computed different tokens for the same unchanged object and
+      every save 409'd. Verified against the live workspace with a raw `get-status` call.
+
+    `modified_at` is the field that actually changes when the content changes, and it is present.
+    That is the whole token.
     """
     if not status:
         return None
     modified = status.get("modified_at")
-    size = status.get("size")
-    if modified is None and size is None:
+    if modified is None:
         return None
-    # A token is a digest so that callers cannot read meaning into it and start comparing fields.
-    raw = f"{modified if modified is not None else ''}|{size if size is not None else ''}"
-    token = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
-    return Version(token=token, modified_at=int(modified or 0), size=int(size or 0))
+    token = hashlib.sha256(str(modified).encode("utf-8")).hexdigest()[:32]
+    return Version(token=token, modified_at=int(modified), size=int(status.get("size") or 0))
 
 
 def matches(current: Version | None, held: str | None) -> bool:

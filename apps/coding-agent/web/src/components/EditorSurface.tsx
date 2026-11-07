@@ -54,6 +54,12 @@ const SAVE_DEBOUNCE = 150;
 export function EditorSurface({
   target, folder, sessionId, source, theme, onSaved, onCells, onAskCell,
 }: Props) {
+  useEffect(() => {
+    const w = window as unknown as { __m?: string[] };
+    w.__m = w.__m || [];
+    w.__m.push(`mount ${Math.random().toString(36).slice(2, 6)}`);
+    return () => { w.__m!.push(`unmount ${Math.random().toString(36).slice(2, 6)}`); };
+  }, []);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fence, setFence] = useState(() => checkPath(folder, target.path));
@@ -74,32 +80,45 @@ export function EditorSurface({
    *  the editor to an empty document forever. */
   const [liveCells, setLiveCells] = useState<Cell[]>([]);
   const seeded = useRef(false);
-  /** True while we are adopting text from above (a load, or the reload right after a save). A
-   *  document we just wrote must not come back as "dirty": that would leave Save enabled forever
-   *  and make the notice a lie. */
-  const adopting = useRef(false);
+  /** The text this buffer is showing, as we last accepted it from above. An incoming `source` that
+   *  equals it is not a change, so adopting it must not mark the document dirty. */
+  const accepted = useRef<string>("");
   useEffect(() => {
     if (target.kind !== "notebook" || !source) return;
-    const next = parseCells(source, target.language);
-    // Re-seed when the document changes or when we have not seeded yet, and never while the user is
-    // mid-edit in the same document.
-    if (seeded.current && !adopting.current) return;
+    if (seeded.current) return;
     seeded.current = true;
-    adopting.current = true;
-    setLiveCells(next);
-    // The adoption turn ends after the cell stack has re-rendered with it.
-    const t = window.setTimeout(() => { adopting.current = false; }, 0);
-    return () => window.clearTimeout(t);
+    accepted.current = source;
+    setLiveCells(parseCells(source, target.language));
+  }, [source, target.kind, target.language]);
+
+  /* After a save, the parent reloads and hands us new `source`. That is not an edit, so it must not
+     mark the document dirty — but the old value of `source` is gone by then, so a byte comparison
+     against it cannot work. What can work: the cells we just saved. If the incoming text parses to
+     the same cells, it is our own write coming back. Compared by meaning, not by bytes, because the
+     parent may serialize with different (equally valid) spacing. */
+  const savedCells = useRef<Cell[] | null>(null);
+  useEffect(() => {
+    if (target.kind !== "notebook" || !source || !savedCells.current) return;
+    const incoming = parseCells(source, target.language);
+    const same = incoming.length === savedCells.current.length
+      && incoming.every((c, i) => c.kind === savedCells.current![i].kind
+        && c.source === savedCells.current![i].source);
+    if (same) {
+      savedCells.current = null;
+      setDirty(false);            // our own bytes: the buffer is exactly what is on disk
+    }
   }, [source, target.kind, target.language]);
   // A different document means a different cell list.
   useEffect(() => {
     seeded.current = false;
-    adopting.current = false;
+    accepted.current = "";
     setLiveCells([]);
   }, [target.path]);
   const saveTimer = useRef<number | undefined>(undefined);
   /** A real lock, not a state read: two key events in one tick both see the old `saving` value. */
   const inFlight = useRef(false);
+  /** The latest `save`, for the single window listener. */
+  const saveRef = useRef<() => void>(() => {});
   /** The version this buffer is based on.
    *
    * A ref, not `target.version`: the parent reloads after every save, and a prop captured at the
@@ -178,10 +197,20 @@ export function EditorSurface({
     switch (result.kind) {
       case "ok":
         setDirty(false);
+        // Remember what we wrote, so the reload that follows is recognised as an echo, not an edit.
+        savedCells.current = liveCells.length ? liveCells : parseCells(body, target.language);
         clearDraft(target.path);
         setNotice({ tone: "ok", text: "saved" });
         version.current = result.version;      // the next save must compare against what we wrote
-        onSaved(result.version);
+        /* `onSaved` reloads the document from the server. If that throws — a transient read error,
+           a dropped connection — the save has still happened, and letting the exception escape
+           would leave `saving` stuck true, which disables Save forever and keeps the spinner
+           turning. A failed reload is not a failed save, and the UI must say so. */
+        try {
+          onSaved(result.version);
+        } catch {
+          setNotice({ tone: "warn", text: "saved — reload failed, so the view may be stale" });
+        }
         break;
       case "ask": {
         // The fence wants approval. The 403 carries the reason but not a token: an approval has to
@@ -200,6 +229,10 @@ export function EditorSurface({
     }
   }, [onSaved, readOnly, saving, sessionId, target.kind, target.language, target.path, target.version]);
 
+  /* Keep the ref current so the single window listener always calls the latest closure. This runs
+     on every render and is the only cost of registering the listener once. */
+  saveRef.current = () => { void save(); };
+
   /* ⌘S for when focus is *outside* the editor: the cell bar, the toolbar, the fence chip. When the
      editor has focus its own keymap handles the key, so this must not also fire — two handlers for
      one keypress means two saves, and the second one races the first into a 409 conflict. */
@@ -209,11 +242,17 @@ export function EditorSurface({
       const t = e.target as HTMLElement | null;
       if (t?.closest(".cm-editor")) return;        // the editor's keymap owns it
       e.preventDefault();
-      void save();
+      void saveRef.current();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [save]);
+    /* Registered ONCE, not per `save` identity. `save` is a useCallback whose dependency list
+       includes props that change on every parent render, so keying the listener on it churned the
+       subscription continuously — and under StrictMode's double-invoke that left two live
+       listeners, so one ⌘S sent two saves and the second raced the first into a 409. The handler
+       reads the latest `save` through a ref, so one listener is always enough. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const restore = () => {
     const draft = readDraft(target.path);
@@ -258,7 +297,7 @@ export function EditorSurface({
 
         <button className="btn primary sm" onClick={() => void save()} disabled={readOnly || saving || !dirty}
           title={readOnly ? "this document cannot be saved" : "Save (⌘S)"}>
-          {saving ? <Clock size={14} className="spin" /> : <SaveIcon size={14} />}
+          {saving ? <Clock size={14} className="icon-spin" /> : <SaveIcon size={14} />}
           <span>Save</span>
         </button>
       </header>
@@ -326,12 +365,23 @@ export function EditorSurface({
           readOnly={readOnly}
           onChange={(next) => {
             setLiveCells(next);
-            if (adopting.current) return;      // this is the reload after a save, not an edit
             // One serialization, in the ref, so save and draft read the same bytes the cells mean.
             const serialized = serializeCells(next, target.language);
             text.current = serialized;
+            /* The reload after a save hands back the cells we just wrote. Reporting that as an edit
+               is what left the buffer permanently dirty — the notice said "saved" while the dot
+               said "unsaved", and both were true of different states. Compare by cell content: if
+               it is what we saved, we are clean. */
+            const saved = savedCells.current;
+            const isEcho = !!saved && next.length === saved.length
+              && next.every((c, i) => c.kind === saved[i].kind && c.source === saved[i].source);
+            if (isEcho) {
+              savedCells.current = null;
+              setDirty(false);
+              return;
+            }
             setDirty(true);
-            writeDraft({ docId: target.path, text: serialized, basedOn: target.version ?? "", at: Date.now() });
+            writeDraft({ docId: target.path, text: serialized, basedOn: version.current ?? "", at: Date.now() });
             onCells(next);
           }}
           onAskCell={(cell) => onAskCell?.(cell)}

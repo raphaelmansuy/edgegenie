@@ -1043,7 +1043,10 @@ button.evidence-head .count { margin-left: 0; }
 .icon-btn:focus-visible { outline: 2px solid var(--blue-600); outline-offset: 0; }
 /* A refresh that spins is a refresh that is working. The spin is on the svg so the button's own
    box stays still — a rotating button would wobble its neighbours. */
-.icon.spin { animation: spin 0.9s linear infinite; }
+/* A rotating ICON, distinctly named. The bare `.spin` class is a different thing entirely — a
+   12x12 bordered circle used as a loading dot — and reusing it on an icon drew that ring around
+   the glyph, which read as a permanently-spinning save button. Class names are a public surface. */
+.icon-spin { animation: spin 0.9s linear infinite; }
 .theme-glyph { display: inline-flex; align-items: center; }
 
 /* ---------- theme switch: a three-state segmented control ----------

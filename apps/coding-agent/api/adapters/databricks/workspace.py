@@ -83,10 +83,16 @@ class WorkspaceObject:
                 "cells": [c.to_dict() for c in self.cells], "text": self.text}
 
 
-def _version_token(object_id: str, modified_at: int, size: int) -> str:
-    """Must equal `api.domain.version.of(...).token` for the same three fields."""
+def _version_token(_object_id: str, modified_at: int, _size: int) -> str:
+    """The same token the save route computes, from the same one field.
+
+    The arguments beyond `modified_at` are kept so call sites read clearly, but only
+    `modified_at` is hashed — see `api.domain.version.of` for why `object_id` and `size` had to be
+    excluded (the first is recreated by delete-then-import, the second is absent from `get-status`
+    for a notebook, and including either made every save 409).
+    """
     from ...domain.version import of as version_of
-    v = version_of({"object_id": object_id, "modified_at": modified_at, "size": size})
+    v = version_of({"modified_at": modified_at})
     return v.token if v else ""
 
 
