@@ -271,9 +271,13 @@ for (let i = 0; i < 45; i += 1) {
 for (const f of focusProblems) add("focus", "no-visible-focus", f);
 
 /* ---------------------------------------------------------------- 3. reduced motion and forced colours */
-const rm = await b.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
-await rm.goto(APP, { waitUntil: "domcontentloaded" });
-await rm.waitForTimeout(1000);
+const rm = await b.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce",
+  extraHTTPHeaders: bearer ? { Authorization: `Bearer ${bearer}` } : {} });
+await rm.goto(APP, { waitUntil: "domcontentloaded", timeout: 60000 });
+// The deployed app authenticates per page: wait for the shell to actually render before measuring,
+// otherwise the evaluate runs during the sign-in redirect and the context is destroyed.
+await rm.locator(".app, .empty, main").first().waitFor({ timeout: 30000 }).catch(() => {});
+await rm.waitForTimeout(800);
 const motion = await rm.evaluate(() => {
   const bad = [];
   for (const el of document.querySelectorAll("body *")) {
@@ -287,9 +291,11 @@ const motion = await rm.evaluate(() => {
 for (const m of motion) add("reduced-motion", "still-animating", m);
 await rm.close();
 
-const fc = await b.newPage({ viewport: { width: 1440, height: 900 }, forcedColors: "active" });
-await fc.goto(APP, { waitUntil: "domcontentloaded" });
-await fc.waitForTimeout(1000);
+const fc = await b.newPage({ viewport: { width: 1440, height: 900 }, forcedColors: "active",
+  extraHTTPHeaders: bearer ? { Authorization: `Bearer ${bearer}` } : {} });
+await fc.goto(APP, { waitUntil: "domcontentloaded", timeout: 60000 });
+await fc.locator(".app, .empty, main").first().waitFor({ timeout: 30000 }).catch(() => {});
+await fc.waitForTimeout(800);
 const forced = await fc.evaluate(() => {
   const invisible = [];
   for (const el of document.querySelectorAll("button, [role=tab], a[href]")) {
@@ -305,9 +311,11 @@ await fc.screenshot({ path: `${out}/06-forced-colors.png` });
 await fc.close();
 
 /* ---------------------------------------------------------------- 4. 200% zoom */
-const z = await b.newPage({ viewport: { width: 720, height: 900 }, deviceScaleFactor: 2 });
-await z.goto(APP, { waitUntil: "domcontentloaded" });
-await z.waitForTimeout(1200);
+const z = await b.newPage({ viewport: { width: 720, height: 900 }, deviceScaleFactor: 2,
+  extraHTTPHeaders: bearer ? { Authorization: `Bearer ${bearer}` } : {} });
+await z.goto(APP, { waitUntil: "domcontentloaded", timeout: 60000 });
+await z.locator(".app, .empty, main").first().waitFor({ timeout: 30000 }).catch(() => {});
+await z.waitForTimeout(800);
 await z.evaluate(HELPERS);
 const zoom = await z.evaluate(() => {
   const cut = [];

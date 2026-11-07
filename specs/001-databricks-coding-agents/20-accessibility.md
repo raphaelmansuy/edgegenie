@@ -41,6 +41,7 @@ Both audits exit non-zero on a finding, so neither can rot silently. The last ru
 | No transition or animation under `prefers-reduced-motion` | WCAG 2.3.3 | Preference honoured, measured per element |
 | Every control still visible in **forced-colors** (Windows high contrast) | WCAG 1.4.1, 1.4.11 | A control that vanishes is not usable without colour |
 | Content stays inside its own shape, at four widths | craft | The defect this pass started from: a `×` that looked outside its tab |
+| A 300-character unbroken token cannot widen its column | craft | Injected deterministically, so a real model's worst output is covered without waiting for it |
 
 ## Defects this pass found and fixed
 
@@ -54,6 +55,14 @@ Both audits exit non-zero on a finding, so neither can rot silently. The last ru
 | Rail and inspector tabs had no `aria-controls` | moderate | Both tablists now point at a `tabpanel`; the doc tab strip shares one panel |
 | Working-folder input had no accessible name | moderate | `aria-label` and a placeholder |
 | The `×` read as outside its tab | craft | It was a sibling of the tab; it is now inside the tab's own shape, with symmetric inset, and its tint appears only under the pointer |
+
+## A note on running these audits
+
+Run **one** audit at a time against a deployed app. Two headless browsers streaming from the same
+app at once made a page report "crashed" in a run of this suite; the same page, alone, loaded in 4 s,
+held a steady 10 MB heap and 176 DOM nodes through a whole turn, and the suite then passed 19/19.
+That was contention in the harness, not a defect in the product — but it is worth knowing before
+reading a red result as a product bug.
 
 ## Below the best, stated plainly
 

@@ -145,6 +145,21 @@ for (const width of widths) {
   await p.keyboard.press("Escape");
   await p.waitForTimeout(150);
 
+  // The worst case a real agent produces: an answer with an unbroken 300-character token.
+  // Injected into the transcript so this is checked deterministically, not only when a model happens
+  // to emit one.
+  await p.evaluate(() => {
+    const host = document.querySelector(".answer") ?? document.querySelector(".transcript");
+    if (!host) return;
+    const bad = `db_dbx_run_notebook(path=/Users/raphael.mansuy@gmail.com/agent_scratch/${"x".repeat(240)}, timeout=45)`;
+    const el = document.createElement("p");
+    el.className = "injected-long";
+    el.textContent = `Ran ${bad} then ${"y".repeat(200)}`;
+    host.appendChild(el);
+  });
+  report.push({ width, view: "long-token", problems: await p.evaluate(audit) });
+  await p.screenshot({ path: `${out}/${width}-long-token.png` });
+
   // an overlay panel is not a missing panel: record what it looks like when opened
   if (width <= 1180) {
     if (await p.locator('.pane.inspector').count() === 0) {

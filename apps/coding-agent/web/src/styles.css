@@ -147,7 +147,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .state-error, .state-blocked { background: var(--pink-100); color: var(--pink-700); }
 
 /* answer */
-.answer { margin-top: 6px; }
+/* An agent answer can contain a path with no spaces in it, a long identifier, or a tool signature.
+   Every block must break rather than push its column wider: the transcript is prose, not code. */
+.answer { margin-top: 6px; overflow-wrap: anywhere; }
+.answer p, .answer li, .answer h1, .answer h2, .answer h3, .answer h4 { overflow-wrap: anywhere; }
+.answer code { overflow-wrap: anywhere; }
 .answer h1, .answer h2, .answer h3 { font-size: 15px; margin: 16px 0 6px; letter-spacing: -0.01em; }
 .answer p { margin: 8px 0; }
 .answer ul { margin: 8px 0; padding-left: 20px; }
@@ -156,8 +160,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .answer pre { background: #1b2130; color: #e6eaf2; border-radius: var(--radius-sm); padding: 12px 14px;
   overflow: auto; font-family: var(--mono); font-size: 12.5px; }
 .answer pre code { background: none; border: 0; color: inherit; padding: 0; }
-.answer table { border-collapse: collapse; margin: 10px 0; font-size: 13px; width: 100%; }
-.answer th, .answer td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
+.answer table { border-collapse: collapse; margin: 10px 0; font-size: 13px; width: 100%; table-layout: fixed; }
+.answer th, .answer td { border: 1px solid var(--line); padding: 6px 10px; text-align: left;
+  overflow-wrap: anywhere; }
 .answer th { background: var(--surface-2); font-weight: 600; }
 .caret { display: inline-block; width: 7px; height: 15px; background: var(--blue-600);
   vertical-align: -2px; animation: blink 1s steps(2) infinite; margin-left: 2px; }
