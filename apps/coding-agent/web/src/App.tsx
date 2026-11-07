@@ -6,8 +6,10 @@
  *  3. when the agent writes something, the tree refreshes and the result opens in one click.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type ModelOption, type SessionSummary } from "./api/client";
+import { api, type CatalogueResponse, type SessionSummary } from "./api/client";
 import { ApprovalSheet, EmptyState, Inspector } from "./components/Chrome";
+import { ModelPicker } from "./components/ModelPicker";
+import { ProviderSettings } from "./components/ProviderSettings";
 import { LayoutMenu } from "./components/LayoutMenu";
 import { Palette, PaletteActions } from "./components/Palette";
 import { DocTabs } from "./components/DocTabs";
@@ -44,7 +46,9 @@ const dedupe = (items: Attachment[]) => {
 
 export function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [models, setModels] = useState<ModelOption[]>([]);
+  // The catalogue, not a list of ids: the picker needs state, limits and a credential hint per model
+  // (FR-15). It replaces the two `<select>` elements that each formatted an id differently (01 E8).
+  const [catalogue, setCatalogue] = useState<CatalogueResponse | null>(null);
   const [defaultModel, setDefaultModel] = useState("");
   const [scratch, setScratch] = useState("");
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -61,6 +65,7 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState<"layout" | null>(null);
   const [keysOpen, setKeysOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // Below each breakpoint a side panel becomes an overlay over the content. An overlay that opens
   // by itself hides the transcript, which is what the app is for — so it starts closed, and opens
   // from its handle, its shortcut, the palette, or a tree click.
@@ -92,7 +97,7 @@ export function App() {
     const [s, m, me] = await Promise.all([
       api.sessions(), api.models(), api.me().catch(() => ({ scratch: "", demo: false, user: "", workspace: undefined }))]);
     setSessions(s.sessions);
-    setModels(m.available);
+    setCatalogue(m);
     setDefaultModel(m.default);
     setScratch(me.scratch ?? "");
     setWorkspace(me.workspace?.host ? me.workspace : null);
@@ -222,6 +227,10 @@ export function App() {
 
     add("act:new", "New session", "Actions", newSession, display("mod+shift+n"), 5);
     add("act:keys", "Keyboard shortcuts", "Actions", () => setKeysOpen(true), display("mod+slash"));
+    add("act:providers", "Providers and keys", "Actions", () => setSettingsOpen(true), display("mod+comma"), 2);
+    add("act:model", "Change the model", "Actions",
+      () => document.querySelector<HTMLButtonElement>(".topbar .model-trigger")?.click(),
+      display("mod+shift+m"), 4);
     add("act:reset", "Reset layout", "Actions", resetAll, "panels, widths and tab", 1);
     add("act:refresh", "Refresh sessions and models", "Actions", () => void refresh());
     for (const r of ["sessions", "files", "catalog"] as Rail[]) {
@@ -278,6 +287,12 @@ export function App() {
     return {
       "mod+k": () => setPaletteOpen((v) => !v),
       "mod+slash": () => { setKeysOpen((v) => !v); },
+      "mod+comma": () => setSettingsOpen((v) => !v),
+      // One command opens the picker from anywhere (P6). It focuses the topbar trigger, which is the
+      // single picker: there is no second list to drift.
+      "mod+shift+m": () => {
+        document.querySelector<HTMLButtonElement>(".topbar .model-trigger")?.click();
+      },
       "mod+shift+n": newSession,
       "mod+l": focusComposer,
       "mod+1": go("sessions"),
@@ -295,6 +310,7 @@ export function App() {
         return true;
       },
       escape: () => {
+        if (settingsOpen) { setSettingsOpen(false); return true; }
         if (paletteOpen || keysOpen) { setPaletteOpen(false); setKeysOpen(false); return true; }
         if (drawer) {
           // Esc closes the overlay it opened, and only that overlay.
@@ -305,8 +321,8 @@ export function App() {
         return false;                          // the composer handles Esc as "stop"
       },
     };
-  }, [docs, view, paletteOpen, keysOpen, newSession, focusComposer, drawer, narrow, inspectorOverlay,
-      openRail, layout, toggle, theme.cycle]);
+  }, [docs, view, paletteOpen, keysOpen, settingsOpen, newSession, focusComposer, drawer, narrow,
+      inspectorOverlay, openRail, layout, toggle, theme.cycle]);
 
   // A menu must close the way people expect: outside click, or Escape.
   useEffect(() => {
@@ -429,21 +445,17 @@ export function App() {
           <h1 className="brand"><span className="mark" aria-hidden><Mark size={13} /></span> Databricks Coding Agents</h1>
           <span className="meta">
             {active && (
-              <span className="chip">
-                <span aria-hidden>model</span>
-                <select
-                  aria-label="Model"
-                  value={session.model}
-                  onChange={async (e) => {
-                    const r = await api.setModel(active, e.target.value);
-                    setSession((s) => ({ ...s, model: r.current }));
-                  }}
-                >
-                  {(models.length ? models.map((m) => m.id) : [session.model]).map((id) => (
-                    <option key={id} value={id}>{id.split("/").pop()}</option>
-                  ))}
-                </select>
-              </span>
+              <ModelPicker
+                catalogue={catalogue}
+                current={session.model}
+                onChoose={async (id) => {
+                  const r = await api.setModel(active, id);
+                  setSession((s) => ({ ...s, model: r.current }));
+                  void refresh();
+                }}
+                onAddKey={() => setSettingsOpen(true)}
+                onRefresh={() => void refresh()}
+              />
             )}
             {active && <span className={`pill ${session.status}`}>{session.status}</span>}
             <button className="search-trigger" onClick={() => setPaletteOpen(true)}
@@ -515,7 +527,8 @@ export function App() {
                 ? <TableViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
                 : <NotebookViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
             ) : !active ? (
-              <EmptyState models={models} folder={folder} onFolder={setFolder} model={model} onModel={setModel}
+              <EmptyState catalogue={catalogue} folder={folder} onFolder={setFolder} model={model}
+                onModel={setModel} onAddKey={() => setSettingsOpen(true)}
                 demo={demo} notice={notice} onStart={(p) => start(p, attachments).then(() => setAttachments([]))} />
             ) : (
               <>
@@ -570,7 +583,8 @@ export function App() {
           </main>
 
           {showInspector && !inspectorOverlay && (
-            <Inspector session={session} onHide={() => openInspector(false)}
+            <Inspector session={session} onHide={() => openInspector(false)} activeId={active}
+              onAddKey={() => setSettingsOpen(true)}
               edge={mode === "wide" ? (
                 <Separator zone="inspector" width={layout.inspectorWidth} min={250} max={Number.POSITIVE_INFINITY}
                   label="Resize the inspector"
@@ -600,7 +614,12 @@ export function App() {
             nobody asked for, which also widened the document (measured 969px in a 900px window).
             The rail above already guarded this way; the inspector did not. */}
         {showInspector && inspectorOverlay && drawer === "inspector" && (
-          <Inspector session={session} onHide={() => openInspector(false)} className="is-drawer" />
+          <Inspector session={session} onHide={() => openInspector(false)} className="is-drawer"
+            activeId={active} onAddKey={() => setSettingsOpen(true)} />
+        )}
+
+        {settingsOpen && (
+          <ProviderSettings onClose={() => setSettingsOpen(false)} onChanged={() => void refresh()} />
         )}
 
         {paletteOpen && <Palette items={paletteItems} onClose={() => setPaletteOpen(false)} />}

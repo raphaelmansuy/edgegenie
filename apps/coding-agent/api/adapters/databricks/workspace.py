@@ -254,3 +254,121 @@ class WorkspaceBrowser:
             except LookupError:
                 pass
         return await self._http.post("/api/2.0/workspace/import", token, body)
+
+    # -- user actions from the right-click menu (never the agent's tools) -------------------
+    #: A right-click must not walk a whole workspace. Past this, the user is sent to Databricks.
+    MAX_COPY_OBJECTS = 200
+    MAX_COPY_DEPTH = 8
+    MAX_EXPORT_BYTES = 25_000_000
+
+    async def exists(self, path: str, token: str | None) -> bool:
+        try:
+            await self.status(path, token)
+        except LookupError:
+            return False
+        return True
+
+    async def remove(self, path: str, token: str | None, *, recursive: bool) -> None:
+        """Move an object to the workspace trash. `recursive` is required by the API for a folder."""
+        await self._http.post("/api/2.0/workspace/delete", token, {"path": path, "recursive": recursive})
+
+    async def export_content(self, path: str, token: str | None, format: str) -> bytes:
+        data = await self._http.get("/api/2.0/workspace/export", token, {"path": path, "format": format})
+        raw = base64.b64decode((data or {}).get("content") or "")
+        if len(raw) > self.MAX_EXPORT_BYTES:
+            raise ValueError("this object is too large to handle here; open it in Databricks")
+        return raw
+
+    async def import_content(self, path: str, raw: bytes, token: str | None, *,
+                              format: str, language: str = "") -> None:
+        """Create an object. Never deletes: a right-click create must not be an overwrite."""
+        if len(raw) > self.MAX_EXPORT_BYTES:
+            raise ValueError("this file is too large to import here; open it in Databricks")
+        body: dict[str, Any] = {
+            "path": path, "format": format,
+            "content": base64.b64encode(raw).decode("ascii"),
+        }
+        if language:
+            body["language"] = language
+        await self._http.post("/api/2.0/workspace/import", token, body)
+
+    async def permissions(self, path: str, token: str | None) -> list[dict[str, Any]]:
+        """Who can see this object, as the permissions API reports it. Read only."""
+        status = await self.status(path, token)
+        kind = KIND.get(str(status.get("object_type", "")).upper(), "file")
+        object_type = {"notebook": "notebooks", "directory": "directories", "repo": "repos"}.get(kind, "files")
+        oid = str(status.get("object_id") or "")
+        if not oid:
+            raise LookupError(f"no object id for {path}")
+        data = await self._http.get(f"/api/2.0/permissions/{object_type}/{oid}", token)
+        rows: list[dict[str, Any]] = []
+        for ace in (data or {}).get("access_control_list") or []:
+            who = ace.get("user_name") or ace.get("group_name") or ace.get("service_principal_name") or "unknown"
+            principal = "user" if ace.get("user_name") else "group" if ace.get("group_name") else "service"
+            for perm in ace.get("all_permissions") or []:
+                rows.append({
+                    "who": who, "principal": principal,
+                    "permission": perm.get("permission_level") or "",
+                    "inherited": bool(perm.get("inherited")),
+                })
+        return rows
+
+    async def relocate(self, source: str, dest: str, token: str | None, *, move: bool) -> None:
+        """Copy an object, and delete the original only after the copy has succeeded.
+
+        A folder is copied child by child, so the new folder has the name the user asked for.
+        A Databricks archive would keep the old name inside the new one. A Git folder is refused:
+        copying its files would drop the repository link, and the user is told to do that in
+        Databricks. If the copy fails part way, the new folder is removed and the original stays.
+        """
+        source = source.rstrip("/") or "/"
+        dest = dest.rstrip("/") or "/"
+        if source == dest:
+            raise ValueError("the destination is the same as the source")
+        if dest.startswith(source + "/"):
+            raise ValueError("a folder cannot be moved into itself")
+        if await self.exists(dest, token):
+            raise FileExistsError(f"{dest} already exists")
+        status = await self.status(source, token)
+        kind = KIND.get(str(status.get("object_type", "")).upper(), "file")
+        if kind == "repo":
+            raise ValueError("a Git folder keeps its history in Databricks; open it there to rename, move or clone it")
+        if kind in FOLDERS:
+            try:
+                await self._copy_tree(source, dest, token, [self.MAX_COPY_OBJECTS], 0)
+            except Exception:
+                try:
+                    await self.remove(dest, token, recursive=True)
+                except LookupError:
+                    pass
+                raise
+            if move:
+                await self.remove(source, token, recursive=True)
+            return
+        await self._copy_leaf(source, dest, token, kind, str(status.get("language") or ""))
+        if move:
+            await self.remove(source, token, recursive=False)
+
+    async def _copy_tree(self, source: str, dest: str, token: str | None, budget: list[int], depth: int) -> None:
+        if depth > self.MAX_COPY_DEPTH:
+            raise ValueError("this folder is nested too deeply to copy here; open it in Databricks")
+        await self.mkdirs(dest, token)
+        for child in await self.list_dir(source, token):
+            if budget[0] <= 0:
+                raise ValueError("this folder is too large to copy here; open it in Databricks")
+            budget[0] -= 1
+            target = f"{dest}/{child.name}"
+            if child.kind == "repo":
+                raise ValueError(f"{child.name} is a Git folder; copy it in Databricks")
+            if child.kind in FOLDERS:
+                await self._copy_tree(child.path, target, token, budget, depth + 1)
+            else:
+                st = await self.status(child.path, token)
+                await self._copy_leaf(child.path, target, token, child.kind, str(st.get("language") or ""))
+
+    async def _copy_leaf(self, source: str, dest: str, token: str | None, kind: str, language: str) -> None:
+        raw = await self.export_content(source, token, "SOURCE")
+        if kind == "notebook":
+            await self.import_content(dest, raw, token, format="SOURCE", language=language or "PYTHON")
+        else:
+            await self.import_content(dest, raw, token, format="AUTO")

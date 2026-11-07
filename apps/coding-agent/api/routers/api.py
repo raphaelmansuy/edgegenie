@@ -14,11 +14,13 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from ..adapters.acp.agent_config import config_for
 from ..adapters.databricks.http import normalize_host
 from ..domain import approval, scope as scope_mod, version
+from ..domain.llm import ModelError
 from ..domain import context as ctx
 from ..domain import events
+from ..domain.redact import token_scopes
+from ..domain.workspace_ops import child_path, is_protected
 from ..domain.session import DomainError, Session
 from ..services import context as ctx_service
 from ..services.orchestrator import Orchestrator
@@ -72,6 +74,25 @@ def _orch(request: Request) -> Orchestrator:
     return request.app.state.orchestrator
 
 
+def _default_model(request: Request) -> str:
+    """The catalogue's default, which is the seeded one rather than a config string."""
+    registry = getattr(request.app.state, "llm", None)
+    if registry is not None:
+        cat = registry.catalogue.last()
+        if cat is not None and cat.default_model:
+            return cat.default_model
+        if registry.default_model:
+            return registry.default_model
+    return request.app.state.settings.default_model
+
+
+def _model_error(exc: Exception) -> HTTPException:
+    """Map a typed model failure to a status, in one place (see `routers/llm.map_error`)."""
+    from .llm import map_error
+
+    return map_error(exc)
+
+
 def _user(request: Request) -> str:
     return request.state.user_id
 
@@ -99,17 +120,41 @@ async def whoami(request: Request) -> dict:
     return {"user": user, "home": _home(request), "scratch": f"{_home(request)}/agent_scratch",
             "workspace": {"host": normalize_host(os.environ.get("DATABRICKS_HOST")),
                           "orgId": os.environ.get("DATABRICKS_WORKSPACE_ID", "")},
+            # What the signed-in token is allowed to do through this app. Names only, never the token.
+            "tokenScopes": token_scopes(token),
             "demo": request.app.state.settings.agent_mode == "fake"}
 
 
 @router.get("/models")
 async def models(request: Request) -> dict:
+    """The catalogue the picker reads (FR-1, FR-5, FR-11, C-5).
+
+    `source` is not decoration: the settings screen states it, so a user who added a key to an app in
+    degraded mode is told it was not saved rather than discovering it next session.
+    """
+    registry = getattr(request.app.state, "llm", None)
+    if registry is not None:
+        cat = await registry.catalogue.catalogue(_user(request),
+                                                 getattr(request.state, "groups", frozenset()))
+        body = cat.to_dict()
+        body["default"] = cat.default_model
+        return body
     allowed = request.app.state.models.allowed(_user(request))
     # Offer only what the workspace serves; if that cannot be read, offer the allow-list unfiltered.
     served = await request.app.state.serving.served(_user_token(request))
     if served is not None:
-        allowed = [m for m in allowed if config_for(m["id"], "").endpoint in served] or allowed
-    return {"available": allowed, "default": request.app.state.settings.default_model}
+        from ..services.model_registry import static_spec
+
+        kept = []
+        for m in allowed:
+            try:
+                if static_spec(m["id"]).endpoint in served:
+                    kept.append(m)
+            except Exception:  # noqa: BLE001 - an unresolved id is filtered, not a 500
+                continue
+        allowed = kept or allowed
+    return {"available": allowed, "default": request.app.state.settings.default_model,
+            "source": "static"}
 
 
 @router.get("/sessions")
@@ -119,10 +164,13 @@ async def list_sessions(request: Request) -> dict:
 
 @router.post("/sessions", status_code=201)
 async def create_session(request: Request, body: CreateSession) -> dict:
-    model = body.model or request.app.state.settings.default_model
+    model = body.model or _default_model(request)
     try:
         s = await _orch(request).create(_user(request), body.folder, model, body.schema_, body.title,
                                         user_token=_user_token(request))
+    except ModelError as exc:
+        # A model the catalogue refuses is the caller's problem and has its own status and sentence.
+        raise _model_error(exc) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - provisioning failures are 503, never a 200
@@ -178,8 +226,19 @@ async def set_model(request: Request, sid: str, body: ModelChoice) -> dict:
         return await _orch(request).set_model(sid, body.model)
     except KeyError:
         raise HTTPException(404, "no such session") from None
+    except ModelError as exc:
+        raise _model_error(exc) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/sessions/{sid}/model-facts")
+async def session_model_facts(request: Request, sid: str) -> dict:
+    """The inspector's model block: the resolved model and which turn used which model (FR-10)."""
+    try:
+        return await _orch(request).model_facts(sid)
+    except KeyError:
+        raise HTTPException(404, "no such session") from None
 
 
 # -- turns -------------------------------------------------------------------
@@ -352,6 +411,8 @@ def _dbx_errors(what: str):
         raise HTTPException(404 if isinstance(exc, LookupError) else 422, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    except FileExistsError as exc:
+        raise HTTPException(409, str(exc)) from exc
     except RuntimeError as exc:
         log.warning("%s failed: %s", what, exc)
         raise HTTPException(502, str(exc)) from exc
@@ -382,11 +443,152 @@ class MakeDir(BaseModel):
 
 @router.post("/workspace/mkdir", status_code=201)
 async def workspace_mkdir(request: Request, body: MakeDir) -> dict:
-    """Create a folder as the signed-in user. Creation only: the app never deletes or overwrites."""
+    """Create a folder as the signed-in user. Does not overwrite: mkdirs is idempotent on the platform."""
     path = _ws_path(body.path)
     with _dbx_errors("workspace mkdir"):
         await _browser(request).mkdirs(path, _user_token(request))
     return {"path": path}
+
+
+class CreateObject(BaseModel):
+    parent: str = Field(min_length=1, max_length=512)
+    name: str = Field(min_length=1, max_length=200)
+    kind: str = Field(pattern="^(notebook|file|folder)$")
+    language: str | None = None
+
+
+class ImportObject(BaseModel):
+    parent: str = Field(min_length=1, max_length=512)
+    name: str = Field(min_length=1, max_length=200)
+    #: Base64 of the file bytes. Capped so a right-click cannot upload an unbounded body.
+    content: str = Field(min_length=0, max_length=12_000_000)
+    format: str = "AUTO"
+    language: str | None = None
+
+
+class RemoveObject(BaseModel):
+    path: str = Field(min_length=2, max_length=1024)
+    recursive: bool = False
+
+
+class TransferObject(BaseModel):
+    source: str = Field(min_length=2, max_length=1024)
+    destination: str = Field(min_length=2, max_length=1024)
+    mode: str = Field(pattern="^(copy|move)$")
+
+
+_EXPORT_FORMATS = {"SOURCE", "HTML", "JUPYTER", "DBC", "R_MARKDOWN", "AUTO"}
+_IMPORT_FORMATS = _EXPORT_FORMATS
+_NOTEBOOK_LANGUAGES = {"PYTHON", "SQL", "SCALA", "R"}
+_EMPTY_NOTEBOOK = b"# Databricks notebook source\n"
+
+
+def _guard(path: str, home: str, what: str) -> None:
+    if is_protected(path, home):
+        raise HTTPException(422, what)
+
+
+def _named(parent: str, name: str) -> str:
+    try:
+        return child_path(parent, name)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/workspace/object", status_code=201)
+async def workspace_create(request: Request, body: CreateObject) -> dict:
+    """Create a notebook, file or folder. Refuses when the path is already taken."""
+    parent = _ws_path(body.parent)
+    path = _named(parent, body.name)
+    _guard(path, _home(request), "that path is a workspace root")
+    token = _user_token(request)
+    browser = _browser(request)
+    with _dbx_errors("workspace create"):
+        if await browser.exists(path, token):
+            raise FileExistsError(f"{path} already exists")
+        if body.kind == "folder":
+            await browser.mkdirs(path, token)
+        elif body.kind == "notebook":
+            lang = (body.language or "PYTHON").upper()
+            if lang not in _NOTEBOOK_LANGUAGES:
+                raise ValueError("language must be PYTHON, SQL, SCALA or R")
+            await browser.import_content(path, _EMPTY_NOTEBOOK, token, format="SOURCE", language=lang)
+        else:
+            await browser.import_content(path, b"\n", token, format="AUTO")
+    return {"path": path}
+
+
+@router.post("/workspace/import", status_code=201)
+async def workspace_import(request: Request, body: ImportObject) -> dict:
+    """Import a file the user chose, into a folder. Does not overwrite an existing object."""
+    import base64
+
+    parent = _ws_path(body.parent)
+    path = _named(parent, body.name)
+    _guard(path, _home(request), "that path is a workspace root")
+    fmt = body.format.upper()
+    if fmt not in _IMPORT_FORMATS:
+        raise HTTPException(422, "unsupported import format")
+    try:
+        raw = base64.b64decode(body.content, validate=True)
+    except Exception as exc:
+        raise HTTPException(422, "content must be base64") from exc
+    lang = (body.language or "").upper()
+    if lang and lang not in _NOTEBOOK_LANGUAGES:
+        raise HTTPException(422, "language must be PYTHON, SQL, SCALA or R")
+    token = _user_token(request)
+    browser = _browser(request)
+    with _dbx_errors("workspace import"):
+        if await browser.exists(path, token):
+            raise FileExistsError(f"{path} already exists")
+        await browser.import_content(path, raw, token, format=fmt, language=lang)
+    return {"path": path}
+
+
+@router.post("/workspace/delete")
+async def workspace_delete(request: Request, body: RemoveObject) -> dict:
+    """Move an object to the workspace trash. Roots are refused here, not only in the menu."""
+    path = _ws_path(body.path)
+    _guard(path, _home(request), "a workspace root cannot be moved to trash")
+    with _dbx_errors("workspace delete"):
+        await _browser(request).remove(path, _user_token(request), recursive=body.recursive)
+    return {"path": path}
+
+
+@router.post("/workspace/transfer")
+async def workspace_transfer(request: Request, body: TransferObject) -> dict:
+    """Copy, or copy-then-trash. The original is removed only after the copy exists."""
+    source, dest = _ws_path(body.source), _ws_path(body.destination)
+    home = _home(request)
+    _guard(source, home, "a workspace root cannot be renamed, moved or cloned")
+    _guard(dest, home, "the destination is a workspace root")
+    with _dbx_errors("workspace transfer"):
+        await _browser(request).relocate(source, dest, _user_token(request), move=body.mode == "move")
+    return {"path": dest}
+
+
+@router.get("/workspace/export")
+async def workspace_export(request: Request, path: str, format: str = "SOURCE") -> Response:
+    """The object's bytes, for the browser to save. Format is one the workspace API accepts."""
+    fmt = format.upper()
+    if fmt not in _EXPORT_FORMATS:
+        raise HTTPException(422, "unsupported export format")
+    target = _ws_path(path)
+    with _dbx_errors("workspace export"):
+        raw = await _browser(request).export_content(target, _user_token(request), fmt)
+    leaf = target.rsplit("/", 1)[-1] or "download"
+    filename = "".join(ch if ch.isascii() and ch not in '"\\' else "_" for ch in leaf)
+    media = {"HTML": "text/html", "JUPYTER": "application/json", "SOURCE": "text/plain"}.get(fmt, "application/octet-stream")
+    return Response(content=raw, media_type=media, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.get("/workspace/permissions")
+async def workspace_permissions(request: Request, path: str) -> dict:
+    """The access list Databricks holds for this object. Changing it is done in Databricks."""
+    target = _ws_path(path)
+    with _dbx_errors("workspace permissions"):
+        entries = await _browser(request).permissions(target, _user_token(request))
+    return {"path": target, "entries": entries}
 
 
 class SaveDocument(BaseModel):

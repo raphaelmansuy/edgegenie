@@ -25,6 +25,10 @@ resources:
       user_api_scopes:
         - sql
         - files
+        - model-serving
+        - ai-gateway
+        - genie
+        - workspace.workspace
         - catalog.catalogs:read
         - catalog.schemas:read
         - catalog.tables:read

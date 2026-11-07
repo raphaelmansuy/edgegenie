@@ -1,4 +1,4 @@
-"""Identity and model policy. In Databricks the proxy forwards both the user and a scoped token."""
+"""Identity and groups. In Databricks the proxy forwards both the user and a scoped token."""
 
 from __future__ import annotations
 
@@ -38,20 +38,25 @@ class ForwardedIdentity:
         return h.get(self.TOKEN_HEADER)
 
 
-class StaticModelCatalog:
-    """Allow-list per user. A catalogue entry must also be served by the workspace (RB-11)."""
+class NullGroups:
+    """No SCIM, so no groups. Safe default: a model granted only to a group appears to nobody.
 
-    def __init__(self, cfg: Settings, extra_allowed: dict[str, list[str]] | None = None) -> None:
-        self._cfg = cfg
-        self._extra = extra_allowed or {}
+    The port exists so the app runs unchanged without an identity provider, and so that adding SCIM
+    is an adapter rather than a change to the policy module (06 §Authorisation).
+    """
 
-    def allowed(self, user_id: str) -> list[dict]:
-        ids = list(self._cfg.allowed_models) + self._extra.get(user_id, [])
-        return [
-            {"id": m, "name": m.split("/")[-1], "default": m == self._cfg.default_model}
-            for m in dict.fromkeys(ids)
-        ]
+    def groups_for(self, user_id: str) -> frozenset[str]:
+        return frozenset()
 
-    def check(self, user_id: str, model: str) -> None:
-        if model not in {m["id"] for m in self.allowed(user_id)}:
-            raise ValueError(f"model {model} is not allowed for this user")
+
+class StaticGroups:
+    """A fixed membership map, for tests and for a deployment that cannot reach SCIM."""
+
+    def __init__(self, memberships: dict[str, set[str] | list[str]] | None = None) -> None:
+        self._by_user = {k: frozenset(v) for k, v in (memberships or {}).items()}
+
+    def groups_for(self, user_id: str) -> frozenset[str]:
+        return self._by_user.get(user_id, frozenset())
+
+
+__all__ = ["ForwardedIdentity", "NullGroups", "StaticGroups"]

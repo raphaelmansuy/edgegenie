@@ -15,7 +15,9 @@
     "e2e:live": "node scripts/genie-e2e.mjs",
     "audit:shell": "node scripts/shell-audit.mjs",
     "audit:cls": "node scripts/cls-selftest.mjs && node scripts/cls-audit.mjs && node scripts/cls-stress.mjs",
-    "verify:spec-links": "node scripts/verify-spec-links.mjs ../../../specs/003-improve-dev-ux-ui",
+    "verify:spec-ascii": "node scripts/verify-spec-ascii.mjs ../../../specs/005-llm-models",
+  "verify:spec-005": "node scripts/verify-spec-links.mjs ../../../specs/005-llm-models && node scripts/verify-spec-ascii.mjs ../../../specs/005-llm-models",
+  "verify:spec-links": "node scripts/verify-spec-links.mjs ../../../specs/003-improve-dev-ux-ui",
     "verify:editor-choice": "node scripts/verify-editor-choice.mjs"
   },
   "dependencies": {

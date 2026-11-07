@@ -28,7 +28,7 @@ def test_every_runtime_import_is_declared():
     import sys
     stdlib = set(sys.stdlib_module_names)
     declared = (APP / "requirements.txt").read_text().lower()
-    alias = {"pydantic_settings": "pydantic-settings"}
+    alias = {"pydantic_settings": "pydantic-settings", "psycopg_pool": "psycopg-pool"}
     missing: set[str] = set()
     for py in (APP / "api").rglob("*.py"):
         for line in py.read_text().splitlines():

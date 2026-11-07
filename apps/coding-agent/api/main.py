@@ -26,17 +26,21 @@ log = logging.getLogger("app.main")
 from .config import Settings
 from .config import settings as load_settings
 from .routers.api import router
-from .services.identity import ForwardedIdentity, StaticModelCatalog
+from .routers.llm import router as llm_router
+from .services.catalogue import SettingsModelCatalog
+from .services.health_service import HealthService
+from .services.identity import ForwardedIdentity, NullGroups
+from .services.model_registry import Registry, build_registry
 from .services.orchestrator import Orchestrator
 
 WEB_DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
 
 
-def build(settings: Settings | None = None) -> FastAPI:
+def build(settings: Settings | None = None, *, llm: Registry | None = None) -> FastAPI:
     cfg = settings or load_settings()
     store = MemoryEventStore()
-    models = StaticModelCatalog(cfg)
     identity = ForwardedIdentity(cfg)
+    groups = NullGroups()
 
     # A deployed app installs the agent with npm; its binary lives in node_modules/.bin.
     local_bin = Path(__file__).resolve().parents[1] / "node_modules" / ".bin"
@@ -67,7 +71,14 @@ def build(settings: Settings | None = None) -> FastAPI:
         if cfg.tool_mode == "subprocess"
         else NullToolRegistry()
     )
-    orch = Orchestrator(runtime, tools, store, models, demo=cfg.agent_mode == "fake")
+    # The catalogue is a facade over the registry, so the orchestrator's existing synchronous calls
+    # keep working while every route reads the async catalogue (spec 005, one resolution path).
+    models = SettingsModelCatalog(cfg, llm.catalogue if llm is not None else None)
+    orch = Orchestrator(runtime, tools, store, models, demo=cfg.agent_mode == "fake",
+                        resolver=llm.resolver if llm is not None else None,
+                        credentials=llm.credentials if llm is not None else None,
+                        store_llm=llm.store if llm is not None else None,
+                        health=llm.health if llm is not None else None)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -76,15 +87,21 @@ def build(settings: Settings | None = None) -> FastAPI:
         # afternoon of testing accumulated 29 live agents, which is what exhausted the machine and
         # produced intermittent renderer crashes.
         reaper = asyncio.create_task(_reap_loop(app))
+        discovery = asyncio.create_task(_discover_loop(app))
         try:
             yield
         finally:
-            reaper.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await reaper
+            for task in (reaper, discovery):
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
             for live in list(app.state.orchestrator._live.values()):  # noqa: SLF001 - orderly shutdown
                 if live.handle:
                     await runtime.close(live.handle)
+            registry = getattr(app.state, "llm", None)
+            if registry is not None:
+                with contextlib.suppress(Exception):
+                    await registry.store.close()
 
     app = FastAPI(title="Databricks Coding Agents", version="0.1.0", lifespan=lifespan)
     app.state.settings = cfg
@@ -92,6 +109,7 @@ def build(settings: Settings | None = None) -> FastAPI:
     app.state.models = models
     app.state.orchestrator = orch
     app.state.idempotency = {}
+    app.state.groups = groups
     app.state.workspace = WorkspaceBrowser(
         os.environ.get("DATABRICKS_HOST", ""),
         lambda: os.environ.get("DATABRICKS_TOKEN") or None,
@@ -105,6 +123,13 @@ def build(settings: Settings | None = None) -> FastAPI:
         lambda: os.environ.get("DATABRICKS_TOKEN") or None,
     )
     app.state.dev_token = os.environ.get("APP_DEV_TOKEN") or os.environ.get("DATABRICKS_TOKEN")
+    # The registry is built by the caller when it can await (`app_factory`) and synchronously here
+    # for the TestClient path, where there is no loop at import time.
+    if llm is not None:
+        app.state.llm = llm
+    else:
+        app.state.llm = _sync_registry(cfg)
+    app.state.orchestrator.attach_registry(app.state.llm)
 
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -114,11 +139,13 @@ def build(settings: Settings | None = None) -> FastAPI:
             headers = dict(request.headers)
             request.state.user_id = identity.user_id(headers)
             request.state.home = identity.home_name(headers, request.state.user_id)
+            request.state.groups = groups.groups_for(request.state.user_id)
         except PermissionError as exc:
             return JSONResponse({"detail": str(exc)}, status_code=401)
         return await call_next(request)
 
     app.include_router(router)
+    app.include_router(llm_router)
 
     if WEB_DIST.exists():
         app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
@@ -133,6 +160,25 @@ def build(settings: Settings | None = None) -> FastAPI:
             return FileResponse(target if target.is_file() else WEB_DIST / "index.html")
 
     return app
+
+
+def _sync_registry(cfg: Settings) -> Registry:
+    """Build the registry without an event loop.
+
+    `asyncio.run` would refuse inside a running loop, and a TestClient app is built at import. The
+    seed store is loaded synchronously here, so this path needs no loop at all; a configured
+    `LLM_DATABASE_URL` on this path is connected lazily on first use instead.
+    """
+    from .services.model_registry import build_registry_sync
+
+    return build_registry_sync(cfg)
+
+
+async def app_factory(settings: Settings | None = None) -> FastAPI:
+    """The async construction path: `uvicorn api.main:factory --factory`."""
+    cfg = settings or load_settings()
+    registry = await build_registry(cfg, host=os.environ.get("DATABRICKS_HOST", ""))
+    return build(cfg, llm=registry)
 
 
 app = build()
@@ -156,3 +202,38 @@ async def _reap_loop(app: FastAPI) -> None:
             raise
         except Exception:            # noqa: BLE001 - a reaper must outlive its own failures
             log.warning("the session reaper failed once; continuing", exc_info=True)
+
+
+async def _discover_loop(app: FastAPI) -> None:
+    """Refresh discovery on a schedule, never per request (C-6).
+
+    The first pass runs immediately: a cold catalogue that waits five minutes for its first look at
+    the workspace is a worse experience than one extra call at boot.
+    """
+    registry = getattr(app.state, "llm", None)
+    if registry is None or getattr(registry, "discovery", None) is None:
+        return
+    interval = float(app.state.settings.llm_discovery_seconds or 300)
+    await asyncio.sleep(1.0)          # let the server finish binding before the first outbound call
+    while True:
+        try:
+            discovery = registry.discovery
+            discovery.invalidate()
+            result = await discovery.fetch(None)
+            for spec in result.specs:
+                try:
+                    await registry.store.upsert_model(spec)
+                except ValueError:
+                    continue
+            await registry.store.record_discovery(discovery.provider_id, result.outcome,
+                                                  len(result.specs), result.detail)
+            registry.catalogue.invalidate()
+            log.info("discovery: %s, %d models", result.outcome, len(result.specs))
+            if result.outcome == "denied":
+                # Three consecutive denials is an alert (12 §Alerts). One is worth a debug line.
+                log.debug("discovery was denied: the catalogue is unchanged")
+        except asyncio.CancelledError:
+            raise
+        except Exception:             # noqa: BLE001 - discovery must outlive its own failures
+            log.warning("the discovery pass failed once; continuing", exc_info=True)
+        await asyncio.sleep(max(interval, 30.0))

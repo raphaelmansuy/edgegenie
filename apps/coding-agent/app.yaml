@@ -17,3 +17,15 @@ env:
     value: databricks/databricks-llama-4-maverick
   - name: APP_MAX_CONCURRENT_AGENTS
     value: "4"
+  # External models (spec 005). Off by default; on here because a provider key is attached below.
+  # `APP_ENV=production` makes the app refuse a development key-encryption key.
+  - name: APP_APP_ENV
+    value: production
+  - name: APP_LLM_ALLOW_EXTERNAL
+    value: "true"
+  # The Vertex service-account key arrives as an app RESOURCE (a Databricks secret), never as text
+  # in this file. `LLM_VERTEX_PROJECT` names the project a key bills to when the key omits it.
+  - name: LLM_VERTEX_KEY
+    valueFrom: vertex-sa
+  - name: LLM_VERTEX_PROJECT
+    value: mobioos-506015

@@ -93,6 +93,8 @@ export const SHORTCUTS: Shortcut[] = [
   { id: "palette", combo: "mod+k", label: "Command palette — jump to anything", group: "General" },
   { id: "help", combo: "mod+slash", label: "Keyboard shortcuts", group: "General" },
   { id: "newSession", combo: "mod+shift+n", label: "New session", group: "Session" },
+  { id: "changeModel", combo: "mod+shift+m", label: "Change the model", group: "Session" },
+  { id: "providers", combo: "mod+comma", label: "Providers and keys", group: "General" },
   { id: "send", combo: "mod+enter", label: "Send the message", group: "Compose" },
   { id: "focusComposer", combo: "mod+l", label: "Focus the message box", group: "Compose" },
   { id: "stop", combo: "escape", label: "Stop the agent", group: "Compose" },

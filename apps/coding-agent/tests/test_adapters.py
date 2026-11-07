@@ -22,7 +22,7 @@ from api.adapters.memory.store import MemoryEventStore
 from api.config import Settings
 from api.domain.session import SessionStatus, TurnStatus
 from api.ports import AgentCrashed, SessionSpec
-from api.services.identity import StaticModelCatalog
+from api.services.catalogue import SettingsModelCatalog
 from api.services.orchestrator import Orchestrator
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -352,7 +352,7 @@ async def _orchestrator(tmp_path: Path, scenario: str = "notebook", delay: float
 
     rt = AcpAgentRuntime(command=f"{sys.executable} -m api.adapters.fake.agent fixed:{scenario} {delay}")
     cfg = Settings(allowed_models=["fake/model-a", "fake/model-b"], default_model="fake/model-a")
-    models = StaticModelCatalog(cfg)
+    models = SettingsModelCatalog(cfg)
     rt._extra_env = {"PYTHONPATH": str(ROOT)}  # noqa: SLF001
     return Orchestrator(rt, NullToolRegistry(), MemoryEventStore(), models, demo=True)
 

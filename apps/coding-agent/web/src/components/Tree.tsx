@@ -1,14 +1,15 @@
 /** Shared tree row and keyboard model for the Files and Catalog trees (WAI-ARIA tree pattern). */
-import type { KeyboardEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { ChevronRight, Icon } from "./Icons";
 
-export interface RowAction { label: string; glyph: string; run?: () => void; href?: string | null }
+export interface RowAction { label: string; glyph: string; run?: (e: ReactMouseEvent) => void; href?: string | null }
 
 export function TreeRow({ depth, role = "treeitem", expanded, selected, loading, caret, icon, iconClass, dim, name, title,
-  badge, actions, onActivate, onKeyDown }: {
+  badge, actions, onActivate, onKeyDown, onContextMenu }: {
   depth: number; role?: string; expanded?: boolean; selected?: boolean; loading?: boolean; caret: boolean;
   icon: string; iconClass: string; dim?: boolean; name: string; title?: string; badge?: ReactNode; actions?: RowAction[];
   onActivate: () => void; onKeyDown?: (e: KeyboardEvent<HTMLDivElement>) => void;
+  onContextMenu?: (e: ReactMouseEvent<HTMLDivElement>) => void;
 }) {
   return (
     <div
@@ -20,6 +21,7 @@ export function TreeRow({ depth, role = "treeitem", expanded, selected, loading,
       className={`tree-row${selected ? " is-selected" : ""}${dim ? " is-dim" : ""}`}
       style={{ paddingLeft: 8 + depth * 14 }}
       onClick={onActivate}
+      onContextMenu={(e) => { if (!onContextMenu) return; e.preventDefault(); e.stopPropagation(); onContextMenu(e); }}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return;           // a key pressed inside an action button is its own
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onActivate(); return; }
@@ -40,7 +42,7 @@ export function TreeRow({ depth, role = "treeitem", expanded, selected, loading,
               title={a.label} aria-label={a.label} onClick={(e) => e.stopPropagation()}>{a.glyph}</a>
           ) : a.run ? (
             <button key={a.label} className="tree-act" title={a.label} aria-label={a.label}
-              onClick={(e) => { e.stopPropagation(); a.run?.(); }}>{a.glyph}</button>
+              onClick={(e) => { e.stopPropagation(); a.run?.(e); }}>{a.glyph}</button>
           ) : null)}
         </span>
       )}

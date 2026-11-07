@@ -3,14 +3,29 @@
 This is what makes the agent able to reach a model at all. Without it, `opencode` starts, accepts a
 prompt, and never completes: it has no provider, so nothing happens and no error is raised. That is
 exactly what the first deployment did.
+
+Two rules survive the refactor untouched, because they are the whole safety story:
+
+* **the config references a variable, never a value** — `{env:DATABRICKS_TOKEN}`,
+  `{env:LLM_PROVIDER_KEY}`. A config on disk is a secret on disk.
+* **for a Databricks model the output is byte-identical to before this spec.** Everything measured in
+  this repository — the 39 %→86 % model comparison, the 19 %→94 % working-agreement result — ran on
+  that exact file. `tests/test_llm_agent_config.py` asserts the bytes.
+
+`AgentConfig` is the compatibility façade: `config_for()` still exists, is defined once, and now
+delegates to the resolver's value object. The provider block builder is provider-agnostic, so a second
+provider is a second block, not a second code path.
 """
+
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..databricks.http import normalize_host
+from ...domain.llm import ProviderKind, ResolvedModel, WireProtocol, agent_prefix
+from ...domain.llm.limits import LimitEvidence, Limits
 
 #: opencode's own tools, all switched off (see as_opencode_json).
 DENIED_BUILTINS = ("bash", "edit", "read", "glob", "grep", "list", "webfetch", "websearch",
@@ -18,14 +33,53 @@ DENIED_BUILTINS = ("bash", "edit", "read", "glob", "grep", "list", "webfetch", "
 
 # Databricks serving endpoints expose an OpenAI-compatible chat completions API at this path.
 GATEWAY_PATH = "/serving-endpoints"
+#: The provider block name the shipped config has always used. Renaming it would change the file.
+DBX_BLOCK = "dbx"
+#: The environment variable a Databricks model authenticates with.
+WORKSPACE_TOKEN_ENV = "DATABRICKS_TOKEN"
+#: The one variable every external provider's key arrives in (D4).
+PROVIDER_KEY_ENV = "LLM_PROVIDER_KEY"
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderBlock:
+    """One provider entry in `opencode.json`. `env` is a variable NAME, never a value."""
+
+    name: str
+    npm: str
+    base_url: str
+    env: str
+    display_name: str = ""
+    models: dict[str, dict] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict)
+    tool_streaming: bool | None = None
+    #: A provider the agent ships built in (Vertex's native wire). It authenticates from the
+    #: environment on its own, so the block carries only the model limits: no URL, no key reference.
+    builtin: bool = False
+
+    def as_dict(self) -> dict:
+        if self.builtin:
+            return {"name": self.display_name or self.name, "models": self.models}
+        options: dict = {"baseURL": self.base_url, "apiKey": f"{{env:{self.env}}}"}
+        if self.headers:
+            # A header may also reference a variable; a literal here would be a secret on disk.
+            options["headers"] = {k: _templated(v, self.env) for k, v in self.headers.items()}
+        block: dict = {"npm": self.npm, "name": self.display_name or self.name,
+                       "options": options}
+        if self.models:
+            block["models"] = self.models
+        if self.tool_streaming is False:
+            for model in block.get("models", {}).values():
+                model.setdefault("options", {})["toolStreaming"] = False
+        return block
 
 
 @dataclass(frozen=True, slots=True)
 class AgentConfig:
     """How the agent should reach the model.
 
-    `endpoint` is the Databricks serving endpoint backing the model (for example
-    `databricks-gpt-oss-120b`); the agent talks to the workspace directly with this name.
+    `endpoint` is what the provider calls the model (for a Databricks model, the serving endpoint
+    name); the agent talks to the provider directly with this name.
     """
 
     host: str
@@ -33,35 +87,74 @@ class AgentConfig:
     model_name: str
     context: int = 128_000
     output: int = 24_000
+    #: Everything below has a default that reproduces the original Databricks file exactly.
+    provider: ProviderKind = ProviderKind.DATABRICKS
+    wire: WireProtocol = WireProtocol.SERVING
+    base_url: str = ""
+    npm: str = "@ai-sdk/openai-compatible"
+    env_var: str = WORKSPACE_TOKEN_ENV
+    block: str = DBX_BLOCK
+    provider_display_name: str = "Databricks serving endpoints"
+    tool_streaming: bool | None = None
+    headers: dict[str, str] = field(default_factory=dict)
+    #: A second block, when the session also needs another provider present in the file. Empty for
+    #: every Databricks session, which is why the golden file is unchanged.
+    secondary: tuple[ProviderBlock, ...] = ()
+
+    # -- construction ---------------------------------------------------------
+    @classmethod
+    def from_resolved(cls, resolved: ResolvedModel, *, host: str = "") -> AgentConfig:
+        """The one adapter from the resolver's value object to the agent's file."""
+        block = _block_name(resolved)
+        return cls(
+            host=normalize_host(host) if host else "",
+            endpoint=resolved.endpoint,
+            model_name=_model_label(resolved),
+            context=resolved.context,
+            output=resolved.output,
+            provider=resolved.provider,
+            wire=resolved.wire,
+            base_url=resolved.base_url,
+            npm=resolved.npm or "@ai-sdk/openai-compatible",
+            env_var=resolved.env_var or WORKSPACE_TOKEN_ENV,
+            block=block,
+            provider_display_name=_display(resolved),
+            tool_streaming=resolved.options.get("toolStreaming") if resolved.options else None,
+            headers=dict((resolved.options or {}).get("headers") or {}),
+        )
+
+    # -- serialisation --------------------------------------------------------
+    def provider_block(self) -> ProviderBlock:
+        return ProviderBlock(
+            name=self.block,
+            npm=self.npm,
+            base_url=self.base_url or f"{self.host.rstrip('/')}{GATEWAY_PATH}",
+            env=self.env_var,
+            display_name=self.provider_display_name,
+            models={self.endpoint: {"name": self.model_name,
+                                    "limit": {"context": self.context, "output": self.output}}},
+            headers=self.headers,
+            tool_streaming=self.tool_streaming,
+            builtin=self.wire is WireProtocol.VERTEX_NATIVE,
+        )
+
+    def model_ref(self) -> str:
+        return f"{self.block}/{self.endpoint}"
 
     def as_opencode_json(self) -> dict:
+        providers = {self.block: self.provider_block().as_dict()}
+        for extra in self.secondary:
+            providers[extra.name] = extra.as_dict()
         return {
             "$schema": "https://opencode.ai/config.json",
-            "model": f"dbx/{self.endpoint}",
+            "model": self.model_ref(),
             # Least privilege. The agent runs in the app's container, where a shell or file tool
             # touches the container, not the user's workspace; every workspace action goes through
             # the fenced tool server. A built-in tool that asks to read a workspace path also waits
             # for a human, which looked like a hang. Planning (todowrite) stays on: it drives the
             # checklist the user sees.
             "permission": dict.fromkeys(DENIED_BUILTINS, "deny"),
-            "provider": {
-                "dbx": {
-                    "npm": "@ai-sdk/openai-compatible",
-                    "name": "Databricks serving endpoints",
-                    "options": {
-                        "baseURL": f"{self.host.rstrip('/')}{GATEWAY_PATH}",
-                        # The token is read from the environment of the agent process, never
-                        # written into this file: a config on disk is a secret on disk.
-                        "apiKey": "{env:DATABRICKS_TOKEN}",
-                    },
-                    "models": {
-                        self.endpoint: {
-                            "name": self.model_name,
-                            "limit": {"context": self.context, "output": self.output},
-                        }
-                    },
-                }
-            },
+            "provider": providers,
         }
 
     def write(self, cwd: str | Path, session_rules: str = "") -> Path:
@@ -78,31 +171,33 @@ class AgentConfig:
         return path
 
 
-#: Per-endpoint (context window, max output tokens). The agent asks for `output` tokens on every call
-#: and the endpoint rejects a request above its own cap ("max_tokens 24000 cannot exceed 8192"), so a
-#: wrong number makes the model unusable. Unlisted endpoints get the conservative default.
-ENDPOINT_LIMITS: dict[str, tuple[int, int]] = {
-    "databricks-gpt-oss-120b": (128_000, 24_000),
-    "databricks-gpt-oss-20b": (128_000, 24_000),
-    "databricks-qwen3-next-80b-a3b-instruct": (128_000, 10_000),
-    "databricks-llama-4-maverick": (128_000, 8_000),
-    "databricks-meta-llama-3-3-70b-instruct": (128_000, 8_000),
-}
-DEFAULT_LIMITS = (64_000, 4_000)
+def _templated(value: str, env: str) -> str:
+    """A header value that is a credential is templated; anything else passes through."""
+    from ...domain.redact import contains_secret
 
-#: The model ids a user can choose, mapped to the Databricks endpoint that serves them.
-#: Only models that are actually served in the workspace belong here; the app intersects this with
-#: the agent's own catalogue (spec 001, RB-11).
-KNOWN_ENDPOINTS: dict[str, str] = {
-    "databricks/system.ai.gpt-oss-120b": "databricks-gpt-oss-120b",
-    "databricks/system.ai.gpt-oss-20b": "databricks-gpt-oss-20b",
-    "databricks/system.ai.qwen3-next-80b-a3b-instruct": "databricks-qwen3-next-80b-a3b-instruct",
-    "databricks/system.ai.databricks-qwen35-122b-a10b": "databricks-qwen35-122b-a10b",
-    "databricks/system.ai.gemma-3-12b-it": "databricks-gemma-3-12b",
-}
+    return f"{{env:{env}}}" if contains_secret(value) else value
 
 
-MARKER = "<!-- written by the Databricks Coding Agents app; safe to overwrite -->"
+def _block_name(resolved: ResolvedModel) -> str:
+    """The provider block name. `dbx` for Databricks, as the shipped config has always used."""
+    return agent_prefix(resolved.provider, resolved.wire)
+
+
+def _model_label(resolved: ResolvedModel) -> str:
+    """What the agent shows for the model. The original file strips the `databricks-` prefix."""
+    if resolved.provider is ProviderKind.DATABRICKS:
+        return resolved.endpoint.replace("databricks-", "")
+    return resolved.endpoint
+
+
+def _display(resolved: ResolvedModel) -> str:
+    return {
+        ProviderKind.DATABRICKS: "Databricks serving endpoints",
+        ProviderKind.OPENAI: "OpenAI",
+        ProviderKind.ANTHROPIC: "Anthropic",
+        ProviderKind.GOOGLE_VERTEX: "Google Vertex AI",
+        ProviderKind.FAKE: "Databricks serving endpoints",
+    }.get(resolved.provider, resolved.provider.value)
 
 
 def session_rules(folder: str, schema: str | None, session_id: str) -> str:
@@ -177,13 +272,38 @@ You work inside the user's Databricks workspace through **tools**. The tools are
 """
 
 
+MARKER = "<!-- written by the Databricks Coding Agents app; safe to overwrite -->"
+
+
+#: The measured per-endpoint caps this repository earned, kept as the *source* of the seed rows that
+#: replaced this dict. It is no longer consulted at call time (the registry is), and it is not deleted
+#: so the provenance of those five numbers stays in the code a reader arrives at first.
+#: `seed/llm_models.yaml` carries the same numbers with `evidence: measured`.
+ENDPOINT_LIMITS: dict[str, tuple[int, int]] = {
+    "databricks-gpt-oss-120b": (128_000, 24_000),
+    "databricks-gpt-oss-20b": (128_000, 24_000),
+    "databricks-qwen3-next-80b-a3b-instruct": (128_000, 10_000),
+    "databricks-llama-4-maverick": (128_000, 8_000),
+    "databricks-meta-llama-3-3-70b-instruct": (128_000, 8_000),
+}
+DEFAULT_LIMITS = (64_000, 4_000)
+
+
 def config_for(model_id: str, host: str) -> AgentConfig:
-    """Turn an allow-listed model id into the agent's provider configuration."""
-    endpoint = KNOWN_ENDPOINTS.get(model_id)
-    if endpoint is None:
-        # A user may also write the endpoint name directly: databricks/<endpoint>
-        short = model_id.split("/", 1)[-1]
-        endpoint = short.replace("system.ai.", "databricks-").replace(".", "-")
+    """Compatibility façade: an id -> `AgentConfig`, through the catalogue, never through the id.
+
+    One definition, delegating to the same pure resolution the resolver uses (C-3). It is kept only
+    until the last call site is gone (P7), and `tests/test_llm_agent_config.py` counts definitions.
+    """
+    from ...services.model_registry import resolve_static
+
+    return resolve_static(model_id, host)
+
+
+def _limits_for(endpoint: str) -> Limits:
+    """The seeded cap for an endpoint, with its provenance. A miss is `default`, never a guess."""
     context, output = ENDPOINT_LIMITS.get(endpoint, DEFAULT_LIMITS)
-    return AgentConfig(host=normalize_host(host), endpoint=endpoint,
-                       model_name=endpoint.replace("databricks-", ""), context=context, output=output)
+    measured = endpoint in ENDPOINT_LIMITS
+    return Limits(context, output,
+                  LimitEvidence.MEASURED if measured else LimitEvidence.DEFAULT,
+                  "docs/genie-code-replacement-spec.md §3.2" if measured else "assumed")

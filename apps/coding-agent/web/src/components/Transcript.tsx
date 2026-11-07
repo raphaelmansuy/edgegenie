@@ -1,7 +1,7 @@
 /** The transcript: turns, thinking, tool cards, evidence, blocked panel. */
 import { createElement, memo, useContext, useState, type ReactNode } from "react";
 import type { Turn } from "../domain/events";
-import { Alert, Check, ChevronDown, ChevronRight, Dot, Mark, Ring } from "./Icons";
+import { Alert, Check, ChevronDown, ChevronRight, Dot, Mark, Ring, User } from "./Icons";
 import { touched } from "../domain/docs";
 import { stripEvidence, subject } from "../domain/toolview";
 import { OpenDoc } from "./DocContext";
@@ -206,7 +206,7 @@ function TurnViewInner({ turn }: { turn: Turn }) {
   return (
     <article className="turn">
       <div className="who">
-        <span className="avatar you" aria-hidden>You</span> You
+        <span className="avatar you" aria-hidden><User size={12} /></span> You
         {turn.model && <span className="chip" style={{ marginLeft: 6 }}>{turn.model.split("/").pop()}</span>}
         <time>{statusWord[turn.status] ?? turn.status}</time>
       </div>

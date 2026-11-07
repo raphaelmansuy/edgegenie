@@ -88,15 +88,36 @@ create_app() {
 }
 
 # ---------------------------------------------------------------- scopes
+# The one list. `apps update` REPLACES the spec it is given: a call that sends only `resources` (or a
+# shorter scope list) silently drops every scope it omits, and the Files and Catalog panes then fail
+# with 403 for every user. That happened; this list and `check_scopes` exist so it cannot again.
+# Names are the ones `apps update` ACCEPTS (docs: "Configure authorization in a Databricks app").
+# `workspace`, `unity-catalog` and `jobs` appear in the platform's refusal text ("required scopes:
+# workspace") but are rejected as grantable names ("not a valid scope"); the grantable SDK scopes are
+# `workspace.workspace` and `catalog.*` (`:read` keeps them to GET). A user's token carries the scopes
+# of the moment they signed in, so after changing this list a signed-in user must sign in again.
+REQUIRED_SCOPES=(sql files model-serving ai-gateway genie workspace.workspace
+                 catalog.catalogs:read catalog.schemas:read catalog.tables:read)
+
+scopes_json() { printf '%s\n' "${REQUIRED_SCOPES[@]}" | python3 -c 'import json,sys;print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))'; }
+
+# Fails (and names the missing scopes) unless every required scope is EFFECTIVE, not merely requested.
+check_scopes() {
+  databricks apps get "$APP" -o json | REQUIRED="$(scopes_json)" python3 -c '
+import json,os,sys
+d = json.load(sys.stdin)
+have = set(d.get("effective_user_api_scopes") or [])
+missing = [s for s in json.loads(os.environ["REQUIRED"]) if s not in have]
+print("  effective scopes:", ", ".join(sorted(have)) or "(none)")
+if missing:
+    print("  MISSING:", ", ".join(missing)); sys.exit(1)'
+}
+
 grant_scopes() {
   say "4/6 Grant user-authorization scopes"
   # Declaring scopes in app.yaml only *requests* them; they must be granted explicitly.
-  databricks apps update "$APP" --json '{"user_api_scopes":["sql","files","catalog.catalogs:read","catalog.schemas:read","catalog.tables:read"]}' 2>&1 | sed 's/^/  /' | head -3
-  databricks apps get "$APP" -o json | python3 -c '
-import json,sys
-d = json.load(sys.stdin)
-print("  effective scopes:", ", ".join(d.get("effective_user_api_scopes") or []))
-'
+  databricks apps update "$APP" --json "{\"user_api_scopes\":$(scopes_json)}" 2>&1 | sed 's/^/  /' | head -3
+  check_scopes || die "the app is missing scopes: the workspace panes would 403 for every user"
 }
 
 # ---------------------------------------------------------------- deploy
@@ -132,6 +153,8 @@ verify() {
   echo "  GET /api/health 200"
 
   curl -s "$url/api/models" | head -c 200 | sed 's/^/  models: /'; echo
+
+  check_scopes || die "the deployed app is missing scopes (see above): Files and Catalog would fail"
 
   # Identity: with user authorization on, an unauthenticated call must not be treated as a user.
   code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$url/api/sessions" \

@@ -1,4 +1,5 @@
 /** Unity Catalog tree: catalogs, schemas, tables. Opens a table viewer; "@" attaches it. */
+import { PaneError } from "./PaneError";
 import { useContext, useEffect, useRef, useState } from "react";
 import { api, type CatalogItem } from "../api/client";
 import type { Attachment } from "../domain/events";
@@ -49,7 +50,7 @@ function Row({ item, depth, onOpenTable, onAttach, selected }: {
           treeKeys(e);
         }}
       />
-      {err && <div className="tree-error" style={{ paddingLeft: 30 + depth * 14 }} role="alert">{err}</div>}
+      {err && <PaneError message={err} indent={30 + depth * 14 - 8} />}
       {open && kids && (
         <div role="group">
           {kids.length === 0 && !err && <div className="tree-empty" style={{ paddingLeft: 30 + depth * 14 }}>(empty)</div>}
@@ -94,7 +95,7 @@ export function CatalogTree({ onOpenTable, onAttach, selected }: {
           <Refresh size={15} className={loading ? "spin" : ""} />
         </button>
       </div>
-      {error && <div className="tree-error" role="alert">{error}</div>}
+      {error && <PaneError message={error} onRetry={() => { setRoots(null); setError(""); setManual((n) => n + 1); }} />}
       {/* The skeleton is INSIDE the tree box, not above it: as a sibling it occupied 51px that
           vanished when the catalog arrived, which pulled every row upward. Inside, the box keeps
           its geometry and only its children are replaced. */}

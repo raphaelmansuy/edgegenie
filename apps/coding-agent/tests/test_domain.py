@@ -253,3 +253,47 @@ def test_turn_finish_records_usage():
 def test_turn_cannot_finish_in_a_non_terminal_state():
     with pytest.raises(DomainError):
         Turn(id="t", session_id="s", index=1, prompt="p", model="m").finish(TurnStatus.RUNNING)
+
+
+# -- an explicit "no tools" is honoured: the answer is the deliverable ------------------------
+@pytest.mark.parametrize("prompt", [
+    "In one sentence, what is the capital of France? Answer without using tools.",
+    "Just explain how a left join works.",
+    "Don't run any code, tell me what this error means.",
+    "No tools please: what is a medallion architecture?",
+    "Do not use the tools. Why is the sky blue?",
+    "What does this do? Explain it without running any queries.",
+])
+def test_an_explicit_no_tools_instruction_is_detected(prompt):
+    from api.domain.evidence import says_no_tools
+
+    assert says_no_tools(prompt)
+
+
+@pytest.mark.parametrize("prompt", [
+    "Run SELECT 6 * 7 and tell me the result.",
+    "Create a notebook that profiles samples.nyctaxi.trips.",
+    "Why is my job failing? Use the tools to check the last run.",
+    "What are the top 5 pickup zones?",
+    "Explain the schema of the trips table.",       # needs a lookup: not an opt-out
+])
+def test_ordinary_requests_are_not_mistaken_for_an_opt_out(prompt):
+    from api.domain.evidence import says_no_tools
+
+    assert not says_no_tools(prompt)
+
+
+def test_a_no_tools_answer_is_done_without_an_audit_pass():
+    """The measured regression: the audit forced `SELECT 'Paris'` after 'answer without using tools'."""
+    from api.domain import supervisor
+    from api.domain.evidence import extract_requirements, says_no_tools
+
+    prompt = "In one sentence, what is the capital of France? Answer without using tools."
+    state = supervisor.State(requirements=extract_requirements(prompt), calls=[],
+                             answer="The capital of France is Paris.",
+                             read_only=says_no_tools(prompt))
+    assert supervisor.decide(state).verdict is supervisor.Verdict.DONE
+    # Same answer, no opt-out: the audit still demands evidence. The rule is unchanged for real work.
+    plain = supervisor.State(requirements=extract_requirements(prompt), calls=[],
+                             answer="The capital of France is Paris.", read_only=False)
+    assert supervisor.decide(plain).verdict is supervisor.Verdict.AUDIT

@@ -52,6 +52,14 @@ export const Mark = (p: IconProps) => (
   </Svg>
 );
 
+/** The person speaking. Pairs with `Mark` (the agent) so both sides of a turn read the same way. */
+export const User = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="8.5" r="3.5" />
+    <path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6" />
+  </Svg>
+);
+
 /* ---------- chrome: panels and layout ---------- */
 
 /** Left panel. Two panes, left one filled — reads as "the sidebar is on" at 16px. */

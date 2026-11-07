@@ -107,6 +107,23 @@ def extract_requirements(prompt: str) -> list[Requirement]:
     return [Requirement(p) for p in parts[:6] if not is_constraint(p)]
 
 
+# The user said, in words, that no tool or code is wanted. "Just explain", "no tools", "don't run any
+# code", "without using tools". Honouring it is not a style choice: Genie Code documents the same escape
+# hatch, and an audit pass that runs SQL after "answer without using tools" breaks the instruction.
+NO_TOOLS_RE = re.compile(
+    r"\b(?:without\s+(?:(?:using|calling|running|any|the)\s+)*(?:tools?|code|queries|sql)\b"
+    r"|(?:do\s+not|don'?t|no\s+need\s+to|never)\s+(?:use|call|run|execute)\s+(?:any\s+|the\s+|your\s+)?(?:tools?|code|queries|sql)\b"
+    r"|no\s+tools?\b"
+    r"|just\s+(?:explain|tell\s+me|answer|describe|say)\b)",
+    re.I,
+)
+
+
+def says_no_tools(prompt: str) -> bool:
+    """True when the user explicitly asked to be answered without tools or code."""
+    return bool(NO_TOOLS_RE.search(DEMO_MARKER.sub(" ", prompt)))
+
+
 def is_read_only(requirements: list[Requirement], has_context: bool) -> bool:
     """True when the user asked only to be told about context they attached.
 

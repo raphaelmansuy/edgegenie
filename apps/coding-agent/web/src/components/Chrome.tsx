@@ -1,7 +1,9 @@
 /** Approval sheet, inspector and the empty state. */
 import { useEffect, useRef, useState } from "react";
 import type { Approval, SessionView } from "../domain/events";
-import { api } from "../api/client";
+import { api, type CatalogueResponse } from "../api/client";
+import { ModelPicker } from "./ModelPicker";
+import { ModelFacts } from "./ModelFacts";
 import { Bug, ChevronRight, Clock, Database, ListIcon, Notebook, Sparkle } from "./Icons";
 
 export function ApprovalSheet({ approval, sessionId, onDecided }: {
@@ -46,8 +48,11 @@ export function ApprovalSheet({ approval, sessionId, onDecided }: {
   );
 }
 
-export function Inspector({ session, edge, onHide, className = "" }: {
+export function Inspector({ session, edge, onHide, className = "", activeId, onAddKey }: {
   session: SessionView; edge?: React.ReactNode; onHide?: () => void; className?: string;
+  /** The session id, so the model-facts block can read the turn pins (FR-10). */
+  activeId?: string | null;
+  onAddKey?: () => void;
 }) {
   const [tab, setTab] = useState<"context" | "audit">("context");
   const calls = session.turns.flatMap((t) => t.tools);
@@ -85,6 +90,10 @@ export function Inspector({ session, edge, onHide, className = "" }: {
                 </div>
               </div>
             </div>
+            {activeId && (
+              <ModelFacts sessionId={activeId} current={session.model}
+                turns={session.turns.length} onAddKey={onAddKey} />
+            )}
             <div className="fieldset">
               <legend>Session</legend>
               <dl className="kv">
@@ -147,10 +156,11 @@ const CARDS = [
 /** The default working folder: a real workspace path under the user's home. */
 export const USER_SCRATCH = "/Users/me/agent_scratch";
 
-export function EmptyState({ models, folder, onFolder, model, onModel, onStart, demo, notice }: {
-  models: { id: string; name: string }[];
+export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddKey, onStart, demo, notice }: {
+  catalogue: CatalogueResponse | null;
   folder: string; onFolder: (v: string) => void;
   model: string; onModel: (v: string) => void;
+  onAddKey?: () => void;
   demo: boolean;
   notice?: string;
   onStart: (prompt: string) => Promise<void>;
@@ -181,11 +191,19 @@ export function EmptyState({ models, folder, onFolder, model, onModel, onStart, 
       <div className="setup">
         <label>Working folder<input value={folder} onChange={(e) => onFolder(e.target.value)} spellCheck={false}
           aria-label="Working folder" placeholder="/Users/you/agent_scratch" /></label>
-        <label>Model
-          <select value={model} onChange={(e) => onModel(e.target.value)}>
-            {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-        </label>
+        <div className="setup-model">
+          <span className="setup-label" id="setup-model-label">Model</span>
+          {/* The same picker the topbar uses: one component, so the first-run choice and the live
+              switch cannot disagree about labels, order or state (FR-15, D13). */}
+          <ModelPicker
+            catalogue={catalogue}
+            current={model}
+            variant="button"
+            label={`Model for the new session: ${model || "none chosen"}`}
+            onChoose={async (id) => onModel(id)}
+            onAddKey={onAddKey}
+          />
+        </div>
         <p className="setup-note">
           It can write only to this folder and its schema. Anything else asks you first.
           Hover a folder in <strong>Files</strong> and press ⌂ to work there.

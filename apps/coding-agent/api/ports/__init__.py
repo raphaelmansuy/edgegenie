@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from ..domain.events import Event
+from ..domain.llm import ModelId, ModelSpec, ProviderKind, ResolvedModel
 
 
 @dataclass(slots=True)
@@ -89,6 +90,165 @@ class Identity(Protocol):
     def token(self, headers: dict[str, str]) -> str | None: ...
 
 
+class Groups(Protocol):
+    """Group membership, from the identity provider — never from this app's tables."""
+
+    def groups_for(self, user_id: str) -> frozenset[str]: ...
+
+
 class ModelCatalog(Protocol):
+    """The catalogue, as the rest of the app sees it.
+
+    Extended, not replaced: `allowed`/`check` are the shape 001 shipped, and they now delegate to
+    the registry. `specs`/`find`/`grants` are what the resolver needs.
+    """
+
     def allowed(self, user_id: str) -> list[dict]: ...
     def check(self, user_id: str, model: str) -> None: ...
+    def specs(self, user_id: str) -> list[ModelSpec]: ...
+    def find(self, model_id: str) -> ModelSpec: ...
+    def grants(self, model_id: str): ...
+
+
+class RegistryStore(Protocol):
+    """Where providers and models are persisted. Three implementations: seed, memory, Postgres."""
+
+    #: `seed` | `database` | `degraded` | `memory`
+    source: str
+
+    async def providers(self) -> list[dict]: ...
+    async def models(self, user_id: str) -> list[ModelSpec]: ...
+    async def grants(self, model_id: str): ...
+    async def health_state(self, model_id: str) -> tuple[str, str, float] | None: ...
+    async def upsert_provider(self, provider: dict) -> None: ...
+    async def upsert_model(self, spec: ModelSpec) -> None: ...
+    async def record_health(self, model_id: str, state: str, detail: str, *, source: str) -> None: ...
+    async def record_turn_model(self, pin: dict) -> None: ...
+    async def turn_models(self, session_id: str) -> list[dict]: ...
+    async def discovery_runs(self, limit: int = 20) -> list[dict]: ...
+    async def record_discovery(self, provider: str, outcome: str, seen: int, detail: str) -> None: ...
+    async def note_limits(self, model_id: str, output: int, source: str) -> None: ...
+    async def close(self) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class Secret:
+    """A decrypted credential, in memory for one spawn. Carries its own redaction in `__repr__`."""
+
+    value: str
+    kind: str = "api_key"
+    ref: str = ""
+
+    def __repr__(self) -> str:  # never print the value, even in a traceback
+        return f"Secret(kind={self.kind!r}, ref={self.ref!r})"
+
+    __str__ = __repr__
+
+
+@dataclass(frozen=True, slots=True)
+class CredentialRef:
+    """An opaque handle to a stored credential. Never the credential."""
+
+    id: str
+    provider: ProviderKind
+    kind: str
+    scope_kind: str = "user"
+    scope_id: str = ""
+    last4: str = ""
+    project_hint: str = ""
+    #: `sha256(plaintext)[:16]`. Answers "was it this key?" without decrypting anything.
+    fingerprint: str = ""
+
+    def public(self) -> dict[str, str]:
+        return {
+            "id": self.id,
+            "provider": self.provider.value,
+            "kind": self.kind,
+            "scope": self.scope_kind,
+            "last4": self.last4,
+            "projectHint": self.project_hint,
+            "fingerprint": self.fingerprint,
+        }
+
+
+class CredentialVault(Protocol):
+    """Store, open, revoke. No method returns plaintext except `open`, and `open` needs a context."""
+
+    @property
+    def available(self) -> bool: ...
+    @property
+    def mode(self) -> str: ...
+    async def put(self, provider: ProviderKind, kind: str, secret: str,
+                  *, user_id: str, scope: str = "user") -> CredentialRef: ...
+    async def open(self, ref: str, *, user_id: str, session_id: str = "") -> Secret: ...
+    async def revoke(self, ref: str, *, user_id: str) -> None: ...
+    async def list(self, *, user_id: str) -> list[CredentialRef]: ...
+    async def find(self, provider: ProviderKind, *, user_id: str) -> CredentialRef | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderDescriptor:
+    """URL, npm package, wire protocol, tool-streaming flag. Pure; no network, no secret."""
+
+    kind: ProviderKind
+    wire: object
+    base_url: str
+    npm: str
+    model_key: str
+    tool_streaming: bool = True
+    extra_headers: dict[str, str] = field(default_factory=dict)
+    extra_body: dict[str, Any] = field(default_factory=dict)
+    #: The model's name inside the agent's catalogue, when it differs from `model_key` (the name the
+    #: provider's HTTP API takes). Vertex's native block lists `gemini-3.8-flash`, not `google/…`.
+    agent_key: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind.value,
+            "wire": getattr(self.wire, "value", str(self.wire)),
+            "baseURL": self.base_url,
+            "npm": self.npm,
+            "modelKey": self.model_key,
+            "toolStreaming": self.tool_streaming,
+            "headers": dict(self.extra_headers),
+            "extraBody": dict(self.extra_body),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ChildEnv:
+    """What an adapter says the agent process needs in order to authenticate.
+
+    `vars` are plain environment values. `files` maps a variable NAME to file CONTENT: the caller
+    writes each to a private file (mode 0600, own directory, removed with the child) and exports the
+    variable as that file's path. A provider whose SDK only reads a credential from a path (Google's
+    `GOOGLE_APPLICATION_CREDENTIALS`) is the reason this exists; the orchestrator needs no vendor
+    knowledge to honour it.
+    """
+
+    vars: dict[str, str] = field(default_factory=dict)
+    files: dict[str, str] = field(default_factory=dict)
+
+
+class ProviderAdapter(Protocol):
+    """One per wire protocol. The adapter knows the wire; the domain knows the model."""
+
+    kind: ProviderKind
+
+    def descriptor(self, spec: ModelSpec, *, host: str = "", project: str = "") -> ProviderDescriptor: ...
+    def env_var(self, spec: ModelSpec) -> str: ...
+    async def child_env(self, resolved: ResolvedModel, secret: Secret) -> ChildEnv: ...
+    async def probe(self, desc: ProviderDescriptor, secret: Secret | None) -> tuple[str, str]: ...
+
+
+class Discovery(Protocol):
+    """What a provider currently serves. `None` means "unreadable: do not filter" (FR-14)."""
+
+    async def fetch(self, token: str | None) -> list[ModelSpec] | None: ...
+
+
+class ModelResolver(Protocol):
+    """id -> everything a child needs. The one resolution path (C-3)."""
+
+    async def resolve(self, model_id: str, *, user_id: str,
+                      session_id: str = "") -> tuple[object, Secret | None]: ...

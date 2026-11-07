@@ -8,13 +8,21 @@
  *  - opening a notebook shows its cells; "@" attaches it to the next message;
  *  - the tree refreshes itself when the agent writes something, keeping what you had open.
  */
+import { PaneError } from "./PaneError";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api, type WsHit } from "../api/client";
 import type { Attachment } from "../domain/events";
-import { workspaceUrl } from "../domain/links";
+import { workspaceUrl, type LinkKind } from "../domain/links";
+import {
+  childPath, cloneName, downloadFormat, downloadName, importFormat, isFolder as folderKind,
+  parentPath, readFavorites, toggleFavorite, type Favorite,
+} from "../domain/workspaceMenu";
 import { WorkspaceLinks } from "./DocContext";
 import { Icon, Plus, Refresh } from "./Icons";
 import { focusFirstChild, focusParent, TreeRow, treeKeys, type RowAction } from "./Tree";
+import { ActionDialog, WorkspaceMenu, type PromptState } from "./WorkspaceMenu";
+
+const FAV_KEY = "coding-agent.workspace-favorites";
 
 export interface WsNode {
   path: string;
@@ -46,6 +54,7 @@ interface Shared {
   onAttach: (a: Attachment) => void;
   onUseFolder: (path: string) => void;
   onFocusFolder: (path: string) => void;
+  onMenu: (node: WsNode, x: number, y: number) => void;
 }
 
 function Row({ node, depth, sh }: { node: WsNode; depth: number; sh: Shared }) {
@@ -83,13 +92,17 @@ function Row({ node, depth, sh }: { node: WsNode; depth: number; sh: Shared }) {
   const ws = useContext(WorkspaceLinks);
   const link = workspaceUrl(ws, { kind: node.kind, ref: node.path, objectId: node.objectId });
   const openIn: RowAction[] = link ? [{ label: `Open ${node.name} in Databricks`, glyph: "↗", href: link }] : [];
+  const more: RowAction = { label: `Actions for ${node.name}`, glyph: "⋯", run: (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    sh.onMenu(node, r.left, r.bottom + 4);
+  } };
   const actions: RowAction[] = folder
     ? [{ label: `Work in ${node.name}`, glyph: "⌂", run: () => sh.onUseFolder(node.path) },
        { label: `Attach folder ${node.name}`, glyph: "@", run: () => sh.onAttach({ kind: "folder", ref: node.path, name: node.name }) },
-       ...openIn]
+       ...openIn, more]
     : [{ label: `Attach ${node.name}`, glyph: "@",
          run: () => sh.onAttach({ kind: node.kind === "notebook" ? "notebook" : "file", ref: node.path, name: node.name }) },
-       ...openIn];
+       ...openIn, more];
 
   return (
     <>
@@ -99,14 +112,21 @@ function Row({ node, depth, sh }: { node: WsNode; depth: number; sh: Shared }) {
         name={node.name} title={node.path}
         badge={node.language && <span className="tree-lang">{node.language.slice(0, 2).toLowerCase()}</span>}
         actions={actions}
+        onContextMenu={(e) => sh.onMenu(node, e.clientX, e.clientY)}
         onActivate={() => (folder ? void toggle() : sh.onOpen(node))}
         onKeyDown={(e) => {
+          if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+            e.preventDefault();
+            const r = e.currentTarget.getBoundingClientRect();
+            sh.onMenu(node, r.left + 28, r.bottom);
+            return;
+          }
           if (e.key === "ArrowRight" && folder) { e.preventDefault(); if (!open) void toggle(); else focusFirstChild(e.currentTarget); }
           if (e.key === "ArrowLeft") { e.preventDefault(); if (folder && open) void toggle(); else focusParent(e.currentTarget); }
           treeKeys(e);
         }}
       />
-      {err && <div className="tree-error" style={{ paddingLeft: 30 + depth * 14 }} role="alert">{err}</div>}
+      {err && <PaneError message={err} indent={30 + depth * 14 - 8} />}
       {open && kids && (
         <div role="group">
           {kids.length === 0 && !err && <div className="tree-empty" style={{ paddingLeft: 30 + depth * 14 }}>(empty)</div>}
@@ -136,8 +156,18 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
   const [making, setMaking] = useState(false);
   const [newName, setNewName] = useState("");
   const [note, setNote] = useState("");
+  const [menu, setMenu] = useState<{ x: number; y: number; node: WsNode } | null>(null);
+  const [prompt, setPrompt] = useState<PromptState | null>(null);
+  const [promptError, setPromptError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [favorites, setFavorites] = useState<Favorite[]>(() => {
+    try { return readFavorites(localStorage.getItem(FAV_KEY)); } catch { return []; }
+  });
   const expanded = useRef(new Set<string>());
   const first = useRef(true);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const importParent = useRef("");
+  const links = useContext(WorkspaceLinks);
 
   useEffect(() => {
     if (!first.current) return;
@@ -176,8 +206,132 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
     return () => { live = false; window.clearTimeout(id); };
   }, [filter, focusFolder, roots]);
 
+  useEffect(() => {
+    try { localStorage.setItem(FAV_KEY, JSON.stringify(favorites)); } catch { /* private mode */ }
+  }, [favorites]);
+
   const sh: Shared = {
     expanded, selected: selected ?? null, onOpen: onOpenFile, onAttach, onUseFolder, onFocusFolder: setFocusFolder,
+    onMenu: (node, x, y) => { setMenu({ node, x, y }); setPrompt(null); },
+  };
+
+  const home = roots.find((r) => r.name === "My home")?.path ?? "";
+  const linkFor = (n: { path: string; kind: string; objectId?: string }) =>
+    workspaceUrl(links, { kind: n.kind as LinkKind, ref: n.path, objectId: n.objectId });
+
+  const refresh = (parent?: string) => {
+    if (parent) expanded.current.add(parent);
+    setManual((n) => n + 1);
+  };
+
+  const fail = (e: unknown) => setNote(e instanceof Error ? e.message : "that did not work");
+
+  const immediate = async (id: string, node: WsNode) => {
+    if (id === "attach") {
+      onAttach({ kind: folderKind(node.kind) ? "folder" : node.kind === "notebook" ? "notebook" : "file", ref: node.path, name: node.name });
+      setNote(`attached ${node.name}`);
+      return;
+    }
+    if (id === "use-folder") { onUseFolder(node.path); setNote(`working in ${node.name}`); return; }
+    if (id === "open") {
+      const href = linkFor(node);
+      if (href) window.open(href, "_blank", "noopener");
+      else setNote("this workspace has no link for that object");
+      return;
+    }
+    if (id === "copy-url" || id === "copy-path") {
+      const text = id === "copy-path" ? node.path : (linkFor(node) ?? "");
+      if (!text) { setNote("there is no URL for that object"); return; }
+      try { await navigator.clipboard.writeText(text); setNote(id === "copy-path" ? "path copied" : "URL copied"); }
+      catch { setNote("the clipboard is not available"); }
+      return;
+    }
+    if (id === "import") {
+      importParent.current = node.path;
+      fileInput.current?.click();
+      return;
+    }
+    if (id === "favorite") {
+      setFavorites((list) => toggleFavorite(list, { path: node.path, name: node.name, kind: node.kind, objectId: node.objectId }));
+      return;
+    }
+    const format = downloadFormat(id);
+    if (format) {
+      try { await api.download(node.path, format, downloadName(node.name, format, node.language)); setNote(`downloaded ${node.name}`); }
+      catch (e) { fail(e); }
+    }
+  };
+
+  const pick = (id: string) => {
+    const node = menu?.node;
+    setMenu(null);
+    if (!node) return;
+    if (id === "rename" || id === "clone" || id === "move" || id === "trash" || id === "share"
+        || id === "create-notebook" || id === "create-file" || id === "create-folder") {
+      setPromptError("");
+      setPrompt({
+        id, node,
+        value: id === "rename" ? node.name : id === "clone" ? cloneName(node.name) : id === "move" ? parentPath(node.path) : "",
+        language: "PYTHON",
+      });
+      return;
+    }
+    void immediate(id, node);
+  };
+
+  const confirm = async () => {
+    if (!prompt) return;
+    const node = prompt.node as WsNode;
+    setBusy(true);
+    setPromptError("");
+    try {
+      if (prompt.id === "trash") {
+        await api.removeObject(node.path, folderKind(node.kind));
+        setFavorites((list) => list.filter((f) => f.path !== node.path && !f.path.startsWith(node.path + "/")));
+        setNote(`moved ${node.name} to Trash`);
+        refresh(parentPath(node.path));
+      } else if (prompt.id === "rename" || prompt.id === "clone" || prompt.id === "move") {
+        const dest = prompt.id === "move"
+          ? childPath(prompt.value ?? "", node.name)
+          : childPath(parentPath(node.path), prompt.value ?? "");
+        if (!dest || (prompt.id === "move" && !(prompt.value ?? "").startsWith("/"))) {
+          setPromptError(prompt.id === "move" ? "a folder path, starting with /" : "use a name without slashes");
+          return;
+        }
+        await api.transferObject(node.path, dest, prompt.id === "clone" ? "copy" : "move");
+        if (prompt.id !== "clone") {
+          setFavorites((list) => list.map((f) => f.path === node.path ? { ...f, path: dest, name: dest.split("/").pop() || f.name } : f));
+        }
+        setNote(prompt.id === "clone" ? `cloned to ${dest}` : `now at ${dest}`);
+        refresh(parentPath(dest));
+        if (prompt.id !== "clone") refresh(parentPath(node.path));
+      } else if (prompt.id === "create-notebook" || prompt.id === "create-file" || prompt.id === "create-folder") {
+        const kind = prompt.id === "create-notebook" ? "notebook" : prompt.id === "create-file" ? "file" : "folder";
+        const name = (prompt.value ?? "").trim();
+        if (!childPath(node.path, name)) { setPromptError("use a name without slashes"); return; }
+        await api.createObject(node.path, name, kind, prompt.language);
+        setNote(`created ${name}`);
+        refresh(node.path);
+      }
+      setPrompt(null);
+    } catch (e) {
+      setPromptError(e instanceof Error ? e.message : "that did not work");
+    } finally { setBusy(false); }
+  };
+
+  const onImport = async (file: File) => {
+    const parent = importParent.current;
+    if (!parent) return;
+    if (file.size > 8_000_000) { setNote("that file is too large to import here; open it in Databricks"); return; }
+    const spec = importFormat(file.name);
+    try {
+      const raw = new Uint8Array(await file.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < raw.length; i += 0x8000) bin += String.fromCharCode(...raw.subarray(i, i + 0x8000));
+      await api.importObject(parent, file.name, btoa(bin), spec.format, spec.language);
+      setNote(`imported ${file.name}`);
+      refresh(parent);
+    } catch (e) { fail(e); }
   };
 
   const parent = focusFolder || roots[0]?.path || "";
@@ -212,8 +366,10 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
           <button className="btn sm" type="submit" disabled={!newName.trim()}>Create</button>
         </form>
       )}
+      <input ref={fileInput} type="file" hidden aria-hidden
+        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void onImport(f); }} />
       {note && <div className="tree-note-line" role="status">{note}</div>}
-      {error && <div className="tree-error" role="alert">{error}</div>}
+      {error && <PaneError message={error} onRetry={() => setManual((n) => n + 1)} />}
 
       {filter.trim().length >= 2 ? (
         <div className="tree-results" role="list" aria-label="Search results">
@@ -229,7 +385,7 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
               )}
             </div>
           )}
-          {searchErr && <div className="tree-error" role="alert">{searchErr}</div>}
+          {searchErr && <PaneError message={searchErr} />}
           {!searching && hits && hits.results.length === 0 && <div className="tree-empty">No match under {hits.root}.</div>}
           {hits && !searching && hits.results.length > 0 && (
             <div className="tree-note-line" role="status">
@@ -238,7 +394,8 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
             </div>
           )}
           {hits?.results.map((h) => (
-            <button key={h.path} role="listitem" className="result" onClick={() => onOpenFile(h)} title={h.path}>
+            <button key={h.path} role="listitem" className="result" onClick={() => onOpenFile(h)} title={h.path}
+              onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, node: { path: h.path, name: h.name, kind: h.kind as WsNode["kind"], language: h.language, hasChildren: folderKind(h.kind) } }); }}>
               <span className={`tree-icon kind-${h.kind}`} aria-hidden><Icon kind={h.kind} /></span>
               <span className="result-main">
                 <span className="result-name">{h.name}</span>
@@ -252,12 +409,27 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
         </div>
       ) : (
         <div role="tree" aria-label="Workspace" className="tree-body">
+          {favorites.length > 0 && <div className="tree-label">Favorites</div>}
+          {favorites.map((f) => (
+            <Row key={`fav:${f.path}:${manual}`} node={{ ...f, kind: f.kind as WsNode["kind"], hasChildren: folderKind(f.kind) }} depth={0} sh={sh} />
+          ))}
           {roots.map((r) => (
             <Row key={`${r.path}:${revision}:${manual}`} node={{ ...r, kind: "directory", hasChildren: true } as WsNode} depth={0} sh={sh} />
           ))}
         </div>
       )}
-      <p className="tree-note">Your workspace, with your permissions. Folders load as you open them.</p>
+      <p className="tree-note">Right-click a file or folder for the same actions as Databricks. Folders load as you open them.</p>
+      {menu && (
+        <WorkspaceMenu x={menu.x} y={menu.y} node={menu.node} home={home}
+          favorite={favorites.some((f) => f.path === menu.node.path)}
+          onPick={pick} onClose={() => setMenu(null)} />
+      )}
+      {prompt && (
+        <ActionDialog prompt={prompt} busy={busy} error={promptError} link={linkFor(prompt.node)}
+          onChange={(next) => { setPrompt(next); setPromptError(""); }}
+          onCancel={() => { if (!busy) setPrompt(null); }}
+          onConfirm={() => void confirm()} />
+      )}
     </div>
   );
 }

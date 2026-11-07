@@ -17,3 +17,12 @@ pydantic-core==2.50.4
 
 # The tool server (tools/databricks_notebook_mcp.py) needs the MCP SDK.
 mcp<2
+
+# Spec 005: envelope encryption for provider keys (AES-256-GCM), and the registry's storage.
+# `cryptography` is also what validates a service-account private key before it is stored.
+cryptography>=43
+# The Lakebase registry and vault. Absent -> the app degrades to the seed catalogue (C-5).
+psycopg[binary]>=3.2
+psycopg-pool>=3.2
+# `seed/llm_models.yaml` is data, parsed at boot rather than compiled in.
+pyyaml>=6

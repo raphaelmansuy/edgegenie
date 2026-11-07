@@ -1,0 +1,170 @@
+# The catalogue this app ships with, as data.
+#
+# Every row carries the provenance of its limits (`evidence` + `source`), because a wrong output cap
+# makes a model unusable AFTER the user waited, and a guess presented as a measurement is the bug
+# this file exists to prevent (spec 005, Axiom A3).
+#
+#   evidence: measured    a request in this workspace was rejected and the cap was read off the error
+#   evidence: documented  a vendor document or a template in this repository
+#   evidence: default     nothing is known; the resolver clamps to 64k / 4k and the picker says so
+#
+# This file is read by `api/adapters/llm/store/seed.py`. It is NOT a permission boundary: grants come
+# only from the database, never from here (05 §llm_model_grant).
+
+providers:
+  - id: databricks
+    display_name: Databricks AI Gateway
+    kind: databricks
+    wire: serving
+    npm: "@ai-sdk/openai-compatible"
+    # base_url is deliberately absent: it is derived from DATABRICKS_HOST at runtime, because a host
+    # in a data file silently pins a workspace that has moved.
+    credential: workspace_token
+
+  - id: openai
+    display_name: OpenAI
+    kind: openai
+    wire: openai
+    base_url: https://api.openai.com/v1
+    npm: "@ai-sdk/openai-compatible"
+    credential: api_key
+
+  - id: anthropic
+    display_name: Anthropic
+    kind: anthropic
+    wire: anthropic
+    base_url: https://api.anthropic.com/v1
+    npm: "@ai-sdk/anthropic"
+    credential: api_key
+
+  - id: google_vertex
+    display_name: Google Vertex AI
+    kind: google_vertex
+    wire: vertex_native
+    npm: "@ai-sdk/google-vertex"
+    credential: service_account_json
+    # The project arrives with the key, so the URL is built per credential rather than stored.
+    base_url: ""
+
+models:
+  # ---- the five measured in this workspace (docs/genie-code-replacement-spec.md §3.2) ----
+  - id: databricks/databricks-llama-4-maverick
+    display_name: llama-4-maverick
+    endpoint: databricks-llama-4-maverick
+    capability: tools
+    context: 128000
+    output: 8000
+    evidence: measured
+    source: docs/genie-code-replacement-spec.md §3.2
+    default: true
+
+  - id: databricks/databricks-gpt-oss-120b
+    display_name: gpt-oss-120b
+    endpoint: databricks-gpt-oss-120b
+    capability: tools_and_reasoning
+    context: 128000
+    output: 24000
+    evidence: measured
+    source: docs/genie-code-replacement-spec.md §3.2
+
+  - id: databricks/databricks-gpt-oss-20b
+    display_name: gpt-oss-20b
+    endpoint: databricks-gpt-oss-20b
+    capability: tools_and_reasoning
+    context: 128000
+    output: 24000
+    evidence: measured
+    source: docs/genie-code-replacement-spec.md §3.2
+
+  - id: databricks/databricks-qwen3-next-80b-a3b-instruct
+    display_name: qwen3-next-80b
+    endpoint: databricks-qwen3-next-80b-a3b-instruct
+    capability: tools
+    context: 128000
+    output: 10000
+    evidence: measured
+    source: docs/genie-code-replacement-spec.md §3.2
+
+  - id: databricks/databricks-meta-llama-3-3-70b-instruct
+    display_name: meta-llama-3-3-70b
+    endpoint: databricks-meta-llama-3-3-70b-instruct
+    capability: tools
+    context: 128000
+    output: 8000
+    evidence: measured
+    source: docs/genie-code-replacement-spec.md §3.2
+
+  # gated in the workspace until an account admin enables the Unity Gateway beta (FR-20): catalogued
+  # so the picker can name the gate instead of hiding the model.
+  - id: databricks/databricks-claude-sonnet-4-5
+    display_name: claude-sonnet-4-5
+    endpoint: databricks-claude-sonnet-4-5
+    capability: tools
+    context: 200000
+    output: 16000
+    evidence: documented
+    source: https://docs.anthropic.com/en/docs/about-claude/models
+    state: not_enabled
+
+  # ---- Google Vertex / Gemini. 1M context and 30k output are the repository's working template. ----
+  - id: google_vertex/google/gemini-3.8-flash
+    display_name: gemini-3.8-flash
+    endpoint: google/gemini-3.8-flash
+    capability: tools_and_reasoning
+    context: 1000000
+    output: 30000
+    evidence: documented
+    source: templates/opencode.gemini.json
+    wire: vertex_native
+
+  - id: google_vertex/google/gemini-3.8-pro
+    display_name: gemini-3.8-pro
+    endpoint: google/gemini-3.8-pro
+    capability: tools_and_reasoning
+    context: 1000000
+    output: 30000
+    evidence: documented
+    source: templates/opencode.gemini.json
+    wire: vertex_native
+
+  - id: google_vertex/google/gemini-3.5-flash
+    display_name: gemini-3.5-flash
+    endpoint: google/gemini-3.5-flash
+    capability: tools_and_reasoning
+    context: 1000000
+    output: 30000
+    evidence: documented
+    source: templates/opencode.gemini.json
+    wire: vertex_native
+
+  # ---- OpenAI. Caps are documented by the vendor; evidence stays `documented`, never `measured` ----
+  - id: openai/gpt-4.1
+    display_name: gpt-4.1
+    endpoint: gpt-4.1
+    capability: tools
+    context: 128000
+    output: 16384
+    evidence: documented
+    source: https://platform.openai.com/docs/models/gpt-4.1
+
+  - id: openai/gpt-4.1-mini
+    display_name: gpt-4.1-mini
+    endpoint: gpt-4.1-mini
+    capability: tools
+    context: 128000
+    output: 16384
+    evidence: documented
+    source: https://platform.openai.com/docs/models/gpt-4.1
+
+  # ---- Anthropic ----
+  - id: anthropic/claude-sonnet-4-5
+    display_name: claude-sonnet-4-5
+    endpoint: claude-sonnet-4-5
+    capability: tools
+    context: 200000
+    output: 16000
+    evidence: documented
+    source: https://docs.anthropic.com/en/docs/about-claude/models
+    # Verified in the repository's working config (docs/genie-code-replacement-spec.md §7.2): with
+    # streaming on, tool calls arrive in a shape this agent's mapper does not reassemble.
+    tool_streaming: false

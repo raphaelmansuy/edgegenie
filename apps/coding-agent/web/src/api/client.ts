@@ -1,5 +1,6 @@
 /** Typed API client. One place that knows the HTTP surface. */
 import type { Attachment, SessionView } from "../domain/events";
+import type { CatalogueResponse, ModelSpec } from "../domain/models";
 
 const json = { "Content-Type": "application/json" };
 
@@ -29,11 +30,44 @@ export interface TableInfo {
 
 export interface ModelOption { id: string; name: string; default?: boolean }
 
+export type { CatalogueResponse, ModelSpec };
+
+export interface CredentialView {
+  id: string;
+  provider: string;
+  kind: string;
+  scope: string;
+  last4: string;
+  projectHint: string;
+  fingerprint: string;
+}
+
+export interface LlmHealth {
+  source: string;
+  updatedAt: string;
+  vault: { mode: string; available: boolean };
+  providers: {
+    id: string; name: string; models: number; usable: number;
+    state: string; detail: string; lastProbe: string | null;
+  }[];
+}
+
+export interface SaveCredentialResult {
+  credential: CredentialView;
+  saved: boolean;
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, init);
   if (!r.ok) {
     let detail = r.statusText;
-    try { detail = (await r.json()).detail ?? detail; } catch { /* non-JSON error body */ }
+    try {
+      const body = await r.json();
+      // A validation failure from `/api/llm/credentials` carries `{field, detail}`; a plain message
+      // is the common case. Both must reach the caller as one readable string.
+      detail = typeof body.detail === "string" ? body.detail
+        : body.detail?.detail ?? JSON.stringify(body.detail ?? body);
+    } catch { /* non-JSON error body */ }
     throw new ApiError(r.status, detail);
   }
   return (r.status === 204 ? (undefined as T) : ((await r.json()) as T));
@@ -43,8 +77,38 @@ export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
+export interface ModelFacts {
+  current: string;
+  resolved: {
+    id: string; provider: string; wire: string; endpoint: string;
+    context: number; output: number; evidence: string; source: string;
+    capability: string; credentialRef: string;
+  } | null;
+  turns: { index: number; turnId: string; model: string; provider: string; wire: string; endpoint: string }[];
+  /** The 1-based turn index at which the model changed, or null when it never did. */
+  switchAtTurn: number | null;
+}
+
 export const api = {
-  models: () => call<{ available: ModelOption[]; default: string }>("/api/models"),
+  models: () => call<CatalogueResponse>("/api/models"),
+  /** The full catalogue: state, limits with evidence, capability and credential hint per model. */
+  catalogue: () => call<CatalogueResponse>("/api/llm/models"),
+  model: (id: string) => call<ModelSpec>(`/api/llm/models/${id}`),
+  llmHealth: () => call<LlmHealth>("/api/llm/health"),
+  credentials: () => call<{ credentials: CredentialView[]; vault: { mode: string; available: boolean }; canSave: boolean }>("/api/llm/credentials"),
+  saveCredential: (provider: string, kind: string, secret: string, scope = "user") =>
+    call<SaveCredentialResult>("/api/llm/credentials", {
+      method: "PUT", headers: json, body: JSON.stringify({ provider, kind, secret, scope }) }),
+  testCredential: (provider: string, kind: string, secret: string, model?: string) =>
+    call<{ ok: boolean; state?: string; detail?: string; field?: string; copy?: string;
+           credential?: CredentialView }>("/api/llm/credentials/test", {
+      method: "POST", headers: json, body: JSON.stringify({ provider, kind, secret, model }) }),
+  revokeCredential: (ref: string) =>
+    call<void>(`/api/llm/credentials/${encodeURIComponent(ref)}`, { method: "DELETE" }),
+  probeModel: (model: string) => call<{ model: string; state: string; detail: string }>(
+    "/api/llm/models/probe", { method: "POST", headers: json, body: JSON.stringify({ model }) }),
+  refreshDiscovery: () => call<CatalogueResponse>("/api/llm/discovery/refresh", { method: "POST" }),
+  modelFacts: (id: string) => call<ModelFacts>(`/api/sessions/${id}/model-facts`),
   sessions: () => call<{ sessions: SessionSummary[] }>("/api/sessions"),
   create: (folder: string, model?: string, schema?: string | null) =>
     call<SessionSummary>("/api/sessions", { method: "POST", headers: json,
@@ -64,6 +128,33 @@ export const api = {
       { signal }),
   mkdir: (path: string) => call<{ path: string }>("/api/workspace/mkdir", { method: "POST", headers: json,
     body: JSON.stringify({ path }) }),
+  createObject: (parent: string, name: string, kind: "notebook" | "file" | "folder", language?: string) =>
+    call<{ path: string }>("/api/workspace/object", { method: "POST", headers: json,
+      body: JSON.stringify({ parent, name, kind, language }) }),
+  importObject: (parent: string, name: string, content: string, format: string, language?: string) =>
+    call<{ path: string }>("/api/workspace/import", { method: "POST", headers: json,
+      body: JSON.stringify({ parent, name, content, format, language }) }),
+  removeObject: (path: string, recursive: boolean) =>
+    call<{ path: string }>("/api/workspace/delete", { method: "POST", headers: json,
+      body: JSON.stringify({ path, recursive }) }),
+  transferObject: (source: string, destination: string, mode: "copy" | "move") =>
+    call<{ path: string }>("/api/workspace/transfer", { method: "POST", headers: json,
+      body: JSON.stringify({ source, destination, mode }) }),
+  permissions: (path: string) => call<{ path: string; entries: { who: string; principal: string; permission: string; inherited: boolean }[] }>(
+    `/api/workspace/permissions?path=${encodeURIComponent(path)}`),
+  download: async (path: string, format: string, filename: string) => {
+    const r = await fetch(`/api/workspace/export?path=${encodeURIComponent(path)}&format=${encodeURIComponent(format)}`);
+    if (!r.ok) {
+      let detail = r.statusText;
+      try { detail = (await r.json()).detail ?? detail; } catch { /* bytes, not JSON */ }
+      throw new ApiError(r.status, detail);
+    }
+    const url = URL.createObjectURL(await r.blob());
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  },
   findTables: (q: string) => call<{ results: CatalogItem[] }>(`/api/catalog/find?q=${encodeURIComponent(q)}`),
   catalog: (catalog = "", schema = "") =>
     call<{ items: CatalogItem[] }>(`/api/catalog?catalog=${encodeURIComponent(catalog)}&schema=${encodeURIComponent(schema)}`),
@@ -75,6 +166,6 @@ export const api = {
     call<{ ok: boolean }>(`/api/approvals/${sid}/${approvalId}`, { method: "POST", headers: json,
       body: JSON.stringify({ outcome, optionId }) }),
   setModel: (id: string, model: string) =>
-    call<{ current: string; available: string[] }>(`/api/sessions/${id}/model`, { method: "POST",
-      headers: json, body: JSON.stringify({ model }) }),
+    call<{ current: string; available: string[]; restartRequired?: boolean }>(
+      `/api/sessions/${id}/model`, { method: "POST", headers: json, body: JSON.stringify({ model }) }),
 };
