@@ -51,10 +51,16 @@ export function Inspector({ session }: { session: SessionView }) {
   return (
     <aside className="pane inspector">
       <div className="insp-head" role="tablist" aria-label="Inspector">
-        <button className="tab" role="tab" aria-selected={tab === "context"} onClick={() => setTab("context")}>Context</button>
-        <button className="tab" role="tab" aria-selected={tab === "audit"} onClick={() => setTab("audit")}>Audit</button>
+        <button id="insp-tab-context" className="tab" role="tab" aria-selected={tab === "context"}
+          aria-controls="insp-panel-context" tabIndex={tab === "context" ? 0 : -1}
+          onClick={() => setTab("context")}
+          onKeyDown={(e) => { if (e.key === "ArrowRight") { e.preventDefault(); setTab("audit"); document.getElementById("insp-tab-audit")?.focus(); } }}>Context</button>
+        <button id="insp-tab-audit" className="tab" role="tab" aria-selected={tab === "audit"}
+          aria-controls="insp-panel-audit" tabIndex={tab === "audit" ? 0 : -1}
+          onClick={() => setTab("audit")}
+          onKeyDown={(e) => { if (e.key === "ArrowLeft") { e.preventDefault(); setTab("context"); document.getElementById("insp-tab-context")?.focus(); } }}>Audit</button>
       </div>
-      <div className="insp-body">
+      <div className="insp-body" id={`insp-panel-${tab}`} role="tabpanel" aria-labelledby={`insp-tab-${tab}`}>
         {tab === "context" ? (
           <>
             <div className="fieldset">
@@ -137,7 +143,7 @@ export function EmptyState({ models, folder, onFolder, model, onModel, onStart, 
   const [starting, setStarting] = useState(false);
   return (
     <div className="empty">
-      <h1>What should we build today?</h1>
+      <h2 className="empty-title">What should we build today?</h2>
       <p className="sub">A coding agent that works in your workspace: it reads, writes, runs and proves.
         Open a notebook or table on the left and ask about it.</p>
       <div className="cards">
@@ -156,7 +162,8 @@ export function EmptyState({ models, folder, onFolder, model, onModel, onStart, 
         ))}
       </div>
       <div className="setup">
-        <label>Working folder<input value={folder} onChange={(e) => onFolder(e.target.value)} spellCheck={false} /></label>
+        <label>Working folder<input value={folder} onChange={(e) => onFolder(e.target.value)} spellCheck={false}
+          aria-label="Working folder" placeholder="/Users/you/agent_scratch" /></label>
         <label>Model
           <select value={model} onChange={(e) => onModel(e.target.value)}>
             {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}

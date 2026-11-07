@@ -105,6 +105,21 @@ await p.keyboard.press("Meta+w");
 ok((await p.locator(".doc-tabs .doc-tab").count()) === 0, "⌘W did not close the document tab");
 ok((await p.locator(".viewer").count()) === 0, "the closed document is still on screen");
 
+// Nothing may spill out of its box, at this width or a narrow one.
+const spills = await p.evaluate(() => {
+  const out = [];
+  for (const el of Array.from(document.querySelectorAll("*"))) {
+    const st = getComputedStyle(el);
+    if (st.display === "none" || st.visibility === "hidden" || el.classList.contains("sr-only")) continue;
+    if (st.overflowX !== "visible" || st.overflowY !== "visible") continue;
+    if (el.scrollWidth > el.clientWidth + 1 && st.textOverflow !== "ellipsis") {
+      out.push(`${el.tagName.toLowerCase()}.${String(el.className).split(" ")[0]} ${el.scrollWidth}>${el.clientWidth}`);
+    }
+  }
+  return out;
+});
+ok(spills.length === 0, `content spills out of its box: ${spills.slice(0, 5).join(", ")}`);
+
 console.log("problems:", problems.length ? problems : "none");
 await b.close();
 process.exit(problems.length ? 1 : 0);

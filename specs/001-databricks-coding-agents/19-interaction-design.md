@@ -72,6 +72,9 @@ Each was found by a test or by looking at the app, not by reading the code.
 
 ## How each claim is verified
 
+Contrast, target size, names, ARIA and OS preferences are covered by the accessibility audit; see
+[20 Accessibility](20-accessibility.md) for the standard and its results.
+
 - **Unit** (`web/src/domain/keys.test.ts`): combo parsing per platform, punctuation aliases, display
   formatting, no duplicate shortcuts, typing-vs-command rule, fuzzy ranking and highlighting.
 - **Unit** (`web/src/components/Composer.test.tsx`): Enter sends, Shift+Enter does not.

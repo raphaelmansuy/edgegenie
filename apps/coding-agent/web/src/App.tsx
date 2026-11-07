@@ -17,11 +17,13 @@ import { ExtLink } from "./components/ExtLink";
 import type { Workspace } from "./domain/links";
 import { TurnView } from "./components/Transcript";
 import { NotebookViewer, TableViewer } from "./components/Viewer";
+import { CloseIcon } from "./components/Icons";
 import { WorkspaceTree } from "./components/WorkspaceTree";
 import { tabKeys } from "./components/Tree";
 import type { Candidate } from "./domain/fuzzy";
 import { caps, display } from "./domain/keys";
 import { useHotkeys } from "./hooks/useHotkeys";
+import { INSPECTOR_DRAWER, NARROW, inspectorIsOverlay, railIsOverlay, useMediaQuery } from "./hooks/useMediaQuery";
 import { ACTIONS, asAttachment, docForNode, makeDoc, touched, type Action, type Doc } from "./domain/docs";
 import type { Attachment } from "./domain/events";
 import { useSessionStream } from "./hooks/useSessionStream";
@@ -52,8 +54,21 @@ export function App() {
   const [treeRev, setTreeRev] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
-  const [railShown, setRailShown] = useState(true);
-  const [inspShown, setInspShown] = useState(true);
+  // Below each breakpoint a side panel becomes an overlay over the content. An overlay that opens
+  // by itself hides the transcript, which is what the app is for — so it starts closed, and opens
+  // from its handle, its shortcut, the palette, or a tree click.
+  const narrow = useMediaQuery(NARROW);
+  const inspectorOverlay = useMediaQuery(INSPECTOR_DRAWER);
+  const [railShown, setRailShown] = useState(() => !railIsOverlay());
+  const [inspShown, setInspShown] = useState(() => !inspectorIsOverlay());
+  const [drawer, setDrawer] = useState<"rail" | "inspector" | null>(null);
+
+  // Crossing a breakpoint resets the panels: a drawer left open over a desktop layout is a bug.
+  useEffect(() => {
+    setRailShown(!narrow);
+    setInspShown(!inspectorOverlay);
+    setDrawer(null);
+  }, [narrow, inspectorOverlay]);
   const bottom = useRef<HTMLDivElement>(null);
   const composerBox = useRef<HTMLTextAreaElement | null>(null);
 
@@ -175,6 +190,15 @@ export function App() {
     composerBox.current?.focus();
   }, []);
 
+  const openRail = useCallback((on: boolean) => {
+    setRailShown(on);
+    setDrawer(on && narrow ? "rail" : null);
+  }, [narrow]);
+  const openInspector = useCallback((on: boolean) => {
+    setInspShown(on);
+    setDrawer(on && inspectorOverlay ? "inspector" : null);
+  }, [inspectorOverlay]);
+
   /** Everything reachable without the mouse: objects, panels, tabs and actions. */
   const paletteItems = useMemo<Candidate[]>(() => {
     const items: Candidate[] = [];
@@ -187,12 +211,12 @@ export function App() {
     for (const r of ["sessions", "files", "catalog"] as Rail[]) {
       const key = r === "sessions" ? "mod+1" : r === "files" ? "mod+2" : "mod+3";
       add(`rail:${r}`, `${r[0].toUpperCase()}${r.slice(1)} panel`, "Panels",
-        () => { setRail(r); setRailShown(true); }, display(key), 2);
+        () => { setRail(r); openRail(true); }, display(key), 2);
     }
     add("panel:rail", railShown ? "Hide the left panel" : "Show the left panel", "Panels",
-      () => setRailShown((v) => !v), display("mod+b"));
+      () => openRail(!railShown), display("mod+b"));
     add("panel:insp", inspShown ? "Hide the inspector" : "Show the inspector", "Panels",
-      () => setInspShown((v) => !v), display("mod+i"));
+      () => openInspector(!inspShown), display("mod+i"));
 
     add("tab:chat", "Chat", "Open", () => setView(CHAT), undefined, 1);
 
@@ -219,12 +243,12 @@ export function App() {
       });
     }
     return items;
-  }, [docs, sessions, railShown, inspShown, newSession, refresh, view, addContext, ask]);
+  }, [docs, sessions, railShown, inspShown, newSession, refresh, view, addContext, ask, openRail, openInspector]);
 
   const busy = session.status === "streaming";
 
   const handlers = useMemo(() => {
-    const go = (r: Rail) => () => { setRail(r); setRailShown(true); };
+    const go = (r: Rail) => () => { setRail(r); openRail(true); };
     const cycle = (step: number) => () => {
       const ids = [CHAT, ...docs.map((d) => d.id)];
       const at = ids.indexOf(view);
@@ -238,9 +262,9 @@ export function App() {
       "mod+1": go("sessions"),
       "mod+2": go("files"),
       "mod+3": go("catalog"),
-      "mod+b": () => setRailShown((v) => !v),
-      "mod+i": () => setInspShown((v) => !v),
-      "mod+p": () => { setRail("files"); setRailShown(true); focusComposer(); },
+      "mod+b": () => { setRailShown((v) => { setDrawer(!v && narrow ? "rail" : null); return !v; }); },
+      "mod+i": () => { setInspShown((v) => { setDrawer(!v && inspectorOverlay ? "inspector" : null); return !v; }); },
+      "mod+p": () => { setRail("files"); openRail(true); focusComposer(); },
       "ctrl+tab": cycle(1),
       "ctrl+shift+tab": cycle(-1),
       "mod+w": () => {
@@ -250,10 +274,16 @@ export function App() {
       },
       escape: () => {
         if (paletteOpen || keysOpen) { setPaletteOpen(false); setKeysOpen(false); return true; }
+        if (drawer) {
+          setDrawer(null);
+          if (railIsOverlay()) setRailShown(false);
+          if (inspectorIsOverlay()) setInspShown(false);
+          return true;
+        }
         return false;                          // the composer handles Esc as "stop"
       },
     };
-  }, [docs, view, paletteOpen, keysOpen, newSession, focusComposer]);
+  }, [docs, view, paletteOpen, keysOpen, newSession, focusComposer, drawer, narrow, inspectorOverlay, openRail]);
 
   useHotkeys(handlers);
   const toolCalls = session.turns.reduce((n, t) => n + t.tools.length, 0);
@@ -267,7 +297,7 @@ export function App() {
     <OpenDoc.Provider value={openDoc}>
       <div className="app">
         <header className="topbar">
-          <span className="brand"><span className="mark" aria-hidden>◧</span> Databricks Coding Agents</span>
+          <h1 className="brand"><span className="mark" aria-hidden>◧</span> Databricks Coding Agents</h1>
           <span className="meta">
             {active && (
               <span className="chip">
@@ -300,15 +330,28 @@ export function App() {
 
         <div className={`layout${active && inspShown ? "" : " no-inspector"}${railShown ? "" : " no-rail"}`}>
           {railShown && <nav className="pane rail" aria-label="Navigator">
-            <button className="rail-collapse" onClick={() => setRailShown(false)}
+            <button className="rail-collapse" onClick={() => openRail(false)}
               title="Hide this panel (⌘B)" aria-label="Hide the left panel">‹</button>
             <div className="rail-tabs" role="tablist" aria-label="Navigator">
               {(["sessions", "files", "catalog"] as Rail[]).map((r) => (
-                <button key={r} className="rail-tab" role="tab" aria-selected={rail === r} onClick={() => setRail(r)}>
+                <button key={r} id={`rail-tab-${r}`} className="rail-tab" role="tab" aria-selected={rail === r}
+                  aria-controls={`rail-panel-${r}`} tabIndex={rail === r ? 0 : -1}
+                  onClick={() => setRail(r)}
+                  onKeyDown={(e) => {
+                    const order = ["sessions", "files", "catalog"] as Rail[];
+                    const at = order.indexOf(rail);
+                    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                      e.preventDefault();
+                      const next = order[(at + (e.key === "ArrowRight" ? 1 : -1) + order.length) % order.length];
+                      setRail(next);
+                      requestAnimationFrame(() => document.getElementById(`rail-tab-${next}`)?.focus());
+                    }
+                  }}>
                   {r === "sessions" ? "Sessions" : r === "files" ? "Files" : "Catalog"}
                 </button>
               ))}
             </div>
+            <div id={`rail-panel-${rail}`} role="tabpanel" aria-labelledby={`rail-tab-${rail}`} className="rail-panel">
             {rail === "sessions" && (
               <>
                 <div className="rail-head">
@@ -343,34 +386,59 @@ export function App() {
                 <CatalogTree selected={selectedRef} onAttach={addContext} onOpenTable={(ref) => openDoc(makeDoc("table", ref))} />
               </div>
             )}
+            </div>
           </nav>}
 
           {!railShown && (
-            <button className="rail-reveal" onClick={() => setRailShown(true)}
+            <button className="rail-reveal" onClick={() => openRail(true)}
               title="Show the left panel (⌘B)" aria-label="Show the left panel">›</button>
+          )}
+          {!inspShown && (
+            <button className="insp-reveal" onClick={() => openInspector(true)}
+              title="Show the inspector (⌘I)" aria-label="Show the inspector">‹</button>
+          )}
+          {drawer && (
+            <div className="drawer-scrim" role="presentation"
+              onClick={() => {
+                setDrawer(null);
+                if (railIsOverlay()) setRailShown(false);
+                if (inspectorIsOverlay()) setInspShown(false);
+              }} />
           )}
 
           <main className="pane main">
             {docs.length > 0 && (
-              <div className="doc-tabs" role="tablist" aria-label="Open items"
+              <div className="doc-tabs" role="tablist" aria-label="Open items" data-count={docs.length}
                 onKeyDown={tabKeys([CHAT, ...docs.map((d) => d.id)], view, setView)}>
-                <button id={`tab-${CHAT}`} className="doc-tab" role="tab" aria-selected={view === CHAT}
-                  tabIndex={view === CHAT ? 0 : -1} onClick={() => setView(CHAT)}>
-                  <span aria-hidden>💬</span> Chat
-                </button>
+                <div id={`tab-${CHAT}`} className="doc-tab" role="tab" aria-selected={view === CHAT}
+                  aria-controls="doc-panel" tabIndex={view === CHAT ? 0 : -1} onClick={() => setView(CHAT)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(CHAT); } }}>
+                  <span className="doc-tab-label"><span aria-hidden>💬</span> Chat</span>
+                </div>
                 {docs.map((d) => (
-                  <span key={d.id} className="doc-tab-wrap">
-                    <button id={`tab-${d.id.replace(/[^\w-]/g, "_")}`} className="doc-tab" role="tab"
-                      aria-selected={view === d.id} tabIndex={view === d.id ? 0 : -1}
-                      onClick={() => setView(d.id)} title={d.ref}>
+                  /* The close control lives INSIDE the tab, so it sits within the tab's own shape
+                     rather than hanging off its edge. One tab stop per tab: the strip is one widget,
+                     and Delete/Backspace on the focused tab closes it. */
+                  <div key={d.id} id={`tab-${d.id.replace(/[^\w-]/g, "_")}`} className="doc-tab" role="tab"
+                    aria-selected={view === d.id} aria-controls="doc-panel" tabIndex={view === d.id ? 0 : -1}
+                    onClick={() => setView(d.id)} title={d.ref}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(d.id); }
+                      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); closeDoc(d.id); }
+                    }}>
+                    <span className="doc-tab-label">
                       <span aria-hidden>{d.kind === "table" ? "▦" : "▤"}</span> {d.name}
-                    </button>
-                    <button className="doc-close" aria-label={`Close ${d.name}`} onClick={() => closeDoc(d.id)}>×</button>
-                  </span>
+                    </span>
+                    <button className="doc-close" tabIndex={-1} aria-label={`Close ${d.name}`} title={`Close ${d.name} (⌘W)`}
+                      onClick={(e) => { e.stopPropagation(); closeDoc(d.id); }}><CloseIcon /></button>
+                  </div>
                 ))}
               </div>
             )}
 
+            {/* One panel serves every tab, so each tab can name it with aria-controls. */}
+            <div id="doc-panel" role="tabpanel" aria-labelledby={`tab-${(view === CHAT ? CHAT : view.replace(/[^\w-]/g, "_"))}`}
+              className="doc-panel">
             {viewDoc ? (
               viewDoc.kind === "table"
                 ? <TableViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
@@ -401,6 +469,7 @@ export function App() {
                 </div>
               </>
             )}
+            </div>
 
             {!active && (
               <p className="composer-note">

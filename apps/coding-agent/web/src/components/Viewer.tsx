@@ -48,7 +48,8 @@ function Head({ doc, subtitle, badge, actions, busy, reload, objectId }: {
         {badge && <span className="tree-lang big">{badge}</span>}
         <button className="btn ghost sm" aria-label="Reload" title="Reload" onClick={reload} disabled={busy}>⟳</button>
       </div>
-      <button className="viewer-path" title="Copy the full path" onClick={() => {
+      <button className="viewer-path" title="Copy the full path" aria-label={`Copy the path ${doc.ref}`}
+        style={{ minHeight: 24, display: "inline-flex", alignItems: "center" }} onClick={() => {
         void navigator.clipboard?.writeText(doc.ref); setCopied(true); window.setTimeout(() => setCopied(false), 1200);
       }}>{copied ? "copied" : subtitle}</button>
       <div className="viewer-actions" role="toolbar" aria-label="Ask the agent about this">
