@@ -10,9 +10,10 @@
     "e2e": "playwright test",
     "audit:a11y": "node scripts/a11y-audit.mjs",
     "audit:overflow": "node scripts/overflow-audit.mjs",
-    "audit": "npm run audit:a11y && npm run audit:overflow",
+    "audit": "npm run audit:a11y && npm run audit:overflow && npm run audit:shell",
     "e2e:shell": "node scripts/ux-e2e.mjs",
-    "e2e:live": "node scripts/genie-e2e.mjs"
+    "e2e:live": "node scripts/genie-e2e.mjs",
+    "audit:shell": "node scripts/shell-audit.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",
