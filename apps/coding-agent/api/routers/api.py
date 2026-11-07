@@ -424,20 +424,25 @@ def _save_scope(request: Request, session_id: str | None) -> scope_mod.Scope:
             return _orch(request).scope(session_id)
         except KeyError:
             raise HTTPException(404, "no such session") from None
-    home = _home(request)
-    return scope_mod.Scope.for_session("nosession", f"{home}/__no_scope__/", None)
+    # No session, so there is no writable folder. `folder=""` rather than a fabricated path: the
+    # `__no_scope__` sentinel used to be returned as the *reason*, so the approval sheet told the
+    # user their file was "outside /Users/them/__no_scope__/" — an internal placeholder, shown to a
+    # person, naming a folder that does not exist. The reason is now stated in words instead
+    # (see the `reason` handling in `workspace_save` and `workspace_fence`).
+    return scope_mod.Scope.for_session("nosession", "", None)
 
 
 @router.post("/workspace/fence")
 async def workspace_fence(request: Request, body: AskFence) -> dict:
     """What would happen if we saved this path. The client asks before the user types (WR-5)."""
     path = _ws_path(body.path)
-    decision = scope_mod.check_path(_save_scope(request, body.sessionId), path)
+    scope = _save_scope(request, body.sessionId)
+    decision = scope_mod.check_path(scope, path)
     return {
         "verdict": decision.verdict.value,
         "action": decision.action.value,
         "target": decision.target,
-        "reason": decision.reason,
+        "reason": _ask_reason(scope, decision.reason),
         "approval": approval.issue(path, body.version or "") if decision.verdict is scope_mod.Verdict.ASK else None,
     }
 
@@ -540,6 +545,18 @@ _EXT_LANGUAGE = {
     ".json": "PYTHON", ".yaml": "PYTHON", ".yml": "PYTHON", ".sh": "PYTHON",
     ".js": "PYTHON", ".ts": "PYTHON", ".html": "PYTHON", ".css": "PYTHON", ".toml": "PYTHON",
 }
+
+
+def _ask_reason(scope: scope_mod.Scope, reason: str) -> str:
+    """Why the save needs approval, in words a person can act on.
+
+    Two cases: there is a writable folder and the path is outside it, or there is no session and
+    therefore no folder at all. The second must not pretend a folder exists — the old code returned
+    the scope's internal path, so the sheet said "outside /Users/them/__no_scope__/".
+    """
+    if not scope.folder:
+        return "no session is open, so there is no working folder to save into"
+    return reason or f"outside {scope.folder}"
 
 
 def _language_for_path(path: str) -> str:

@@ -54,5 +54,9 @@ export function describeFence(d: FenceDecision, readOnly: boolean): { label: str
   if (readOnly) return { label: "read-only", tone: "off" };
   if (d.verdict === "allow") return { label: "in your folder", tone: "ok" };
   if (d.verdict === "deny") return { label: "cannot write here", tone: "off" };
+  /* With no session there IS no folder, so "outside your folder" would name something that does not
+     exist. The chip has to describe the actual situation, because it is the first and often only
+     thing a user reads before typing. */
+  if (!d.reason || /no session/i.test(d.reason)) return { label: "no session — will ask", tone: "warn" };
   return { label: "outside your folder — will ask", tone: "warn" };
 }

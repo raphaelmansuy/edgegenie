@@ -244,3 +244,38 @@ def test_a_save_without_a_session_still_works(save_client):
 def test_save_reports_the_size_it_wrote(save_client):
     body = save(save_client, f"{SCRATCH}/size.py", "héllo\n", version="").json()
     assert body["size"] == len("héllo\n".encode("utf-8"))     # bytes, not characters
+
+
+# ---------------------------------------------------------------- the fence cannot be widened by accident
+def test_an_empty_folder_is_not_a_wildcard():
+    """A session-less scope must not allow everything.
+
+    `"anything".startswith("")` is True, so a literal prefix test on an empty folder classifies
+    every path as inside the fence and silently permits the write. That bug was introduced while
+    making the no-session message human-readable, and caught by
+    `test_a_save_without_a_session_still_works`. This test states the property directly so the
+    next person cannot reintroduce it.
+    """
+    from api.domain import scope as scope_mod
+
+    empty = scope_mod.Scope.for_session("x", "", None)
+    for path in ["/Users/anyone/agent_scratch/a.py", "/Shared/b.py", "/etc/passwd", "/a"]:
+        assert scope_mod.check_path(empty, path).verdict is scope_mod.Verdict.ASK, path
+    assert "no session" in scope_mod.check_path(empty, "/a").reason
+
+
+def test_a_root_folder_is_not_a_wildcard():
+    """`/` as a folder would also match everything; treat it as "no fence", not "all of it"."""
+    from api.domain import scope as scope_mod
+
+    root = scope_mod.Scope.for_session("x", "/", None)
+    assert scope_mod.check_path(root, "/Users/anyone/x.py").verdict is scope_mod.Verdict.ASK
+
+
+def test_a_normal_folder_still_allows_what_is_inside_it():
+    """The guard must not break the case it exists to protect."""
+    from api.domain import scope as scope_mod
+
+    s = scope_mod.Scope.for_session("x", "/Users/me/agent_scratch/", None)
+    assert scope_mod.check_path(s, "/Users/me/agent_scratch/a.py").verdict is scope_mod.Verdict.ALLOW
+    assert scope_mod.check_path(s, "/Users/me/other/a.py").verdict is scope_mod.Verdict.ASK

@@ -44,10 +44,14 @@ class Scope:
     instance_prefix: str
 
     @staticmethod
+    @staticmethod
     def for_session(session_id: str, folder: str, schema: str | None) -> Scope:
         short = session_id[:8]
         return Scope(
-            folder=folder.rstrip("/") + "/",
+            # An empty folder stays empty. `"".rstrip("/") + "/"` is "/", which would make the
+            # scope look like a root folder rather than "no folder at all" — and a root folder is
+            # a wildcard, so the distinction matters for the fence.
+            folder=(folder.rstrip("/") + "/") if folder.strip("/") else "",
             schema=schema,
             job_prefix=f"agent_{short}_",
             app_prefix=f"agent-{short}-",
@@ -78,7 +82,13 @@ def _inside(path: str, folder: str) -> bool:
     p = _norm(path)
     if ".." in p.split("/"):
         return False
-    return p.startswith(_norm(folder)) and len(p) > len(_norm(folder)) - 1
+    f = _norm(folder)
+    # An empty folder means "there is no writable folder", NOT "every folder is writable".
+    # `"anything".startswith("")` is True, so without this guard a session-less save would be
+    # classified as inside the fence and silently allowed — a real widening of the write boundary.
+    if not f or f == "/":
+        return False
+    return p.startswith(f) and len(p) > len(f) - 1
 
 
 def classify_sql(sql: str) -> Action:
@@ -120,7 +130,9 @@ def check_sql(scope: Scope, sql: str) -> Decision:
 def check_path(scope: Scope, path: str) -> Decision:
     if _inside(path, scope.folder):
         return Decision(Verdict.ALLOW, Action.WRITE, _norm(path))
-    return Decision(Verdict.ASK, Action.WRITE, _norm(path)[:160], f"outside {scope.folder}")
+    reason = (f"outside {scope.folder}" if scope.folder
+              else "no session is open, so there is no working folder to save into")
+    return Decision(Verdict.ASK, Action.WRITE, _norm(path)[:160], reason)
 
 
 def check_job(scope: Scope, name: str) -> Decision:

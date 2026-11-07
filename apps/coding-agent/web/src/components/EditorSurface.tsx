@@ -66,7 +66,7 @@ export function EditorSurface({
   /** The server's answer, once we have it. It is the authority; the local check is a preview. */
   const [serverFence, setServerFence] = useState<{ verdict: string; reason: string } | null>(null);
   const [conflict, setConflict] = useState<Extract<SaveResult, { kind: "conflict" }> | null>(null);
-  const [asking, setAsking] = useState<{ reason: string; token: string | null } | null>(null);
+  const [asking, setAsking] = useState<{ reason: string; token: string | null; noFolder: boolean } | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "warn" | "error"; text: string } | null>(null);
   const [restored, setRestored] = useState(false);
   /** A recovery replaces the buffer through the same channel a load uses, because the editor is
@@ -217,7 +217,14 @@ export function EditorSurface({
         // be minted for this exact path and version, which is what /workspace/fence does. Without
         // this round trip the sheet would appear with no way to complete it — a dead end.
         const answer = await askFence(target.path, sessionId, version.current ?? "");
-        setAsking({ reason: result.reason || answer.reason, token: answer.approval });
+        const reason = result.reason || answer.reason;
+        setAsking({
+          reason,
+          token: answer.approval,
+          // The server says exactly this when there is no session; the fence has no folder, so the
+          // heading should not claim one exists.
+          noFolder: reason.toLowerCase().includes("no session"),
+        });
         break;
       }
       case "conflict":
@@ -346,7 +353,10 @@ export function EditorSurface({
         <div className="ask-banner" role="alertdialog" aria-label="Approval required">
           <Warning size={15} />
           <div>
-            <strong>Save outside your working folder?</strong>
+            {/* The heading must agree with the reason. Asking "save outside your folder?" over
+                "there is no working folder" is a contradiction the user has to resolve. The flag is
+                computed where the reason is produced, not sniffed back out of the sentence. */}
+            <strong>{asking.noFolder ? "Save without a session?" : "Save outside your working folder?"}</strong>
             <p><code>{target.path}</code> — {asking.reason}</p>
           </div>
           <button className="btn primary sm" onClick={() => void approve()}>Allow once</button>

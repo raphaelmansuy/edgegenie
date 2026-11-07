@@ -318,7 +318,11 @@ await scene("approval-sheet", 1440, async (p) => {
   await p.keyboard.press("Meta+s");
   await p.locator(".ask-banner").waitFor({ timeout: 30000 });
   const text = (await p.locator(".ask-banner").textContent()) ?? "";
-  if (!/outside/i.test(text)) fail("the approval sheet does not say why");
+  /* The sheet must explain itself in terms a person can act on. It used to name an internal
+     placeholder (`__no_scope__`) as if it were a folder; the assertion is therefore "it names the
+     situation", not "it contains one particular word". */
+  if (!/no session|outside/i.test(text)) fail(`the approval sheet does not say why: "${text.slice(0, 90)}"`);
+  if (/__no_scope__/.test(text)) fail("the sheet leaks an internal placeholder");
   await shot(p, "approval-sheet", { x: 260, y: 52, width: 860, height: 340 });
 });
 

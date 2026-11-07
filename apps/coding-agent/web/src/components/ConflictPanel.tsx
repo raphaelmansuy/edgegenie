@@ -26,6 +26,19 @@ interface Props {
   onDismiss: () => void;
 }
 
+/** The reason, unless it only repeats the heading. */
+function explain(c: { reason: string; yours: string | null; current: string | null }): string {
+  const generic = /somebody else changed this file/i.test(c.reason);
+  if (!generic && c.reason.trim()) {
+    return c.reason.trim().replace(/\.?$/, ".").replace(/^./, (m) => m.toUpperCase());
+  }
+  // Say which version is on disk and which is in the buffer: the two facts a person needs.
+  if (c.current && c.yours && c.current !== c.yours) {
+    return "This file was written by someone else after you opened it.";
+  }
+  return "This file changed while you were editing it.";
+}
+
 export function ConflictPanel({ conflict, mine, theirs, onKeepMine, onTakeTheirs, onDismiss }: Props) {
   return (
     <div className="conflict-panel" role="alert">
@@ -34,8 +47,12 @@ export function ConflictPanel({ conflict, mine, theirs, onKeepMine, onTakeTheirs
         <strong>Somebody else changed this file</strong>
         <button className="icon-btn conflict-dismiss" aria-label="Dismiss" onClick={onDismiss}>×</button>
       </div>
+      {/* The heading already says "somebody else changed this file", and the server sends exactly
+          that sentence as a fallback reason — so printing it again read as a stutter. Show the
+          reason only when it adds something, and always say the one thing that matters: nothing is
+          lost yet. */}
       <p className="conflict-note">
-        {conflict.reason}. Your text is safe: pick what should be on disk.
+        {explain(conflict)} Your text is safe: pick what should be on disk.
       </p>
       <div className="conflict-actions">
         <button className="btn primary sm" onClick={onKeepMine}>
