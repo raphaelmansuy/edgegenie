@@ -62,6 +62,10 @@ class Session:
     schema: str | None
     model: str
     title: str = "New session"
+    # When the session was created, epoch seconds. Optional so an existing in-memory session, or a
+    # replayed event, can be constructed without it; the API omits the field when it is absent
+    # rather than inventing a time.
+    created_at: float | None = None
     status: SessionStatus = SessionStatus.PROVISIONING
     tools: int = 0
     agent: str = ""

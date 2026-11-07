@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type ModelOption, type SessionSummary } from "./api/client";
 import { ApprovalSheet, EmptyState, Inspector } from "./components/Chrome";
+import { LayoutMenu } from "./components/LayoutMenu";
 import { Palette, PaletteActions } from "./components/Palette";
 import { DocTabs } from "./components/DocTabs";
 import { Separator } from "./components/Separator";
@@ -24,7 +25,11 @@ import type { Candidate } from "./domain/fuzzy";
 import { caps, display } from "./domain/keys";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useLayout } from "./hooks/useLayout";
+import { useTheme } from "./hooks/useTheme";
+import { ThemeSwitch } from "./components/ThemeSwitch";
+import { ChevronLeft, CommandKey, Mark, PanelLeft, PanelRight, Refresh, Search } from "./components/Icons";
 import { columns, modeFor, type RailTab } from "./domain/layout";
+import { exactTime, relativeTime } from "./domain/time";
 import { ACTIONS, asAttachment, docForNode, makeDoc, touched, type Action, type Doc } from "./domain/docs";
 import type { Attachment } from "./domain/events";
 import { useSessionStream } from "./hooks/useSessionStream";
@@ -54,12 +59,14 @@ export function App() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [treeRev, setTreeRev] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState<"layout" | null>(null);
   const [keysOpen, setKeysOpen] = useState(false);
   // Below each breakpoint a side panel becomes an overlay over the content. An overlay that opens
   // by itself hides the transcript, which is what the app is for — so it starts closed, and opens
   // from its handle, its shortcut, the palette, or a tree click.
   const [viewport, setViewport] = useState(() => window.innerWidth);
-  const { layout, setWidth, resetOne, toggle, setRailTab: setLayoutTab } = useLayout(viewport);
+  const { layout, setWidth, resetOne, resetAll, toggle, setRailTab: setLayoutTab } = useLayout(viewport);
+  const theme = useTheme();
   const { railVisible: railShown, inspectorVisible: inspShown, railTab: rail } = layout;
   const mode = modeFor(viewport);
   const narrow = mode === "narrow";
@@ -215,6 +222,7 @@ export function App() {
 
     add("act:new", "New session", "Actions", newSession, display("mod+shift+n"), 5);
     add("act:keys", "Keyboard shortcuts", "Actions", () => setKeysOpen(true), display("mod+slash"));
+    add("act:reset", "Reset layout", "Actions", resetAll, "panels, widths and tab", 1);
     add("act:refresh", "Refresh sessions and models", "Actions", () => void refresh());
     for (const r of ["sessions", "files", "catalog"] as Rail[]) {
       const key = r === "sessions" ? "mod+1" : r === "files" ? "mod+2" : "mod+3";
@@ -251,9 +259,14 @@ export function App() {
       });
     }
     return items;
-  }, [docs, sessions, railShown, inspShown, newSession, refresh, view, addContext, ask, openRail, openInspector]);
+  }, [docs, sessions, railShown, inspShown, newSession, refresh, view, addContext, ask, openRail,
+      openInspector, resetAll]);
 
   const busy = session.status === "streaming";
+  /** The inspector is only real when a session is loaded: one predicate for the column and the pane. */
+  const showInspector = Boolean(active) && session.turns !== undefined && inspShown;
+  /** In narrow the rail is a drawer that starts closed. */
+  const railDrawn = railShown && !narrow ? true : (railShown && narrow && drawer === "rail");
 
   const handlers = useMemo(() => {
     const go = (r: RailTab) => () => setRailAndOpen(r);
@@ -270,6 +283,7 @@ export function App() {
       "mod+1": go("sessions"),
       "mod+2": go("files"),
       "mod+3": go("catalog"),
+      "mod+shift+l": theme.cycle,
       "mod+b": () => { setDrawer(!layout.railVisible && narrow ? "rail" : null); toggle("rail"); },
       "mod+i": () => { setDrawer(!layout.inspectorVisible && inspectorOverlay ? "inspector" : null); toggle("inspector"); },
       "mod+p": () => { setRailAndOpen("files"); focusComposer(); },
@@ -292,7 +306,22 @@ export function App() {
       },
     };
   }, [docs, view, paletteOpen, keysOpen, newSession, focusComposer, drawer, narrow, inspectorOverlay,
-      openRail, layout, toggle]);
+      openRail, layout, toggle, theme.cycle]);
+
+  // A menu must close the way people expect: outside click, or Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    // mousedown anywhere outside the wrapper closes it. Inside, the click must reach the item:
+    // closing on mousedown would unmount the button before its click event fires.
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t?.closest(".menu-wrap")) setMenuOpen(null);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(null); };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("mousedown", onDown); window.removeEventListener("keydown", onKey); };
+  }, [menuOpen]);
 
   useHotkeys(handlers);
   const toolCalls = session.turns.reduce((n, t) => n + t.tools.length, 0);
@@ -306,7 +335,7 @@ export function App() {
     <>
 
           <button className="rail-collapse" onClick={() => openRail(false)}
-            title="Hide this panel (⌘B)" aria-label="Hide the left panel">‹</button>
+            title="Hide this panel (⌘B)" aria-label="Hide the left panel"><ChevronLeft size={15} /></button>
           {mode !== "narrow" && (
             <Separator zone="rail" width={layout.railWidth} min={250} max={Number.POSITIVE_INFINITY}
               label="Resize the navigator"
@@ -344,13 +373,22 @@ export function App() {
                     No sessions yet. Start with what you want to build.
                   </p>
                 )}
-                {sessions.map((s) => (
-                  <button key={s.id} className="rail-item" aria-current={s.id === active}
-                    onClick={() => { setActive(s.id); setView(CHAT); }}>
-                    <span className={`dot${s.status === "streaming" ? " busy" : ""}`} aria-hidden />
-                    {s.title === "New session" ? s.id.slice(0, 8) : s.title}
-                  </button>
-                ))}
+                {sessions.map((s) => {
+                  const label = s.title === "New session" ? s.id.slice(0, 8) : s.title;
+                  const when = relativeTime(s.createdAt);
+                  return (
+                    <button key={s.id} className="rail-item" aria-current={s.id === active}
+                      title={exactTime(s.createdAt) || undefined}
+                      onClick={() => { setActive(s.id); setView(CHAT); }}>
+                      <span className={`dot${s.status === "streaming" ? " busy" : ""}`} aria-hidden />
+                      <span className="rail-item-label">{label}</span>
+                      {/* A truncated title alone cannot tell two sessions apart. The stamp is the
+                          cheapest disambiguator, and it is announced to screen readers as the exact
+                          time so the abbreviation is never the only encoding. */}
+                      {when && <span className="rail-item-when" aria-label={exactTime(s.createdAt)}>{when}</span>}
+                    </button>
+                  );
+                })}
               </div>
             </>
           )}
@@ -376,7 +414,7 @@ export function App() {
     <OpenDoc.Provider value={openDoc}>
       <div className="app">
         <header className="topbar">
-          <h1 className="brand"><span className="mark" aria-hidden>◧</span> Databricks Coding Agents</h1>
+          <h1 className="brand"><span className="mark" aria-hidden><Mark size={13} /></span> Databricks Coding Agents</h1>
           <span className="meta">
             {active && (
               <span className="chip">
@@ -398,38 +436,59 @@ export function App() {
             {active && <span className={`pill ${session.status}`}>{session.status}</span>}
             <button className="search-trigger" onClick={() => setPaletteOpen(true)}
               aria-label={`Search or run a command (${display("mod+k")})`} title={`Search or run a command — ${display("mod+k")}`}>
-              <span aria-hidden>⌕</span>
+              <Search size={14} />
               <span className="search-trigger-label">Search or run a command</span>
               <span className="kbd-hint">{caps("mod+k").map((c) => <kbd key={c}>{c}</kbd>)}</span>
             </button>
-            <button className="btn ghost" onClick={() => setKeysOpen(true)} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (⌘/)">⌘</button>
-            <button className="btn ghost" onClick={() => void refresh()} aria-label="Refresh sessions" title="Refresh">⟳</button>
+            {/* Persistent zone toggles. A floating pill on a pane edge is not a discoverable
+                idiom: it reads as a stray element and only exists once the pane is already gone.
+                These stay put at every width, state their state to assistive tech, and are the
+                same controls as ⌘B / ⌘I and the ▤ menu. */}
+            <button className="btn ghost shell-toggle" aria-pressed={railDrawn}
+              onClick={() => openRail(!railDrawn)}
+              aria-label={railDrawn ? "Hide the navigator" : "Show the navigator"}
+              title={`${railDrawn ? "Hide" : "Show"} the navigator (${display("mod+b")})`}>
+              <PanelLeft size={16} />
+            </button>
+            <button className="btn ghost shell-toggle" aria-pressed={showInspector}
+              onClick={() => openInspector(!showInspector)}
+              disabled={!active}
+              aria-label={showInspector ? "Hide the inspector" : "Show the inspector"}
+              title={active
+                ? `${showInspector ? "Hide" : "Show"} the inspector (${display("mod+i")})`
+                : "The inspector appears once a session is open"}>
+              <PanelRight size={16} />
+            </button>
+            <ThemeSwitch pref={theme.pref} onChoose={theme.choose} title={theme.title} />
+            <LayoutMenu
+              open={menuOpen === "layout"}
+              onOpen={() => setMenuOpen((m) => (m === "layout" ? null : "layout"))}
+              railVisible={railShown}
+              inspectorVisible={showInspector}
+              inspectorAvailable={Boolean(active)}
+              onToggleRail={() => { openRail(!railShown); setMenuOpen(null); }}
+              onToggleInspector={() => { openInspector(!inspShown); setMenuOpen(null); }}
+              onReset={() => { resetAll(); setMenuOpen(null); }}
+              onKeys={() => { setMenuOpen(null); setKeysOpen(true); }}
+            />
+            <button className="btn ghost shell-toggle" onClick={() => setKeysOpen(true)}
+              aria-label="Keyboard shortcuts" title="Keyboard shortcuts (⌘/)"><CommandKey size={16} /></button>
+            <button className="btn ghost shell-toggle" onClick={() => void refresh()}
+              aria-label="Refresh sessions" title="Refresh the session list"><Refresh size={16} /></button>
           </span>
         </header>
 
-        <div className="layout" style={{ "--layout-columns": columns(layout, viewport) } as React.CSSProperties}>
+        {/* The grid must not reserve a column for a pane that will not be rendered. With no session
+            the inspector has nothing to show, so its column collapses — otherwise a fresh window
+            opens with an empty panel beside the work. */}
+        <div className="layout"
+          style={{ "--layout-columns": columns({ ...layout, inspectorVisible: showInspector }, viewport) } as React.CSSProperties}>
           {railShown && !narrow && (
             <nav className="pane rail" aria-label="Navigator">
               {railBody}
             </nav>
           )}
 
-          {!railShown && (
-            <button className="rail-reveal" onClick={() => openRail(true)}
-              title="Show the left panel (⌘B)" aria-label="Show the left panel">›</button>
-          )}
-          {!inspShown && (
-            <button className="insp-reveal" onClick={() => openInspector(true)}
-              title="Show the inspector (⌘I)" aria-label="Show the inspector">‹</button>
-          )}
-          {drawer && (
-            <div className="drawer-scrim" role="presentation"
-              onClick={() => {
-                setDrawer(null);
-                if (narrow) toggle("rail", false);
-                if (inspectorOverlay) toggle("inspector", false);
-              }} />
-          )}
 
           <main className="pane main">
             {docs.length > 0 && (
@@ -472,9 +531,20 @@ export function App() {
             )}
             </div>
 
+            {/* Rendered only once the folder is known: before /api/me resolves this line had an
+                empty <code> and reflowed into its real path a frame later, which is a visible
+                flash of half-written text (and measured as layout shift). The element holds its
+                line height either way, so the composer below never moves. */}
             {!active && (
-              <p className="composer-note">
-                {viewDoc ? "New session" : "Session"} in <code>{folder || scratch}</code> — <strong>the agent can write only there</strong>.
+              <p className="composer-note" aria-live="off">
+                {(folder || scratch) ? (
+                  <>
+                    {viewDoc ? "New session" : "Session"} in <code>{folder || scratch}</code> —{" "}
+                    <strong>the agent can write only there</strong>.
+                  </>
+                ) : (
+                  <span className="composer-note-pending">Preparing your scratch folder…</span>
+                )}
               </p>
             )}
             <Composer
@@ -487,8 +557,8 @@ export function App() {
             />
           </main>
 
-          {active && inspShown && !inspectorOverlay && (
-            <Inspector session={session}
+          {showInspector && !inspectorOverlay && (
+            <Inspector session={session} onHide={() => openInspector(false)}
               edge={mode === "wide" ? (
                 <Separator zone="inspector" width={layout.inspectorWidth} min={250} max={Number.POSITIVE_INFINITY}
                   label="Resize the inspector"
@@ -497,13 +567,24 @@ export function App() {
           )}
         </div>
 
+        {/* No floating pills: the top bar owns the zone toggles, so a hidden zone is always
+            recoverable from a fixed, predictable place. */}
+        {drawer && (
+          <div className="drawer-scrim" role="presentation"
+            onClick={() => {
+              setDrawer(null);
+              if (narrow) toggle("rail", false);
+              if (inspectorOverlay) toggle("inspector", false);
+            }} />
+        )}
+
         {/* Overlay panes live outside the grid: a fixed grid child still reserves a row in some
             engines, which once pushed the work area down the page. */}
-        {railShown && narrow && (
+        {railShown && narrow && drawer === "rail" && (
           <nav className="pane rail is-drawer" aria-label="Navigator">{railBody}</nav>
         )}
-        {active && inspShown && inspectorOverlay && (
-          <Inspector session={session} className="is-drawer" />
+        {showInspector && inspectorOverlay && (
+          <Inspector session={session} onHide={() => openInspector(false)} className="is-drawer" />
         )}
 
         {paletteOpen && <Palette items={paletteItems} onClose={() => setPaletteOpen(false)} />}

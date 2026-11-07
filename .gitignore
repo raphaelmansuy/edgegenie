@@ -18,6 +18,8 @@ apps/coding-agent/.mypy_cache/
 apps/coding-agent/*.log
 apps/coding-agent/web/node_modules/
 apps/coding-agent/web/dist/
+# tsc's incremental state: a build artifact that churns on every compile and conflicts on merge.
+apps/coding-agent/web/tsconfig.tsbuildinfo
 apps/coding-agent/web/shots/
 __pycache__/
 .pytest_cache/

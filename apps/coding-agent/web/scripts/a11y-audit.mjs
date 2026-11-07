@@ -29,6 +29,23 @@ const page = (b, opts = {}) => b.newPage({
   ...opts,
 });
 
+/** A dark-theme pass is not optional once a dark theme ships.
+ *  Contrast is a property of a colour *pair*, so every finding cleared in light mode can reappear
+ *  in dark: a muted ink that clears 4.5:1 on white can land at 2.9:1 on charcoal. `colorScheme`
+ *  drives the `prefers-color-scheme` path, which is what the default `system` preference uses. */
+async function darkPass(b, theme) {
+  const p = await page(b, { colorScheme: theme });
+  await p.addInitScript(HELPERS);
+  await p.goto(APP, { waitUntil: "domcontentloaded" });
+  await p.waitForTimeout(1500);
+  await p.evaluate(HELPERS);
+  const r = await p.evaluate(collect);
+  const painted = await p.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await p.screenshot({ path: `${out}/dark-${theme}.png` });
+  await p.close();
+  return { name: `theme:${theme}`, painted, ...r };
+}
+
 /* ---------------------------------------------------------------- in-page helpers */
 const HELPERS = `
 window.__a11y = {
@@ -192,7 +209,7 @@ const states = [];
 const run = async (name) => {
   await p.evaluate(HELPERS);
   const r = await p.evaluate(collect);
-  states.push({ name, ...r });
+  states.push({ name: `light:${name}`, ...r });
 };
 await run("home");
 await p.screenshot({ path: `${out}/01-home.png` });
@@ -338,6 +355,20 @@ const reach = await p.evaluate(() => document.querySelectorAll('[role="treeitem"
 if (reach === 0) add("keyboard", "no-tree-rows", "Files panel has nothing focusable");
 
 await p.close();
+
+// Both ways into dark: the OS preference (what `system` follows) and an explicit choice.
+for (const theme of ["dark", "light"]) states.push(await darkPass(b, theme));
+
+// If the two passes painted the same colour, the theme layer is not wired and every dark finding
+// below would be meaningless. Fail loudly rather than report a false all-clear.
+{
+  const dark = states.find((s) => s.name === "theme:dark");
+  const light = states.find((s) => s.name === "theme:light");
+  if (dark && light && dark.painted === light.painted) {
+    add("theme", "contrast", `both colour schemes painted ${dark.painted}: the theme layer is inert`);
+  }
+}
+
 await b.close();
 
 /* ---------------------------------------------------------------- report */

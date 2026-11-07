@@ -16,7 +16,7 @@ export interface Shortcut {
   combo: Combo;
   /** What it does, phrased as an instruction. Shown in the sheet and in tooltips. */
   label: string;
-  group: "General" | "Navigate" | "Session" | "Compose" | "Panes";
+  group: "General" | "Navigate" | "Session" | "Compose" | "Panes" | "Appearance";
 }
 
 const IS_MAC = typeof navigator !== "undefined" && /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent);
@@ -102,6 +102,7 @@ export const SHORTCUTS: Shortcut[] = [
   { id: "railCatalog", combo: "mod+3", label: "Catalog panel", group: "Panes" },
   { id: "toggleRail", combo: "mod+b", label: "Show or hide the left panel", group: "Panes" },
   { id: "toggleInspector", combo: "mod+i", label: "Show or hide the inspector", group: "Panes" },
+  { id: "cycleTheme", combo: "mod+shift+l", label: "Cycle the colour theme — system, light, dark", group: "Appearance" },
   { id: "searchFiles", combo: "mod+p", label: "Search notebooks and files", group: "Navigate" },
   { id: "nextTab", combo: "ctrl+tab", label: "Next open tab", group: "Navigate" },
   { id: "prevTab", combo: "ctrl+shift+tab", label: "Previous open tab", group: "Navigate" },
@@ -133,7 +134,7 @@ export const byId = (id: string): Shortcut | undefined => SHORTCUTS.find((s) => 
 
 /** Grouped for the sheet, in the order people learn them. */
 export function grouped(): { group: Shortcut["group"]; items: Shortcut[] }[] {
-  const order: Shortcut["group"][] = ["General", "Navigate", "Compose", "Panes", "Session"];
+  const order: Shortcut["group"][] = ["General", "Navigate", "Compose", "Panes", "Appearance", "Session"];
   return order
     .map((group) => ({ group, items: SHORTCUTS.filter((s) => s.group === group) }))
     .filter((g) => g.items.length > 0);

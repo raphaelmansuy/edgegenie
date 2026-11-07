@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Approval, SessionView } from "../domain/events";
 import { api } from "../api/client";
+import { Bug, ChevronRight, Clock, Database, ListIcon, Notebook, Sparkle } from "./Icons";
 
 export function ApprovalSheet({ approval, sessionId, onDecided }: {
   approval: Approval; sessionId: string; onDecided: () => void;
@@ -45,8 +46,8 @@ export function ApprovalSheet({ approval, sessionId, onDecided }: {
   );
 }
 
-export function Inspector({ session, edge, className = "" }: {
-  session: SessionView; edge?: React.ReactNode; className?: string;
+export function Inspector({ session, edge, onHide, className = "" }: {
+  session: SessionView; edge?: React.ReactNode; onHide?: () => void; className?: string;
 }) {
   const [tab, setTab] = useState<"context" | "audit">("context");
   const calls = session.turns.flatMap((t) => t.tools);
@@ -59,6 +60,12 @@ export function Inspector({ session, edge, className = "" }: {
           aria-controls="insp-panel-context" tabIndex={tab === "context" ? 0 : -1}
           onClick={() => setTab("context")}
           onKeyDown={(e) => { if (e.key === "ArrowRight") { e.preventDefault(); setTab("audit"); document.getElementById("insp-tab-audit")?.focus(); } }}>Context</button>
+        {/* The navigator has an in-panel collapse control; without a matching one here the two side
+            zones are not symmetric, and the only way to close this pane is the top bar. */}
+        {onHide && (
+          <button className="rail-collapse insp-collapse" onClick={onHide}
+            title="Hide this panel (⌘I)" aria-label="Hide the right panel"><ChevronRight size={15} /></button>
+        )}
         <button id="insp-tab-audit" className="tab" role="tab" aria-selected={tab === "audit"}
           aria-controls="insp-panel-audit" tabIndex={tab === "audit" ? 0 : -1}
           onClick={() => setTab("audit")}
@@ -112,23 +119,27 @@ export function Inspector({ session, edge, className = "" }: {
   );
 }
 
+/* Glyphs, not emoji. An emoji is coloured by the font and ignores `color`, so a dark pictogram
+   lands on a dark tint in dark mode — the audit measured 🗄 at 1.06:1, i.e. invisible. These are
+   text glyphs that inherit currentColor, so they follow the theme and the accent per card.
+   `fg` is the ink for the glyph; the tile keeps a soft wash of the same hue. */
 const CARDS = [
-  { icon: "📓", bg: "var(--blue-100)", t: "Build a notebook", d: "Revenue by month, a chart, a written summary",
+  { icon: Notebook, fg: "var(--blue-600)", bg: "var(--blue-100)", t: "Build a notebook", d: "Revenue by month, a chart, a written summary",
     scenario: "notebook",
     prompt: "Build a notebook that shows revenue by month from samples.nyctaxi.trips with a chart, then run it and report the exit value." },
-  { icon: "🧪", bg: "var(--yellow-100)", t: "Investigate a number", d: "Why did revenue drop on the 10th?",
+  { icon: Sparkle, fg: "var(--yellow-800)", bg: "var(--yellow-100)", t: "Investigate a number", d: "Why did revenue drop on the 10th?",
     scenario: "blocked",
     prompt: "Investigate why revenue dropped on the 10th. Show the SQL you used and name the most likely cause." },
-  { icon: "⚙", bg: "var(--green-100)", t: "Create a job", d: "Daily recompute at 06:00, with a dependency",
+  { icon: Clock, fg: "var(--green-700)", bg: "var(--green-100)", t: "Create a job", d: "Daily recompute at 06:00, with a dependency",
     scenario: "slow",
     prompt: "Create a job that recomputes daily revenue at 06:00 after a dependency task, run it once, and prove the run succeeded." },
-  { icon: "🗄", bg: "var(--teal-100)", t: "Lakebase and an app", d: "Postgres, then a small web page",
+  { icon: Database, fg: "var(--teal-300)", bg: "var(--teal-100)", t: "Lakebase and an app", d: "Postgres, then a small web page",
     scenario: "notebook",
     prompt: "Create a Lakebase database with one table and a small app that reads it. Show me the connection details." },
-  { icon: "📚", bg: "var(--purple-100)", t: "Document tables", d: "Comments grounded in real values",
+  { icon: ListIcon, fg: "var(--purple-300)", bg: "var(--purple-100)", t: "Document tables", d: "Comments grounded in real values",
     scenario: "injection",
     prompt: "Document the tables in my schema: add a comment to each table and column based on the real values you observe." },
-  { icon: "🔍", bg: "var(--pink-100)", t: "Debug a failing job", d: "Find the cause and prove the fix",
+  { icon: Bug, fg: "var(--pink-700)", bg: "var(--pink-100)", t: "Debug a failing job", d: "Find the cause and prove the fix",
     scenario: "blocked",
     prompt: "A job is failing. Read its last run, find the cause, fix the notebook, re-run the job and show me the successful run." },
 ];
@@ -160,7 +171,9 @@ export function EmptyState({ models, folder, onFolder, model, onModel, onStart, 
               try { await onStart(demo ? `${c.prompt} [[scenario:${c.scenario}]]` : c.prompt); }
               finally { setStarting(false); }
             }}>
-            <span className="t"><span className="ico" style={{ background: c.bg }} aria-hidden>{c.icon}</span>{c.t}</span>
+            <span className="t"><span className="ico" style={{ background: c.bg, color: c.fg }} aria-hidden>
+                <c.icon size={16} />
+              </span>{c.t}</span>
             <span className="d">{c.d}</span>
           </button>
         ))}

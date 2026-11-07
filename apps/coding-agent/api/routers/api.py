@@ -61,6 +61,8 @@ def _session_json(s: Session) -> dict[str, Any]:
         "tools": s.tools,
         "agent": s.agent,
         "agentVersion": s.agent_version,
+        # Omitted rather than null when unknown, so the client can tell "no timestamp" from "epoch 0".
+        **({"createdAt": s.created_at} if s.created_at is not None else {}),
     }
 
 

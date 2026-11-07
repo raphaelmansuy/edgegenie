@@ -13,7 +13,7 @@ import { api, type WsHit } from "../api/client";
 import type { Attachment } from "../domain/events";
 import { workspaceUrl } from "../domain/links";
 import { WorkspaceLinks } from "./DocContext";
-import { Icon } from "./Icons";
+import { Icon, Plus, Refresh } from "./Icons";
 import { focusFirstChild, focusParent, TreeRow, treeKeys, type RowAction } from "./Tree";
 
 export interface WsNode {
@@ -199,8 +199,10 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
           onKeyDown={(e) => { if (e.key === "Escape") setFilter(""); }}
           placeholder="Search notebooks and files…" aria-label="Search workspace" spellCheck={false}
         />
-        <button className="btn ghost sm" title="Refresh" aria-label="Refresh tree" onClick={() => setManual((n) => n + 1)}>⟳</button>
-        <button className="btn ghost sm" title={`New folder in ${parent}`} aria-label="New folder" onClick={() => setMaking((m) => !m)}>＋</button>
+        <button className="icon-btn tree-refresh" title="Refresh" aria-label="Refresh the file tree"
+          onClick={() => setManual((n) => n + 1)}><Refresh size={15} /></button>
+        <button className="icon-btn" title={`New folder in ${parent}`} aria-label="New folder"
+          onClick={() => setMaking((m) => !m)}><Plus size={15} /></button>
       </div>
       {making && (
         <form className="tree-new" onSubmit={(e) => { e.preventDefault(); void createFolder(); }}>
@@ -215,10 +217,16 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
 
       {filter.trim().length >= 2 ? (
         <div className="tree-results" role="list" aria-label="Search results">
+          {/* Skeleton rows while results are in flight, plus the honest slow hint. The count of
+              bars is a placeholder, not a promise: the result count is shown as soon as it is known. */}
           {searching && (
-            <div className="tree-empty" role="status">
-              <span className="spin" /> searching the workspace…{" "}
-              {Date.now() - startedAt > 1200 && <span className="tree-slow">this workspace is large; it walks folders in order</span>}
+            <div className="sk-list" role="status" aria-label="Searching the workspace">
+              {[0, 1, 2, 3].map((i) => (
+                <div className="sk-row" key={i}><span className="sk a" /><span className="sk b" /></div>
+              ))}
+              {Date.now() - startedAt > 1200 && (
+                <p className="tree-slow">This workspace is large; folders are walked in order.</p>
+              )}
             </div>
           )}
           {searchErr && <div className="tree-error" role="alert">{searchErr}</div>}

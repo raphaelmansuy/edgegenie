@@ -5,7 +5,7 @@
  * strip, and when tabs are hidden the count is stated (specs/001-perfect-shell SH-C1..C4).
  */
 import { useEffect, useRef, useState } from "react";
-import { CloseIcon } from "./Icons";
+import { CloseIcon, Notebook, Table } from "./Icons";
 import { tabKeys } from "./Tree";
 
 export interface DocTab {
@@ -70,7 +70,9 @@ export function DocTabs({ chatId, docs, active, onSelect, onClose }: {
               if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); onClose(d.id); }
             }}>
             <span className="doc-tab-label">
-              <span aria-hidden>{d.kind === "table" ? "▦" : "▤"}</span> {d.name}
+              <span className="tab-icon" aria-hidden>
+                {d.kind === "table" ? <Table size={13} /> : <Notebook size={13} />}
+              </span> {d.name}
             </span>
             <button className="doc-close" tabIndex={-1} aria-label={`Close ${d.name}`}
               title={`Close ${d.name} (⌘W)`}

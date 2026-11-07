@@ -131,7 +131,7 @@ for (const width of widths) {
   // a document open, with long paths and the tab strip.
   // On a narrow window the rail starts closed (it is a drawer there), so open it first.
   if (!(await p.getByRole("tab", { name: /Files/i }).isVisible())) {
-    await p.locator(".rail-reveal").click();
+    await p.getByRole("button", { name: "Show the navigator" }).click();
     await p.locator(".pane.rail").waitFor({ state: "visible" });
   }
   await p.getByRole("tab", { name: /Files/i }).click();
@@ -163,7 +163,7 @@ for (const width of widths) {
   // an overlay panel is not a missing panel: record what it looks like when opened
   if (width <= 1180) {
     if (await p.locator('.pane.inspector').count() === 0) {
-      await p.locator('.insp-reveal').click();
+      await p.getByRole("button", { name: "Show the inspector" }).click();
       await p.locator('.pane.inspector').waitFor({ state: "visible" });
     }
     report.push({ width, view: "inspector-overlay", problems: await p.evaluate(audit) });

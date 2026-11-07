@@ -130,7 +130,8 @@ class Orchestrator:
     ) -> Session:
         self._models.check(user_id, model)
         sid = uuid4().hex[:16]
-        session = Session(id=sid, user_id=user_id, folder=folder, schema=schema, model=model, title=title)
+        session = Session(id=sid, user_id=user_id, folder=folder, schema=schema, model=model, title=title,
+                          created_at=time.time())
         live = Live(state=SessionState(session=session), workspace_folder=folder)
         # The user's forwarded token: the agent and the tool server act as this user, not as the app.
         live.extra["user_token"] = user_token

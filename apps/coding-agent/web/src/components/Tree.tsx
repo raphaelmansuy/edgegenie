@@ -1,6 +1,6 @@
 /** Shared tree row and keyboard model for the Files and Catalog trees (WAI-ARIA tree pattern). */
 import type { KeyboardEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
-import { Icon } from "./Icons";
+import { ChevronRight, Icon } from "./Icons";
 
 export interface RowAction { label: string; glyph: string; run?: () => void; href?: string | null }
 
@@ -26,7 +26,9 @@ export function TreeRow({ depth, role = "treeitem", expanded, selected, loading,
         onKeyDown?.(e);
       }}
     >
-      <span className={`tree-caret${expanded ? " is-open" : ""}`} aria-hidden>{caret ? "▸" : ""}</span>
+      <span className={`tree-caret${expanded ? " is-open" : ""}`} aria-hidden>
+        {caret ? <ChevronRight size={12} /> : null}
+      </span>
       <span className={`tree-icon ${iconClass}`} aria-hidden><Icon kind={icon} /></span>
       <span className="tree-name" title={title ?? name}>{name}</span>
       {badge}

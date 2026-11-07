@@ -8,6 +8,7 @@ import { api, type TableInfo, type WsObject } from "../api/client";
 import { ACTIONS, ACTIONS_FOR, type Action, type Doc } from "../domain/docs";
 import { tokenize } from "../domain/highlight";
 import { ExtLink } from "./ExtLink";
+import { Refresh } from "./Icons";
 import { Markdown } from "./Markdown";
 
 export function Code({ text, language }: { text: string; language: string }) {
@@ -46,7 +47,9 @@ function Head({ doc, subtitle, badge, actions, busy, reload, objectId }: {
       <div className="viewer-title">
         <span className="viewer-name">{doc.name}</span>
         {badge && <span className="tree-lang big">{badge}</span>}
-        <button className="btn ghost sm" aria-label="Reload" title="Reload" onClick={reload} disabled={busy}>⟳</button>
+        <button className="icon-btn" aria-label="Reload this document" title="Reload" onClick={reload} disabled={busy}>
+          <Refresh size={15} className={busy ? "spin" : ""} />
+        </button>
       </div>
       <button className="viewer-path" title="Copy the full path" aria-label={`Copy the path ${doc.ref}`}
         style={{ minHeight: 24, display: "inline-flex", alignItems: "center" }} onClick={() => {

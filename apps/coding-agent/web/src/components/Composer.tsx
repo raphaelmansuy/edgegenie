@@ -4,21 +4,25 @@
  * trees add chips too. A chip marked "open" is the document on screen: it rides along with the
  * message automatically, the way Genie Code knows which notebook you are looking at.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createElement, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, type CatalogItem, type WsHit } from "../api/client";
 import { applyCommand, commandAt, matchCommands, pushHistory, stepHistory, type Command } from "../domain/commands";
 import type { Attachment } from "../domain/events";
 import type { Doc } from "../domain/docs";
+import { FileIcon, Folder, Notebook, Table } from "./Icons";
 
 const MENTION = /(^|\s)@([^\s@]*)$/;
 const HISTORY_KEY = "coding-agent:prompt-history";
 
-export const KIND_GLYPH: Record<string, string> = { notebook: "▤", file: "▢", folder: "▸", table: "▦" };
+/** One source of truth for "what does a notebook look like" across chips, tabs, and mentions. */
+export const KIND_ICON: Record<string, (p: { size?: number }) => ReactNode> = {
+  notebook: Notebook, file: FileIcon, folder: Folder, table: Table,
+};
 
 export function Chip({ a, auto, onRemove }: { a: Attachment; auto?: boolean; onRemove?: () => void }) {
   return (
     <span className={`ctx-chip${auto ? " auto" : ""}`} title={`${a.ref}${auto ? "\nOpen in the viewer, so it is sent with your message" : ""}`}>
-      <span aria-hidden>{KIND_GLYPH[a.kind]}</span>
+      <span className="chip-icon" aria-hidden>{createElement(KIND_ICON[a.kind] ?? FileIcon, { size: 13 })}</span>
       <span className="ctx-name">{a.name}</span>
       {auto && <span className="ctx-tag">open</span>}
       {onRemove && <button aria-label={`Remove ${a.name}`} onClick={onRemove}>×</button>}
@@ -166,7 +170,7 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
   };
 
   return (
-    <section className="composer" role="region" aria-label="Message the agent">
+    <section className="composer" role="region" aria-label="Message composer">
       <div className="composer-box">
         {(attachments.length > 0 || auto) && (
           <div className="ctx-row" aria-label="Context for this message">
@@ -234,7 +238,7 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
                 <button key={`${o.a.kind}:${o.a.ref}`} role="option" aria-selected={i === pick}
                   className={`mention-opt${i === pick ? " is-active" : ""}`}
                   onMouseDown={(e) => { e.preventDefault(); choose(o); }}>
-                  <span aria-hidden>{KIND_GLYPH[o.a.kind]}</span>
+                  <span className="chip-icon" aria-hidden>{createElement(KIND_ICON[o.a.kind] ?? FileIcon, { size: 13 })}</span>
                   <span className="mention-name">{o.a.name}</span>
                   <span className="mention-hint">{o.hint}</span>
                 </button>

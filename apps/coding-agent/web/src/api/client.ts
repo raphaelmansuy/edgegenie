@@ -5,6 +5,8 @@ const json = { "Content-Type": "application/json" };
 
 export interface SessionSummary {
   id: string; title: string; folder: string; model: string; status: string; tools: number;
+  /** Epoch seconds. Absent for a session created before this field existed. */
+  createdAt?: number;
 }
 
 export interface Cell { index: number; kind: "code" | "markdown"; language: string; source: string; truncated: boolean }

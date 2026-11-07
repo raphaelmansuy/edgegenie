@@ -1,6 +1,7 @@
 /** The transcript: turns, thinking, tool cards, evidence, blocked panel. */
-import { memo, useContext, useState } from "react";
+import { createElement, memo, useContext, useState, type ReactNode } from "react";
 import type { Turn } from "../domain/events";
+import { Alert, Check, ChevronDown, ChevronRight, Dot, Mark, Ring } from "./Icons";
 import { touched } from "../domain/docs";
 import { stripEvidence, subject } from "../domain/toolview";
 import { OpenDoc } from "./DocContext";
@@ -47,7 +48,8 @@ export function ToolCard({ name, args, status, seconds, summary, error, table }:
   const openDoc = useContext(OpenDoc);
   const hit = touched(name, args);
   const state = status === "error" ? "error" : status === "completed" ? "completed" : "running";
-  const glyph = state === "error" ? "!" : state === "completed" ? "✓" : "";
+  // Drawn, not typed: a "✓" character sits on the font baseline and never centres in the badge.
+  const glyph = state === "error" ? <Alert size={12} /> : state === "completed" ? <Check size={12} /> : null;
   return (
     <div className="tool" data-open={open}>
       {hit && state === "completed" && (
@@ -87,7 +89,9 @@ function pretty(args: string): string {
   try { return JSON.stringify(JSON.parse(args), null, 2); } catch { return args; }
 }
 
-const PLAN_GLYPH: Record<string, string> = { completed: "✓", in_progress: "●", pending: "○" };
+const PLAN_GLYPH: Record<string, (p: { size?: number }) => ReactNode> = {
+  completed: Check, in_progress: Dot, pending: Ring,
+};
 
 function Plan({ turn }: { turn: Turn }) {
   if (!turn.plan?.length) return null;
@@ -98,7 +102,7 @@ function Plan({ turn }: { turn: Turn }) {
       <ol>
         {turn.plan.map((p, i) => (
           <li key={i} className={`plan-${p.status}`}>
-            <span className="plan-mark" aria-hidden>{PLAN_GLYPH[p.status] ?? "○"}</span>
+            <span className="plan-mark" aria-hidden>{createElement(PLAN_GLYPH[p.status] ?? Ring, { size: 12 })}</span>
             <span>{p.content}</span>
             <span className="sr-only">{p.status.replace("_", " ")}</span>
           </li>
@@ -133,13 +137,13 @@ function Evidence({ turn }: { turn: Turn }) {
   return (
     <section className="evidence" aria-label="Evidence">
       <button className="evidence-head" aria-expanded={shown} onClick={() => setOpen((o) => !o)}>
-        <span aria-hidden>{allProven ? "✓" : "!"}</span> Evidence
+        <span aria-hidden>{allProven ? <Check size={13} /> : <Alert size={13} />}</span> Evidence
         <span className="count">{allProven ? `all ${turn.evidence.length} proven` : `${ok} of ${turn.evidence.length} proven`}</span>
-        <span className="chev" aria-hidden>{shown ? "▾" : "▸"}</span>
+        <span className="chev" aria-hidden>{shown ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
       </button>
       {shown && turn.evidence.map((r, i) => (
         <div key={i} className={`evidence-row${r.verified ? "" : " unverified"}`}>
-          <span className="tick" aria-hidden>{r.verified ? "✓" : "?"}</span>
+          <span className="tick" aria-hidden>{r.verified ? <Check size={13} /> : <Alert size={13} />}</span>
           <span className="req">{r.requirement || "(unnamed requirement)"}</span>
           <span className="tool">{r.tool || "no tool"}</span>
         </div>
@@ -181,9 +185,9 @@ function ToolList({ tools }: { tools: Turn["tools"] }) {
   return (
     <>
       <button className="who tools-head" aria-expanded={open || !many} onClick={() => many && setOpen((o) => !o)}>
-        <span className="avatar agent" aria-hidden>◧</span> Agent
+        <span className="avatar agent" aria-hidden><Mark size={11} /></span> Agent
         <time>{tools.length} tool {tools.length === 1 ? "call" : "calls"}{failed ? ", one failed" : ""}</time>
-        {many && <span className="chev" aria-hidden>{open ? "▾" : "▸"}</span>}
+        {many && <span className="chev" aria-hidden>{open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>}
       </button>
       {open && <div className="tools">{tools.map((c) => <ToolCard key={c.callId} {...c} />)}</div>}
     </>
@@ -217,7 +221,7 @@ function TurnViewInner({ turn }: { turn: Turn }) {
       {turn.thought && (
         <div className="thought">
           <button className="thought-toggle" onClick={() => setShowThought((s) => !s)} aria-expanded={showThought}>
-            <span aria-hidden>{showThought ? "▾" : "▸"}</span> thinking
+            <span aria-hidden>{showThought ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span> thinking
             {streaming && <span className="spin" aria-hidden />}
           </button>
           {showThought && <div className="thought-body">{turn.thought}</div>}
@@ -227,14 +231,19 @@ function TurnViewInner({ turn }: { turn: Turn }) {
       {turn.tools.length > 0 && <ToolList tools={turn.tools} />}
 
       {turn.answer && (
-        <>
+        <section className="answer-block" aria-label="The agent's answer">
+          {/* A real h2 for the answer, visually hidden. The brand is the page's only h1, and markdown
+              renders "###" as a genuine h3 — so without a heading here the document skipped h1 to h3,
+              which the audit flagged on every turn. This also makes the transcript navigable by
+              heading in a screen reader, which is the point of headings in a long log. */}
+          <h2 className="sr-only">The agent's answer</h2>
           {/* While a long answer streams, plain text: re-parsing markdown on every frame is what
               made the tab unresponsive. The finished answer is rendered properly. */}
           {streaming && turn.answer.length > 4000
             ? <div className="answer streaming-plain">{turn.answer}</div>
             : <Markdown text={turn.evidence.length ? stripEvidence(turn.answer) : turn.answer} />}
           {streaming && <span className="caret" aria-hidden />}
-        </>
+        </section>
       )}
       {turn.status === "auditing" && !turn.answer && <p style={{ color: "var(--ink-3)" }}>Checking the work…</p>}
       <Evidence turn={turn} />

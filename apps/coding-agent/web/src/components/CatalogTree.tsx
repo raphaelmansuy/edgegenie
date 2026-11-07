@@ -4,6 +4,7 @@ import { api, type CatalogItem } from "../api/client";
 import type { Attachment } from "../domain/events";
 import { workspaceUrl } from "../domain/links";
 import { WorkspaceLinks } from "./DocContext";
+import { Refresh } from "./Icons";
 import { focusFirstChild, focusParent, TreeRow, treeKeys } from "./Tree";
 
 function Row({ item, depth, onOpenTable, onAttach, selected }: {
@@ -66,24 +67,45 @@ export function CatalogTree({ onOpenTable, onAttach, selected }: {
   const [roots, setRoots] = useState<CatalogItem[] | null>(null);
   const [error, setError] = useState("");
   const [manual, setManual] = useState(0);
+  /** In flight. Distinct from `!roots`, which is also true after a failure — a refresh button that
+   *  spins forever because the request errored is worse than one that never spins. */
+  const [loading, setLoading] = useState(true);
   const first = useRef(-1);
 
   useEffect(() => {
     if (first.current === manual) return;
     first.current = manual;
+    setLoading(true);
     api.catalog().then((r) => { setRoots(r.items); setError(""); })
-      .catch((e) => setError(e instanceof Error ? e.message : "cannot read the catalog"));
+      .catch((e) => setError(e instanceof Error ? e.message : "cannot read the catalog"))
+      .finally(() => setLoading(false));
   }, [manual]);
 
   return (
     <div className="tree">
       <div className="tree-search">
         <div className="tree-hint">Unity Catalog, as you can see it</div>
-        <button className="btn ghost sm" title="Refresh" aria-label="Refresh catalog" onClick={() => { setRoots(null); setManual((n) => n + 1); }}>⟳</button>
+        {/* A real icon, not the ⟳ character: the glyph was 12px inside a 24x27 button, below the
+            24px target and sized by the font rather than the grid. It also spins while the reload
+            is in flight, so the control reports its own progress. */}
+        <button className="icon-btn tree-refresh" title="Refresh the catalog" aria-label="Refresh the catalog"
+          disabled={loading}
+          onClick={() => { setRoots(null); setManual((n) => n + 1); }}>
+          <Refresh size={15} className={loading ? "spin" : ""} />
+        </button>
       </div>
       {error && <div className="tree-error" role="alert">{error}</div>}
-      {!roots && !error && <div className="tree-empty"><span className="spin" /> loading…</div>}
+      {/* The skeleton is INSIDE the tree box, not above it: as a sibling it occupied 51px that
+          vanished when the catalog arrived, which pulled every row upward. Inside, the box keeps
+          its geometry and only its children are replaced. */}
       <div role="tree" aria-label="Unity Catalog" className="tree-body">
+        {!roots && !error && (
+          <div className="sk-list" role="status" aria-label="Loading the catalog">
+            {[0, 1, 2].map((i) => (
+              <div className="sk-row" key={i}><span className="sk a" /><span className="sk b" /></div>
+            ))}
+          </div>
+        )}
         {roots?.map((c) => <Row key={`${c.ref}:${manual}`} item={c} depth={0} selected={selected}
           onOpenTable={onOpenTable} onAttach={onAttach} />)}
       </div>
