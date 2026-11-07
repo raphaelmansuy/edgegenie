@@ -385,6 +385,7 @@ export function EditorSurface({
             onCells(next);
           }}
           onAskCell={(cell) => onAskCell?.(cell)}
+          onSave={() => void save()}
         />
       ) : (
         <Editor

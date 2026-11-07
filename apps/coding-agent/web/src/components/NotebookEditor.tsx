@@ -26,10 +26,12 @@ interface Props {
   onAskCell?: (cell: Cell, index: number) => void;
   /** Run one cell through the agent's execution path (NB-6: no second executor). */
   onRunCell?: (cell: Cell, index: number) => void;
+  /** ⌘S pressed inside a cell. It must reach the document's save, not stop at the cell. */
+  onSave?: () => void;
 }
 
 export function NotebookEditor({
-  cells, language, theme, readOnly = false, onChange, onAskCell, onRunCell,
+  cells, language, theme, readOnly = false, onChange, onAskCell, onRunCell, onSave,
 }: Props) {
   const [focused, setFocused] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -79,6 +81,7 @@ export function NotebookEditor({
           onInsertAfter={(kind) => addAt(i + 1, kind)}
           onAsk={() => onAskCell?.(cell, i)}
           onRun={() => onRunCell?.(cell, i)}
+          onSave={() => onSave?.()}
         />
       ))}
 
@@ -113,6 +116,7 @@ interface CellProps {
   onInsertAfter: (kind: "code" | "markdown") => void;
   onAsk: () => void;
   onRun: () => void;
+  onSave: () => void;
 }
 
 function CellBlock(p: CellProps) {
@@ -190,7 +194,11 @@ function CellBlock(p: CellProps) {
                 readOnly={readOnly}
                 theme={theme}
                 onChange={p.onSource}
-                onSave={() => { setEditing(false); }}
+                /* ⌘S inside a cell must save the DOCUMENT. CodeMirror's keymap consumes the key
+                   before it can bubble, so if this handler does anything else — exiting markdown
+                   edit mode, say — the save silently never happens. That was the real reason the
+                   e2e scene saw no request at all while a button click worked. */
+                onSave={() => { setEditing(false); p.onSave(); }}
                 autoFocus={false}
                 ariaLabel={`Cell ${index + 1} source`}
               />

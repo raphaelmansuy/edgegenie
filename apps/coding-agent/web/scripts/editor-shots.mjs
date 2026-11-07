@@ -266,15 +266,46 @@ await scene("notebook-convert", 1440, async (p) => {
 });
 
 await scene("fence-outside", 1440, async (p) => {
+  /* A document that is NOT in the session's working folder. The previous version of this scene
+     clicked a folder in the tree and then looked for an editor bar — a folder opens no editor, so
+     the assertion was wrong, not the app. Seed a file in /Shared, open it, and require the chip to
+     warn before any keystroke (WR-5). */
   await withSession(p);
+  const outside = await p.evaluate(async () => {
+    /* Outside the session's working folder but inside the user's home, so the Files tree can
+       reach it by default search. That is the realistic case — a notebook sitting next to your
+       scratch folder, not in it — and it is what WR-5 is about. */
+    const s = await (await fetch("/api/sessions")).json();
+    const home = (s.sessions?.[0]?.folder ?? "").replace(/\/agent_scratch\/?$/, "");
+    const path = `${home}/e2e_outside_fence`;
+    const text = "# Databricks notebook source\noutside = True\n";
+    const r = await fetch("/api/workspace/fence", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, version: "" }),
+    });
+    const fence = await r.json();
+    const save = await fetch("/api/workspace/save", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, text, version: "", approval: fence.approval, language: "PYTHON" }),
+    });
+    return save.ok ? path : "";
+  }).catch(() => "");
+  if (!outside) fail("could not create a document outside the working folder");
+
   await p.getByRole("tab", { name: /Files/i }).click();
-  await p.waitForTimeout(600);
-  const root = p.locator('[role="treeitem"]').first();
-  if (await root.count()) await root.click({ timeout: 4000 }).catch(() => {});
-  await p.waitForTimeout(1400);
-  const chip = (await p.locator(".fence-text").first().textContent().catch(() => ""))?.trim() ?? "";
-  if (!chip) fail("no fence chip to inspect");
-  await shot(p, "fence-outside", { x: 260, y: 52, width: 860, height: 280 });
+  await p.waitForTimeout(500);
+  await p.getByPlaceholder("Search notebooks and files…").fill("e2e_outside_fence");
+  const hit = p.locator(".result").first();
+  await hit.waitFor({ timeout: 60000 });
+  await hit.click();
+  await p.locator(".editor-surface").waitFor({ timeout: 30000 });
+  await p.locator(".cm-editor, .cell-rendered").first().waitFor({ timeout: 30000 });
+  await p.waitForTimeout(1200);
+
+  const chip = (await p.locator(".fence-text").textContent().catch(() => ""))?.trim() ?? "";
+  if (!chip) fail("no fence chip");
+  if (!/ask|outside/i.test(chip)) fail(`the fence did not warn outside the folder: "${chip}"`);
+  await shot(p, "fence-outside", { x: 260, y: 52, width: 860, height: 300 });
 });
 
 await scene("approval-sheet", 1440, async (p) => {
@@ -303,10 +334,15 @@ await scene("conflict", 1440, async (p) => {
   const raced = await p.evaluate(async () => {
     const path = document.querySelector(".viewer-path")?.textContent?.trim() ?? "";
     if (!path) return "no path";
+    /* A second writer WITH the session — i.e. another tab of the same user. Sending no session made
+       the fence treat the write as outside every folder and refuse it with 403, which is correct
+       behaviour and the wrong test: nothing was written, so nothing could conflict. */
+    const sessions = await (await fetch("/api/sessions")).json();
+    const sid = sessions.sessions?.[0]?.id ?? null;
     const obj = await (await fetch(`/api/workspace/object?path=${encodeURIComponent(path)}`)).json();
     const r = await fetch("/api/workspace/save", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path, version: obj.version ?? "", text: "# theirs\n", sessionId: null }),
+      body: JSON.stringify({ path, version: obj.version ?? "", text: "# theirs\n", sessionId: sid }),
     });
     return r.status;
   }).catch(() => 0);
@@ -328,8 +364,14 @@ await scene("draft-recovery", 1440, async (p) => {
   await p.reload({ waitUntil: "load" });
   await p.locator(".composer textarea").waitFor({ timeout: 45000 });
   await p.waitForTimeout(700);
-  await openNotebook(p);
-  await p.locator(".draft-banner").waitFor({ timeout: 20000 });
+  /* Reopen the SAME document. `openNotebook` searches for "taxi" and would open the agent's
+     notebook — a different file, with no draft — so the banner could never appear. The draft is
+     keyed by path, so the path must be the one we typed into. */
+  await openPath(p, path);
+  /* Generous, because this scene reloads the whole app and then re-walks the Files search before
+     the banner can appear. Measured end to end at ~3 s on a warm server, but the search alone has
+     been observed at 10 s on a large workspace. */
+  await p.locator(".draft-banner").waitFor({ timeout: 60000 });
   const text = (await p.locator(".draft-banner").textContent()) ?? "";
   if (!/unsaved changes/i.test(text)) fail("the draft banner does not explain itself");
   await shot(p, "draft-recovery", { x: 260, y: 52, width: 860, height: 320 });
