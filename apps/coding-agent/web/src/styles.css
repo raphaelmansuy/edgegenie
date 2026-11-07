@@ -988,6 +988,14 @@ button.evidence-head .count { margin-left: 0; }
 /* ---------- tab strip: it owns its overflow ---------- */
 .doc-tabs-wrap { position: relative; display: flex; align-items: flex-end; background: var(--surface-2);
   border-bottom: 1px solid var(--line); flex: none; }
+/* The overflow badge floats over the strip instead of taking a flex column. As a sibling it
+   shrank the strip by ~41px AFTER the active tab had been scrolled into view, which re-clipped
+   that tab and left it off screen — the effect had already run and its deps had not changed, so
+   nothing corrected it. Out of flow, the strip's width is final before the scroll is measured. */
+.doc-tabs-wrap > .tabs-hidden {
+  position: absolute; right: 6px; bottom: 6px; z-index: var(--z-sticky);
+  pointer-events: none;
+}
 .doc-tabs-wrap .doc-tabs { flex: 1; min-width: 0; border-bottom: 0; }
 /* Tabs may shrink to a readable minimum, then the strip scrolls. Scrollbar hidden: the count and the
    active-tab scroll carry the affordance, and a visible bar under tabs looks like a defect. */
@@ -1007,9 +1015,11 @@ button.evidence-head .count { margin-left: 0; }
 .doc-tabs::-webkit-scrollbar { display: none; }
 .doc-tab { min-width: 96px; flex: 0 1 auto; }
 .tabs-hidden {
-  flex: none; align-self: center; margin: 0 8px 4px 4px; font-size: 11px; font-weight: 650;
+  font-size: 11px; font-weight: 650;
   color: var(--ink-2); background: var(--line); border-radius: 999px; padding: 1px 7px;
   font-variant-numeric: tabular-nums;
+  /* A shadow in the strip's own colour so the count reads on top of a half-scrolled tab edge. */
+  box-shadow: 0 0 0 3px var(--surface-2);
 }
 
 .tree-slow { display: block; margin-top: 4px; color: var(--ink-3); font-size: 11px; }

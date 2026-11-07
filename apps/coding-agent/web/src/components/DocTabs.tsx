@@ -5,7 +5,7 @@
  * strip, and when tabs are hidden the count is stated (specs/001-perfect-shell SH-C1..C4).
  */
 import { useEffect, useRef, useState } from "react";
-import { CloseIcon, Notebook, Table } from "./Icons";
+import { Chat, CloseIcon, Notebook, Table } from "./Icons";
 import { tabKeys } from "./Tree";
 
 export interface DocTab {
@@ -34,6 +34,19 @@ export function DocTabs({ chatId, docs, active, onSelect, onClose }: {
     if (!el || !strip.current) return;
     const frame = window.requestAnimationFrame(() => {
       el.scrollIntoView({ block: "nearest", inline: "nearest" });
+      // A single scrollIntoView is not enough when the strip grew in the same frame: it scrolls
+      // against the old width. Correct with an explicit delta, then re-read. Bounded to 3 passes.
+      const s0 = strip.current;
+      if (s0) {
+        for (let pass = 0; pass < 3; pass += 1) {
+          const box = s0.getBoundingClientRect();
+          const item = el.getBoundingClientRect();
+          const over = item.right - (box.right - 4);
+          const under = (box.left + 4) - item.left;
+          if (over <= 0 && under <= 0) break;
+          s0.scrollLeft += over > 0 ? over : -under;
+        }
+      }
       const s = strip.current;
       if (!s) return;
       const tabs = Array.from(s.querySelectorAll<HTMLElement>("[data-tab]"));
@@ -57,7 +70,9 @@ export function DocTabs({ chatId, docs, active, onSelect, onClose }: {
         <div id={domId(chatId)} data-tab className="doc-tab" role="tab" aria-selected={active === chatId}
           aria-controls="doc-panel" tabIndex={active === chatId ? 0 : -1} onClick={() => onSelect(chatId)}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(chatId); } }}>
-          <span className="doc-tab-label"><span aria-hidden>💬</span> Chat</span>
+          <span className="doc-tab-label">
+            <span className="tab-icon" aria-hidden><Chat size={13} /></span> Chat
+          </span>
         </div>
         {docs.map((d) => (
           /* The close control lives INSIDE the tab, so it sits within the tab's own shape. One tab

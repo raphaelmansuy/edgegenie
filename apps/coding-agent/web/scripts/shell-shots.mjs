@@ -80,9 +80,38 @@ const grid = (page) => page.evaluate(() => ({
 }));
 
 const turn = async (page) => {
+  /* Wait until the composer is actually usable before typing into it.
+
+     Sending too early produced a real 422 from the server: the model <select> is populated from
+     /api/models, and in the window before that response lands the app holds the placeholder
+     "model-a" rather than "fake/model-a", so `POST /api/sessions` was rejected with "model
+     model-a is not allowed for this user". The screenshot then showed an empty session and the
+     failure surfaced as "the work area did not take the whole width" several assertions later —
+     a misleading message for a startup race.
+
+     So: require a real model id (contains a "/"), a non-empty folder, and an enabled Send. */
+  await page.waitForFunction(() => {
+    const ta = document.querySelector(".composer textarea");
+    if (!ta) return false;
+    const sel = document.querySelector(".setup select");
+    if (sel && !String(sel.value).includes("/")) return false;
+    const folder = document.querySelector(".setup input");
+    if (folder && !String(folder.value).trim()) return false;
+    return true;
+  }, null, { timeout: 30000 });
+
   await page.locator(".composer textarea").fill("Build a notebook that shows revenue by pickup hour");
   await page.keyboard.press("Enter");
-  await page.locator(".turn").first().waitFor({ timeout: 45000 });
+  // The turn must actually start: a rejected POST leaves no .turn and the scene would otherwise
+  // fail much later with an unrelated message.
+  await page.locator(".turn").first().waitFor({ timeout: 45000 }).catch(async () => {
+    const body = await page.evaluate(async () => {
+      const r = await fetch("/api/sessions", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: "x", model: "y" }) }).catch(() => null);
+      return r ? `probe ${r.status}` : "probe failed";
+    }).catch(() => "");
+    fail(`the turn never started (no .turn element) — the send was probably rejected. ${body}`);
+  });
   await page.locator(".turn-foot").first().waitFor({ timeout: 150000 }).catch(() => {});
   await page.waitForTimeout(400);
 };
@@ -179,20 +208,52 @@ await scene("reset", 1440, async (p) => {
 
 await scene("tabs", 1100, async (p) => {
   await turn(p);
-  // Open documents through the Catalog tree: deterministic, and it needs no slow name search.
+  /* Open enough documents to overflow the strip.
+
+     Three attempts to write this, each failing differently — worth keeping, because the third
+     one is the only one that is actually deterministic:
+       1. Clicking rows.nth(0..7) blind: clicks containers as often as tables, and a container
+          click toggles it shut. Whether a table ever opened depended on row order.
+       2. Looping "while a collapsed row exists" over a LIVE locator: expanding a row removes it
+          from that set, so nth(0) kept re-resolving to a different row and the loop collapsed
+          what it had just opened.
+       3. This one: address rows by their explicit `aria-level`, which encode the real
+          catalog > schema > table hierarchy, and wait for each level to exist before using it.
+          Nothing depends on order, index stability, or timing. */
   await p.keyboard.press("Meta+3");
   await p.waitForTimeout(600);
-  const samples = p.locator('[role="treeitem"]').filter({ hasText: /samples|system|workspace/ }).first();
-  await samples.click().catch(() => {});
-  await p.waitForTimeout(1200);
-  for (let level = 0; level < 3 && (await p.locator(".doc-tab").count()) < 8; level += 1) {
-    const rows = p.locator('[role="treeitem"]');
-    const count = await rows.count();
-    for (let i = 0; i < Math.min(count, 8) && (await p.locator(".doc-tab").count()) < 8; i += 1) {
-      await rows.nth(i).click({ timeout: 1500 }).catch(() => {});
-      await p.waitForTimeout(300);
+
+  const level = (n) => p.locator(`[role="treeitem"][aria-level="${n}"]`);
+  const settle = (n) => p.waitForFunction(
+    (lv) => document.querySelectorAll(`[role="treeitem"][aria-level="${lv}"]`).length > 0,
+    n, { timeout: 20000 },
+  ).catch(() => {});
+
+  // catalog
+  await level(1).first().click({ timeout: 5000 });
+  await settle(2);
+  await p.waitForTimeout(600);
+
+  // schema
+  if (await level(2).count()) {
+    await level(2).first().click({ timeout: 5000 });
+    await settle(3);
+    await p.waitForTimeout(800);
+  }
+
+  // tables: a table is level 3 here, and clicking one opens a viewer, which creates a tab.
+  for (let pass = 0; pass < 2 && (await p.locator(".doc-tab").count()) < 9; pass += 1) {
+    const tables = level(3);
+    const count = await tables.count();
+    for (let i = 0; i < count && (await p.locator(".doc-tab").count()) < 9; i += 1) {
+      await tables.nth(i).click({ timeout: 2000 }).catch(() => {});
+      await p.waitForTimeout(220);
     }
   }
+
+  const tabs = await p.locator(".doc-tab").count();
+  if (tabs < 8) fail(`could not open enough documents to overflow the strip: ${tabs} tabs`);
+
   const t = await p.evaluate(() => {
     const strip = document.querySelector(".doc-tabs");
     if (!strip) return null;

@@ -286,3 +286,51 @@ Our chrome used characters — `⟳ ▤ ▥ ✓ ▾ ▸ ● ○ ☀ ☾ ▭ ◧ 
 | `audit:overflow` | 0 / 20 |
 | `audit:cls` | 0.0000, local **and deployed** |
 | `e2e:shell` | problems: none |
+
+
+## Two bugs the regenerated screenshots caught
+
+The committed screenshots predated the icon work, so they documented a design that no longer
+existed. Regenerating them surfaced two real defects that no unit test had covered.
+
+### 1. The active tab really could sit off screen — the F2 fix was incomplete
+
+Finding F2 said the strip scrolls but never brings the active tab into view, and the first fix was
+a `scrollIntoView` plus a one-frame measure. With **9 tabs** that fix did not hold: measured
+`{"tabs":9,"overflows":true,"activeVisible":false}`, with the active tab at x 1000–1096 inside a
+strip ending at 1059.
+
+Cause: the `+N` overflow badge was a **flex sibling** of the strip, so rendering it removed
+**41px** of strip width (823 → 782) *after* the scroll had been computed. That re-clipped the tab,
+and the effect's deps (`[active, docs.length]`) had not changed, so nothing re-ran. Two successive
+scroll attempts could never win that race.
+
+Fix: the badge is `position: absolute`, over the strip's tail. The strip's width is final before
+the scroll is measured. The scroll also now corrects with an explicit delta in a bounded loop
+(3 passes) instead of trusting one `scrollIntoView`. Measured after: **`inside: true`, 9 tabs,
+badge `+1` at `position: absolute`**.
+
+A test that only ever opened 2–3 tabs could never have caught this. Opening nine is what exposed it.
+
+### 2. A startup race made the app send an invalid model
+
+Sending before `/api/models` resolved sent `"model": "model-a"` — the placeholder in the
+`<select>` — and the server correctly rejected it: **422 "model model-a is not allowed for this
+user"**. The session was never created, and the failure surfaced much later as a misleading
+"the work area did not take the whole width".
+
+This is a real app-level fragility, not only a test artefact: the model list and the composer both
+render before the list arrives, so a fast typist can hit it. The harness now waits for a model id
+that contains `/` and a non-empty folder before typing, and asserts that a `.turn` actually
+appeared rather than failing several assertions downstream.
+
+### Also fixed in this pass
+
+- **The Chat tab still used a `💬` emoji**, the same class of defect as the `🗄` card icon
+  measured at 1.06:1 in dark mode: an emoji is coloured by the font and ignores `currentColor`,
+  so it cannot follow the theme. It is now a drawn `Chat` icon.
+- **Test harness determinism.** The `tabs` scene clicked rows by index and toggled containers shut
+  as often as it opened tables; a later attempt looped over a *live* locator, which re-resolved to
+  a different row each pass and collapsed what it had just opened. It now walks the tree by
+  `aria-level` (catalog → schema → table), waiting for each level to exist. Nothing depends on
+  row order, index stability, or timing.

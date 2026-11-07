@@ -167,6 +167,13 @@ export const Square = (p: IconProps) => (
 
 /* ---------- objects ---------- */
 
+/** A conversation. */
+export const Chat = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M21 11.5a8 8 0 0 1-8 8H8l-4 2.5V11.5a8 8 0 0 1 8-8h1a8 8 0 0 1 8 8z" />
+  </Svg>
+);
+
 export const Notebook = (p: IconProps) => (
   <Svg {...p}>
     <rect x="5" y="3" width="14" height="18" rx="2" />
@@ -308,7 +315,7 @@ export const Bug = (p: IconProps) => (
 
 /** A registry so a data table can name an icon instead of embedding a glyph. */
 export const ICONS = {
-  panelLeft: PanelLeft, panelRight: PanelRight, layout: LayoutGrid, refresh: Refresh,
+  panelLeft: PanelLeft, panelRight: PanelRight, layout: LayoutGrid, refresh: Refresh, chat: Chat,
   search: Search, command: CommandKey, chevron: ChevronRight, check: Check, alert: Alert,
   dot: Dot, ring: Ring, square: Square, notebook: Notebook, file: FileIcon, folder: Folder,
   table: Table, database: Database, schema: Schema, repo: Repo, plus: Plus, close: Close,
