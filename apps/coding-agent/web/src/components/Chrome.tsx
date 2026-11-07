@@ -45,11 +45,15 @@ export function ApprovalSheet({ approval, sessionId, onDecided }: {
   );
 }
 
-export function Inspector({ session }: { session: SessionView }) {
+export function Inspector({ session, edge, className = "" }: {
+  session: SessionView; edge?: React.ReactNode; className?: string;
+}) {
   const [tab, setTab] = useState<"context" | "audit">("context");
   const calls = session.turns.flatMap((t) => t.tools);
   return (
-    <aside className="pane inspector">
+    <aside className={`pane inspector${className ? ` ${className}` : ""}`}>
+      {/* The resize handle belongs to this pane and sits on the edge facing the work area. */}
+      {edge}
       <div className="insp-head" role="tablist" aria-label="Inspector">
         <button id="insp-tab-context" className="tab" role="tab" aria-selected={tab === "context"}
           aria-controls="insp-panel-context" tabIndex={tab === "context" ? 0 : -1}

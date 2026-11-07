@@ -51,9 +51,10 @@ export const api = {
       body: JSON.stringify({ text, attachments: attachments.map(({ kind, ref }) => ({ kind, ref })) }) }),
   me: () => call<{ user: string; scratch: string; demo: boolean; workspace?: { host: string; orgId?: string } }>("/api/me"),
   object: (path: string) => call<WsObject>(`/api/workspace/object?path=${encodeURIComponent(path)}`),
-  search: (q: string, path?: string) =>
+  search: (q: string, path?: string, signal?: AbortSignal) =>
     call<{ root: string; complete: boolean; results: WsHit[] }>(
-      `/api/workspace/search?q=${encodeURIComponent(q)}${path ? `&path=${encodeURIComponent(path)}` : ""}`),
+      `/api/workspace/search?q=${encodeURIComponent(q)}${path ? `&path=${encodeURIComponent(path)}` : ""}`,
+      { signal }),
   mkdir: (path: string) => call<{ path: string }>("/api/workspace/mkdir", { method: "POST", headers: json,
     body: JSON.stringify({ path }) }),
   findTables: (q: string) => call<{ results: CatalogItem[] }>(`/api/catalog/find?q=${encodeURIComponent(q)}`),

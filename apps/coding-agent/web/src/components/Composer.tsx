@@ -166,7 +166,7 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
   };
 
   return (
-    <div className="composer">
+    <section className="composer" role="region" aria-label="Message the agent">
       <div className="composer-box">
         {(attachments.length > 0 || auto) && (
           <div className="ctx-row" aria-label="Context for this message">
@@ -264,6 +264,6 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
           )}
         </div>
       </div>
-    </div>
+    </section>
   );
 }

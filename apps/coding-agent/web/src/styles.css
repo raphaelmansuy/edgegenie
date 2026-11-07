@@ -27,6 +27,9 @@
   --orange-300: #f5c29c;
   --teal-100: #e0f5f3;
   --teal-300: #9ad5ce;
+  --z-base: 0; --z-sticky: 10; --z-dropdown: 20; --z-scrim: 39; --z-drawer: 40;
+  --z-drawer-content: 41; --z-modal: 50; --z-toast: 60;
+  --sep-hit: 6px; --sep-line: 1px; --sep-accent: 2px;
   --radius: 12px;
   --radius-sm: 8px;
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -63,11 +66,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .topbar select { min-height: 24px; font: inherit; font-size: 12.5px; padding: 1px 4px; border-radius: 6px;
   border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); }
 
+/* The grid container only. Its columns come from domain/layout.ts via --layout-columns; the fallback
+   here is the single literal column list in the codebase, used for the first paint. (SH-G1.) */
 .layout {
-  display: grid; grid-template-columns: 232px minmax(0, 1fr) 372px;
+  display: grid; grid-template-columns: var(--layout-columns, 276px minmax(0, 1fr) 340px);
   gap: 1px; background: var(--line); min-height: 0;
 }
-.layout.no-inspector { grid-template-columns: 244px minmax(0, 1fr); }
 .pane { background: var(--surface); min-height: 0; display: flex; flex-direction: column; }
 
 /* ---------- sessions rail ---------- */
@@ -193,7 +197,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
   box-shadow: var(--shadow); transition: border-color 0.12s, box-shadow 0.12s; }
 .composer-box:focus-within { border-color: var(--blue-300); box-shadow: 0 0 0 3px var(--blue-100); }
 .composer textarea {
-  width: 100%; border: 0; outline: 0; resize: none; padding: 12px 14px; font: inherit;
+  width: 100%; border: 0; outline: 0; resize: none; padding: 10px 14px; font: inherit;
+  max-height: calc(1.55em * 8 + 20px); overflow-y: auto;
   background: transparent; min-height: 56px; max-height: 200px;
 }
 .composer-actions { display: flex; align-items: center; gap: 6px; padding: 0 10px 10px; }
@@ -251,7 +256,7 @@ kbd { font-family: var(--mono); font-size: 11px; color: var(--ink-2); background
 
 /* approval */
 .scrim { position: fixed; inset: 0; background: rgba(31, 41, 55, 0.28); backdrop-filter: blur(2px);
-  display: grid; place-items: center; z-index: 50; animation: fade 0.14s ease-out; }
+  display: grid; place-items: center; z-index: var(--z-modal); animation: fade 0.14s ease-out; }
 .sheet { width: min(560px, calc(100vw - 32px)); background: var(--surface); border-radius: 16px;
   box-shadow: var(--shadow-lg); overflow: hidden; animation: rise 0.16s ease-out; }
 .sheet header { padding: 16px 20px 10px; background: var(--yellow-100); border-bottom: 1px solid var(--yellow-300); }
@@ -294,27 +299,10 @@ kbd { font-family: var(--mono); font-size: 11px; color: var(--ink-2); background
     transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
 }
 
-@media (max-width: 1180px) {
-  .layout { grid-template-columns: 240px minmax(0, 1fr); }
-  /* The inspector stays reachable: it becomes a drawer, not a hidden panel. */
-  .pane.inspector {
-    position: fixed; top: 52px; bottom: 0; right: 0; width: min(340px, 88vw); z-index: 40;
-    border-left: 1px solid var(--line-strong); box-shadow: var(--shadow-lg);
-  }
-}
 /* Narrow: one column, and both side panels become drawers over the content rather than vanishing.
    A panel that simply disappears takes Files and Catalog with it, which is how a narrow window
    became a dead end. */
 @media (max-width: 820px) {
-  .layout, .layout.no-inspector, .layout.no-rail { grid-template-columns: minmax(0, 1fr); }
-  .pane.rail {
-    position: fixed; top: 52px; bottom: 0; left: 0; width: min(320px, 86vw); z-index: 40;
-    border-right: 1px solid var(--line-strong); box-shadow: var(--shadow-lg);
-  }
-  .pane.inspector {
-    position: fixed; top: 52px; bottom: 0; right: 0; width: min(340px, 88vw); z-index: 40;
-    border-left: 1px solid var(--line-strong); box-shadow: var(--shadow-lg);
-  }
   .rail-reveal { top: 22px; transform: none; }
   .transcript, .composer { padding-left: 14px; padding-right: 14px; }
   .cards { grid-template-columns: 1fr; }
@@ -360,8 +348,6 @@ kbd { font-family: var(--mono); font-size: 11px; color: var(--ink-2); background
 /* ======================================================================================
    Genie-Code-class additions: rail tabs, viewer, context chips, mentions, plan.
    ====================================================================================== */
-.layout { grid-template-columns: 276px minmax(0, 1fr) 340px; }
-.layout.no-inspector { grid-template-columns: 276px minmax(0, 1fr); }
 .pane.main { min-width: 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);
   white-space: nowrap; border: 0; padding: 0; margin: -1px; }
@@ -493,7 +479,7 @@ table.grid { border-collapse: collapse; font-size: 12.5px; width: 100%; }
 .ctx-chip button:hover { background: var(--pink-100); color: var(--pink-700); }
 .composer-field { position: relative; }
 .mention { position: absolute; left: 10px; right: 10px; bottom: calc(100% - 4px); background: var(--surface); border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); padding: 4px; max-height: 260px; overflow: auto; z-index: 20; animation: rise 0.12s ease-out; }
+  border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); padding: 4px; max-height: 260px; overflow: auto; z-index: var(--z-dropdown); animation: rise 0.12s ease-out; }
 .mention-empty { padding: 8px 10px; font-size: 12.5px; color: var(--ink-3); }
 .mention-opt { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; background: transparent; padding: 6px 10px; border-radius: 6px; }
 .mention-opt.is-active, .mention-opt:hover { background: var(--blue-100); }
@@ -516,13 +502,11 @@ table.grid { border-collapse: collapse; font-size: 12.5px; width: 100%; }
 .plan-completed span:nth-child(2) { text-decoration: line-through; text-decoration-color: var(--line-strong); }
 .plan-in_progress { color: var(--ink); font-weight: 560; } .plan-in_progress .plan-mark { color: var(--blue-600); animation: pulse 1.4s ease-in-out infinite; }
 .tool { position: relative; }
-.tool-open { position: absolute; right: 74px; top: 4px; z-index: 1; border: 1px solid var(--green-300); background: var(--green-100); color: var(--green-700);
+.tool-open { position: absolute; right: 74px; top: 4px; z-index: var(--z-sticky); border: 1px solid var(--green-300); background: var(--green-100); color: var(--green-700);
   font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 0 10px; min-height: 24px; display: inline-grid; place-items: center; }
 .tool-open:hover { background: #d4ecdb; }
 .turn-foot { margin: 10px 0 0; font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
-@media (max-width: 1180px) { .layout, .layout.no-inspector { grid-template-columns: 252px minmax(0, 1fr); } }
-@media (max-width: 820px) { .layout, .layout.no-inspector { grid-template-columns: minmax(0, 1fr); } }
 
 .tree-icon { display: grid; place-items: center; width: 16px; }
 .tree-icon svg { display: block; }
@@ -656,22 +640,19 @@ button.evidence-head .count { margin-left: 0; }
 @media (max-width: 560px) { .keys-row { flex-wrap: wrap; } .keys-row dd { margin-left: auto; } }
 @media (max-width: 720px) { .keys-body { grid-template-columns: 1fr; } }
 
-/* ---------- layout without the rail ---------- */
-.layout.no-rail { grid-template-columns: minmax(0, 1fr) 340px; }
-.layout.no-rail.no-inspector { grid-template-columns: minmax(0, 1fr); }
 
 /* ---------- panel toggles ---------- */
 .pane.rail { position: relative; }
 .rail-collapse {
-  position: absolute; top: 6px; right: 4px; z-index: 2; border: 0; background: transparent;
+  position: absolute; top: 6px; right: 4px; z-index: var(--z-sticky); border: 0; background: transparent;
   color: var(--ink-2); font-size: 15px; line-height: 1; border-radius: 6px;
   min-width: 24px; min-height: 24px; display: grid; place-items: center;
 }
 .rail-collapse:hover { background: var(--blue-100); color: var(--ink); }
 .rail-reveal {
-  position: absolute; left: 0; top: 50%; transform: translateY(-50%); z-index: 3;
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
   border: 1px solid var(--line-strong); border-left: 0; background: var(--surface);
-  border-radius: 0 7px 7px 0; padding: 12px 4px; color: var(--ink-3); box-shadow: var(--shadow);
+  border-radius: 0 7px 7px 0; padding: 12px 4px; color: var(--ink-3); box-shadow: var(--shadow); z-index: var(--z-sticky);
 }
 .rail-reveal:hover { background: var(--blue-50); color: var(--ink); border-color: var(--blue-300); }
 .app { position: relative; }
@@ -699,20 +680,20 @@ button.evidence-head .count { margin-left: 0; }
 
 /* ---------- drawers on narrow screens ---------- */
 /* A drawer needs to read as "on top of", not as "the page is broken": dim what it covers. */
-.drawer-scrim { position: fixed; inset: 52px 0 0; z-index: 39; background: rgba(20, 16, 32, 0.22);
+.drawer-scrim { position: fixed; inset: 52px 0 0; z-index: var(--z-scrim); background: rgba(20, 16, 32, 0.22);
   animation: fade 0.12s ease-out; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .insp-reveal {
-  position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 3;
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
   border: 1px solid var(--line-strong); border-right: 0; background: var(--surface);
-  border-radius: 7px 0 0 7px; padding: 12px 4px; color: var(--ink-3); box-shadow: var(--shadow);
+  border-radius: 7px 0 0 7px; padding: 12px 4px; color: var(--ink-3); box-shadow: var(--shadow); z-index: var(--z-sticky);
 }
 .insp-reveal:hover { background: var(--blue-50); color: var(--ink); border-color: var(--blue-300); }
 @media (min-width: 821px) and (max-width: 1180px) {
   .rail-reveal { top: 50%; transform: translateY(-50%); }
 }
 /* A drawer is above its scrim, so the panel itself is always clickable. */
-.pane.rail, .pane.inspector { z-index: 41; }
+.pane.rail, .pane.inspector { z-index: var(--z-drawer-content); }
 
 /* ---------- tab panel wrappers ---------- */
 .rail-panel { display: flex; flex-direction: column; min-height: 0; flex: 1; }
@@ -720,3 +701,61 @@ button.evidence-head .count { margin-left: 0; }
 
 /* The single tab panel: it is the flex child the viewer or transcript used to be. */
 .doc-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+/* ---------- separators: the resize affordance, in four designed states ---------- */
+/* The hit area is 6 px wide and centred on the 1 px divider, so it is easy to grab without being a
+   visible bar. Nothing is painted at rest beyond the divider the grid already draws. */
+/* Inside the pane it resizes, sitting fully within its own edge so it is genuinely part of the pane's
+   shape (nothing straddles or spills). The hit area is 6 px; the visible mark is a 1 px line that
+   becomes 2 px on hover. */
+.separator {
+  position: absolute; top: 0; bottom: 0; width: var(--sep-hit);
+  cursor: col-resize; touch-action: none; background: transparent; z-index: var(--z-sticky);
+}
+.pane.rail > .separator { right: 0; }
+.pane.inspector > .separator { left: 0; }
+.separator::before {
+  content: ""; position: absolute; inset: 0 calc(50% - var(--sep-line) / 2);
+  background: transparent; transition: background 0.12s;
+}
+.separator:hover::before, .separator.is-dragging::before {
+  inset: 0 calc(50% - var(--sep-accent) / 2);
+  background: var(--blue-600);
+}
+.separator.is-dragging::before { transition: none; }
+/* The ring is on the element itself (not a pseudo-element) so it is always detectable and always
+   visible against both the pane and the divider. */
+.separator:focus-visible { outline: 2px solid var(--blue-600); outline-offset: -2px; border-radius: 3px; }
+.separator:focus-visible::before {
+  inset: 0 calc(50% - var(--sep-accent) / 2);
+  background: var(--blue-600);
+}
+/* While dragging, the pointer must not select text or show a caret anywhere. */
+.separator.is-dragging { user-select: none; }
+
+/* ---------- overlay panes: siblings of the grid, never its children ---------- */
+.pane.rail.is-drawer {
+  position: fixed; top: 52px; bottom: 0; left: 0; width: min(320px, 86vw);
+  z-index: var(--z-drawer); border-right: 1px solid var(--line-strong); box-shadow: var(--shadow-lg);
+}
+.pane.inspector.is-drawer {
+  position: fixed; top: 52px; bottom: 0; right: 0; width: min(340px, 88vw);
+  z-index: var(--z-drawer); border-left: 1px solid var(--line-strong); box-shadow: var(--shadow-lg);
+}
+
+/* ---------- tab strip: it owns its overflow ---------- */
+.doc-tabs-wrap { position: relative; display: flex; align-items: flex-end; background: var(--surface-2);
+  border-bottom: 1px solid var(--line); flex: none; }
+.doc-tabs-wrap .doc-tabs { flex: 1; min-width: 0; border-bottom: 0; }
+/* Tabs may shrink to a readable minimum, then the strip scrolls. Scrollbar hidden: the count and the
+   active-tab scroll carry the affordance, and a visible bar under tabs looks like a defect. */
+.doc-tabs { scrollbar-width: none; }
+.doc-tabs::-webkit-scrollbar { display: none; }
+.doc-tab { min-width: 96px; flex: 0 1 auto; }
+.tabs-hidden {
+  flex: none; align-self: center; margin: 0 8px 4px 4px; font-size: 11px; font-weight: 650;
+  color: var(--ink-2); background: var(--line); border-radius: 999px; padding: 1px 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tree-slow { display: block; margin-top: 4px; color: var(--ink-3); font-size: 11px; }

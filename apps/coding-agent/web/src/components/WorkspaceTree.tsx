@@ -149,18 +149,28 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
     }).catch((e) => setError(`cannot reach the workspace: ${e.message}`));
   }, []);
 
-  // search: debounced, and a newer query always wins over an older, slower one
+  // Search: debounced, a newer query always wins, and a slow walk narrates itself.
+  // The workspace API has no server-side search, so this is a bounded client-driven walk that takes
+  // seconds on a real workspace. Honest feedback is the requirement (SH-D1..D3), not speed.
+  const abort = useRef<AbortController | null>(null);
+  const [startedAt, setStartedAt] = useState(0);
   useEffect(() => {
     const q = filter.trim();
-    if (q.length < 2) { setHits(null); setSearchErr(""); return; }
+    if (q.length < 2) { setHits(null); setSearchErr(""); setSearching(false); return; }
     let live = true;
-    setSearching(true);
     const id = window.setTimeout(async () => {
+      abort.current?.abort();
+      const ctl = new AbortController();
+      abort.current = ctl;
+      setSearching(true);
+      setStartedAt(Date.now());
       try {
-        const r = await api.search(q, focusFolder || roots[0]?.path);
-        if (live) { setHits(r); setSearchErr(""); }
+        const r = await api.search(q, focusFolder || roots[0]?.path, ctl.signal);
+        if (live && !ctl.signal.aborted) { setHits(r); setSearchErr(""); }
       } catch (e) {
-        if (live) { setHits(null); setSearchErr(e instanceof Error ? e.message : "search failed"); }
+        // A cancelled search keeps whatever results were already shown: emptying the list punishes
+        // the user for changing their mind.
+        if (live && !ctl.signal.aborted) setSearchErr(e instanceof Error ? e.message : "search failed");
       } finally { if (live) setSearching(false); }
     }, 350);
     return () => { live = false; window.clearTimeout(id); };
@@ -205,9 +215,20 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
 
       {filter.trim().length >= 2 ? (
         <div className="tree-results" role="list" aria-label="Search results">
-          {searching && <div className="tree-empty"><span className="spin" /> searching…</div>}
+          {searching && (
+            <div className="tree-empty" role="status">
+              <span className="spin" /> searching the workspace…{" "}
+              {Date.now() - startedAt > 1200 && <span className="tree-slow">this workspace is large; it walks folders in order</span>}
+            </div>
+          )}
           {searchErr && <div className="tree-error" role="alert">{searchErr}</div>}
           {!searching && hits && hits.results.length === 0 && <div className="tree-empty">No match under {hits.root}.</div>}
+          {hits && !searching && hits.results.length > 0 && (
+            <div className="tree-note-line" role="status">
+              {hits.results.length} match{hits.results.length === 1 ? "" : "es"}
+              {hits.complete ? "" : " so far"}
+            </div>
+          )}
           {hits?.results.map((h) => (
             <button key={h.path} role="listitem" className="result" onClick={() => onOpenFile(h)} title={h.path}>
               <span className={`tree-icon kind-${h.kind}`} aria-hidden><Icon kind={h.kind} /></span>

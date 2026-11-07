@@ -9,6 +9,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type ModelOption, type SessionSummary } from "./api/client";
 import { ApprovalSheet, EmptyState, Inspector } from "./components/Chrome";
 import { Palette, PaletteActions } from "./components/Palette";
+import { DocTabs } from "./components/DocTabs";
+import { Separator } from "./components/Separator";
 import { ShortcutSheet } from "./components/ShortcutSheet";
 import { CatalogTree } from "./components/CatalogTree";
 import { Composer } from "./components/Composer";
@@ -17,13 +19,12 @@ import { ExtLink } from "./components/ExtLink";
 import type { Workspace } from "./domain/links";
 import { TurnView } from "./components/Transcript";
 import { NotebookViewer, TableViewer } from "./components/Viewer";
-import { CloseIcon } from "./components/Icons";
 import { WorkspaceTree } from "./components/WorkspaceTree";
-import { tabKeys } from "./components/Tree";
 import type { Candidate } from "./domain/fuzzy";
 import { caps, display } from "./domain/keys";
 import { useHotkeys } from "./hooks/useHotkeys";
-import { INSPECTOR_DRAWER, NARROW, inspectorIsOverlay, railIsOverlay, useMediaQuery } from "./hooks/useMediaQuery";
+import { useLayout } from "./hooks/useLayout";
+import { columns, modeFor, type RailTab } from "./domain/layout";
 import { ACTIONS, asAttachment, docForNode, makeDoc, touched, type Action, type Doc } from "./domain/docs";
 import type { Attachment } from "./domain/events";
 import { useSessionStream } from "./hooks/useSessionStream";
@@ -47,7 +48,7 @@ export function App() {
   const [folder, setFolder] = useState("");
   const [model, setModel] = useState("");
   const [notice, setNotice] = useState("");
-  const [rail, setRail] = useState<Rail>("sessions");
+
   const [docs, setDocs] = useState<Doc[]>([]);
   const [view, setView] = useState<string>(CHAT);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -57,18 +58,23 @@ export function App() {
   // Below each breakpoint a side panel becomes an overlay over the content. An overlay that opens
   // by itself hides the transcript, which is what the app is for — so it starts closed, and opens
   // from its handle, its shortcut, the palette, or a tree click.
-  const narrow = useMediaQuery(NARROW);
-  const inspectorOverlay = useMediaQuery(INSPECTOR_DRAWER);
-  const [railShown, setRailShown] = useState(() => !railIsOverlay());
-  const [inspShown, setInspShown] = useState(() => !inspectorIsOverlay());
+  const [viewport, setViewport] = useState(() => window.innerWidth);
+  const { layout, setWidth, resetOne, toggle, setRailTab: setLayoutTab } = useLayout(viewport);
+  const { railVisible: railShown, inspectorVisible: inspShown, railTab: rail } = layout;
+  const mode = modeFor(viewport);
+  const narrow = mode === "narrow";
+  const inspectorOverlay = mode !== "wide";
   const [drawer, setDrawer] = useState<"rail" | "inspector" | null>(null);
+  const setRail = useCallback((r: RailTab) => { setLayoutTab(r); }, [setLayoutTab]);
 
-  // Crossing a breakpoint resets the panels: a drawer left open over a desktop layout is a bug.
+  // The layout module needs the viewport; the browser owns it. One passive listener.
   useEffect(() => {
-    setRailShown(!narrow);
-    setInspShown(!inspectorOverlay);
-    setDrawer(null);
-  }, [narrow, inspectorOverlay]);
+    const onResize = () => setViewport(window.innerWidth);
+    window.addEventListener("resize", onResize, { passive: true });
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  // Crossing a breakpoint closes the drawers: one left open over a desktop layout is a bug.
+  useEffect(() => { setDrawer(null); }, [mode]);
   const bottom = useRef<HTMLDivElement>(null);
   const composerBox = useRef<HTMLTextAreaElement | null>(null);
 
@@ -191,13 +197,15 @@ export function App() {
   }, []);
 
   const openRail = useCallback((on: boolean) => {
-    setRailShown(on);
+    toggle("rail", on);
     setDrawer(on && narrow ? "rail" : null);
-  }, [narrow]);
+  }, [toggle, narrow]);
   const openInspector = useCallback((on: boolean) => {
-    setInspShown(on);
+    toggle("inspector", on);
     setDrawer(on && inspectorOverlay ? "inspector" : null);
-  }, [inspectorOverlay]);
+  }, [toggle, inspectorOverlay]);
+  const setRailAndOpen = useCallback((r: RailTab) => { setLayoutTab(r); openRail(true); },
+    [setLayoutTab, openRail]);
 
   /** Everything reachable without the mouse: objects, panels, tabs and actions. */
   const paletteItems = useMemo<Candidate[]>(() => {
@@ -211,7 +219,7 @@ export function App() {
     for (const r of ["sessions", "files", "catalog"] as Rail[]) {
       const key = r === "sessions" ? "mod+1" : r === "files" ? "mod+2" : "mod+3";
       add(`rail:${r}`, `${r[0].toUpperCase()}${r.slice(1)} panel`, "Panels",
-        () => { setRail(r); openRail(true); }, display(key), 2);
+        () => setRailAndOpen(r), display(key), 2);
     }
     add("panel:rail", railShown ? "Hide the left panel" : "Show the left panel", "Panels",
       () => openRail(!railShown), display("mod+b"));
@@ -248,7 +256,7 @@ export function App() {
   const busy = session.status === "streaming";
 
   const handlers = useMemo(() => {
-    const go = (r: Rail) => () => { setRail(r); openRail(true); };
+    const go = (r: RailTab) => () => setRailAndOpen(r);
     const cycle = (step: number) => () => {
       const ids = [CHAT, ...docs.map((d) => d.id)];
       const at = ids.indexOf(view);
@@ -262,9 +270,9 @@ export function App() {
       "mod+1": go("sessions"),
       "mod+2": go("files"),
       "mod+3": go("catalog"),
-      "mod+b": () => { setRailShown((v) => { setDrawer(!v && narrow ? "rail" : null); return !v; }); },
-      "mod+i": () => { setInspShown((v) => { setDrawer(!v && inspectorOverlay ? "inspector" : null); return !v; }); },
-      "mod+p": () => { setRail("files"); openRail(true); focusComposer(); },
+      "mod+b": () => { setDrawer(!layout.railVisible && narrow ? "rail" : null); toggle("rail"); },
+      "mod+i": () => { setDrawer(!layout.inspectorVisible && inspectorOverlay ? "inspector" : null); toggle("inspector"); },
+      "mod+p": () => { setRailAndOpen("files"); focusComposer(); },
       "ctrl+tab": cycle(1),
       "ctrl+shift+tab": cycle(-1),
       "mod+w": () => {
@@ -275,15 +283,16 @@ export function App() {
       escape: () => {
         if (paletteOpen || keysOpen) { setPaletteOpen(false); setKeysOpen(false); return true; }
         if (drawer) {
+          // Esc closes the overlay it opened, and only that overlay.
           setDrawer(null);
-          if (railIsOverlay()) setRailShown(false);
-          if (inspectorIsOverlay()) setInspShown(false);
+          toggle(drawer === "rail" ? "rail" : "inspector", false);
           return true;
         }
         return false;                          // the composer handles Esc as "stop"
       },
     };
-  }, [docs, view, paletteOpen, keysOpen, newSession, focusComposer, drawer, narrow, inspectorOverlay, openRail]);
+  }, [docs, view, paletteOpen, keysOpen, newSession, focusComposer, drawer, narrow, inspectorOverlay,
+      openRail, layout, toggle]);
 
   useHotkeys(handlers);
   const toolCalls = session.turns.reduce((n, t) => n + t.tools.length, 0);
@@ -291,6 +300,76 @@ export function App() {
   const turns = session.turns;
   const selectedRef = viewDoc?.ref ?? null;
   const viewerActions = { onAsk: ask, onAttach: (d: Doc) => addContext(asAttachment(d)) };
+
+  /** The navigator's body, shared by its in-grid form and its drawer form (one definition, not two). */
+  const railBody = (
+    <>
+
+          <button className="rail-collapse" onClick={() => openRail(false)}
+            title="Hide this panel (⌘B)" aria-label="Hide the left panel">‹</button>
+          {mode !== "narrow" && (
+            <Separator zone="rail" width={layout.railWidth} min={250} max={Number.POSITIVE_INFINITY}
+              label="Resize the navigator"
+              onResize={(px) => setWidth("rail", px)} onReset={() => resetOne("rail")} />
+          )}
+          <div className="rail-tabs" role="tablist" aria-label="Navigator">
+            {(["sessions", "files", "catalog"] as RailTab[]).map((r) => (
+              <button key={r} id={`rail-tab-${r}`} className="rail-tab" role="tab" aria-selected={rail === r}
+                aria-controls={`rail-panel-${r}`} tabIndex={rail === r ? 0 : -1}
+                onClick={() => setRail(r)}
+                onKeyDown={(e) => {
+                  const order = ["sessions", "files", "catalog"] as RailTab[];
+                  const at = order.indexOf(rail);
+                  if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                    e.preventDefault();
+                    const next = order[(at + (e.key === "ArrowRight" ? 1 : -1) + order.length) % order.length];
+                    setRail(next);
+                    requestAnimationFrame(() => document.getElementById(`rail-tab-${next}`)?.focus());
+                  }
+                }}>
+                {r === "sessions" ? "Sessions" : r === "files" ? "Files" : "Catalog"}
+              </button>
+            ))}
+          </div>
+          <div id={`rail-panel-${rail}`} role="tabpanel" aria-labelledby={`rail-tab-${rail}`} className="rail-panel">
+          {rail === "sessions" && (
+            <>
+              <div className="rail-head">
+                <span className="rail-title">Recent</span>
+                <button className="btn" onClick={() => { setActive(null); setView(CHAT); }}>+ New</button>
+              </div>
+              <div className="rail-list">
+                {sessions.length === 0 && (
+                  <p style={{ color: "var(--ink-3)", fontSize: 12.5, padding: "4px 10px" }}>
+                    No sessions yet. Start with what you want to build.
+                  </p>
+                )}
+                {sessions.map((s) => (
+                  <button key={s.id} className="rail-item" aria-current={s.id === active}
+                    onClick={() => { setActive(s.id); setView(CHAT); }}>
+                    <span className={`dot${s.status === "streaming" ? " busy" : ""}`} aria-hidden />
+                    {s.title === "New session" ? s.id.slice(0, 8) : s.title}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {rail === "files" && (
+            <div className="rail-tree">
+              <WorkspaceTree selected={selectedRef} revision={treeRev}
+                onOpenFile={(n) => { const d = docForNode(n.kind, n.path); if (d) openDoc(d); }}
+                onAttach={addContext} onUseFolder={useFolder} />
+            </div>
+          )}
+          {rail === "catalog" && (
+            <div className="rail-tree">
+              <CatalogTree selected={selectedRef} onAttach={addContext} onOpenTable={(ref) => openDoc(makeDoc("table", ref))} />
+            </div>
+          )}
+          </div>
+        
+    </>
+  );
 
   return (
     <WorkspaceLinks.Provider value={workspace}>
@@ -328,66 +407,12 @@ export function App() {
           </span>
         </header>
 
-        <div className={`layout${active && inspShown ? "" : " no-inspector"}${railShown ? "" : " no-rail"}`}>
-          {railShown && <nav className="pane rail" aria-label="Navigator">
-            <button className="rail-collapse" onClick={() => openRail(false)}
-              title="Hide this panel (⌘B)" aria-label="Hide the left panel">‹</button>
-            <div className="rail-tabs" role="tablist" aria-label="Navigator">
-              {(["sessions", "files", "catalog"] as Rail[]).map((r) => (
-                <button key={r} id={`rail-tab-${r}`} className="rail-tab" role="tab" aria-selected={rail === r}
-                  aria-controls={`rail-panel-${r}`} tabIndex={rail === r ? 0 : -1}
-                  onClick={() => setRail(r)}
-                  onKeyDown={(e) => {
-                    const order = ["sessions", "files", "catalog"] as Rail[];
-                    const at = order.indexOf(rail);
-                    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-                      e.preventDefault();
-                      const next = order[(at + (e.key === "ArrowRight" ? 1 : -1) + order.length) % order.length];
-                      setRail(next);
-                      requestAnimationFrame(() => document.getElementById(`rail-tab-${next}`)?.focus());
-                    }
-                  }}>
-                  {r === "sessions" ? "Sessions" : r === "files" ? "Files" : "Catalog"}
-                </button>
-              ))}
-            </div>
-            <div id={`rail-panel-${rail}`} role="tabpanel" aria-labelledby={`rail-tab-${rail}`} className="rail-panel">
-            {rail === "sessions" && (
-              <>
-                <div className="rail-head">
-                  <span className="rail-title">Recent</span>
-                  <button className="btn" onClick={() => { setActive(null); setView(CHAT); }}>+ New</button>
-                </div>
-                <div className="rail-list">
-                  {sessions.length === 0 && (
-                    <p style={{ color: "var(--ink-3)", fontSize: 12.5, padding: "4px 10px" }}>
-                      No sessions yet. Start with what you want to build.
-                    </p>
-                  )}
-                  {sessions.map((s) => (
-                    <button key={s.id} className="rail-item" aria-current={s.id === active}
-                      onClick={() => { setActive(s.id); setView(CHAT); }}>
-                      <span className={`dot${s.status === "streaming" ? " busy" : ""}`} aria-hidden />
-                      {s.title === "New session" ? s.id.slice(0, 8) : s.title}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-            {rail === "files" && (
-              <div className="rail-tree">
-                <WorkspaceTree selected={selectedRef} revision={treeRev}
-                  onOpenFile={(n) => { const d = docForNode(n.kind, n.path); if (d) openDoc(d); }}
-                  onAttach={addContext} onUseFolder={useFolder} />
-              </div>
-            )}
-            {rail === "catalog" && (
-              <div className="rail-tree">
-                <CatalogTree selected={selectedRef} onAttach={addContext} onOpenTable={(ref) => openDoc(makeDoc("table", ref))} />
-              </div>
-            )}
-            </div>
-          </nav>}
+        <div className="layout" style={{ "--layout-columns": columns(layout, viewport) } as React.CSSProperties}>
+          {railShown && !narrow && (
+            <nav className="pane rail" aria-label="Navigator">
+              {railBody}
+            </nav>
+          )}
 
           {!railShown && (
             <button className="rail-reveal" onClick={() => openRail(true)}
@@ -401,39 +426,14 @@ export function App() {
             <div className="drawer-scrim" role="presentation"
               onClick={() => {
                 setDrawer(null);
-                if (railIsOverlay()) setRailShown(false);
-                if (inspectorIsOverlay()) setInspShown(false);
+                if (narrow) toggle("rail", false);
+                if (inspectorOverlay) toggle("inspector", false);
               }} />
           )}
 
           <main className="pane main">
             {docs.length > 0 && (
-              <div className="doc-tabs" role="tablist" aria-label="Open items" data-count={docs.length}
-                onKeyDown={tabKeys([CHAT, ...docs.map((d) => d.id)], view, setView)}>
-                <div id={`tab-${CHAT}`} className="doc-tab" role="tab" aria-selected={view === CHAT}
-                  aria-controls="doc-panel" tabIndex={view === CHAT ? 0 : -1} onClick={() => setView(CHAT)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(CHAT); } }}>
-                  <span className="doc-tab-label"><span aria-hidden>💬</span> Chat</span>
-                </div>
-                {docs.map((d) => (
-                  /* The close control lives INSIDE the tab, so it sits within the tab's own shape
-                     rather than hanging off its edge. One tab stop per tab: the strip is one widget,
-                     and Delete/Backspace on the focused tab closes it. */
-                  <div key={d.id} id={`tab-${d.id.replace(/[^\w-]/g, "_")}`} className="doc-tab" role="tab"
-                    aria-selected={view === d.id} aria-controls="doc-panel" tabIndex={view === d.id ? 0 : -1}
-                    onClick={() => setView(d.id)} title={d.ref}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(d.id); }
-                      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); closeDoc(d.id); }
-                    }}>
-                    <span className="doc-tab-label">
-                      <span aria-hidden>{d.kind === "table" ? "▦" : "▤"}</span> {d.name}
-                    </span>
-                    <button className="doc-close" tabIndex={-1} aria-label={`Close ${d.name}`} title={`Close ${d.name} (⌘W)`}
-                      onClick={(e) => { e.stopPropagation(); closeDoc(d.id); }}><CloseIcon /></button>
-                  </div>
-                ))}
-              </div>
+              <DocTabs chatId={CHAT} docs={docs} active={view} onSelect={setView} onClose={closeDoc} />
             )}
 
             {/* One panel serves every tab, so each tab can name it with aria-controls. */}
@@ -460,13 +460,14 @@ export function App() {
                   </span>
                   {error && <span className="strip-error">{error}</span>}
                 </div>
-                <div className="transcript" ref={pane} aria-live="polite" aria-busy={busy}>
+                <section className="transcript" ref={pane} role="region" aria-label="Conversation"
+                  aria-live="polite" aria-busy={busy}>
                   {turns.length === 0 && (
                     <p style={{ color: "var(--ink-3)" }}>Starting the agent… (usually 3–8 s)</p>
                   )}
                   {turns.map((t) => <TurnView key={t.id} turn={t} />)}
                   <div ref={bottom} />
-                </div>
+                </section>
               </>
             )}
             </div>
@@ -486,8 +487,24 @@ export function App() {
             />
           </main>
 
-          {active && inspShown && <Inspector session={session} />}
+          {active && inspShown && !inspectorOverlay && (
+            <Inspector session={session}
+              edge={mode === "wide" ? (
+                <Separator zone="inspector" width={layout.inspectorWidth} min={250} max={Number.POSITIVE_INFINITY}
+                  label="Resize the inspector"
+                  onResize={(px) => setWidth("inspector", px)} onReset={() => resetOne("inspector")} />
+              ) : null} />
+          )}
         </div>
+
+        {/* Overlay panes live outside the grid: a fixed grid child still reserves a row in some
+            engines, which once pushed the work area down the page. */}
+        {railShown && narrow && (
+          <nav className="pane rail is-drawer" aria-label="Navigator">{railBody}</nav>
+        )}
+        {active && inspShown && inspectorOverlay && (
+          <Inspector session={session} className="is-drawer" />
+        )}
 
         {paletteOpen && <Palette items={paletteItems} onClose={() => setPaletteOpen(false)} />}
         {keysOpen && <ShortcutSheet onClose={() => setKeysOpen(false)} />}
