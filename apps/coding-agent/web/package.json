@@ -14,7 +14,9 @@
     "e2e:shell": "node scripts/ux-e2e.mjs",
     "e2e:live": "node scripts/genie-e2e.mjs",
     "audit:shell": "node scripts/shell-audit.mjs",
-    "audit:cls": "node scripts/cls-selftest.mjs && node scripts/cls-audit.mjs && node scripts/cls-stress.mjs"
+    "audit:cls": "node scripts/cls-selftest.mjs && node scripts/cls-audit.mjs && node scripts/cls-stress.mjs",
+    "verify:spec-links": "node scripts/verify-spec-links.mjs ../../../specs/003-improve-dev-ux-ui",
+    "verify:editor-choice": "node scripts/verify-editor-choice.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",
