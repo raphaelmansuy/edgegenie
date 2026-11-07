@@ -121,7 +121,8 @@ class AcpAgentRuntime:
         models, current = model_options(new)
         agent_sid = str(new.get("sessionId", ""))
         self._by_agent[agent_sid] = spec.session_id
-        return RuntimeHandle(session_id=agent_sid, capabilities=caps, models=models, current_model=current)
+        return RuntimeHandle(session_id=agent_sid, ours=spec.session_id, capabilities=caps,
+                             models=models, current_model=current)
 
     async def _drain_stderr(self, session_id: str, stream: asyncio.StreamReader) -> None:
         """Keep the agent's stderr flowing and remember the tail, for diagnosis."""
@@ -387,7 +388,18 @@ class AcpAgentRuntime:
 
     # -- internals ------------------------------------------------------------
     def _ours(self, h: RuntimeHandle) -> str:
-        """Our session id for a handle (the handle carries the agent's own session id)."""
+        """The key this process is stored under.
+
+        `h.ours` is authoritative: it is the id we started the process with, and `_procs` is keyed
+        by exactly that. The agent-id mapping is a fallback for a handle built before `ours` existed.
+
+        This used to derive the key from the agent's own session id. That is not unique per process
+        — the fake agent reports the same id for every instance — so three processes collapsed onto
+        one key and `close()` could only find the last of them. Three archived sessions, two orphan
+        processes, measured.
+        """
+        if h.ours and h.ours in self._procs:
+            return h.ours
         return self._by_agent.get(h.session_id, h.session_id)
 
     def _channel(self, h: RuntimeHandle) -> StdioChannel:

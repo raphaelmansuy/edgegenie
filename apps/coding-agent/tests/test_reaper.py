@@ -12,8 +12,10 @@ POLICY = Policy(idle_seconds=1800, keep_minimum=8)
 NOW = 1_800_000_000.0
 
 
-def c(status: str = "ready", idle: float = 3600, watchers: int = 0) -> Candidate:
-    return Candidate(session_id="s1", status=status, last_seen=NOW - idle, watchers=watchers)
+def c(status: str = "ready", idle: float = 3600, watchers: int = 0, turns: int = 1) -> Candidate:
+    """A session that has been USED by default. The empty case is a distinct rule with its own tests:
+    an unused session is reaped on a much shorter window and ignores the floor."""
+    return Candidate(session_id="s1", status=status, last_seen=NOW - idle, watchers=watchers, turns=turns)
 
 
 def decide(cand: Candidate, live: int = 20) -> Why | None:
@@ -165,10 +167,39 @@ async def test_the_soft_cap_is_respected_in_one_pass():
     gone: list[str] = []
     open_now = len(statuses)
     for sid in list(statuses):
-        cand = Candidate(sid, statuses[sid], last_seen=0.0, watchers=0)
+        cand = Candidate(sid, statuses[sid], last_seen=0.0, watchers=0, turns=1)
         if reapable(cand, now=NOW, live_count=open_now, policy=policy) is None:
             gone.append(sid)
             statuses[sid] = "archived"
             open_now -= 1
     assert len(gone) == 6, f"expected 6 reaped, got {len(gone)}"
     assert open_now == 2
+
+
+# ---------------------------------------------------------------- an unused session is not an idle one
+def test_an_unused_session_is_reaped_on_the_short_window():
+    """Measured: 36 orphan agent processes after an afternoon of audit runs, every one of them a
+    session that was created and never spoken to. Waiting 30 minutes for those wastes a subprocess
+    each, and they are exactly what a test harness produces by the hundred."""
+    empty = c(turns=0, idle=policy_empty() + 1)
+    assert decide(empty, live=1) is None, "an empty session past the short window must be reaped"
+
+
+def test_an_unused_session_ignores_the_soft_cap():
+    """The floor protects sessions someone might return to. An empty one protects nobody."""
+    assert decide(c(turns=0, idle=99_999), live=1) is None
+
+
+def test_a_freshly_created_session_is_still_left_alone():
+    """The point is not to kill sessions the instant they appear: opening one must work."""
+    assert decide(c(turns=0, idle=1), live=20) is Why.YOUNG
+
+
+def test_a_used_session_is_not_reaped_on_the_short_window():
+    """A session with a turn in it keeps the long window: it is worth coming back to."""
+    used = c(turns=1, idle=policy_empty() + 1)
+    assert decide(used, live=20) is Why.YOUNG
+
+
+def policy_empty() -> float:
+    return Policy().empty_idle_seconds

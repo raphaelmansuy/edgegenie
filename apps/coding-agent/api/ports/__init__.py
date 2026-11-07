@@ -34,6 +34,12 @@ class RuntimeHandle:
     capabilities: Capabilities
     models: list[str] = field(default_factory=list)
     current_model: str = ""
+    #: OUR session id — the key the runtime stores this process under. Carried on the handle because
+    #: the agent's own id is not unique per process: the fake agent reports the same id for every
+    #: instance, so `_by_agent` (agent id -> our id) collapsed three processes onto one key and
+    #: `close()` could only ever find the last of them. Measured: three sessions archived with
+    #: `handle=True`, two processes left running.
+    ours: str = ""
 
 
 class AgentError(Exception):

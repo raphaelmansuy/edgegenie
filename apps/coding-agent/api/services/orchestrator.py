@@ -134,7 +134,8 @@ class Orchestrator:
         from ..domain.reaper import Candidate
         return [
             Candidate(session_id=sid, status=live.state.session.status.value,
-                      last_seen=live.last_seen or 0.0, watchers=self.watchers(sid))
+                      last_seen=live.last_seen or 0.0, watchers=self.watchers(sid),
+                      turns=len(live.state.turns))
             for sid, live in self._live.items()
         ]
 
@@ -227,6 +228,14 @@ class Orchestrator:
         spec = SessionSpec(session_id=s.id, cwd=cwd, model=s.model, mcp_url=live.mcp_url,
                            env={"DATABRICKS_TOKEN": token} if token else {})
         live.handle = await self._rt.start(spec)
+        # If the session was archived while this was in flight — a reaper pass, or the user closing
+        # it — the process we just started has no session to serve and `archive()` already ran with
+        # `live.handle` still None, so it could not close it. Close it here instead. Measured: nine
+        # orphaned agents survived an archive because the reaper won this race.
+        if live.state.session.status is SessionStatus.ARCHIVED:
+            await self._rt.close(live.handle)
+            live.handle = None
+            return
         live.state.session = s.transition(SessionStatus.READY)
         live.state.session = updated(
             live.state.session,
@@ -281,6 +290,7 @@ class Orchestrator:
             if live.handle:
                 await self._rt.cancel(live.handle)
         live.state.session = live.state.session.transition(SessionStatus.ARCHIVED)
+        live.cancel = True          # a provision still in flight must not finish
         if live.handle:
             await self._rt.close(live.handle)
         await self._tools.stop(session_id)

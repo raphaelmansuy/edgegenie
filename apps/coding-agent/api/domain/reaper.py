@@ -45,6 +45,8 @@ class Candidate:
     last_seen: float
     #: Live stream subscribers. Non-zero means a human is looking.
     watchers: int = 0
+    #: Turns this session has produced. Zero means it was opened and never used.
+    turns: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +56,10 @@ class Policy:
     #: Idle this long before a session is a candidate at all. Overridable by env so the behaviour
     #: can be exercised against a running server without waiting half an hour.
     idle_seconds: float = float(os.environ.get("APP_REAP_IDLE_SECONDS", 30 * 60))
+    #: An **unused** session (no turns) is reaped far sooner. It holds a subprocess and has nothing
+    #: to lose: measured at 36 orphan agents after one afternoon of audit runs, every one of them a
+    #: session that was created and never spoken to.
+    empty_idle_seconds: float = float(os.environ.get("APP_REAP_EMPTY_SECONDS", 5 * 60))
     #: Keep at least this many live sessions even if idle: one process is cheap, churn is not.
     keep_minimum: int = int(os.environ.get("APP_REAP_KEEP_MINIMUM", 8))
 
@@ -68,7 +74,14 @@ def reapable(c: Candidate, *, now: float, live_count: int, policy: Policy) -> Wh
         return Why.ARCHIVED
     if c.watchers > 0:
         return Why.WATCHED
-    if now - c.last_seen < policy.idle_seconds:
+    idle = now - c.last_seen
+    # An unused session is a different thing from an idle one. It holds a subprocess and has nothing
+    # worth returning to, so it does not deserve the long window AND it is not protected by the
+    # floor — the floor exists to avoid churn on sessions someone might come back to.
+    if c.turns == 0:
+        # No floor: an unused session costs a subprocess and protects nobody.
+        return None if idle >= policy.empty_idle_seconds else Why.YOUNG
+    if idle < policy.idle_seconds:
         return Why.YOUNG
     if live_count <= policy.keep_minimum:
         return Why.UNDER_CAP
