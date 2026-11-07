@@ -19,6 +19,7 @@ from ..domain import supervisor
 from ..domain.events import (
     Event,
     approval_decided,
+    document_saved,
     evidence_proposed,
     session_created,
     session_ready,
@@ -246,6 +247,16 @@ class Orchestrator:
         live.cancel = True
         if live.handle:
             await self._rt.cancel(live.handle)
+
+    async def record_document_saved(self, session_id: str, path: str, size: int, *, by: str) -> None:
+        """Put a human write into the session's event stream (spec 003 WR-4).
+
+        The transcript and the audit are one record: a save that happened in the editor has to be
+        visible where a turn is visible, with who did it. The session must exist; a caller that
+        already saved should not fail because recording did not — the route decides that.
+        """
+        self.get(session_id)          # KeyError if there is no such session
+        await self._store.append(document_saved(session_id, path, size, by=by))
 
     # -- turns ----------------------------------------------------------------
     async def submit(self, session_id: str, text: str, context: str = "",

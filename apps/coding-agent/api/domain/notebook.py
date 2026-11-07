@@ -85,7 +85,15 @@ def _cell(index: int, block: list[str], lang: str, pre: str) -> Cell:
         first = body[0].strip() if body else ""
         if first.startswith("%"):
             word = first[1:].split()[0].lower() if first[1:].split() else ""
-            rest = [first[1 + len(word):].strip()] + body[1:]
+            # Everything after the magic token is content, and its leading whitespace is content
+            # too: a markdown cell whose first line is "\tindented" is a different cell from one
+            # whose first line is "indented". Drop the magic, the one separator space the writer is
+            # required to emit, and nothing else. A bare `.strip()` here silently ate indentation,
+            # which made the SOURCE round trip lossy.
+            after = body[0].strip()[1 + len(word):]
+            if after.startswith(" "):
+                after = after[1:]
+            rest = [after] + body[1:]
             rest = [r for i, r in enumerate(rest) if i or r]          # drop an empty remainder of line 1
             kind = "markdown" if word == "md" else "code"
             return _make(index, kind, MAGICS.get(word, word or lang), "\n".join(rest))

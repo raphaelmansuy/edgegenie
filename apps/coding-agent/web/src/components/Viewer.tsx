@@ -1,12 +1,25 @@
-/** Document viewer: a notebook as cells, a file as text, a table as schema plus sample rows.
+/** Document viewer, now with a fenced editing surface (spec 003).
  *
- * Read-only on purpose. Editing happens through the agent (which is fenced and audited), so a
- * viewer that could also write would be a second, unfenced way to change the workspace.
+ * The old header said "read-only on purpose", because a writable viewer would have been a second,
+ * unfenced way to change the workspace. That comment could go because the fence moved: saving goes
+ * through `scope.check_path` on the server — the same function the agent's tools call — so an editor
+ * here is a *fenced* door rather than a hole.
+ *
+ * Three surfaces, chosen by what the document is:
+ *
+ *   notebook  -> EditorSurface with cells, when the reader did not truncate it
+ *   file      -> EditorSurface as plain text, when likewise
+ *   table     -> TableViewer (unchanged: a table is not a document you edit here)
+ *
+ * Read-only is not an apology. Saving a truncated document would silently drop the tail, so
+ * refusing is the correct behaviour (spec 003 D7, ED-6).
  */
 import { useCallback, useEffect, useState } from "react";
 import { api, type TableInfo, type WsObject } from "../api/client";
 import { ACTIONS, ACTIONS_FOR, type Action, type Doc } from "../domain/docs";
+import { serializeCells, type Cell } from "../domain/notebook";
 import { tokenize } from "../domain/highlight";
+import { EditorSurface, type EditTarget } from "./EditorSurface";
 import { ExtLink } from "./ExtLink";
 import { Refresh } from "./Icons";
 import { Markdown } from "./Markdown";
@@ -36,6 +49,13 @@ function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
 export interface ViewerActions {
   onAsk: (a: Action, doc: Doc) => void;
   onAttach: (doc: Doc) => void;
+  /** Present when there is a session: the folder a save may enter without asking, and the session
+   *  whose audit stream should receive the write. */
+  editing?: {
+    folder: string;
+    sessionId: string | null;
+    theme: "light" | "dark";
+  };
 }
 
 function Head({ doc, subtitle, badge, actions, busy, reload, objectId }: {
@@ -59,8 +79,10 @@ function Head({ doc, subtitle, badge, actions, busy, reload, objectId }: {
         <button className="btn" onClick={() => actions.onAttach(doc)}>＠ Add to chat</button>
         <ExtLink className="btn" label={`Open ${doc.name} in Databricks`}
           target={{ kind: doc.kind, ref: doc.ref, objectId }}>Open in Databricks ↗</ExtLink>
-        {ACTIONS_FOR[doc.kind].map((a) => (
-          <button key={a} className="btn" onClick={() => actions.onAsk(a, doc)}>{ACTIONS[a].label}</button>
+        {ACTIONS_FOR[doc.kind].map((action) => (
+          <button key={action} className="btn" onClick={() => actions.onAsk(action, doc)}>
+            {ACTIONS[action].label}
+          </button>
         ))}
       </div>
     </header>
@@ -80,9 +102,54 @@ function CellCopy({ text }: { text: string }) {
   );
 }
 
+/** The version token, as the server computed it.
+ *
+ * This must NOT be re-derived on the client. An earlier version hashed the same three fields
+ * locally with a different algorithm, so every first save was refused as a conflict: the client's
+ * token could never equal the server's. The token is opaque by design — the server mints it, the
+ * client carries it, nothing else interprets it.
+ */
+function versionOf(o: WsObject | null): string | null {
+  return o?.version ?? null;
+}
+
 export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActions }) {
   const { data, error, loading, reload } = useLoad<WsObject>(() => api.object(doc.ref), [doc.ref, doc.rev]);
   const isFile = data?.kind === "file";
+  const [cells, setCells] = useState<Cell[] | null>(null);
+
+  useEffect(() => {
+    if (!data) return;
+    if (isFile) { setCells(null); return; }
+    // The server already parsed these cells. Adopting them directly is the whole point of one
+    // shared Cell model — and re-serializing them here was a real corruption bug: server cells have
+    // no client `id`, so `serializeCells` treated each `source` as a whole document and emitted
+    // the header inside cell 1. Take the cells as given; only give them ids.
+    setCells(data.cells.map((c, i) => ({
+      id: `s${i}-${c.index}`,
+      kind: c.kind as "code" | "markdown",
+      language: c.language,
+      source: c.source,
+      ...(c.truncated ? { truncated: true } : {}),
+    })));
+  }, [data, isFile]);
+
+  const onSaved = useCallback(() => { reload(); }, [reload]);
+
+  const editable = Boolean(actions.editing && data && !data.truncated);
+  // The editor's text is the cells serialized exactly once. This is the only place it happens, so
+  // "what the user sees" and "what a save writes" cannot diverge.
+  const source = data ? (isFile ? data.text : serializeCells(cells ?? [], (data.language || "PYTHON").toUpperCase())) : "";
+
+  const target: EditTarget | null = data ? {
+    path: doc.ref,
+    name: doc.name,
+    kind: isFile ? "file" : "notebook",
+    language: (data.language || "PYTHON").toUpperCase(),
+    version: versionOf(data),
+    truncated: Boolean(data.truncated),
+  } : null;
+
   return (
     <section className="viewer" aria-label={`${doc.name} viewer`}>
       <Head doc={doc} busy={loading} reload={reload} actions={actions} objectId={data?.objectId}
@@ -90,8 +157,23 @@ export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActi
       <div className="viewer-body">
         {loading && !data && <p className="viewer-note"><span className="spin" /> opening…</p>}
         {error && <p className="viewer-error" role="alert">{error}</p>}
-        {data && !isFile && data.cells.length === 0 && <p className="viewer-note">This notebook has no cells.</p>}
-        {data && !isFile && data.cells.map((c) => (
+
+        {data && target && editable && actions.editing && (
+          <EditorSurface
+            target={target}
+            folder={actions.editing.folder}
+            sessionId={actions.editing.sessionId}
+            source={source}
+            theme={actions.editing.theme}
+            onSaved={onSaved}
+            onCells={(next) => setCells(next)}
+          />
+        )}
+
+        {/* Read-only rendering: a table is not editable here, and a truncated document must not be
+            saved, so the viewer shows it exactly as before. */}
+        {data && !editable && !isFile && data.cells.length === 0 && <p className="viewer-note">This notebook has no cells.</p>}
+        {data && !editable && !isFile && data.cells.map((c) => (
           <div key={c.index} className={`cell cell-${c.kind}`}>
             <div className="cell-gutter" aria-hidden>
               <span>{c.index + 1}</span>
@@ -104,7 +186,7 @@ export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActi
             </div>
           </div>
         ))}
-        {data && isFile && <Code text={data.text} language={data.language || "plain"} />}
+        {data && !editable && isFile && <Code text={data.text} language={data.language || "plain"} />}
         {data?.truncated && <p className="viewer-note">Showing the first 400 KB. The agent reads the rest in pages.</p>}
       </div>
     </section>

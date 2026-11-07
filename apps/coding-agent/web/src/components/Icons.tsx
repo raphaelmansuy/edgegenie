@@ -165,6 +165,32 @@ export const Square = (p: IconProps) => (
   </Svg>
 );
 
+/** Save. A floppy is the icon everyone still reads as "save", even though nobody owns one. */
+export const Save = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 3h11l3 3v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+    <path d="M8 3v6h7V3" />
+    <rect x="8" y="13" width="8" height="7" rx="1" />
+  </Svg>
+);
+
+/** Locked. Used for "read-only", not for "secure", so it is a padlock on a document. */
+export const Lock = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="5" y="10" width="14" height="10" rx="2" />
+    <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+  </Svg>
+);
+
+/** Warning. A triangle with a bang: distinguishable from Alert at 13px by its outline shape. */
+export const Warning = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3.8 21 19.5H3z" />
+    <path d="M12 9.5v4.2" />
+    <circle cx="12" cy="16.6" r="0.65" fill="currentColor" stroke="none" />
+  </Svg>
+);
+
 /* ---------- objects ---------- */
 
 /** A conversation. */
@@ -320,6 +346,7 @@ export const ICONS = {
   dot: Dot, ring: Ring, square: Square, notebook: Notebook, file: FileIcon, folder: Folder,
   table: Table, database: Database, schema: Schema, repo: Repo, plus: Plus, close: Close,
   stop: Stop, send: Send, monitor: Monitor, sun: Sun, moon: Moon, sparkle: Sparkle,
+  save: Save, lock: Lock, warning: Warning,
   clock: Clock, layers: Layers, list: ListIcon, bug: Bug,
 } as const;
 

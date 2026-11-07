@@ -212,6 +212,55 @@ people expect from every editor.
 
 ---
 
+## D9 · No CRDT in this design
+
+**Decision:** no CRDT (no Yjs, no Automerge). Concurrency is a version token and a conflict UI.
+
+This needs defending, because the spec *cites* JupyterLab's Yjs CRDT as evidence for axiom A5. Taking
+the reasoning and not the protocol is deliberate, and the distinction matters:
+
+> A5 says **a cell needs a stable identity, because an index cannot survive a reorder.** That is a
+> statement about the document model. A CRDT is one *implementation* of it, and it exists to solve a
+> different problem: merging concurrent operation streams. We adopted the identity rule (cells carry
+> ids, moves are operations on ids) without the merge machinery.
+
+### What a CRDT needs, and what we have
+
+| A CRDT requires | What exists here |
+|---|---|
+| Two writers producing **operation streams** on one shared document | Both writers produce a **whole-file replacement**. The agent calls `dbx_write_notebook(cells)`; the human posts a full text. |
+| A **stable document identity** to converge on | The storage **destroys identity on every write**: `overwrite` is rejected with `format=SOURCE` (measured: `INVALID_PARAMETER_VALUE`), so a save is delete-then-import and `object_id` changes. This was discovered the hard way — `object_id` had to be removed from the version token because it made every first save 409. |
+| A **channel** to exchange deltas | The workspace API is REST import/export. No websocket, no delta endpoint, no server-side document store. |
+
+### Why a client-only CRDT buys nothing
+
+If the CRDT lives in one browser tab, the merge happens locally and is then **discarded by the next
+whole-file import**. It gives no cross-session guarantee, and it is strictly more machinery than a
+version token for the same outcome.
+
+### What a server-side CRDT would cost
+
+- a second source of truth for document content (Lakebase + Yjs), which **contradicts D5** (one
+  serializer, one authority) and duplicates a persistence problem the workspace already solves;
+- agent writes must become operation streams, so every tool's write path changes;
+- presence/awareness, tombstone GC, and auth on a new sync endpoint;
+- and at import time a **whole-file reconcile would still be needed**, because the workspace is not
+  CRDT-aware. That is two concurrency models layered, neither authoritative — the worst outcome.
+
+### When this decision should be *reversed rather than extended*
+
+The trigger is a product condition, not scale: **two people editing the same notebook at once and
+expecting to see each other's carets.** If that becomes the goal, the design changes:
+
+1. the document store owns content (Lakebase + Yjs) and the workspace becomes an **export target**;
+2. agent writes become operations, not whole files;
+3. the version token, the 409 path and `ConflictPanel` are **removed** — replaced by presence and
+   convergence. Keeping them alongside a CRDT would be the layered failure above.
+
+Until then, the honest promise stands: a lost write is always **recoverable** (draft, CX-5), and a
+detected conflict is always a **choice** (CX-3). That is the strongest guarantee the current storage
+can keep, and it is a guarantee we can test.
+
 ## Risks
 
 ### R1 · No conditional write in the workspace API
@@ -317,5 +366,6 @@ should decide.
 | D6 EditorHost | ED-1 | test speed |
 | D7 read-only truncated | ED-6 | — |
 | D8 scoped `⌘F` | UX-1 | — |
+| D9 no CRDT | CX-1..CX-5 (a guarantee we can keep) | rejects live multi-user editing |
 
 [Back to the index](README.md)

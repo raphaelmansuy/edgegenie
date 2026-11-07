@@ -12,6 +12,11 @@ export interface SessionSummary {
 export interface Cell { index: number; kind: "code" | "markdown"; language: string; source: string; truncated: boolean }
 export interface WsObject {
   objectId?: string;
+  /** Epoch seconds from the workspace API. With objectId and size it forms the version token a
+   *  save compares (spec 003 CX-1). */
+  modifiedAt?: number;
+  /** The server's version token. Opaque; send it back on save. */
+  version?: string;
   path: string; name: string; kind: "notebook" | "file"; language: string; size: number;
   truncated: boolean; cells: Cell[]; text: string;
 }

@@ -1095,3 +1095,149 @@ button.evidence-head .count { margin-left: 0; }
 .shell-toggle[aria-pressed="true"] { background: var(--blue-100); color: var(--blue-600); }
 .shell-toggle[aria-pressed="true"]:hover { background: var(--blue-300); color: var(--ink); }
 .shell-toggle:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ============================================================================
+   EDITING SURFACE (spec 003)
+   The editor lives inside the centre zone as a second work surface. These rules are the whole
+   visual contract: one type scale, one token set, one geometry, and no layout shift when the
+   editor chunk arrives.
+   ============================================================================ */
+
+.editor-surface { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+
+/* ---- the bar: fence, dirty, save ---- */
+.editor-bar {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  border-bottom: 1px solid var(--line); background: var(--surface); flex: none; min-height: 38px;
+}
+.editor-bar-spacer { flex: 1; }
+
+/* The fence is ambient, not an error (WR-5): it is present before the first keystroke and it says
+   what will happen, in words. Never a dialog, never a colour-only signal (UX-5). */
+.fence-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px 0 7px;
+  border-radius: 999px; font-size: 11.5px; font-weight: 550; white-space: nowrap;
+  border: 1px solid transparent;
+}
+.fence-chip.fence-ok { color: var(--green-700); background: var(--green-100); }
+.fence-chip.fence-warn { color: var(--yellow-800); background: var(--yellow-100); }
+.fence-chip.fence-off { color: var(--ink-3); background: var(--surface-3); }
+.fence-text { line-height: 1; }
+
+.editor-dirty { font-size: 11.5px; color: var(--yellow-800); font-weight: 550; }
+.editor-notice { font-size: 11.5px; color: var(--ink-3); }
+.editor-notice.is-ok { color: var(--green-700); }
+.editor-notice.is-warn { color: var(--yellow-800); }
+.editor-notice.is-error { color: var(--pink-700); font-weight: 550; }
+
+/* ---- the editor itself ---- */
+.editor-host { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* The mount reserves its height BEFORE the editor loads, so the 250 KB chunk arriving late adds no
+   layout shift. This is the rule that keeps audit:cls at 0 with a lazy editor. */
+.editor-mount { flex: 1; min-height: 0; overflow: hidden; }
+.editor-mount .cm-editor { height: 100%; }
+.editor-mount .cm-scroller { overflow: auto; }
+.editor-mount:empty { min-height: 240px; }
+.editor-note {
+  position: absolute; inset: 0; display: grid; place-items: center; margin: 0;
+  color: var(--ink-3); font-size: 12.5px; background: var(--surface); pointer-events: none;
+}
+.editor-fallback {
+  margin: 0; padding: 12px 14px; font-family: var(--mono); font-size: 12.5px;
+  white-space: pre-wrap; overflow: auto; color: var(--ink-2);
+}
+
+/* ---- banners: recovery, read-only, approval, conflict ---- */
+.draft-banner, .ask-banner {
+  display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 12.5px;
+  border-bottom: 1px solid var(--line); flex: none;
+}
+.draft-banner { background: var(--blue-50); color: var(--ink-2); }
+.draft-banner > span { flex: 1; }
+.ask-banner { background: var(--yellow-100); color: var(--ink); align-items: flex-start; gap: 10px; }
+.ask-banner > div { flex: 1; min-width: 0; }
+.ask-banner strong { display: block; font-size: 12.5px; }
+.ask-banner p { margin: 2px 0 0; font-size: 11.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+.ask-banner code { font-family: var(--mono); font-size: 11px; }
+
+.editor-readonly-note {
+  margin: 0; padding: 8px 12px; font-size: 12px; color: var(--ink-2);
+  background: var(--surface-3); border-bottom: 1px solid var(--line);
+}
+
+/* A conflict is a choice, never a verdict (CX-3). */
+.conflict-panel {
+  border-bottom: 1px solid var(--pink-300); background: var(--pink-100); padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 6px; flex: none;
+}
+.conflict-head { display: flex; align-items: center; gap: 8px; color: var(--pink-700); font-size: 12.5px; }
+.conflict-head strong { flex: 1; }
+.conflict-dismiss { width: 22px; height: 22px; font-size: 15px; line-height: 1; color: var(--pink-700); }
+.conflict-note { margin: 0; font-size: 12px; color: var(--ink-2); }
+.conflict-actions { display: flex; gap: 6px; }
+.conflict-hint { margin: 0; font-size: 11px; color: var(--ink-3); }
+
+/* ---- notebook cells ---- */
+.cells { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px 24px; display: flex; flex-direction: column; gap: 8px; }
+
+.cell-block {
+  display: flex; gap: 0; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); transition: border-color var(--dur), box-shadow var(--dur);
+}
+.cell-block.is-focused { border-color: var(--blue-300); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue-600) 10%, transparent); }
+.cell-block.is-md { background: var(--surface-2); }
+
+/* The gutter carries the run affordance and the index: product surface, not editor chrome. */
+.cell-gutter {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  width: 46px; flex: none; padding: 7px 0 6px; border-right: 1px solid var(--line);
+  background: var(--surface-2); border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.cell-no { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.cell-run {
+  width: 24px; height: 24px; display: grid; place-items: center; border: 0; border-radius: 5px;
+  background: transparent; color: var(--ink-3);
+  transition: background var(--dur), color var(--dur), transform var(--dur);
+}
+.cell-block:hover .cell-run, .cell-block.is-focused .cell-run { background: var(--blue-100); color: var(--blue-600); }
+.cell-run:hover { background: var(--blue-300); color: var(--blue-600); transform: scale(1.06); }
+.cell-run:active { transform: scale(0.96); }
+
+.cell-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+.cell-bar { display: flex; align-items: center; gap: 6px; padding: 3px 6px 3px 4px; min-height: 26px; }
+.cell-collapse { width: 20px; height: 20px; display: grid; place-items: center; border: 0; background: transparent; color: var(--ink-3); border-radius: 4px; }
+.cell-collapse:hover { background: var(--surface-3); color: var(--ink); }
+.cell-kind {
+  font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--ink-3); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px;
+}
+.cell-kind.is-markdown { color: var(--purple-300); border-color: var(--purple-300); }
+.cell-actions { margin-left: auto; display: flex; align-items: center; gap: 2px; }
+/* Cell actions are quiet until the cell is hovered or focused: a stack of 9 cells each with 4
+   buttons is noise, and the noise is what makes an editor feel cluttered. */
+.cell-act {
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  height: 24px; min-width: 24px; padding: 0 5px; border: 0; border-radius: 4px;
+  background: transparent; color: var(--ink-3); font-size: 10.5px; font-weight: 550;
+  /* Discoverable at rest, emphasised on hover. Hiding every action until a hover is what makes a
+     cell read as static text; 0.55 is quiet but present, and the row brightens as one unit. */
+  opacity: 0.55; transition: opacity var(--dur), background var(--dur), color var(--dur);
+}
+.cell-block:hover .cell-act, .cell-block.is-focused .cell-act, .cell-act:focus-visible { opacity: 1; }
+.cell-act:hover { background: var(--surface-3); color: var(--ink); }
+.cell-del:hover { background: var(--pink-100); color: var(--pink-700); }
+@media (hover: none) { .cell-act { opacity: 1; } }
+
+.cell-body { min-width: 0; }
+.cell-body .editor-host { min-height: 44px; }
+.cell-body .cm-content { padding: 4px 0 6px; }
+.cell-rendered { padding: 6px 10px 10px; cursor: text; border-radius: var(--radius-sm); }
+.cell-rendered:hover { background: var(--surface); }
+.cell-rendered:focus-visible { outline: 2px solid var(--blue-600); outline-offset: -2px; }
+.cell-rendered > :first-child { margin-top: 0; }
+.cell-rendered > :last-child { margin-bottom: 0; }
+
+.cells-add { display: flex; gap: 6px; padding: 2px 0 12px; }
+.cells-add .btn { color: var(--ink-3); }
+.cells-add .btn:hover { color: var(--ink); }

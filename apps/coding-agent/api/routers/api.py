@@ -16,7 +16,9 @@ from pydantic import BaseModel, Field
 
 from ..adapters.acp.agent_config import config_for
 from ..adapters.databricks.http import normalize_host
+from ..domain import approval, scope as scope_mod, version
 from ..domain import context as ctx
+from ..domain import events
 from ..domain.session import DomainError, Session
 from ..services import context as ctx_service
 from ..services.orchestrator import Orchestrator
@@ -382,6 +384,181 @@ async def workspace_mkdir(request: Request, body: MakeDir) -> dict:
     with _dbx_errors("workspace mkdir"):
         await _browser(request).mkdirs(path, _user_token(request))
     return {"path": path}
+
+
+class SaveDocument(BaseModel):
+    """A whole-object save, which is the only granularity the workspace API offers."""
+
+    path: str = Field(min_length=2, max_length=1024)
+    text: str = Field(max_length=8_000_000)
+    #: The token the client held when it loaded. Absent means "I did not load, just write".
+    version: str | None = None
+    #: Present when the fence answered ASK and the user approved. Path- and version-bound.
+    approval: str | None = None
+    #: The notebook's language, only used when the object does not exist yet.
+    language: str | None = None
+    #: The session this save belongs to, so the write lands in that session's audit stream.
+    sessionId: str | None = None
+
+
+class AskFence(BaseModel):
+    """Ask the server what the fence thinks, without writing anything."""
+
+    path: str = Field(min_length=2, max_length=1024)
+    version: str | None = None
+    #: The same session the save would name. Without it there is no writable folder, so every path
+    #: is outside and every answer is "ask" — correct, but useless as a preview.
+    sessionId: str | None = None
+
+
+def _save_scope(request: Request, session_id: str | None) -> scope_mod.Scope:
+    """The scope a save is judged against.
+
+    With a session, it is that session's scope — the same object the agent's tools get, so a human
+    and an agent saving the same path see the same verdict (WR-1). Without a session there is no
+    folder to be inside, so the scope is an empty folder: every path is outside it and every save
+    asks. That is the honest answer rather than a default-allow.
+    """
+    if session_id:
+        try:
+            return _orch(request).scope(session_id)
+        except KeyError:
+            raise HTTPException(404, "no such session") from None
+    home = _home(request)
+    return scope_mod.Scope.for_session("nosession", f"{home}/__no_scope__/", None)
+
+
+@router.post("/workspace/fence")
+async def workspace_fence(request: Request, body: AskFence) -> dict:
+    """What would happen if we saved this path. The client asks before the user types (WR-5)."""
+    path = _ws_path(body.path)
+    decision = scope_mod.check_path(_save_scope(request, body.sessionId), path)
+    return {
+        "verdict": decision.verdict.value,
+        "action": decision.action.value,
+        "target": decision.target,
+        "reason": decision.reason,
+        "approval": approval.issue(path, body.version or "") if decision.verdict is scope_mod.Verdict.ASK else None,
+    }
+
+
+@router.post("/workspace/save")
+async def workspace_save(request: Request, body: SaveDocument) -> dict:
+    """Save a document, fenced.
+
+    The order of the checks is the design (spec 003 WR-1..WR-7, CX-2):
+
+      1. the path is well formed            -> 422
+      2. `check_path` says what may happen  -> ASK requires an approval token, or 403
+      3. the version the client held still  -> 409 with both versions
+      4. import                             -> the object is replaced or it is not
+      5. record the write                   -> the audit stream
+
+    Step 2 calls `scope.check_path`, the same function the agent's tools call. This route contains
+    no path policy of its own; a mutation test flips `check_path` to always-deny and requires this
+    route to obey.
+    """
+    path = _ws_path(body.path)
+    scope = _save_scope(request, body.sessionId)
+    decision = scope_mod.check_path(scope, path)
+
+    if decision.verdict is scope_mod.Verdict.DENY:
+        raise HTTPException(403, decision.reason or "this path cannot be written")
+
+    if decision.verdict is scope_mod.Verdict.ASK:
+        # The approval is bound to this exact path and this exact version, so it cannot be reused
+        # for another object or replayed onto a revision the user never saw (approval.py).
+        if not approval.verify(body.approval, path, body.version or ""):
+            raise HTTPException(
+                403,
+                {"fence": "ask", "reason": decision.reason or f"outside {scope.folder}",
+                 "hint": "ask the fence for an approval for this path, then send it back"},
+            )
+
+    browser = _browser(request)
+    token = _user_token(request)
+
+    with _dbx_errors("workspace status"):
+        current_status = await browser.status(path, token) if not _is_missing(body) else None
+
+    current_version = version.of(current_status)
+    supplied = body.version or ""
+    # A version was supplied: it must still describe the object, or this is an overwrite of
+    # somebody else's edit and the user has to see both (CX-2, CX-3).
+    if supplied and not version.matches(current_version, supplied):
+        raise HTTPException(409, {
+            "conflict": True,
+            "current": (current_version.to_dict() if current_version else None),
+            "yours": supplied,
+            "path": path,
+        })
+    if not supplied and current_status is not None:
+        # Client did not say what it held. That is only acceptable when it is creating a new
+        # object; overwriting an existing one without a version is exactly the silent-clobber this
+        # whole path exists to prevent.
+        raise HTTPException(409, {
+            "conflict": True,
+            "current": current_version.to_dict() if current_version else None,
+            "yours": None,
+            "path": path,
+            "reason": "no version supplied for an object that already exists",
+        })
+
+    with _dbx_errors("workspace save"):
+        # SOURCE import needs a language: after the overwrite's delete there is no object to infer
+        # from. Prefer the caller's, then what the object already had, then the path's extension.
+        lang = (body.language or "").upper()
+        if not lang and current_status:
+            existing = current_status.get("language")
+            lang = str(existing or "").upper()
+        if not lang:
+            lang = _language_for_path(path)
+        await browser.import_source(path, body.text, token, language=lang)
+
+    with _dbx_errors("workspace status"):
+        after = version.of(await browser.status(path, token))
+
+    if body.sessionId:
+        try:
+            await _orch(request).record_document_saved(
+                body.sessionId, path, len(body.text.encode()), by="human")
+        except (KeyError, AttributeError):
+            # Recording is valuable but must never fail a save that already landed.
+            log.warning("could not record the save of %s in session %s", path, body.sessionId)
+
+    return {
+        "path": path,
+        "size": len(body.text.encode("utf-8")),
+        "version": after.to_dict() if after else None,
+        "fence": decision.verdict.value,
+    }
+
+
+#: Extension -> workspace language, for a create where the caller did not say.
+_EXT_LANGUAGE = {
+    ".py": "PYTHON", ".sql": "SQL", ".scala": "SCALA", ".r": "R", ".md": "PYTHON",
+    ".json": "PYTHON", ".yaml": "PYTHON", ".yml": "PYTHON", ".sh": "PYTHON",
+    ".js": "PYTHON", ".ts": "PYTHON", ".html": "PYTHON", ".css": "PYTHON", ".toml": "PYTHON",
+}
+
+
+def _language_for_path(path: str) -> str:
+    """The notebook language for a path with no extension information.
+
+    Databricks notebooks are stored without an extension, so the usual case is "unknown" and
+    PYTHON is the honest default: it is what the workspace itself assumes, and a wrong language on a
+    *new* object is recoverable, whereas a missing one fails the write outright.
+    """
+    for ext, lang in _EXT_LANGUAGE.items():
+        if path.lower().endswith(ext):
+            return lang
+    return "PYTHON"
+
+
+def _is_missing(body: SaveDocument) -> bool:
+    """A create: the caller declared it is writing something new, so there is no prior version."""
+    return body.version == ""
+
 
 
 # -- unity catalog -------------------------------------------------------------

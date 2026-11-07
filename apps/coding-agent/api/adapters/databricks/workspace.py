@@ -68,11 +68,26 @@ class WorkspaceObject:
     cells: list[nb.Cell]
     text: str = ""
     object_id: str = ""
+    #: Epoch seconds from get-status. Carried so the client can hold a version token for the save
+    #: path (spec 003 CX-1) without a second round trip.
+    modified_at: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {"objectId": self.object_id, "path": self.path, "name": self.path.rsplit("/", 1)[-1], "kind": self.kind,
                 "language": self.language, "size": self.size, "truncated": self.truncated,
+                "modifiedAt": self.modified_at,
+                # The version token itself, so the client never re-derives it. Two derivations of
+                # one token is a guaranteed false-conflict bug: the client's hash will not equal
+                # the server's, so every first save would be refused.
+                "version": _version_token(self.object_id, self.modified_at, self.size),
                 "cells": [c.to_dict() for c in self.cells], "text": self.text}
+
+
+def _version_token(object_id: str, modified_at: int, size: int) -> str:
+    """Must equal `api.domain.version.of(...).token` for the same three fields."""
+    from ...domain.version import of as version_of
+    v = version_of({"object_id": object_id, "modified_at": modified_at, "size": size})
+    return v.token if v else ""
 
 
 def _node(o: dict) -> Node:
@@ -137,10 +152,11 @@ class WorkspaceBrowser:
         text = raw[:MAX_READ_BYTES].decode("utf-8", "replace")
         language = str(status.get("language") or "").upper()
         oid = str(status.get("object_id") or "")
+        modified = int(status.get("modified_at") or 0)
         if kind == "notebook":
             return WorkspaceObject(path, kind, language, size, truncated, nb.parse_source(text, language),
-                                   object_id=oid)
-        return WorkspaceObject(path, kind, language, size, truncated, [], text, oid)
+                                   object_id=oid, modified_at=modified)
+        return WorkspaceObject(path, kind, language, size, truncated, [], text, oid, modified)
 
     # -- searching -------------------------------------------------------------------------
     async def search(self, root: str, query: str, token: str | None) -> tuple[list[Node], bool]:
@@ -189,3 +205,46 @@ class WorkspaceBrowser:
     # -- writing (user-initiated only; the agent has its own fenced tools) -----------------
     async def mkdirs(self, path: str, token: str | None) -> None:
         await self._http.post("/api/2.0/workspace/mkdirs", token, {"path": path})
+
+    async def status(self, path: str, token: str | None) -> dict[str, Any]:
+        """`get-status` as a plain dict: object_id, modified_at, size, language, object_type.
+
+        Exposed because the save path needs the *version* of an object (see domain/version.py) and
+        `read()` throws that away in favour of the content.
+        """
+        return await self._http.get("/api/2.0/workspace/get-status", token, {"path": path})
+
+    async def import_source(self, path: str, text: str, token: str | None, *,
+                            language: str = "", overwrite: bool = True) -> dict[str, Any]:
+        """Write a notebook or file in SOURCE format, as the signed-in user.
+
+        Measured on the workspace API: **`overwrite` is rejected together with `format=SOURCE`** —
+        `INVALID_PARAMETER_VALUE: Overwrite cannot be used for SOURCE format when importing a
+        folder.` So an overwrite is not a flag here, it is two calls: delete the object, then import
+        it. That is also the only ordering that is safe, because a failed import after a successful
+        delete leaves *nothing* rather than a half-written object — and the caller holds a local
+        draft, so nothing is lost (spec 003 CX-5).
+
+        `format=SOURCE` is the only format that keeps a notebook as text both ways: it is what
+        `read()` exports and what `parse_source` understands. `language` is passed on a create and
+        omitted on overwrite, so an existing notebook keeps its language; sending a different one is
+        how a Python notebook silently becomes a SQL one.
+        """
+        body: dict[str, Any] = {
+            "path": path,
+            "format": "SOURCE",
+            "content": base64.b64encode(text.encode("utf-8")).decode("ascii"),
+        }
+        # `language` is not optional in practice for SOURCE: after a delete the API has no object to
+        # infer from, and responds "The zip archive contains no items." (measured). So the caller
+        # always supplies it, and the route falls back to the language the object had.
+        if language:
+            body["language"] = language
+        if overwrite:
+            # Deleting first is what makes the write an overwrite. A missing object is fine: this is
+            # then a create, which is the same end state.
+            try:
+                await self._http.post("/api/2.0/workspace/delete", token, {"path": path, "recursive": False})
+            except LookupError:
+                pass
+        return await self._http.post("/api/2.0/workspace/import", token, body)

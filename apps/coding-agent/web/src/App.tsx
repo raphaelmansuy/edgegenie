@@ -328,7 +328,19 @@ export function App() {
   const pending = session.approvals.find((a) => !a.outcome);
   const turns = session.turns;
   const selectedRef = viewDoc?.ref ?? null;
-  const viewerActions = { onAsk: ask, onAttach: (d: Doc) => addContext(asAttachment(d)) };
+  /* The editing surface needs the writable folder of the current session, the session id (so the
+     save lands in that session's audit stream), and the resolved theme. Without a session there is
+     still an editor — every save simply goes through the approval sheet, which is the honest answer
+     rather than a dead end. */
+  const viewerActions = useMemo(() => ({
+    onAsk: ask,
+    onAttach: (d: Doc) => addContext(asAttachment(d)),
+    editing: {
+      folder: session.folder || folder || "",
+      sessionId: active,
+      theme: theme.effective,
+    },
+  }), [ask, addContext, session.folder, folder, active, theme.effective]);
 
   /** The navigator's body, shared by its in-grid form and its drawer form (one definition, not two). */
   const railBody = (

@@ -3,7 +3,7 @@
  * The reducer is a pure function over these, which is what makes replay and reconnection free.
  */
 export type EventType =
-  | "session.created" | "session.ready" | "session.degraded" | "session.archived"
+  | "session.created" | "session.ready" | "session.degraded" | "session.archived" | "document.saved"
   | "turn.started" | "turn.queued" | "thought.delta" | "message.delta"
   | "tool_call.started" | "tool_call.updated" | "plan.updated"
   | "approval.requested" | "approval.decided"
@@ -12,7 +12,7 @@ export type EventType =
   | "turn.failed" | "turn.retrying" | "session.compacted" | "usage.updated";
 
 export const EVENT_TYPES: EventType[] = [
-  "session.created", "session.ready", "session.degraded", "session.archived",
+  "session.created", "session.ready", "session.degraded", "session.archived", "document.saved",
   "turn.started", "turn.queued", "thought.delta", "message.delta",
   "tool_call.started", "tool_call.updated", "plan.updated",
   "approval.requested", "approval.decided",
@@ -98,6 +98,8 @@ export interface SessionView {
   agentVersion: string;
   turns: Turn[];
   approvals: Approval[];
+  /** Human writes, in the same stream as the agent's tool calls (WR-4). */
+  saves?: { path: string; size: number; by: string; at: string }[];
   scope?: { folder: string; schema: string | null; jobPrefix: string; appPrefix: string };
 }
 
@@ -196,6 +198,18 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
     case "approval.decided":
       return { ...s, approvals: s.approvals.map((a) =>
         a.approvalId === e.approvalId ? { ...a, outcome: String(e.outcome) } : a) };
+    case "document.saved": {
+      /* A human save belongs in the same record as the agent's tool calls (spec 003 WR-4): the
+         transcript is the audit. It appends to a running list rather than creating a turn, because
+         a save is not a conversation — it is a fact about a file that happened at a time. */
+      const entry = {
+        path: String(e.path ?? ""),
+        size: Number(e.size ?? 0),
+        by: String(e.by ?? "human"),
+        at: String(e.at ?? ""),
+      };
+      return { ...s, saves: [...(s.saves ?? []), entry] };
+    }
     case "evidence.proposed":
       // a snapshot for the turn, not an append: the supervisor may report it more than once
       return patchTurn(s, e.turnId, (t) => ({ ...t, evidence: (e.rows as EvidenceRow[]) ?? [] }));

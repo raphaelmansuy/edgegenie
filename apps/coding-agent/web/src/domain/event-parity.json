@@ -22,6 +22,7 @@
   "turn.failed",
   "turn.retrying",
   "session.compacted",
-  "usage.updated"
+  "usage.updated",
+  "document.saved"
  ]
 }

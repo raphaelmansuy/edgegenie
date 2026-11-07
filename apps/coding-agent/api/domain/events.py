@@ -34,6 +34,7 @@ EventType = Literal[
     "turn.retrying",
     "session.compacted",
     "usage.updated",
+    "document.saved",
 ]
 
 EVENT_TYPES: tuple[str, ...] = EventType.__args__  # type: ignore[attr-defined]
@@ -217,3 +218,13 @@ def turn_ended(
 
 def usage_updated(sid: str, tid: str, usage: dict) -> Event:
     return Event(sid, "usage.updated", {"usage": usage}, turn_id=tid, actor="agent")
+
+
+def document_saved(sid: str, path: str, size: int, *, by: str, actor: str = "app") -> Event:
+    """A human saved a document through the editor.
+
+    Recorded in the same stream as the agent's tool calls so the transcript and the audit are one
+    record: WR-4. `by` says who initiated it ("human" or "agent"); the agent's own writes arrive as
+    `tool_call.*` events and are not double-recorded.
+    """
+    return Event(sid, "document.saved", {"path": path, "size": size, "by": by}, actor=actor)  # type: ignore[arg-type]
