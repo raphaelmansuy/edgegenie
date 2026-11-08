@@ -86,4 +86,16 @@ fi
 
 echo
 echo "screenshots: specs/008-github-page/e2e/"
+
+# The deployed audit answers a different question from the local one: does what Pages actually serves
+# behave like what this repository builds? A local server serves from the root and Pages serves from a
+# subpath, so only this run can see an absolute-path bug (it found d70f567).
+if [ "${AUDIT_DEPLOYED:-0}" = "1" ]; then
+  echo "==> the same audit against the published site"
+  APP_URL="https://raphaelmansuy.github.io/opengenie" node site/shots.mjs --scene S1 --scene S2 \
+    && cp specs/008-github-page/e2e/audit.json specs/008-github-page/e2e/audit-live.json \
+    && git checkout -- specs/008-github-page/e2e/ \
+    || echo "    (deployed audit reported a problem; see specs/008-github-page/e2e/audit.json)"
+fi
+
 exit $STATUS

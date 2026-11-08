@@ -20,7 +20,14 @@ specs/008-github-page/e2e/
   reference/       1440 390
   about/           1440 390
   states/          menu open, three theme states, no-JS, no-images, 404
-  audit.json       contrast, targets, CLS, overflow, byte weight, per route
+  deployed/        the same audit run against the published URL, plus three captures of it
+  audit.json       contrast, targets, CLS, overflow, byte weight, per route — local build
+  audit-live.json  the same, against https://raphaelmansuy.github.io/opengenie/
+
+The two audits are kept apart on purpose. `audit.json` describes the artefact this repository builds;
+`audit-live.json` describes what Pages actually serves. They should agree, and the only reason they
+once did not is that a local server serves from the root while Pages serves from a subpath — the defect
+`[S1]` cannot see locally and the deployed run found (`d70f567`).
 ```
 
 Naming: `<route>-<width>[-<variant>].png`, so a file sorts into its route and a reader can tell its
