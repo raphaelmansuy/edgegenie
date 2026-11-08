@@ -210,3 +210,29 @@ async def test_the_env_vault_takes_the_project_from_beside_a_key_that_omits_it()
     assert ref is not None and ref.project_hint == "mobioos-506015" and ref.scope_kind == "workspace"
     secret = await vault.open(ref.id, user_id="u@example.com")
     assert json.loads(secret.value)["project_id"] == "mobioos-506015"
+
+
+# -- the operator's environment key survives turning the key store on --------------------------
+async def test_a_layered_vault_keeps_the_operators_key_when_the_store_is_writable():
+    """Regression: enabling the key store replaced the env vault, so a model that relied on the
+    operator's `LLM_VERTEX_KEY` failed with "needs a key" on a deployment where that key had not changed."""
+    from api.adapters.llm.vault.layered import LayeredVault
+    from tests.test_llm_domain import _service_account
+
+    vault = LayeredVault(MemoryVault(EnvKek.generate("t")),
+                         EnvVault({"LLM_VERTEX_KEY": _service_account("operator-proj")}))
+    me = "a@example.com"
+    found = await vault.find(ProviderKind.GOOGLE_VERTEX, user_id=me)
+    assert found is not None and found.id == "env:google_vertex"      # nothing saved: the operator's key
+    assert (await vault.open(found.id, user_id=me)).kind == CredentialKind.SERVICE_ACCOUNT_JSON.value
+
+    saved = await vault.put(ProviderKind.OPENAI, "api_key", OPENAI_KEY, user_id=me)
+    assert (await vault.find(ProviderKind.OPENAI, user_id=me)).id == saved.id
+    assert {c.provider for c in await vault.list(user_id=me)} == {ProviderKind.OPENAI, ProviderKind.GOOGLE_VERTEX}
+    assert vault.available is True                                    # still writable
+
+    own = await vault.put(ProviderKind.GOOGLE_VERTEX, "service_account_json",
+                          _service_account("my-proj"), user_id=me)
+    assert (await vault.find(ProviderKind.GOOGLE_VERTEX, user_id=me)).id == own.id   # yours wins
+    with pytest.raises(VaultRefused):
+        await vault.revoke("env:google_vertex", user_id=me)           # the operator's key is not yours to remove

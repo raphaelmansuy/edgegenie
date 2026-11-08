@@ -2,15 +2,22 @@
 import { useEffect, useRef, useState } from "react";
 import type { Approval, SessionView } from "../domain/events";
 import { api, type CatalogueResponse } from "../api/client";
+import { useReturnFocus } from "../hooks/useReturnFocus";
 import { ModelPicker } from "./ModelPicker";
+import { FolderPicker } from "./FolderPicker";
+import { LogoMark } from "./Logo";
 import { ModelFacts } from "./ModelFacts";
-import { Bug, ChevronRight, Clock, Database, ListIcon, Notebook, Sparkle } from "./Icons";
+import { ArrowUpRight, Bug, ChevronRight, Clock, Database, FileIcon, ListIcon, Notebook, Search, Sparkle, Table } from "./Icons";
+import type { Artifact } from "../domain/artifacts";
+import type { Doc } from "../domain/docs";
 
 export function ApprovalSheet({ approval, sessionId, onDecided }: {
   approval: Approval; sessionId: string; onDecided: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { ref.current?.focus(); }, []);
+  // KB-1: approving or denying returns focus to where the user was, not to <body>.
+  useReturnFocus();
   if (approval.outcome) return null;
 
   const decide = async (outcome: "allow_once" | "allow_session" | "deny") => {
@@ -48,14 +55,21 @@ export function ApprovalSheet({ approval, sessionId, onDecided }: {
   );
 }
 
-export function Inspector({ session, edge, onHide, className = "", activeId, onAddKey }: {
+export function Inspector({ session, edge, onHide, className = "", activeId, onAddKey, folder }: {
   session: SessionView; edge?: React.ReactNode; onHide?: () => void; className?: string;
+  /** The folder a NEW session would use, so the fence can name it before one exists. */
+  folder?: string;
   /** The session id, so the model-facts block can read the turn pins (FR-10). */
   activeId?: string | null;
   onAddKey?: () => void;
 }) {
   const [tab, setTab] = useState<"context" | "audit">("context");
   const calls = session.turns.flatMap((t) => t.tools);
+  /* One string for one path, resolved once. The three facts used raw `??` fallbacks inline, which is
+     why the block could grow a line mid-load and shift everything below it by 40 px (measured CLS
+     0.0024): `not chosen yet` is 14 characters, the real path is 43. Naming it here also lets the
+     path carry a `title`, since it is now displayed on one line with an ellipsis. */
+  const scopedFolder = session.scope?.folder || session.folder || folder || "not chosen yet";
   return (
     <aside className={`pane inspector${className ? ` ${className}` : ""}`}>
       {/* The resize handle belongs to this pane and sits on the edge facing the work area. */}
@@ -83,25 +97,39 @@ export function Inspector({ session, edge, onHide, className = "", activeId, onA
               <legend>Working scope</legend>
               <div className="fence">
                 <strong>This agent can write here and nowhere else.</strong>
-                <div style={{ marginTop: 6 }}>
-                  folder <code>{session.scope?.folder ?? session.folder}</code><br />
-                  schema <code>{session.scope?.schema ?? "none"}</code><br />
-                  job prefix <code>{session.scope?.jobPrefix ?? "—"}</code>
-                </div>
+                <dl className="fence-facts">
+                  <dt>folder</dt>
+                  <dd><code title={scopedFolder}>{scopedFolder}</code></dd>
+                  <dt>schema</dt>
+                  <dd><code>{session.scope?.schema ?? "none"}</code></dd>
+                  <dt>job prefix</dt>
+                  <dd><code>{session.scope?.jobPrefix ?? "—"}</code></dd>
+                </dl>
               </div>
             </div>
             {activeId && (
               <ModelFacts sessionId={activeId} current={session.model}
-                turns={session.turns.length} onAddKey={onAddKey} />
+                turns={session.turns.length} lastStatus={session.turns.at(-1)?.status}
+                onAddKey={onAddKey} />
             )}
             <div className="fieldset">
               <legend>Session</legend>
-              <dl className="kv">
-                <dt>agent</dt><dd>{session.agent || "starting"} {session.agentVersion && `v${session.agentVersion}`}</dd>
-                <dt>tools</dt><dd>{session.tools > 0 ? `${session.tools} available` : "none configured"}</dd>
-                <dt>model</dt><dd>{session.model}</dd>
-                <dt>turns</dt><dd>{session.turns.length}</dd>
-              </dl>
+              {activeId ? (
+                <dl className="kv">
+                  <dt>agent</dt><dd>{session.agent || "starting"} {session.agentVersion && `v${session.agentVersion}`}</dd>
+                  <dt>tools</dt><dd>{session.tools > 0 ? `${session.tools} available` : "none configured"}</dd>
+                  <dt>model</dt><dd>{session.model}</dd>
+                  <dt>turns</dt><dd>{session.turns.length}</dd>
+                </dl>
+              ) : (
+                /* No session is a real state (a document opened straight from a link or the Files
+                   tree), not an error: say what that means for the fence and how to get one. An empty
+                   panel would read as broken, which is how this audit started. */
+                <p className="insp-empty">
+                  No session yet. The agent starts one when you send a message; until then a save asks
+                  for approval — that is the fence, not a failure. <kbd>⌘⇧N</kbd> starts one now.
+                </p>
+              )}
             </div>
             <div className="fieldset">
               <legend>Skill reads</legend>
@@ -113,7 +141,11 @@ export function Inspector({ session, edge, onHide, className = "", activeId, onA
         ) : (
           <div className="fieldset">
             <legend>Tool calls in this session</legend>
-            {calls.length === 0 && <p style={{ color: "var(--ink-3)", fontSize: 12.5 }}>No tool calls yet.</p>}
+            {calls.length === 0 && (
+              <p className="insp-empty">
+                {activeId ? "No tool calls yet." : "No session, so no tool calls. The audit log fills as the agent works."}
+              </p>
+            )}
             {calls.map((c, i) => (
               <div key={c.callId} className="audit-row">
                 <span className="n">{i + 1}</span>
@@ -156,7 +188,40 @@ const CARDS = [
 /** The default working folder: a real workspace path under the user's home. */
 export const USER_SCRATCH = "/Users/me/agent_scratch";
 
-export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddKey, onStart, demo, notice }: {
+/** The centre while a conversation runs in the dock and nothing is open: what exists so far, and where
+ *  to look. Replaces the first-run screen, which said nothing had started. */
+export function SessionHome({ title, folder, artifacts, busy, turns, onOpen }: {
+  title: string; folder: string; artifacts: Artifact[]; busy: boolean; turns: number;
+  onOpen: (doc: Doc) => void;
+}) {
+  return (
+    <div className="session-home" aria-label="This conversation's work">
+      <p className="session-home-kicker">{busy ? "Working…" : turns > 0 ? "This conversation" : "Starting…"}</p>
+      <h2 className="session-home-title">{title || "New session"}</h2>
+      <p className="sub">The conversation is on the right. What it makes appears here; the agent can write only in{" "}
+        <code>{folder}</code>.</p>
+      {artifacts.length > 0 ? (
+        <ul className="session-home-list">
+          {artifacts.map((a) => (
+            <li key={a.doc.id}>
+              <button className="session-home-item" onClick={() => onOpen(a.doc)}>
+                <span className="session-home-ico" aria-hidden>{a.doc.kind === "notebook" ? <Notebook size={16} /> : <FileIcon size={16} />}</span>
+                <span className="session-home-name">{a.doc.name}</span>
+                <span className="session-home-tag">{a.wrote ? "written" : "read"}</span>
+                <span className="session-home-open">Open</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="session-home-none">{busy ? "Nothing has been written yet." : "Nothing was written or opened in this conversation."}</p>
+      )}
+    </div>
+  );
+}
+
+export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddKey, onStart, demo, notice,
+  user, recent, onOpenRecent, onOpenSearch, onOpenCatalog }: {
   catalogue: CatalogueResponse | null;
   folder: string; onFolder: (v: string) => void;
   model: string; onModel: (v: string) => void;
@@ -164,37 +229,46 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
   demo: boolean;
   notice?: string;
   onStart: (prompt: string) => Promise<void>;
+  /** Who is signed in, so the screen can say whose workspace this is. */
+  user?: string;
+  /** Notebooks and tables that already exist, so the first screen is a way IN rather than only a way
+   *  to start: the most common task is "change something I already have". */
+  recent?: { name: string; path: string; kind: "notebook" | "file" | "table" }[];
+  onOpenRecent?: (path: string, kind: "notebook" | "file" | "table") => void;
+  onOpenSearch?: () => void;
+  onOpenCatalog?: () => void;
 }) {
   const [starting, setStarting] = useState(false);
+  const start = async (prompt: string) => {
+    setStarting(true);
+    try { await onStart(prompt); } finally { setStarting(false); }
+  };
   return (
-    <div className="empty">
-      <h2 className="empty-title">What should we build today?</h2>
-      <p className="sub">A coding agent that works in your workspace: it reads, writes, runs and proves.
-        Open a notebook or table on the left and ask about it.</p>
-      <div className="cards">
-        {CARDS.map((c) => (
-          <button key={c.t} className="card" disabled={starting}
-            onClick={async () => {
-              setStarting(true);
-              // Demo mode only: the marker tells the reference agent which behaviour to play.
-              // A real agent never sees it: sending it would put noise in a real prompt.
-              try { await onStart(demo ? `${c.prompt} [[scenario:${c.scenario}]]` : c.prompt); }
-              finally { setStarting(false); }
-            }}>
-            <span className="t"><span className="ico" style={{ background: c.bg, color: c.fg }} aria-hidden>
-                <c.icon size={16} />
-              </span>{c.t}</span>
-            <span className="d">{c.d}</span>
-          </button>
-        ))}
-      </div>
-      <div className="setup">
-        <label>Working folder<input value={folder} onChange={(e) => onFolder(e.target.value)} spellCheck={false}
-          aria-label="Working folder" placeholder="/Users/you/agent_scratch" /></label>
-        <div className="setup-model">
-          <span className="setup-label" id="setup-model-label">Model</span>
-          {/* The same picker the topbar uses: one component, so the first-run choice and the live
-              switch cannot disagree about labels, order or state (FR-15, D13). */}
+    <div className="home">
+      <div className="home-inner">
+        <header className="home-hero">
+          <span className="home-glow" aria-hidden />
+          <LogoMark size={40} className="home-mark" />
+          <h2 className="home-title">What should we build today?</h2>
+          <p className="home-sub">
+            A coding agent that works in your workspace. It reads, writes, runs, and proves — and it can
+            change <strong>only the folder you name below</strong>.
+          </p>
+        </header>
+
+        {/* Where the agent may write, as the first decision rather than a field at the bottom. The
+            fence is the product's promise, so it is shown before anything is suggested. */}
+        <section className="home-fence" aria-label="Working folder">
+          <div className="home-fence-main">
+            <span className="home-fence-label" id="home-fence-label">Working folder</span>
+            <FolderPicker value={folder} onChange={onFolder} />
+          </div>
+          <p className="home-fence-note">
+            Everything under it, nothing outside it. A write anywhere else asks you first.
+          </p>
+        </section>
+
+        <section className="home-models" aria-label="Model">
           <ModelPicker
             catalogue={catalogue}
             current={model}
@@ -203,12 +277,63 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
             onChoose={async (id) => onModel(id)}
             onAddKey={onAddKey}
           />
+        </section>
+
+        {notice && <p className="home-notice" role="status">{notice}</p>}
+
+        <div className="home-cards">
+          {CARDS.map((c) => (
+            <button key={c.t} className="home-card" disabled={starting}
+              onClick={() => void start(demo ? `${c.prompt} [[scenario:${c.scenario}]]` : c.prompt)}>
+              <span className="home-card-ico" style={{ background: c.bg, color: c.fg }} aria-hidden>
+                <c.icon size={15} />
+              </span>
+              <span className="home-card-t">{c.t}</span>
+              <span className="home-card-d">{c.d}</span>
+            </button>
+          ))}
         </div>
-        <p className="setup-note">
-          It can write only to this folder and its schema. Anything else asks you first.
-          Hover a folder in <strong>Files</strong> and press ⌂ to work there.
-        </p>
-        {notice && <p className="setup-notice" role="status">{notice}</p>}
+
+        <div className="home-panels">
+          <section className="home-panel" aria-label="Open something">
+            <h3 className="home-panel-t">Open something</h3>
+            <button className="home-search" onClick={onOpenSearch}>
+              <Search size={13} /><span>Search notebooks and tables</span><kbd>⌘K</kbd>
+            </button>
+            <button className="home-search" onClick={onOpenCatalog}>
+              <Table size={13} /><span>Browse the catalog</span>
+            </button>
+            {recent && recent.length > 0 && (
+              <ul className="home-recent">
+                {recent.map((r) => (
+                  <li key={`${r.kind}:${r.path}`}>
+                    <button className="home-recent-item" onClick={() => onOpenRecent?.(r.path, r.kind)} title={r.path}>
+                      <span className={`home-recent-ico is-${r.kind}`} aria-hidden>
+                        {r.kind === "table" ? <Table size={12} /> : r.kind === "notebook" ? <Notebook size={12} /> : <FileIcon size={12} />}
+                      </span>
+                      <span className="home-recent-name">{r.name}</span>
+                      <ArrowUpRight size={12} className="home-recent-go" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="home-panel home-panel-about" aria-label="About this workspace">
+            <h3 className="home-panel-t">This workspace</h3>
+            <dl className="home-facts">
+              <dt>signed in</dt><dd>{user || "—"}</dd>
+              <dt>agent writes</dt><dd><code>{folder || "choose a folder"}</code></dd>
+              <dt>model</dt><dd>{model || "none chosen"}</dd>
+            </dl>
+            <p className="home-fine">
+              Ask for a change to an open notebook and OpenGenie edits it in place, then shows you the
+              cells it touched. A notebook outside the folder above is never modified: it makes a copy
+              and tells you where.
+            </p>
+          </section>
+        </div>
       </div>
     </div>
   );

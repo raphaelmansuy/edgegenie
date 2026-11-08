@@ -19,7 +19,7 @@ log = logging.getLogger("app.llm.migrations")
 MIGRATIONS = Path(__file__).resolve().parent / "migrations"
 
 #: The version this build understands. A database stamped higher refuses to start (E-17).
-EXPECTED_VERSION = 1
+EXPECTED_VERSION = 2
 
 
 class SchemaAhead(RuntimeError):

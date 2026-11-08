@@ -36,8 +36,10 @@ def free_port() -> int:
 
 
 class SubprocessToolRegistry:
-    def __init__(self, server: Path | None = None, python: str = "python3") -> None:
+    def __init__(self, server: Path | None = None, python: str = "python3", bridge=None) -> None:
         self._server = server or TOOL_SERVER
+        #: How a tool asks the app to run a notebook (services/run_bridge.py); None = it cannot.
+        self._bridge = bridge
         self._python = python
         self._procs: dict[str, tuple[asyncio.subprocess.Process, str]] = {}
         self._stderr: str = ""
@@ -60,6 +62,7 @@ class SubprocessToolRegistry:
             "NBMCP_SKILLS_DIR": str(self._server.parent / "skills"),
             # Where the server reads the user's current token; never the agent's working folder.
             **({"NBMCP_TOKEN_FILE": token_file} if token_file else {}),
+            **(self._bridge.env_for(session_id) if self._bridge else {}),
         }
         # stderr goes to a file, not a pipe nobody reads and not /dev/null: when the server cannot
         # start, its own message is the only useful diagnostic, and a full pipe would block it.

@@ -82,6 +82,11 @@ export function parseCells(text: string, language = "PYTHON"): Cell[] {
     while (b.length && !b[0].trim()) b.shift();
     while (b.length && !b[b.length - 1].trim()) b.pop();
     if (!b.length) continue;
+    /* A block whose only content is the notebook header is not a cell.
+       This happened for real: an import wrote the header, a separator, then the query, and the
+       header became cell 1 — which then rendered as SQL, was "runnable", and failed at the warehouse
+       with a PARSE_SYNTAX_ERROR about '#'. A cell that is only provenance is not executable code. */
+    if (b.every((ln) => ln.trim() === "" || ln.trim() === header)) continue;
     cells.push(cellOf(cells.length, b, lang, pre));
     if (cells.length >= MAX_CELLS) break;
   }

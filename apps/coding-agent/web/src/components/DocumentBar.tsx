@@ -12,7 +12,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { ACTIONS, ACTIONS_FOR, type Action, type Doc } from "../domain/docs";
-import { Check, ChevronDown, Clock, Close, Lock, Refresh, Save as SaveIcon, Warning } from "./Icons";
+import { Check, ChevronDown, Clock, Close, Lock, LinkIcon, Refresh, Save as SaveIcon, Warning } from "./Icons";
 
 export interface BarFence {
   label: string;
@@ -38,11 +38,16 @@ interface Props {
   onAsk: (a: Action) => void;
   onAttach: () => void;
   onOpenInDatabricks: () => void;
+  /** Copy a link that opens this document in this app. */
+  onCopyLink?: () => void;
+  /** Markdown only: show the RENDERED document instead of the source. A `.md` file is prose, and
+   *  opening it as source means its headings, links and formulas arrive as raw syntax (007 MD-7). */
+  preview?: { on: boolean; onToggle: () => void };
 }
 
 export function DocumentBar({
   doc, crumbs, language, fence, readOnly, dirty, saving, busy, notice, path,
-  onReload, onSave, onAsk, onAttach, onOpenInDatabricks,
+  onReload, onSave, onAsk, onAttach, onOpenInDatabricks, onCopyLink, preview,
 }: Props) {
   const [menu, setMenu] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -94,10 +99,27 @@ export function DocumentBar({
         <span className="fence-text">{fence.label}</span>
       </span>
 
+      {preview && (
+        <button className={`btn sm preview-toggle${preview.on ? " is-on" : ""}`}
+          aria-pressed={preview.on}
+          aria-label={preview.on ? "Show the markdown source" : "Preview the rendered markdown"}
+          title={preview.on ? "Show the source" : "Preview the rendered markdown"}
+          onClick={preview.onToggle}>
+          {preview.on ? "Source" : "Preview"}
+        </button>
+      )}
+
       <button className="icon-btn" aria-label="Reload this document" title="Reload from the server"
         onClick={onReload} disabled={busy}>
         <Refresh size={15} className={busy ? "spin" : ""} />
       </button>
+
+      {onCopyLink && (
+        <button className="icon-btn" aria-label={`Copy a link to ${doc.name}`}
+          title="Copy a link that opens this document in this app" onClick={onCopyLink}>
+          <LinkIcon size={15} />
+        </button>
+      )}
 
       <button className="icon-btn" aria-label="Open in Databricks" title="Open in Databricks"
         onClick={onOpenInDatabricks}><span aria-hidden>↗</span></button>

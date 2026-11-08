@@ -27,6 +27,8 @@ from .config import Settings
 from .config import settings as load_settings
 from .routers.api import router
 from .routers.llm import router as llm_router
+from .routers.llm_admin import router as llm_admin_router
+from .routers.internal import router as internal_router
 from .services.catalogue import SettingsModelCatalog
 from .services.health_service import HealthService
 from .services.identity import ForwardedIdentity, NullGroups
@@ -64,10 +66,16 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
 
         runtime = HttpAcpAgentRuntime(cfg.agent_config_dir or None)
 
+    # The agent's tool server cannot submit runs as the user (an App has no jobs scope); it asks the
+    # app, over loopback, to run the notebook as the app. The key only opens one session's door.
+    from .services.run_bridge import RunBridge
+
+    bridge = RunBridge(cfg.internal_url or f"http://127.0.0.1:{os.environ.get('DATABRICKS_APP_PORT') or '8000'}")
     tools = (
         SubprocessToolRegistry(
             # `python3` on a container's PATH is not the interpreter that has our dependencies (mcp).
-            python=sys.executable if cfg.tool_server_python == "python3" else cfg.tool_server_python)
+            python=sys.executable if cfg.tool_server_python == "python3" else cfg.tool_server_python,
+            bridge=bridge)
         if cfg.tool_mode == "subprocess"
         else NullToolRegistry()
     )
@@ -88,10 +96,11 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
         # produced intermittent renderer crashes.
         reaper = asyncio.create_task(_reap_loop(app))
         discovery = asyncio.create_task(_discover_loop(app))
+        database = asyncio.create_task(_database_loop(app))
         try:
             yield
         finally:
-            for task in (reaper, discovery):
+            for task in (reaper, discovery, database):
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
@@ -103,8 +112,9 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
                 with contextlib.suppress(Exception):
                     await registry.store.close()
 
-    app = FastAPI(title="Databricks Coding Agents", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="OpenGenie", version="0.1.0", lifespan=lifespan)
     app.state.settings = cfg
+    app.state.run_bridge = bridge
     app.state.store = store
     app.state.models = models
     app.state.orchestrator = orch
@@ -118,11 +128,22 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
         os.environ.get("DATABRICKS_HOST", ""),
         lambda: os.environ.get("DATABRICKS_TOKEN") or None,
     )
+    from .adapters.databricks.serverless import ServerlessRunner
+    from .services.pyrun_service import PythonRuns
+
+    # Built here, authenticated lazily: a demo that never runs a Python cell never needs SDK auth.
+    app.state.pyruns = PythonRuns(ServerlessRunner())
     app.state.serving = ServingBrowser(
         os.environ.get("DATABRICKS_HOST", ""),
         lambda: os.environ.get("DATABRICKS_TOKEN") or None,
     )
     app.state.dev_token = os.environ.get("APP_DEV_TOKEN") or os.environ.get("DATABRICKS_TOKEN")
+    # A dev token expires in an hour. In a deployed app the proxy supplies a fresh one per request, so
+    # this only affects local work — but there it silently turns into an empty file tree and a search
+    # that never finishes, which reads as a product bug and costs an afternoon. When a dev token is
+    # configured and `databricks` is on PATH, it is re-minted on demand (see `dev_token` below).
+    app.state.dev_token_auto = bool(os.environ.get("APP_DEV_TOKEN")) and bool(
+        os.environ.get("APP_DEV_TOKEN_AUTO", "1") != "0")
     # The registry is built by the caller when it can await (`app_factory`) and synchronously here
     # for the TestClient path, where there is no loop at import time.
     if llm is not None:
@@ -135,6 +156,11 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
 
     @app.middleware("http")
     async def identity_middleware(request: Request, call_next):
+        if request.url.path.startswith("/internal/"):
+            # The app's own tool servers, over loopback: no forwarded user, and a per-session key
+            # instead (routers/internal.py). Nothing here is reachable without it.
+            request.state.user_id, request.state.home, request.state.groups = "internal", "internal", []
+            return await call_next(request)
         try:
             headers = dict(request.headers)
             request.state.user_id = identity.user_id(headers)
@@ -146,6 +172,8 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
 
     app.include_router(router)
     app.include_router(llm_router)
+    app.include_router(llm_admin_router)
+    app.include_router(internal_router)
 
     if WEB_DIST.exists():
         app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
@@ -202,6 +230,34 @@ async def _reap_loop(app: FastAPI) -> None:
             raise
         except Exception:            # noqa: BLE001 - a reaper must outlive its own failures
             log.warning("the session reaper failed once; continuing", exc_info=True)
+
+
+async def _database_loop(app: FastAPI) -> None:
+    """Bring the registry onto the database, retrying until it is reachable.
+
+    A Lakebase compute that was suspended takes a few seconds to wake, and a network that is not up
+    at boot is not a reason to serve the seed for the life of the process.
+    """
+    from .services.model_registry import adopt_database
+
+    cfg = app.state.settings
+    registry = getattr(app.state, "llm", None)
+    if registry is None:
+        return
+    delay = 1.0
+    while True:
+        try:
+            if await adopt_database(registry, cfg):
+                app.state.orchestrator.attach_registry(registry)
+                return
+        except asyncio.CancelledError:
+            raise
+        except Exception:             # noqa: BLE001 - a retry loop must outlive its own failures
+            log.warning("adopting the database failed once; retrying", exc_info=True)
+        if not (cfg.llm_pg_endpoint or cfg.llm_database_url):
+            return
+        await asyncio.sleep(delay)
+        delay = min(delay * 2, 30.0)
 
 
 async def _discover_loop(app: FastAPI) -> None:

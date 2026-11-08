@@ -143,6 +143,18 @@ class ModelService:
     def invalidate(self) -> None:
         self._cached_at = 0.0
 
+    def rebind(self, store, vault=None) -> None:
+        """Swap the storage under a running service (the database came up after the app did)."""
+        self._store = store
+        if vault is not None:
+            self._vault = vault
+        self._default = getattr(store, "default_model", "") or self._default
+        self.invalidate()
+
+    def set_default(self, model_id: str) -> None:
+        self._default = model_id
+        self.invalidate()
+
     # -- assembly -------------------------------------------------------------
     async def _merge(self) -> list[ModelSpec]:
         try:

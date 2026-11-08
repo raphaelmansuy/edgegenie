@@ -13,6 +13,11 @@ export const COMMANDS: Command[] = [
   { name: "/sql", hint: "answer a question with SQL, show the rows", insert: "Answer this question with SQL: " },
   { name: "/document", hint: "add grounded comments to tables", insert: "Document the tables in the attached context: for each one, a short comment grounded in the real values you sample. Do not change data." },
   { name: "/profile", hint: "row count, nulls, ranges, surprises", insert: "Profile the attached table: row count, null rates, the range of each numeric column, and anything surprising. Show the numbers." },
+  { name: "/optimize", hint: "make it faster, prove the result is the same", insert: "Review the attached notebook for slow or wasteful steps. Make the smallest changes that speed it up, write the result as a copy in my working folder, and show that the output is unchanged." },
+  { name: "/prettify", hint: "format and name things clearly", insert: "Tidy the attached notebook: consistent formatting, clear names, one idea per cell, a short markdown heading for each section. Do not change what it computes. Save it as a copy in my working folder." },
+  { name: "/rename", hint: "better names for variables and columns", insert: "Suggest clearer names for the variables, aliases and columns in the attached notebook, apply them in a copy in my working folder, and list every rename you made." },
+  { name: "/findtables", hint: "find tables that match what you describe", insert: "Find tables in Unity Catalog that match this description, and for each give its full name and one line on why it fits: " },
+  { name: "/test", hint: "add checks that would catch a regression", insert: "Add a few checks to a copy of the attached notebook that would catch a wrong result (row counts, nulls, ranges, a known value), run them, and show the results." },
   { name: "/help", hint: "what this agent can do", insert: "What can you do here, in two short paragraphs, and what are your limits?" },
 ];
 

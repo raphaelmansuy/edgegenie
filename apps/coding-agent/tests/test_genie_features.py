@@ -256,6 +256,11 @@ class StubWs:
         from api.adapters.databricks.workspace import Node
         return [Node(path=f"{root}/{q}_nb", name=f"{q}_nb", kind="notebook", language="PYTHON")], False
 
+    async def status(self, path, token):
+        if path == "/gone":
+            raise LookupError("not found: /gone")
+        return {"object_type": "NOTEBOOK", "modified_at": 1700000000123}
+
     async def mkdirs(self, path, token):
         self.made = path
 
@@ -666,3 +671,15 @@ def test_the_table_name_cache_is_per_credential():
     assert mine[0]["ref"] == "samples.nyctaxi.trips"
     assert theirs[0]["ref"] == "samples.nyctaxi.trips"
     assert len(c._walks) == 2, "results were shared across credentials"
+
+
+def test_version_endpoint_is_the_token_the_editor_holds(client):
+    from api.domain import version as v
+    d = client.get("/api/workspace/version?path=/Users/x/nb").json()
+    assert d["version"] == v.of({"modified_at": 1700000000123}).token
+    assert d["modifiedAt"] == 1700000000123
+
+
+def test_version_endpoint_maps_errors_like_the_object_endpoint(client):
+    assert client.get("/api/workspace/version?path=/gone").status_code == 404
+    assert client.get("/api/workspace/version?path=relative").status_code == 422

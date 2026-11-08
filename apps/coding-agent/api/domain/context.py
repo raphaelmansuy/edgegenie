@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-KINDS = ("notebook", "file", "folder", "table")
+KINDS = ("notebook", "file", "folder", "table", "cell")
 MAX_ATTACHMENTS = 6
 MAX_CHARS_EACH = 6_000
 MAX_CHARS_TOTAL = 16_000
@@ -33,14 +33,31 @@ class ContextError(ValueError):
 @dataclass(frozen=True, slots=True)
 class Attachment:
     kind: str
-    ref: str  # workspace path, or catalog.schema.table
+    ref: str  # workspace path, or catalog.schema.table, or path#index for a cell
+    #: For a cell binding: the content hash the user saw when they selected it. Optional, and only
+    #: used to tell the agent the cell changed rather than silently answering about different code.
+    sha: str = ""
 
     @property
     def name(self) -> str:
-        return self.ref.rsplit("/", 1)[-1] if self.kind != "table" else self.ref
+        if self.kind == "table":
+            return self.ref
+        if self.kind == "cell":
+            # "/a/b#3" -> "b · cell 3": the chip is read at 320 px, so the path does not belong in it.
+            from .binding import parse_cell_ref
+
+            try:
+                path, index = parse_cell_ref(self.ref)
+            except ValueError:
+                return self.ref
+            return f"{path.rsplit('/', 1)[-1]} · cell {index}"
+        return self.ref.rsplit("/", 1)[-1]
 
     def to_dict(self) -> dict:
-        return {"kind": self.kind, "ref": self.ref, "name": self.name}
+        out = {"kind": self.kind, "ref": self.ref, "name": self.name}
+        if self.sha:
+            out["sha"] = self.sha
+        return out
 
 
 def parse(raw: list[dict] | None) -> list[Attachment]:
@@ -54,9 +71,16 @@ def parse(raw: list[dict] | None) -> list[Attachment]:
         if kind == "table":
             if not _UC_NAME.match(ref):
                 raise ContextError(f"a table is attached as catalog.schema.table, got {ref!r}")
+        elif kind == "cell":
+            from .binding import BindingError, parse_cell_ref
+
+            try:
+                parse_cell_ref(ref)
+            except BindingError as exc:
+                raise ContextError(str(exc)) from exc
         elif not _WS_PATH.match(ref) or ".." in ref.split("/"):
             raise ContextError(f"not a workspace path: {ref!r}")
-        out[(kind, ref)] = Attachment(kind, ref)
+        out[(kind, ref)] = Attachment(kind, ref, str(item.get("sha", "") or ""))
     if len(out) > MAX_ATTACHMENTS:
         raise ContextError(f"at most {MAX_ATTACHMENTS} attachments per message")
     return list(out.values())

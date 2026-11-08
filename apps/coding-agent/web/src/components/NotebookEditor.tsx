@@ -8,13 +8,35 @@
  * you are not in it, and edits when you are** (NB-3). Getting that right without the text changing
  * is the detail users notice.
  */
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   insertCell, moveCell, newCell, removeCell, setCellKind, updateCellSource, type Cell,
 } from "../domain/notebook";
-import { ChevronDown, ChevronRight, Close, Plus, Send } from "./Icons";
+import { ChevronDown, ChevronRight, Close, LinkIcon, Play, Plus, Sparkle } from "./Icons";
+import { CellInsert } from "./CellInsert";
+import { CellPrompt } from "./CellPrompt";
+import { editPrompt, fixPrompt, insertPrompt } from "../domain/cellprompt";
+import { runAffordance, type CellRun, type PythonPolicy } from "../domain/cellrun";
+import { CellOutput } from "./CellOutput";
 import { Editor } from "../editor/Editor";
 import { Markdown } from "./Markdown";
+import { commandKey, type Advance, type CellCommand } from "../domain/cellkeys";
+import { clampTo, recall, remember, type ViewState } from "../domain/viewstate";
+import type { EditorChord } from "../editor/host";
+import { display } from "../domain/keys";
+
+/** A request to move the user's place: into a cell's text ("edit") or onto the cell itself
+ *  ("command"). `n` makes each request distinct. See Editor's `focusRequest`. */
+type Req = { id: string; mode: "edit" | "command"; at?: number; n: number };
+
+/** The element that scrolls the cell stack: the stack itself (it owns its overflow) or an ancestor. */
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  for (let n: HTMLElement | null = el; n; n = n.parentElement) {
+    const o = getComputedStyle(n).overflowY;
+    if (o === "auto" || o === "scroll") return n;
+  }
+  return null;
+}
 
 interface Props {
   cells: Cell[];
@@ -24,40 +46,252 @@ interface Props {
   onChange: (cells: Cell[]) => void;
   /** Ask the agent about one cell: the reason owning the editor is worth it (spec 003 lens 7). */
   onAskCell?: (cell: Cell, index: number) => void;
-  /** Run one cell through the agent's execution path (NB-6: no second executor). */
-  onRunCell?: (cell: Cell, index: number) => void;
+  /** Send an instruction about one cell (`index` is 0-based) or ask for a new one after `after` cells.
+   *  The text is already a full prompt; the app only has to bind it to the cell and send it. */
+  onPrompt?: (p: { cell: number; text: string }) => void;
   /** ⌘S pressed inside a cell. It must reach the document's save, not stop at the cell. */
   onSave?: () => void;
+  /** Per-cell run state, keyed by cell id. Owned by the surface, so a reorder keeps the result. */
+  runs?: Record<string, CellRun>;
+  /** Run one cell. Absent when the document cannot be run (spec 006 X1). */
+  onRunCell?: (cell: Cell, index: number) => void;
+  onClearRun?: (cell: Cell) => void;
+  /** The cell a link named (1-based). It is scrolled to and marked; keyboard focus is left alone. */
+  linkedCell?: number | null;
+  /** 1-based cells another writer just changed: marked until the user dismisses the banner. */
+  changedCells?: number[];
+  /** Whether Python cells may run (the server's answer), so the Run control says what it will do. */
+  python?: PythonPolicy;
+  /** Copy a link to one cell (1-based). */
+  onCopyCellLink?: (cell: number) => void;
+  /** Identifies the document, so the user's place (cell, caret, scroll) is remembered per document
+   *  and restored when it is reopened, reloaded or comes back after a tab switch. */
+  viewKey?: string;
+  /** Scroll a cell into view because the USER asked (the banner's Show). Never set by a data update:
+   *  the page must not move on its own while someone is reading or the assistant is writing. */
+  reveal?: { cell: number; n: number } | null;
 }
 
 export function NotebookEditor({
-  cells, language, theme, readOnly = false, onChange, onAskCell, onRunCell, onSave,
+  cells, language, theme, readOnly = false, onChange, onAskCell, onPrompt, onSave, runs, onRunCell, onClearRun,
+  linkedCell = null, changedCells, onCopyCellLink, python, viewKey, reveal,
 }: Props) {
+  const root = useRef<HTMLDivElement>(null);
+  /* A link to a cell must land ON the cell: scroll it to the middle and mark it. Runs when the link
+     changes or when the cells first exist (a link is opened before the notebook has loaded). */
+  /* Cells another writer just changed are marked, never scrolled to. Moving the page on its own is the
+     one thing a reader of a live document cannot forgive: the banner's Show button brings them into
+     view when the user wants. A class, not a prop through CellBlock: it is a transient mark, owned by
+     the banner that announces it. */
+  useEffect(() => {
+    if (!changedCells?.length) return;
+    const nodes = changedCells.map((n) => root.current?.querySelector<HTMLElement>(`[data-cell="${n}"]`)).filter(Boolean) as HTMLElement[];
+    nodes.forEach((el) => el.classList.add("is-agent-changed"));
+    return () => nodes.forEach((el) => el.classList.remove("is-agent-changed"));
+  }, [changedCells, cells.length]);
+  useEffect(() => {
+    if (!reveal) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    root.current?.querySelector(`[data-cell="${reveal.cell}"]`)
+      ?.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reveal?.n]);
+  const target = linkedCell && cells[linkedCell - 1] ? cells[linkedCell - 1].id : null;
+  useEffect(() => {
+    if (!target || !linkedCell) return;
+    setFocused(target);
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    root.current?.querySelector(`[data-cell="${linkedCell}"]`)
+      ?.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, linkedCell]);
+  /** One prompt open at a time: on a cell (edit) or in a seam (insert, `after` cells above it). */
+  const [prompt, setPrompt] = useState<{ mode: "edit"; id: string } | { mode: "insert"; after: number } | null>(null);
   const [focused, setFocused] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const set = useCallback((next: Cell[]) => onChange(next), [onChange]);
+  const cellsRef = useRef(cells);
+  cellsRef.current = cells;
+
+  /* ---- the user's place -------------------------------------------------------------------- */
+  const [req, setReq] = useState<Req | null>(null);
+  const reqSeq = useRef(0);
+  const request = (id: string, mode: Req["mode"], at?: number) => {
+    const n = (reqSeq.current += 1);
+    setReq({ id, mode, at, n });
+    // A request that nobody honoured (its cell is collapsed or gone) must not fire on a later mount.
+    window.setTimeout(() => setReq((r) => (r?.n === n ? null : r)), 2500);
+  };
+  const done = useCallback((n: number) => setReq((r) => (r?.n === n ? null : r)), []);
+  const carets = useRef(new Map<string, number>());
+  const armed = useRef(false);
+  /** Snapshots before each structural change, for `z`. Text typing is CodeMirror's own undo. */
+  const undo = useRef<Cell[][]>([]);
+
+  const pending = useRef<Partial<ViewState>>({});
+  const flushTimer = useRef<number | undefined>(undefined);
+  const flush = useCallback(() => {
+    window.clearTimeout(flushTimer.current);
+    if (viewKey && Object.keys(pending.current).length) remember(viewKey, pending.current);
+    pending.current = {};
+  }, [viewKey]);
+  const note = useCallback((patch: Partial<ViewState>) => {
+    if (!viewKey) return;
+    pending.current = { ...pending.current, ...patch };
+    window.clearTimeout(flushTimer.current);
+    flushTimer.current = window.setTimeout(flush, 150);
+  }, [viewKey, flush]);
+  useEffect(() => flush, [flush]);                       // leaving a document saves its place
+
+  // Remember how far down the user is, and restore it when the document comes back.
+  useEffect(() => {
+    const sp = scrollParent(root.current);
+    if (!viewKey || !sp) return;
+    const onScroll = () => note({ scroll: sp.scrollTop });
+    sp.addEventListener("scroll", onScroll, { passive: true });
+    return () => sp.removeEventListener("scroll", onScroll);
+  }, [viewKey, note]);
+  const restored = useRef<string | null>(null);
+  useEffect(() => {
+    if (!viewKey || restored.current === viewKey || cells.length === 0) return;
+    restored.current = viewKey;
+    const saved = recall(viewKey);
+    if (!saved || linkedCell) return;                    // a link to a cell outranks the old place
+    const st = clampTo(saved, cells.length, (n) => cells[n - 1]?.source.length ?? 0);
+    const sp = scrollParent(root.current);
+    let moved = false;
+    const stop = () => { moved = true; };
+    sp?.addEventListener("wheel", stop, { passive: true, once: true });
+    sp?.addEventListener("pointerdown", stop, { once: true });
+    const place = () => { if (sp && !moved) sp.scrollTop = st.scroll; };
+    // Editors load lazily and settle the layout a moment after mount; re-apply until the user moves.
+    const timers = [0, 120, 400].map((ms) => window.setTimeout(place, ms));
+    const target = st.cell > 0 ? cells[st.cell - 1] : null;
+    const idle = !document.activeElement || document.activeElement === document.body;
+    if (target && idle) request(target.id, st.mode, st.mode === "edit" ? st.caret : undefined);
+    return () => timers.forEach(window.clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewKey, cells.length]);
+
+  /* ---- structure ---------------------------------------------------------------------------- */
+  const commit = (next: Cell[]) => {
+    undo.current = [...undo.current.slice(-49), cellsRef.current];
+    set(next);
+  };
 
   const addAt = (at: number, kind: "code" | "markdown") => {
     const cell = newCell(kind, language);
-    const next = insertCell(cells, at, cell);
-    set(next);
-    setFocused(cell.id);
+    commit(insertCell(cells, at, cell));
+    request(cell.id, "edit");
   };
 
-  // Keyboard model for the cell stack (NB-2). Escaping the editor is what lets you move cells.
-  const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
-      (e.target as HTMLElement).blur();
-      setFocused(null);
+  const undoStructure = () => {
+    const prev = undo.current.pop();
+    if (!prev) return;
+    // Restore the shape (which cells, in what order and kind) but keep the text as it is now: undoing
+    // a delete must never throw away what was typed since.
+    const now = new Map(cellsRef.current.map((c) => [c.id, c]));
+    set(prev.map((c) => (now.has(c.id) ? { ...c, source: now.get(c.id)!.source } : c)));
+    // Select what the undo brought back (the restored cell), else where the user was.
+    const back = prev.find((c) => !now.has(c.id));
+    const keep = back?.id ?? (focused && prev.some((c) => c.id === focused) ? focused : prev[0]?.id);
+    if (keep) request(keep, "command");
+  };
+
+  const runCell = (i: number, advance: Advance, from: "edit" | "command") => {
+    const cell = cells[i];
+    if (!cell) return;
+    if (cell.kind === "code" && !readOnly && onRunCell
+      && runAffordance(cell.language || "python", cell.source, python).enabled) onRunCell(cell, i);
+    if (advance === "stay") {
+      if (cell.kind === "markdown" || from === "command") request(cell.id, "command");
+    } else if (advance === "next") {
+      const t = cells[i + 1];
+      if (t) request(t.id, from === "edit" && t.kind === "code" && !readOnly ? "edit" : "command");
+      else if (!readOnly) addAt(cells.length, "code");   // Shift+Enter on the last cell adds a cell
+    } else if (!readOnly) addAt(i + 1, "code");
+  };
+
+  const runCommand = (cmd: CellCommand, i: number) => {
+    const cell = cells[i];
+    if (!cell) return;
+    switch (cmd.type) {
+      case "select": {
+        const to = cmd.to === "prev" ? i - 1 : cmd.to === "next" ? i + 1 : cmd.to === "first" ? 0 : cells.length - 1;
+        const t = cells[Math.max(0, Math.min(cells.length - 1, to))];
+        if (t) request(t.id, "command");
+        break;
+      }
+      case "edit": request(cell.id, "edit", carets.current.get(cell.id) ?? Infinity); break;
+      case "insert": if (!readOnly) addAt(cmd.where === "above" ? i : i + 1, "code"); break;
+      case "delete": {
+        if (readOnly) break;
+        const next = removeCell(cells, cell.id);
+        commit(next);
+        const t = next[Math.min(i, next.length - 1)];
+        if (t) request(t.id, "command"); else setFocused(null);
+        break;
+      }
+      case "convert":
+        if (!readOnly && cell.kind !== cmd.kind) { commit(setCellKind(cells, cell.id, cmd.kind, language)); request(cell.id, "command"); }
+        break;
+      case "move": {
+        const to = i + cmd.by;
+        if (!readOnly && to >= 0 && to < cells.length) { commit(moveCell(cells, i, to)); request(cell.id, "command"); }
+        break;
+      }
+      case "undo": if (!readOnly) undoStructure(); break;
+      case "run": runCell(i, cmd.advance, "command"); break;
+      case "ask": if (onPrompt) setPrompt({ mode: "edit", id: cell.id }); break;
     }
   };
 
+  const onChord = (i: number, chord: EditorChord): boolean => {
+    if (chord === "escape") { request(cells[i].id, "command"); return true; }
+    runCell(i, chord === "run-next" ? "next" : chord === "run-insert" ? "insert" : "stay", "edit");
+    return true;
+  };
+
+  // Keyboard model for the cell stack (NB-2): see domain/cellkeys.ts. The cell itself (not its text)
+  // being focused IS command mode.
+  const onKey = (e: React.KeyboardEvent) => {
+    /* ⌘⇧I / Ctrl+⇧I: ask about the cell you are in (007 KB-10). It moved off ⌘I because the shortcut
+       sheet promised ⌘I to the inspector, and a chord with two meanings is the bug this spec exists
+       for. Note the shift: `toLowerCase()` would also match ⌘I, so the modifier is checked first. */
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "i" && focused && onPrompt) {
+      e.preventDefault();
+      setPrompt({ mode: "edit", id: focused });
+      return;
+    }
+    const t = e.target as HTMLElement;
+    if (!t.classList.contains("cell-block")) return;
+    const { command, armed: next } = commandKey(e, armed.current);
+    armed.current = next;
+    if (!command) return;
+    e.preventDefault();
+    runCommand(command, Number(t.dataset.cell) - 1);
+  };
+
+  const seam = (after: number) => (
+    prompt?.mode === "insert" && prompt.after === after ? (
+      <CellPrompt key={`prompt-${after}`} mode="insert"
+        label={after <= 0 ? "at the top" : `after cell ${after}`}
+        onClose={() => setPrompt(null)}
+        onSend={(text) => { setPrompt(null); onPrompt?.({ cell: after, text: insertPrompt(after, text) }); }} />
+    ) : (
+      <CellInsert key={`seam-${after}`} after={after} total={cells.length} always={after === cells.length}
+        onCode={() => addAt(after, "code")} onText={() => addAt(after, "markdown")}
+        onAgent={onPrompt ? () => setPrompt({ mode: "insert", after }) : undefined} />
+    )
+  );
+
   return (
-    <div className="cells" onKeyDown={onKey}>
+    <div className="cells" ref={root} onKeyDown={onKey}>
+      {cells.length === 0 && !readOnly && seam(0)}
       {cells.map((cell, i) => (
+        <Fragment key={cell.id}>
         <CellBlock
-          key={cell.id}
           cell={cell}
           index={i}
           total={cells.length}
@@ -66,8 +300,16 @@ export function NotebookEditor({
           readOnly={readOnly}
           focused={focused === cell.id}
           collapsed={collapsed.has(cell.id)}
-          onFocus={() => setFocused(cell.id)}
+          onFocus={(mode) => {
+            setFocused(cell.id);
+            note({ cell: i + 1, mode, caret: mode === "edit" ? carets.current.get(cell.id) ?? 0 : 0 });
+          }}
           onBlur={() => setFocused((f) => (f === cell.id ? null : f))}
+          request={req?.id === cell.id ? req : null}
+          onRequestDone={done}
+          onCaret={(pos) => { carets.current.set(cell.id, pos); note({ cell: i + 1, caret: pos, mode: "edit" }); }}
+          onChord={(chord) => onChord(i, chord)}
+          onEdit={() => request(cell.id, "edit", Infinity)}
           onToggleCollapse={() => {
             const next = new Set(collapsed);
             if (next.has(cell.id)) next.delete(cell.id);
@@ -75,24 +317,36 @@ export function NotebookEditor({
             setCollapsed(next);
           }}
           onSource={(src) => set(updateCellSource(cells, cell.id, src))}
-          onMove={(to) => { set(moveCell(cells, i, to)); setFocused(cell.id); }}
-          onDelete={() => { set(removeCell(cells, cell.id)); setFocused(null); }}
-          onConvert={(kind) => set(setCellKind(cells, cell.id, kind, language))}
+          onMove={(to) => { commit(moveCell(cells, i, to)); request(cell.id, "command"); }}
+          onDelete={() => {
+            const next = removeCell(cells, cell.id);
+            commit(next);
+            const t = next[Math.min(i, next.length - 1)];
+            if (t) request(t.id, "command"); else setFocused(null);
+          }}
+          onConvert={(kind) => commit(setCellKind(cells, cell.id, kind, language))}
           onInsertAfter={(kind) => addAt(i + 1, kind)}
-          onAsk={() => onAskCell?.(cell, i)}
-          onRun={() => onRunCell?.(cell, i)}
+          onAsk={() => (onPrompt ? setPrompt({ mode: "edit", id: cell.id }) : onAskCell?.(cell, i))}
+          prompting={prompt?.mode === "edit" && prompt.id === cell.id}
+          onClosePrompt={() => setPrompt(null)}
+          onDiscuss={onAskCell ? () => { setPrompt(null); onAskCell(cell, i); } : undefined}
+          onPromptSend={(instruction) => {
+            setPrompt(null);
+            onPrompt?.({ cell: i + 1, text: editPrompt(i + 1, instruction) });
+          }}
+          onFix={onPrompt ? (error) => onPrompt({ cell: i + 1, text: fixPrompt(i + 1, error) }) : undefined}
           onSave={() => onSave?.()}
+          run={runs?.[cell.id]}
+          canRun={Boolean(onRunCell)}
+          onRun={() => onRunCell?.(cell, i)}
+          onClearRun={() => onClearRun?.(cell)}
+          onCopyLink={onCopyCellLink ? () => onCopyCellLink(i + 1) : undefined}
+          python={python}
         />
+        {!readOnly && (i < cells.length - 1 || prompt?.mode === "insert" && prompt.after === cells.length) && seam(i + 1)}
+        </Fragment>
       ))}
-
-      <div className="cells-add">
-        <button className="btn sm" onClick={() => addAt(cells.length, "code")}>
-          <Plus size={13} /> code
-        </button>
-        <button className="btn sm" onClick={() => addAt(cells.length, "markdown")}>
-          <Plus size={13} /> markdown
-        </button>
-      </div>
+      {!readOnly && cells.length > 0 && seam(cells.length)}
     </div>
   );
 }
@@ -106,8 +360,13 @@ interface CellProps {
   readOnly: boolean;
   focused: boolean;
   collapsed: boolean;
-  onFocus: () => void;
+  onFocus: (mode: "edit" | "command") => void;
   onBlur: () => void;
+  request: Req | null;
+  onRequestDone: (n: number) => void;
+  onCaret: (pos: number) => void;
+  onChord: (chord: EditorChord) => boolean;
+  onEdit: () => void;
   onToggleCollapse: () => void;
   onSource: (s: string) => void;
   onMove: (to: number) => void;
@@ -115,8 +374,18 @@ interface CellProps {
   onConvert: (kind: "code" | "markdown") => void;
   onInsertAfter: (kind: "code" | "markdown") => void;
   onAsk: () => void;
-  onRun: () => void;
+  prompting: boolean;
+  onClosePrompt: () => void;
+  onDiscuss?: () => void;
+  onPromptSend: (instruction: string) => void;
+  onFix?: (error: string) => void;
   onSave: () => void;
+  run?: CellRun;
+  canRun: boolean;
+  onRun: () => void;
+  onClearRun: () => void;
+  onCopyLink?: () => void;
+  python?: PythonPolicy;
 }
 
 function CellBlock(p: CellProps) {
@@ -126,29 +395,75 @@ function CellBlock(p: CellProps) {
   const [editing, setEditing] = useState(isMd ? false : true);
   // A fresh cell (empty source) should be editable immediately; that is what you meant by adding it.
   const wantsEdit = !isMd || editing || !cell.source.trim();
+  // Whether this cell CAN run is a domain decision, so the control cannot claim something the server
+  // will refuse (006 X1, 00 P4). A disabled button with the reason in its title beats a lying one.
+  const affordance = runAffordance(isMd ? "markdown" : cell.language || "python", cell.source, p.python);
+
+  const section = useRef<HTMLElement>(null);
+  // Honour a request to move the user's place. "edit" is consumed by the cell's Editor (it waits
+  // for the editor to load); "command" puts the focus on the cell itself, rendering markdown.
+  const reqN = p.request?.n;
+  useEffect(() => {
+    const r = p.request;
+    if (!r) return;
+    if (r.mode === "command" || collapsed) {
+      if (isMd && cell.source.trim()) setEditing(false);
+      section.current?.focus();
+      p.onRequestDone(r.n);
+    } else if (isMd) {
+      setEditing(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reqN]);
 
   return (
     <section
+      ref={section}
+      /* The cell itself is focusable (not tabbable except the current one): focused = COMMAND mode,
+         where single keys act on the cell. A click on the cell's chrome lands here too. */
+      tabIndex={focused || index === 0 ? 0 : -1}
       className={`cell-block${focused ? " is-focused" : ""}${isMd ? " is-md" : ""}`}
       aria-label={`Cell ${index + 1}${isMd ? ", markdown" : ", code"}`}
-      onMouseDown={(e) => {
-        // Clicking anywhere in a rendered markdown cell puts you in it.
-        if (isMd && !editing && (e.target as HTMLElement).closest(".cell-body")) setEditing(true);
+      aria-keyshortcuts="Enter Shift+Enter Control+Enter Alt+Enter Escape"
+      data-cell={index + 1}
+      /* Focus anywhere inside the cell (its editor, its buttons) is "this cell is current". React's
+         onFocus/onBlur bubble like focusin/focusout, so one pair on the section covers all of it; the
+         blur only counts when focus leaves the cell, not when it moves between two controls inside. */
+      onFocus={(e) => p.onFocus(e.target === e.currentTarget ? "command" : "edit")}
+      onBlur={(e) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        p.onBlur();
+        // Leaving a markdown cell renders it (Databricks). Not when the whole window lost focus: the
+        // user switching app and coming back must find the cell as they left it.
+        if (isMd && editing && cell.source.trim() && document.hasFocus()) setEditing(false);
       }}
     >
       <div className="cell-gutter">
         <span className="cell-no" aria-hidden>{index + 1}</span>
-        {!readOnly && (
-          <button className="cell-run" aria-label={`Run cell ${index + 1}`} title="Run this cell (⌘↵)"
-            onClick={p.onRun}>
-            <Send size={12} />
-          </button>
-        )}
+        {/* No run button: there is no executor here, and a control that cannot act must not be shown
+            (spec 006 00 P4, NB-2, 11 D3). Asking ABOUT the cell is offered instead, below. */}
       </div>
 
       <div className="cell-main">
-        <header className="cell-bar">
-          <button className="cell-collapse" aria-expanded={!collapsed}
+        <header className="cell-bar"
+          /* KB-4: one Tab stop per cell. Its controls are reachable with ←/→ from the cell, instead of
+             six Tab presses before the text. Buttons keep their names and clicks; only their Tab entry
+             changes, via `tabIndex={-1}` below, so a pointer user sees no difference. */
+          onKeyDown={(e) => {
+            if (e.key !== "ArrowRight" && e.key !== "ArrowLeft" && e.key !== "Home" && e.key !== "End") return;
+            const bar = e.currentTarget;
+            if (!bar.contains(e.target as Node)) return;
+            const stops = [...bar.querySelectorAll<HTMLElement>("button:not([disabled])")]
+              .filter((b) => b.offsetParent !== null);
+            if (stops.length === 0) return;
+            const at = stops.indexOf(e.target as HTMLElement);
+            if (at < 0) return;
+            e.preventDefault();
+            const to = e.key === "Home" ? 0 : e.key === "End" ? stops.length - 1
+              : at + (e.key === "ArrowRight" ? 1 : -1);
+            stops[Math.max(0, Math.min(stops.length - 1, to))]?.focus();
+          }}>
+          <button className="cell-collapse" tabIndex={-1} aria-expanded={!collapsed}
             aria-label={collapsed ? `Expand cell ${index + 1}` : `Collapse cell ${index + 1}`}
             onClick={p.onToggleCollapse}>
             {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
@@ -157,35 +472,52 @@ function CellBlock(p: CellProps) {
 
           <span className="cell-actions">
             {!readOnly && (
-              <button className="cell-act" onClick={() => p.onConvert(isMd ? "code" : "markdown")}
+              <button className="cell-act" tabIndex={-1} onClick={() => p.onConvert(isMd ? "code" : "markdown")}
                 title={isMd ? "Convert to code" : "Convert to markdown"}>
                 {isMd ? "→ code" : "→ md"}
               </button>
             )}
-            {focused && p.onAsk && (
-              <button className="cell-act" onClick={p.onAsk} title="Ask the agent about this cell">
-                ask
+            <button className="cell-act cell-ask" tabIndex={-1} onClick={p.onAsk} aria-pressed={p.prompting}
+              title={`Ask the agent about cell ${index + 1} (${display("mod+shift+i")})`}
+              aria-label={`Ask the agent about cell ${index + 1}`}>
+              <Sparkle size={11} /> Ask
+            </button>
+            {p.onCopyLink && (
+              <button className="cell-act" tabIndex={-1} onClick={p.onCopyLink}
+                title={`Copy a link to cell ${index + 1}`} aria-label={`Copy a link to cell ${index + 1}`}>
+                <LinkIcon size={12} />
+              </button>
+            )}
+            {!readOnly && !isMd && (
+              <button className="cell-act cell-run-act" tabIndex={-1}
+                aria-label={`Run cell ${index + 1}`} title={affordance.title}
+                disabled={!affordance.enabled}
+                onClick={p.onRun}>
+                <Play size={10} /> Run
               </button>
             )}
             {!readOnly && (
               <>
-                <button className="cell-act" aria-label={`Add a cell after ${index + 1}`}
+                <button className="cell-act" tabIndex={-1} aria-label={`Add a cell after ${index + 1}`}
                   onClick={() => p.onInsertAfter("code")} title="Add a code cell below"><Plus size={12} /></button>
-                <button className="cell-act cell-del" aria-label={`Delete cell ${index + 1}`}
+                <button className="cell-act cell-del" tabIndex={-1} aria-label={`Delete cell ${index + 1}`}
                   onClick={p.onDelete} title="Delete this cell"><Close size={12} /></button>
               </>
             )}
           </span>
         </header>
 
+        {p.prompting && (
+          <CellPrompt mode="edit" label={`cell ${index + 1}`} onClose={p.onClosePrompt} onSend={p.onPromptSend}
+            onDiscuss={p.onDiscuss} />
+        )}
+
         {!collapsed && (
           <div className="cell-body">
             {isMd && !wantsEdit ? (
-              <div className="cell-rendered" role="button" tabIndex={0}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setEditing(true); } }}
-                onClick={() => setEditing(true)}
-                aria-label={`Markdown cell ${index + 1}, press Enter to edit`}>
-                <Markdown text={cell.source || "*Empty markdown cell — click to edit*"} />
+              <div className="cell-rendered" title={readOnly ? undefined : "Double-click to edit"}
+                onDoubleClick={() => { if (!readOnly) p.onEdit(); }}>
+                <Markdown text={cell.source || "*Empty markdown cell*"} />
               </div>
             ) : (
               <Editor
@@ -198,11 +530,21 @@ function CellBlock(p: CellProps) {
                    before it can bubble, so if this handler does anything else — exiting markdown
                    edit mode, say — the save silently never happens. That was the real reason the
                    e2e scene saw no request at all while a button click worked. */
-                onSave={() => { setEditing(false); p.onSave(); }}
+                onSave={() => p.onSave()}
+                onChord={p.onChord}
+                onCaret={p.onCaret}
+                focusRequest={p.request?.mode === "edit" ? { n: p.request.n, at: p.request.at } : null}
+                onFocusDone={p.onRequestDone}
                 autoFocus={false}
                 ariaLabel={`Cell ${index + 1} source`}
               />
             )}
+          </div>
+        )}
+        {p.run && !collapsed && (
+          <div className="cell-output-wrap">
+            <CellOutput run={p.run} onClear={p.onClearRun}
+              onFix={p.onFix && p.run.error ? () => p.onFix?.(p.run?.error ?? "") : undefined} />
           </div>
         )}
       </div>

@@ -31,6 +31,8 @@ class MemoryRegistryStore:
         self._turns: dict[str, dict] = {}
         self._turns_by_session: dict[str, list[dict]] = {}
         self._discovery: list[dict] = []
+        self._settings: dict[str, str] = {}
+        self.default_model = ""
 
     # -- reads ----------------------------------------------------------------
     async def providers(self) -> list[dict]:
@@ -66,6 +68,41 @@ class MemoryRegistryStore:
                 f"refusing to replace it with {spec.endpoint!r}"
             )
         self._models[key] = spec
+
+    # -- administration (the same operations the Postgres store offers) -------------
+    async def all_models(self) -> list[ModelSpec]:
+        return list(self._models.values())
+
+    async def get_setting(self, key: str) -> str:
+        return self._settings.get(key, "")
+
+    async def set_setting(self, key: str, value: str, by: str = "") -> None:
+        self._settings[key] = value
+
+    async def set_default_model(self, model_id: str, by: str = "") -> None:
+        self._settings["default_model"] = model_id
+        self.default_model = model_id
+
+    async def set_model_enabled(self, model_id: str, enabled: bool) -> bool:
+        spec = self._models.get(model_id)
+        if spec is None:
+            return False
+        self._models[model_id] = replace(spec, enabled=enabled)
+        return True
+
+    async def delete_model(self, model_id: str) -> bool:
+        return self._models.pop(model_id, None) is not None
+
+    async def update_provider(self, provider_id: str, *, enabled: bool | None = None,
+                              base_url: str | None = None) -> bool:
+        row = self._providers.get(provider_id)
+        if row is None:
+            return False
+        if enabled is not None:
+            row["enabled"] = enabled
+        if base_url is not None:
+            row["base_url"] = base_url
+        return True
 
     async def set_grant(self, grant: Grant) -> None:
         self._grants[grant.model_id] = grant

@@ -171,7 +171,7 @@ for (const width of widths) {
   if (width <= 1180) {
     /* The inspector is an overlay below 1180, opened on demand. Guard on the button EXISTING: it is
        absent when the pane is already open, and absent when there is no session to describe. */
-    const open = p.getByRole("button", { name: "Show the inspector" });
+    const open = p.locator('.topbar').getByRole("button", { name: "Show the inspector" });
     if (await open.count() > 0 && await p.locator(".pane.inspector").count() === 0) {
       await open.click();
       await p.locator(".pane.inspector").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});

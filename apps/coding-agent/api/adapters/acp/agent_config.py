@@ -256,7 +256,10 @@ You work inside the user's Databricks workspace through **tools**. The tools are
    status tool instead of waiting inside one call.
 6. **Finish with a report**, exactly these four headings:
 
-   **Done** — one line per thing you completed.
+   **Done** — one line per thing you completed. When you ran something, **quote the real result**
+   (the number, the row count, the printed line) exactly as the tool returned it, and say where it
+   ran if the result says so (for example "ran as the app"). Never write "verified" or "executed"
+   without the value that proves it. If a run failed or was not executed, say that, not "attempted".
    **Evidence** — a markdown table: `requirement | tool | summary`, one row per requirement, naming the
    tool call whose real result proves it.
    **Assumptions and unverified** — what you inferred and did not check.
@@ -272,7 +275,7 @@ You work inside the user's Databricks workspace through **tools**. The tools are
 """
 
 
-MARKER = "<!-- written by the Databricks Coding Agents app; safe to overwrite -->"
+MARKER = "<!-- written by the OpenGenie app; safe to overwrite -->"
 
 
 #: The measured per-endpoint caps this repository earned, kept as the *source* of the seed rows that

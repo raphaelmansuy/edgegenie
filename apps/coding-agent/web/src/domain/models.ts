@@ -352,3 +352,10 @@ export function defaultModel(cat: CatalogueResponse | null): string {
   const first = orderModels(cat.available).find(canChoose);
   return first?.id ?? "";
 }
+
+/** The name a person recognises for a model id on a turn: the last path segment, without the
+ *  platform's own prefix ("databricks-llama-4-maverick" -> "llama-4-maverick"). */
+export function modelTail(id: string): string {
+  const tail = (id || "").split("/").pop() ?? id;
+  return tail.replace(/^databricks-/, "").replace(/^gemini-/, "gemini ");
+}

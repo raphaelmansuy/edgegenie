@@ -30,6 +30,12 @@ export interface EditorHost {
   reconfigure(language: string): void;
   /** Focus the editor, optionally at a position (character offset). */
   focus(at?: number): void;
+  /** Where the caret is now (character offset). Read-only geometry, never content. */
+  getCaret(): number;
+  /** Called when the caret moves (typing, arrows, click), so the app can remember the user's place. */
+  onCaret(cb: (pos: number) => void): void;
+  /** Take the keyboard focus away (the cell stays selected). */
+  blur(): void;
   /** Release listeners and DOM. Safe to call twice. */
   destroy(): void;
 }
@@ -39,7 +45,12 @@ export type EditorHostFactory = (opts: {
   theme: "light" | "dark";
   /** Called for ⌘S so the app owns persistence, not the editor. */
   onSave?: () => void;
+  /** Cell-level chords the editor itself cannot decide: Shift/⌘/Alt+Enter run, Esc leaves the text.
+   *  Return true if handled. Esc is offered only after an open completion list has taken it. */
+  onChord?: (chord: EditorChord) => boolean;
 }) => EditorHost;
+
+export type EditorChord = "run-stay" | "run-next" | "run-insert" | "escape";
 
 /** Load the real editor lazily.
  *

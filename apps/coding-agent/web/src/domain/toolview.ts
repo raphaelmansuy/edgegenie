@@ -36,6 +36,46 @@ const squash = (s: string, limit: number) => {
 /** The EVIDENCE table the agent is asked to append is shown as the Evidence panel, not twice. */
 export function stripEvidence(answer: string): string {
   if (!answer) return answer;
-  const at = answer.search(/^\s*#{0,4}\s*\**\s*EVIDENCE\s*\**\s*$/im);
-  return at === -1 ? answer : answer.slice(0, at).trimEnd();
+  let start = 0;
+  while (start <= answer.length) {
+    let end = answer.indexOf("\n", start);
+    if (end === -1) end = answer.length;
+    if (isEvidenceHeading(answer, start, end)) return answer.slice(0, start).trimEnd();
+    start = end + 1;
+  }
+  return answer;
+}
+
+const WORD = "evidence";
+const isSpace = (c: string) => c === " " || c === "\t" || c === "\r" || c === "\f" || c === "\v" || c === "\u00a0";
+
+/** One line is the heading when it is `#{0,4} **? EVIDENCE **?` and nothing else. Scanned by hand,
+ *  one pass, no backtracking. The regex this replaces (`^\s*#{0,4}\s*\**\s*EVIDENCE\s*\**\s*$`) had
+ *  adjacent `\s*` groups that match the same blanks, so a run of N blank lines cost O(N³): 500 blank
+ *  lines took 65 seconds, and a streaming answer ran it on every render. That was the "Page
+ *  Unresponsive" freeze. A model that pads its answer with blank lines is an ordinary failure. */
+export function isEvidenceHeading(text: string, from: number, to: number): boolean {
+  let i = from;
+  const skipSpace = () => { while (i < to && isSpace(text[i])) i += 1; };
+  const skipStars = () => { while (i < to && text[i] === "*") i += 1; };
+  skipSpace();
+  for (let hashes = 0; hashes < 4 && i < to && text[i] === "#"; hashes += 1) i += 1;
+  skipSpace(); skipStars(); skipSpace();
+  if (to - i < WORD.length || text.slice(i, i + WORD.length).toLowerCase() !== WORD) return false;
+  i += WORD.length;
+  skipSpace(); skipStars(); skipSpace();
+  return i === to;
+}
+
+const FRIENDLY: Record<string, string> = {
+  describe_table: "looked at the table", list_tables: "listed tables", run_sql: "ran SQL",
+  write_notebook: "wrote a notebook", run_notebook: "ran a notebook", read_notebook: "read a notebook",
+  grep_notebook: "searched a notebook", create_job: "created a job", run_job: "ran a job",
+  write_file: "wrote a file", lakebase_create: "created a database", skill: "read a skill",
+};
+
+/** A tool's name as a past-tense phrase: "dbxnb_dbx_write_notebook" → "wrote a notebook". */
+export function toolLabel(name: string): string {
+  const plain = name.replace(/^dbxnb_/, "").replace(/^dbx_/, "").replace(/^dbx/, "").replace(/^db_dbx_/, "");
+  return FRIENDLY[plain] ?? plain.replace(/_/g, " ");
 }

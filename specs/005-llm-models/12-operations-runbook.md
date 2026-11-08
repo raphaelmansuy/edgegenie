@@ -29,6 +29,40 @@ this.
 
 ---
 
+## Where the configuration lives, and how to set it up (as deployed)
+
+The catalogue, the default model and every stored key are rows in a **Lakebase** (managed Postgres)
+database, schema `llm`. Nothing an administrator chooses is kept in the browser or in a file.
+
+| Piece | Where | Notes |
+|---|---|---|
+| Database | Lakebase Autoscaling project `coding-agent-llm`, branch `production`, endpoint `primary` | `APP_LLM_PG_ENDPOINT` names the endpoint; the host is read from it |
+| Who connects | the app's **service principal**, as a Postgres role of the same name | the password is a one-hour OAuth token, minted per connection (`adapters/llm/store/lakebase.py`) |
+| Schema owner | the app's service principal | the app creates `llm.*` itself at boot; migrations `001`, `002` are forward-only |
+| Key-encryption key | Databricks secret `coding-agent-llm/llm-kek`, attached as app resource `llm-kek`, delivered as `APP_LLM_KEK` | not in the database, so a dump of the database is not a dump of the keys |
+| Vertex service-account key | secret `coding-agent-llm/vertex-sa`, resource `vertex-sa` | an operator-provided key, used when a user has none of their own |
+| Who may change the catalogue | `APP_LLM_ADMINS` (e-mails, comma separated) | empty means nobody; everyone else sees the screen read-only |
+
+One-off setup, in a workspace that has none of it:
+
+```bash
+databricks postgres create-project coding-agent-llm --json '{"spec":{"display_name":"coding-agent-llm"}}'
+APP_SP=$(databricks apps get coding-agent -o json | jq -r .service_principal_client_id)
+databricks postgres create-role projects/coding-agent-llm/branches/production --role-id coding-agent-sp \
+  --json "{\"spec\":{\"postgres_role\":\"$APP_SP\",\"identity_type\":\"SERVICE_PRINCIPAL\",\"auth_method\":\"LAKEBASE_OAUTH_V1\"}}"
+# as the project owner, once: let the role create its schema
+#   GRANT CONNECT, CREATE ON DATABASE databricks_postgres TO "<APP_SP>";
+python3 -c "import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())" \
+  | tr -d '\n' | databricks secrets put-secret coding-agent-llm llm-kek
+# `apps update` REPLACES the resource list: send every resource and every scope together.
+```
+
+The app starts on the packaged seed catalogue and moves onto the database as soon as it is reachable
+(`_database_loop`, retrying with back-off), so a suspended Lakebase compute delays the switch and never
+the boot. `GET /api/llm/config` says which store is live (`source`: `database`, `degraded` or `seed`).
+While it is not `database`, every write route answers 503 with that reason rather than saving
+something that would vanish. The screens are described in `e2e/config-screens/`.
+
 ## Health endpoints
 
 | Route | Answers | Must not |
@@ -167,3 +201,22 @@ The honest list. Each item names what would settle it and where.
 
 Step 6 is the one people skip, and it is the only step that exercises the whole path end to end with
 a real provider.
+
+## Model configuration in Lakebase (as deployed)
+
+The model catalogue, the default model and users' encrypted keys live in a Lakebase Postgres project, not in the app's files.
+
+| Piece | Where |
+|---|---|
+| Database | Lakebase project `coding-agent-llm`, branch `production`, database `databricks_postgres`, schema `llm` |
+| App identity | the app's service principal has a Postgres role with the same name and `CONNECT, CREATE` on the database. It owns the `llm` schema, so its own migrations can alter it |
+| Connection | `APP_LLM_PG_ENDPOINT=projects/coding-agent-llm/branches/production/endpoints/primary`. The app mints a short-lived OAuth password per connection (`api/adapters/llm/store/lakebase.py`), so there is no password to store or rotate |
+| Key-encryption key | a Databricks secret (`coding-agent-llm/llm-kek`) attached as the app resource `llm-kek` and delivered as `APP_LLM_KEK`. It is not in the database, so a database dump is not a key dump |
+| Who may change the catalogue | `APP_LLM_ADMINS` (comma-separated e-mails). Empty means nobody. Everyone else can read it |
+| First boot | the seed catalogue is written once and `APP_DEFAULT_MODEL` becomes the stored default. After that the stored default wins, so a redeploy never undoes a choice made in the screen |
+
+Screens: **Settings → Models** (add, switch off, remove, default, provider address) and **Settings → Keys**. Screenshots: `e2e/config-screens/`. Offline suite: `web/scripts/modelcfg-e2e.mjs`.
+
+To recreate the database from nothing: create the project, create a role for the app's service principal (`databricks postgres create-role … --json '{"spec":{"postgres_role":"<client id>","identity_type":"SERVICE_PRINCIPAL","auth_method":"LAKEBASE_OAUTH_V1"}}'`), grant it `CONNECT, CREATE ON DATABASE databricks_postgres`, attach the KEK secret, and deploy. The app creates the schema itself.
+
+If the database is unreachable the app serves the seed catalogue marked `degraded`, retries with backoff, and the Models screen says changes cannot be saved. It never pretends to save.

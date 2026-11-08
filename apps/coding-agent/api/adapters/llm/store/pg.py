@@ -51,11 +51,17 @@ class PgRegistryStore:
 
     # -- lifecycle ------------------------------------------------------------
     @classmethod
-    async def connect(cls, dsn: str, *, seed_path: Path | str | None = None) -> PgRegistryStore:
-        """Connect, then apply migrations. Raises when unreachable, and the caller degrades."""
+    async def connect(cls, dsn: str, *, seed_path: Path | str | None = None,
+                      connection_class=None, max_lifetime: float = 3600.0) -> PgRegistryStore:
+        """Connect, then apply migrations. Raises when unreachable, and the caller degrades.
+
+        `connection_class` lets Lakebase supply a fresh OAuth token per connection (see `lakebase`).
+        """
         from psycopg_pool import AsyncConnectionPool
 
-        pool = AsyncConnectionPool(dsn, min_size=1, max_size=4, open=False)
+        extra = {"connection_class": connection_class} if connection_class else {}
+        pool = AsyncConnectionPool(dsn, min_size=1, max_size=4, open=False,
+                                   max_lifetime=max_lifetime, **extra)
         await pool.open(wait=True, timeout=10)
         store = cls(pool, seed_path=seed_path)
         await store._migrate()
@@ -77,6 +83,9 @@ class PgRegistryStore:
 
         seed = load(self._seed_path)
         self.default_model = seed.default_model
+        chosen = await self.get_setting("default_model")
+        if chosen:
+            self.default_model = chosen
         async with self._conn.connection() as conn, conn.cursor() as cur:
             for provider in seed.providers:
                 await cur.execute(
@@ -111,6 +120,14 @@ class PgRegistryStore:
 
     async def models(self, user_id: str = "") -> list[ModelSpec]:
         """The picker's one query. Two lateral joins, no N+1, no secret (05 §Tables)."""
+        return await self._models(enabled_only=True)
+
+    async def all_models(self) -> list[ModelSpec]:
+        """Every model, switched off or not: the administrator's view, never the picker's."""
+        return await self._models(enabled_only=False)
+
+    async def _models(self, *, enabled_only: bool) -> list[ModelSpec]:
+        where = "WHERE p.enabled AND m.enabled" if enabled_only else ""
         rows = await self._fetch(
             """SELECT m.id, m.endpoint, m.display_name, m.group_name, m.capability, m.wire,
                       m.context_window, m.max_output, m.limit_evidence, m.limit_source,
@@ -122,7 +139,7 @@ class PgRegistryStore:
                LEFT JOIN LATERAL (
                    SELECT state, detail, at FROM llm.llm_health
                    WHERE model_id = m.id ORDER BY at DESC LIMIT 1) h ON TRUE
-               WHERE p.enabled AND m.enabled
+               """ + where + """
                ORDER BY m.group_name, m.display_name""", ())
         return [_spec_from_row(r) for r in rows]
 
@@ -200,6 +217,41 @@ class PgRegistryStore:
              spec.capability.value, spec.wire.value, spec.limits.context, spec.limits.output,
              spec.limits.evidence.value, spec.limits.source, spec.credential_kind.value,
              spec.state.value, spec.enabled, spec.selectable))
+
+    async def get_setting(self, key: str) -> str:
+        rows = await self._fetch("SELECT value FROM llm.llm_setting WHERE key = %s", (key,))
+        return rows[0][0] if rows else ""
+
+    async def set_setting(self, key: str, value: str, by: str = "") -> None:
+        await self._run(
+            """INSERT INTO llm.llm_setting (key, value, updated_by) VALUES (%s,%s,%s)
+               ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value,
+                                               updated_by = EXCLUDED.updated_by, updated_at = now()""",
+            (key, value, by))
+
+    async def set_default_model(self, model_id: str, by: str = "") -> None:
+        await self.set_setting("default_model", model_id, by)
+        self.default_model = model_id
+
+    async def set_model_enabled(self, model_id: str, enabled: bool) -> bool:
+        rows = await self._fetch(
+            "UPDATE llm.llm_model SET enabled = %s, updated_at = now() WHERE id = %s RETURNING id",
+            (enabled, model_id))
+        return bool(rows)
+
+    async def delete_model(self, model_id: str) -> bool:
+        rows = await self._fetch("DELETE FROM llm.llm_model WHERE id = %s RETURNING id", (model_id,))
+        return bool(rows)
+
+    async def update_provider(self, provider_id: str, *, enabled: bool | None = None,
+                              base_url: str | None = None) -> bool:
+        rows = await self._fetch(
+            """UPDATE llm.llm_provider SET enabled = coalesce(%s, enabled),
+                                           base_url = CASE WHEN %s::boolean THEN nullif(%s, '') ELSE base_url END,
+                                           updated_at = now()
+               WHERE id = %s RETURNING id""",
+            (enabled, base_url is not None, base_url or "", provider_id))
+        return bool(rows)
 
     async def record_health(self, model_id: str, state: str, detail: str, *, source: str = "probe") -> None:
         await self._run(

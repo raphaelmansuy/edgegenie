@@ -10,12 +10,17 @@
  * 3. **Never a reveal.** The key is masked once it validates, and nothing derived from it comes back
  *    from the server beyond `last4` and a fingerprint (C-1).
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useReturnFocus } from "../hooks/useReturnFocus";
 import { api, type CredentialView, type LlmHealth } from "../api/client";
 import { sourceNotice, type CatalogueResponse, type ModelSpec } from "../domain/models";
 import { Alert, Check, Lock, Plus, Refresh, Warning } from "./Icons";
+import { ModelConfigPane } from "./ModelConfig";
 
 export interface ProviderSettingsProps {
+  /** Which tab is showing. The caller owns it so the address bar can name it (domain/route.ts). */
+  tab: "providers" | "models";
+  onTab: (tab: "providers" | "models") => void;
   onClose: () => void;
   /** Called after a key changes, so the catalogue can be re-read and the picker updated. */
   onChanged?: () => void;
@@ -39,7 +44,7 @@ function credentialKindOf(models: ModelSpec[]): string {
   return spec?.credential.kind ?? "none";
 }
 
-export function ProviderSettings({ onClose, onChanged }: ProviderSettingsProps) {
+export function ProviderSettings({ tab: wanted, onTab, onClose, onChanged }: ProviderSettingsProps) {
   const [catalogue, setCatalogue] = useState<CatalogueResponse | null>(null);
   const [health, setHealth] = useState<LlmHealth | null>(null);
   const [credentials, setCredentials] = useState<CredentialView[]>([]);
@@ -49,6 +54,8 @@ export function ProviderSettings({ onClose, onChanged }: ProviderSettingsProps) 
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const tab = wanted === "models" ? "models" : "keys";
+  const chooseTab = (next: "keys" | "models") => { setAdding(null); onTab(next === "models" ? "models" : "providers"); };
 
   const load = useCallback(async () => {
     const [cat, creds, healthBody] = await Promise.all([
@@ -64,6 +71,10 @@ export function ProviderSettings({ onClose, onChanged }: ProviderSettingsProps) 
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  // KB-1: the sheet returns focus to its opener, and starts on its own heading.
+  useReturnFocus();
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { heading.current?.focus(); }, []);
 
   // `esc` is the back path from every surface (07 §Navigation map).
   useEffect(() => {
@@ -119,28 +130,40 @@ export function ProviderSettings({ onClose, onChanged }: ProviderSettingsProps) 
     <div className="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <header className="settings-head">
         <div>
-          <h2 id="settings-title">Providers and keys</h2>
+          <h2 id="settings-title">{tab === "models" ? "Models" : "Providers and keys"}</h2>
           <p className="settings-sub">
-            A key is encrypted before it is stored and is never shown again. Prompts and tool results
-            in a session on an external model leave your Databricks workspace.
+            {tab === "models"
+              ? "Choose which external models this app offers and which one is the default. The choices are kept in the database, not in the browser."
+              : "A key is encrypted before it is stored and is never shown again. Prompts and tool results in a session on an external model leave your Databricks workspace."}
           </p>
+          <div className="settings-tabs" role="tablist" aria-label="Settings sections">
+            <button role="tab" id="tab-keys" aria-selected={tab === "keys"} aria-controls="settings-panel"
+              className={tab === "keys" ? "is-on" : ""} onClick={() => chooseTab("keys")}>Keys</button>
+            <button role="tab" id="tab-models" aria-selected={tab === "models"} aria-controls="settings-panel"
+              className={tab === "models" ? "is-on" : ""} onClick={() => chooseTab("models")}>Models</button>
+          </div>
         </div>
         <div className="settings-head-actions">
-          <button className="btn" onClick={async () => { setBusy("refresh"); try { await api.refreshDiscovery(); await load(); onChanged?.(); } catch (err) { setError(err instanceof Error ? err.message : "discovery failed"); } finally { setBusy(""); } }}
+          {tab === "keys" && <button className="btn" onClick={async () => { setBusy("refresh"); try { await api.refreshDiscovery(); await load(); onChanged?.(); } catch (err) { setError(err instanceof Error ? err.message : "discovery failed"); } finally { setBusy(""); } }}
             disabled={busy === "refresh"}>
             <Refresh size={13} /> Refresh models
-          </button>
+          </button>}
           <button className="btn" onClick={onClose} aria-label="Close settings">Close</button>
         </div>
       </header>
 
-      {noticeText && (
+      {tab === "models" && (
+        <div id="settings-panel" role="tabpanel" aria-labelledby="tab-models" className="settings-panel">
+          <ModelConfigPane onChanged={() => { void load(); onChanged?.(); }} />
+        </div>
+      )}
+      {tab === "keys" && noticeText && (
         <p className="settings-notice" role="note"><Warning size={14} /> {noticeText}</p>
       )}
-      {error && <p className="settings-error" role="alert"><Alert size={14} /> {error}</p>}
-      {notice && !error && <p className="settings-ok" role="status"><Check size={14} /> {notice}</p>}
+      {tab === "keys" && error && <p className="settings-error" role="alert"><Alert size={14} /> {error}</p>}
+      {tab === "keys" && notice && !error && <p className="settings-ok" role="status"><Check size={14} /> {notice}</p>}
 
-      {adding && current ? (
+      {tab === "keys" && (adding && current ? (
         <AddKey
           provider={current.id}
           providerName={current.name}
@@ -173,9 +196,9 @@ export function ProviderSettings({ onClose, onChanged }: ProviderSettingsProps) 
             />
           ))}
         </div>
-      )}
+      ))}
 
-      <footer className="settings-foot">
+      {tab === "keys" && <footer className="settings-foot">
         <span>
           source: {catalogue?.source ?? "…"}
           {vaultMode && <> · keys {canSave ? `encrypted with ${vaultMode}` : "cannot be saved here"}</>}
@@ -185,7 +208,7 @@ export function ProviderSettings({ onClose, onChanged }: ProviderSettingsProps) 
           {" · "}
           {rows.filter((r) => r.credential).length} configured
         </span>
-      </footer>
+      </footer>}
     </div>
   );
 }

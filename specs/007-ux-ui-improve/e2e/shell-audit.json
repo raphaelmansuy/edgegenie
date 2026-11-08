@@ -1,0 +1,97 @@
+{
+  "zones": {
+    "topbar": {
+      "w": 1440,
+      "h": 52,
+      "x": 0,
+      "overflowY": "visible",
+      "scrollH": 51,
+      "clientH": 51
+    },
+    "rail": {
+      "w": 276,
+      "h": 848,
+      "x": 0,
+      "overflowY": "visible",
+      "scrollH": 848,
+      "clientH": 848
+    },
+    "centre": {
+      "w": 782,
+      "h": 848,
+      "x": 277,
+      "overflowY": "visible",
+      "scrollH": 848,
+      "clientH": 848
+    },
+    "dock": {
+      "w": 380,
+      "h": 848,
+      "x": 1060,
+      "overflowY": "visible",
+      "scrollH": 848,
+      "clientH": 848
+    },
+    "inspector": null,
+    "tabs": null,
+    "home": {
+      "w": 782,
+      "h": 848,
+      "x": 277,
+      "overflowY": "auto",
+      "scrollH": 848,
+      "clientH": 848
+    },
+    "body": {
+      "scrollW": 1440,
+      "innerW": 1440,
+      "scrollH": 900,
+      "innerH": 900
+    }
+  },
+  "tabbables": [
+    "button.chip",
+    "button.search-trigger",
+    "button.btn",
+    "button.btn",
+    "button.theme-opt",
+    "button.theme-opt",
+    "button.theme-opt",
+    "button.btn",
+    "button.btn",
+    "button.btn",
+    "button.avatar-btn",
+    "button.rail-collapse",
+    "div.separator",
+    "button.rail-tab",
+    "button.btn",
+    "button.fp-trigger",
+    "button.btn",
+    "button.home-card",
+    "button.home-card",
+    "button.home-card",
+    "button.home-card",
+    "button.home-card",
+    "button.home-card",
+    "button.home-search",
+    "button.home-search",
+    "div.separator",
+    "button.icon-btn",
+    "button.icon-btn",
+    "button.icon-btn",
+    "button.icon-btn",
+    "button.dock-suggestion",
+    "button.dock-suggestion",
+    "button.dock-suggestion",
+    "textarea.-",
+    "button.btn",
+    "button.btn",
+    "button.btn"
+  ],
+  "noFocusStyle": [
+    "textarea.- \"Message the agent\""
+  ],
+  "scrollers": [],
+  "nesting": 0,
+  "shortcuts": 0
+}

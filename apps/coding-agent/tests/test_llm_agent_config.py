@@ -77,7 +77,11 @@ def test_the_only_vendor_names_left_are_provider_kind_members_and_adapter_files(
     #: person. Everything else is a regression.
     allowed_prefixes = ("api/adapters/llm/", "api/domain/llm/")
     allowed = {"api/adapters/acp/agent_config.py", "api/services/model_resolver.py",
-               "api/services/model_registry.py", "api/services/credential_service.py"}
+               "api/services/model_registry.py", "api/services/credential_service.py",
+               # A Databricks adapter: it shells out to the `databricks` CLI to refresh a local
+               # development token. Naming the vendor is the point of the file, and it is the only
+               # place the name may appear for this reason (see `api/adapters/databricks/devtoken.py`).
+               "api/adapters/databricks/devtoken.py"}
     offenders = []
     for path in API.rglob("*.py"):
         rel = str(path.relative_to(APP))

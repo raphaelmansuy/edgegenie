@@ -186,6 +186,17 @@ def test_archive_then_writes_are_refused(client):
     assert r.status_code == 409
 
 
+def test_a_deleted_conversation_leaves_the_list(client):
+    """Delete is archive; the list must not keep showing what the user just deleted."""
+    keep = client.post("/api/sessions", json={"folder": "/tmp/agent-work"}).json()["id"]
+    gone = client.post("/api/sessions", json={"folder": "/tmp/agent-work"}).json()["id"]
+    assert client.delete(f"/api/sessions/{gone}").status_code == 204
+    ids = [s["id"] for s in client.get("/api/sessions").json()["sessions"]]
+    assert keep in ids and gone not in ids
+    # the record itself is still readable (the audit trail), it is just not listed
+    assert client.get(f"/api/sessions/{gone}").status_code == 200
+
+
 def test_forwarded_user_header_wins_over_the_dev_user():
     app = build(
         Settings(

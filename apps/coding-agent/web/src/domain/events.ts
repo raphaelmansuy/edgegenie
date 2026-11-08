@@ -31,6 +31,17 @@ export interface AgentEvent {
   [key: string]: unknown;
 }
 
+/** The three states a tool card can be in. The server says `failed` (the agent protocol's word) and the
+ *  card says `error`; anything unrecognised was once treated as "still running", which left a failed
+ *  call spinning forever under a finished turn. Only an explicit in-flight word means running. */
+export function toolState(status: string | undefined): "running" | "completed" | "error" {
+  switch ((status ?? "").toLowerCase()) {
+    case "completed": case "complete": case "done": case "success": case "succeeded": return "completed";
+    case "error": case "failed": case "failure": case "cancelled": case "canceled": case "rejected": return "error";
+    default: return "running";
+  }
+}
+
 export interface ToolCall {
   callId: string;
   name: string;
@@ -65,7 +76,8 @@ export interface EvidenceRow {
 export type TurnStatus =
   | "queued" | "running" | "auditing" | "completed" | "blocked" | "cancelled" | "interrupted" | "failed";
 
-export interface Attachment { kind: "notebook" | "file" | "folder" | "table"; ref: string; name: string }
+/** `cell` is a fragment on a notebook path (`/path#3`); the server renders only that cell (006 FX-3). */
+export interface Attachment { kind: "notebook" | "file" | "folder" | "table" | "cell"; ref: string; name: string }
 export interface PlanEntry { content: string; status: "pending" | "in_progress" | "completed" | string; priority?: string }
 
 export interface Turn {
@@ -180,7 +192,7 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
       return patchTurn(s, e.turnId, (t) => ({
         ...t,
         tools: t.tools.map((c) => (c.callId === e.callId
-          ? { ...c, status: String(e.status ?? c.status),
+          ? { ...c, status: e.status ? toolState(String(e.status)) : c.status,
               args: e.args ? String(e.args) : c.args,
               seconds: typeof e.seconds === "number" ? e.seconds : c.seconds,
               summary: e.summary ? String(e.summary) : c.summary,

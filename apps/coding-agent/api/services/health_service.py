@@ -34,6 +34,9 @@ DEFAULT_INTERVAL = 900.0
 class HealthService:
     """Probes models and records what happened, through the store and the adapters."""
 
+    def rebind(self, store) -> None:
+        self._store = store
+
     def __init__(self, store, credentials, *, interval: float = DEFAULT_INTERVAL,
                  host: str = "", enabled: bool = True) -> None:
         self._store = store

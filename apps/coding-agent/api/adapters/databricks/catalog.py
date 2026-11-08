@@ -89,12 +89,7 @@ class CatalogBrowser:
     async def preview(self, full_name: str, token: str | None) -> dict[str, Any]:
         """The first rows, through the SQL Statement API on a running warehouse the user can use."""
         quoted = _quote(full_name)
-        wh = await self._http.get("/api/2.0/sql/warehouses", token)
-        warehouses = wh.get("warehouses", [])
-        pick = next((w for w in warehouses if w.get("state") == "RUNNING"), None) or (
-            warehouses[0] if warehouses else None)
-        if not pick:
-            raise LookupError("no SQL warehouse is available to run a preview")
+        pick = await self._pick_warehouse(token, "run a preview")
         d = await self._http.post("/api/2.0/sql/statements", token, {
             "warehouse_id": pick["id"], "statement": f"SELECT * FROM {quoted} LIMIT {PREVIEW_ROWS}",
             "wait_timeout": "30s", "on_wait_timeout": "CANCEL", "row_limit": PREVIEW_ROWS,
@@ -106,6 +101,36 @@ class CatalogBrowser:
         cols = [c["name"] for c in d.get("manifest", {}).get("schema", {}).get("columns", [])]
         return {"columns": cols, "rows": (d.get("result") or {}).get("data_array", []),
                 "warehouse": pick.get("name", "")}
+
+    async def _pick_warehouse(self, token: str | None, what: str) -> dict[str, Any]:
+        """The warehouse to run on: a running one if there is one, else the first this user can see.
+
+        Shared by the table preview and by cell execution. One definition, so the two cannot disagree
+        about which warehouse a user's query lands on — and so `what` can name the user's action in
+        the message when none exists.
+        """
+        wh = await self._http.get("/api/2.0/sql/warehouses", token)
+        warehouses = wh.get("warehouses", [])
+        pick = next((w for w in warehouses if w.get("state") == "RUNNING"), None) or (
+            warehouses[0] if warehouses else None)
+        if not pick:
+            raise LookupError(f"no SQL warehouse is available to {what}")
+        return pick
+
+    async def run_sql(self, statement: str, token: str | None, *, limit: int = 200,
+                      wait_seconds: float = 50.0) -> tuple[dict[str, Any], str]:
+        """Run one SQL statement and return (raw response, warehouse name).
+
+        The raw payload is returned rather than a decoded result so the *domain* decides what a
+        result means (`cellrun.result_from_statement`). This adapter knows the API; it does not know
+        what a user should be told about it.
+        """
+        pick = await self._pick_warehouse(token, "run this query")
+        payload = await self._http.post("/api/2.0/sql/statements", token, {
+            "warehouse_id": pick["id"], "statement": statement,
+            "wait_timeout": f"{int(wait_seconds)}s", "on_wait_timeout": "CANCEL", "row_limit": limit,
+        }, timeout=wait_seconds + 15)
+        return payload, pick.get("name", "")
 
     async def table_names(self, token: str | None) -> list[str]:
         """Every table name this user can see, for name search.

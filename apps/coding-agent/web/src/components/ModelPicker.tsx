@@ -31,7 +31,7 @@ import {
   type CatalogueResponse,
   type ModelSpec,
 } from "../domain/models";
-import { Check, ChevronDown, Dot, Ring, Warning } from "./Icons";
+import { Check, ChevronDown, Ring, Warning } from "./Icons";
 
 export interface ModelPickerProps {
   catalogue: CatalogueResponse | null;
@@ -45,6 +45,8 @@ export interface ModelPickerProps {
   onRefresh?: () => void;
   /** How the trigger looks: the topbar chip, or a button inside the inspector. */
   variant?: "chip" | "button";
+  /** A word before the model name: `model` in a composer, nothing in the top bar (006 MC-7). */
+  triggerGlyph?: string;
   label?: string;
   disabled?: boolean;
   /**
@@ -62,7 +64,7 @@ const TOPBAR = 52;
 
 export function ModelPicker({
   catalogue, current, onChoose, onAddKey, onRefresh, variant = "chip", label: triggerLabel,
-  disabled = false, open: openProp, onOpenChange,
+  disabled = false, open: openProp, onOpenChange, triggerGlyph,
 }: ModelPickerProps) {
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
@@ -162,6 +164,20 @@ export function ModelPicker({
     setStatus("");
   }, [close]);
 
+  // Escape closes from anywhere, not only from the search box: focus can be on the trigger, on a row,
+  // or nowhere (the palette and ⌘⇧M open the popover without a click), and a popover that ignores
+  // Escape in those states cannot be dismissed without hunting for a click target.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      e.preventDefault();
+      dismiss();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, dismiss]);
+
   // Outside click closes, the way people expect from a popover.
   useEffect(() => {
     if (!open) return;
@@ -236,7 +252,9 @@ export function ModelPicker({
         disabled={disabled}
         onClick={() => { if (open) close(false); else { setStatus(""); setOpen(true); } }}
       >
-        {variant === "chip" && <span aria-hidden>model</span>}
+        {(triggerGlyph ?? (variant === "chip" ? "model" : "")) !== "" && (
+          <span aria-hidden className="model-trigger-glyph">{triggerGlyph ?? "model"}</span>
+        )}
         <span className="model-trigger-label">
           {currentSpec ? label(currentSpec) : current ? current.split("/").slice(1).join("/") : "Choose a model"}
         </span>
@@ -423,10 +441,14 @@ function SpanGlyph({ glyph }: { glyph: string }) {
 /** The chip's state glyph: the same vocabulary as the rows, so one legend covers the whole surface. */
 export function StateGlyph({ spec }: { spec: ModelSpec }) {
   const { glyph, tone, word } = STATE_COPY[spec.state];
+  // In the trigger the glyph must mean "there is something to act on". `available` is the normal
+  // case and needs no mark; the muted states ("never probed") would otherwise put a bare "?" beside
+  // the model name, which reads as a defect rather than as information. The rows and the inspector
+  // still spell every state out (spec 006 MC-7).
+  const shows = spec.state !== "available" && tone !== "muted";
+  if (!shows) return null;
   return (
-    <span className={`state-glyph tone-${tone}`} aria-label={word} title={word}>
-      {spec.state === "available" ? <Dot size={9} /> : glyph}
-    </span>
+    <span className={`state-glyph tone-${tone}`} aria-label={word} title={word}>{glyph}</span>
   );
 }
 

@@ -24,6 +24,7 @@ import { json } from "@codemirror/lang-json";
 import { javascript } from "@codemirror/lang-javascript";
 import { markdown } from "@codemirror/lang-markdown";
 import type { EditorHost, EditorHostFactory } from "./host";
+import { minimalChange } from "./diff";
 
 /** Language id -> parser. Unknown languages get no parser, which CodeMirror treats as plain text —
  *  the same "showing the source is always safe, guessing is not" rule as the notebook parser. */
@@ -47,13 +48,19 @@ function token(name: string, fallback: string): string {
 
 function highlight(theme: "light" | "dark"): Extension {
   const c = (n: string, d: string) => token(n, d);
+  /* Every colour here is a FOREGROUND, so every token it reads must be a text-weight one. Three of
+     these were reading a `-300` tint — `--purple-300` for keywords, `--orange-300` for numbers,
+     `--teal-300` for type names — and a tint on the editor surface measured 1.79:1, which is a
+     keyword you cannot read (WCAG 1.4.3 wants 4.5:1). The `-700` tokens exist for exactly this, and
+     the CodeMirror fallbacks below were already the right weight, which is what made the bug visible
+     only when the stylesheet's token won. */
   const style = HighlightStyle.define([
     { tag: t.comment, color: c("--ink-3", theme === "dark" ? "#9b968f" : "#6b6760"), fontStyle: "italic" },
-    { tag: [t.keyword, t.operatorKeyword, t.modifier], color: c("--purple-300", "#7652c2") },
+    { tag: [t.keyword, t.operatorKeyword, t.modifier], color: c("--purple-700", "#7652c2") },
     { tag: [t.string, t.special(t.string)], color: c("--green-700", "#25754b") },
-    { tag: [t.number, t.bool, t.null], color: c("--orange-300", "#c0612b") },
+    { tag: [t.number, t.bool, t.null], color: c("--orange-700", "#c0612b") },
     { tag: [t.function(t.variableName), t.function(t.propertyName)], color: c("--blue-600", "#4b5bd6") },
-    { tag: [t.typeName, t.className, t.namespace], color: c("--teal-300", "#1e8580") },
+    { tag: [t.typeName, t.className, t.namespace], color: c("--teal-700", "#1e8580") },
     { tag: t.definition(t.variableName), color: c("--ink", "#1c1b19") },
     { tag: [t.propertyName, t.attributeName], color: c("--ink-2", "#57544e") },
     { tag: [t.punctuation, t.bracket], color: c("--ink-3", "#6b6760") },
@@ -117,13 +124,14 @@ function themeVars(theme: "light" | "dark"): Record<string, Record<string, strin
   };
 }
 
-export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, onSave }) => {
+export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, onSave, onChord }) => {
   let view: EditorView | null = null;
   const languageConf = new Compartment();
   const themeConf = new Compartment();
   const readOnlyConf = new Compartment();
   const changeCbs: ((v: string, docChanged: boolean) => void)[] = [];
   const cellCbs: ((id: string | null) => void)[] = [];
+  const caretCbs: ((pos: number) => void)[] = [];
   /** True while we are replacing the document ourselves. A programmatic write is not an edit: if it
    *  were reported as one, opening a file would immediately show "unsaved". */
   let silent = false;
@@ -148,7 +156,13 @@ export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, o
       // ⌘S is the app's, not the browser's: the editor must never show "Save page?".
       { key: "Mod-s", preventDefault: true, run: () => { onSave?.(); return true; } },
       { key: "Mod-/", preventDefault: true, run: toggleComment },
-      ...completionKeymap, ...searchKeymap, ...historyKeymap, ...foldKeymap,
+      { key: "Shift-Enter", preventDefault: true, run: () => onChord?.("run-next") ?? false },
+      { key: "Mod-Enter", preventDefault: true, run: () => onChord?.("run-stay") ?? false },
+      { key: "Alt-Enter", preventDefault: true, run: () => onChord?.("run-insert") ?? false },
+      ...completionKeymap,
+      // After completionKeymap on purpose: Esc closes an open completion list first.
+      { key: "Escape", run: () => onChord?.("escape") ?? false },
+      ...searchKeymap, ...historyKeymap, ...foldKeymap,
       ...defaultKeymap, indentWithTab,
     ]),
     readOnlyConf.of(EditorState.readOnly.of(readOnly)),
@@ -158,6 +172,10 @@ export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, o
       if (u.docChanged && !silent) {
         const v = u.state.doc.toString();
         for (const cb of changeCbs) cb(v, true);
+      }
+      if ((u.selectionSet || u.docChanged) && !silent) {
+        const pos = u.state.selection.main.head;
+        for (const cb of caretCbs) cb(pos);
       }
     }),
     EditorView.domEventHandlers({
@@ -180,7 +198,11 @@ export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, o
       if (!view) return;
       silent = true;
       try {
-        view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: next } });
+        // Replace only what differs. A whole-document replace collapses the caret to the start and
+        // scrolls the cell; a minimal change lets CodeMirror map the caret and selection through it,
+        // so an outside edit elsewhere in the cell leaves the user exactly where they were.
+        const change = minimalChange(view.state.doc.toString(), next);
+        if (change) view.dispatch({ changes: change });
       } finally {
         silent = false;
       }
@@ -198,11 +220,15 @@ export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, o
         view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
       }
     },
+    getCaret: () => view?.state.selection.main.head ?? 0,
+    onCaret(cb) { caretCbs.push(cb); },
+    blur() { view?.contentDOM.blur(); },
     destroy() {
       view?.destroy();
       view = null;
       changeCbs.length = 0;
       cellCbs.length = 0;
+      caretCbs.length = 0;
     },
   } satisfies EditorHost;
 };

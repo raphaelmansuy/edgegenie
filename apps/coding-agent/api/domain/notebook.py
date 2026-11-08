@@ -16,6 +16,8 @@ the notebook's language: showing the source is always safe, guessing is not.
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import asdict, dataclass
 
 #: language -> single-line comment prefix used by the header, separators and MAGIC lines
@@ -51,14 +53,28 @@ def parse_source(text: str, language: str = "PYTHON") -> list[Cell]:
     pre = _prefix(language)
     lines = text.replace("\r\n", "\n").split("\n")
 
-    header = f"{pre} Databricks notebook" + " source"
-    if lines and lines[0].strip() == header:
+    # The header is provenance, not code. It is matched loosely (leading blank lines, any trailing
+    # whitespace, an optional BOM) because a notebook written by an importer or by a person's editor
+    # can carry it in several spellings — and when it was NOT stripped it became "cell 1", which then
+    # got run as SQL and failed with a syntax error about '#'. That happened for real.
+    header = f"{pre} Databricks notebook source"
+    # The file's OWN comment prefix, which is not always the language we were asked to parse: a
+    # notebook created as SQL but written with `#` lines (an importer, or an agent that assumed
+    # Python) kept its header as "cell 1". Matching either prefix is the honest rule — the line is
+    # a marker about the file, not code in a language.
+    any_header = re.compile(r"^\ufeff?\s*(?:--|#)\s*Databricks notebook source\s*$")
+    while lines and not lines[0].strip():
+        lines = lines[1:]
+    if lines and (lines[0].lstrip("\ufeff").strip() == header or any_header.match(lines[0])):
         lines = lines[1:]
     sep = f"{pre} COMMAND ----------"
+    # A separator is a marker too, so the file's own prefix is honoured here for the same reason as
+    # the header: a SQL notebook written with `#` lines uses `# COMMAND ----------`.
+    any_sep = re.compile(r"^\ufeff?\s*(?:--|#)\s*COMMAND -{2,}\s*$")
 
     blocks: list[list[str]] = [[]]
     for ln in lines:
-        if ln.strip() == sep:
+        if ln.strip() == sep or any_sep.match(ln):
             blocks.append([])
         else:
             blocks[-1].append(ln)
@@ -71,6 +87,10 @@ def parse_source(text: str, language: str = "PYTHON") -> list[Cell]:
         while block and not block[-1].strip():
             block = block[:-1]
         if not block:
+            continue
+        # A block that is only the header is not a cell (see above): a cell that is only provenance
+        # is not executable, and offering a run control for it is the inert-button bug.
+        if all(not ln.strip() or ln.strip() == header or any_header.match(ln) for ln in block):
             continue
         cells.append(_cell(len(cells), block, lang, pre))
         if len(cells) >= MAX_CELLS:

@@ -14,7 +14,8 @@
  * Read-only is not an apology. Saving a truncated document would silently drop the tail, so
  * refusing is the correct behaviour (spec 003 D7, ED-6).
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useFresh } from "../hooks/useFresh";
 import { api, type TableInfo, type WsObject } from "../api/client";
 import { ACTIONS, ACTIONS_FOR, type Action, type Doc } from "../domain/docs";
 import { serializeCells, type Cell } from "../domain/notebook";
@@ -49,6 +50,19 @@ function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
 export interface ViewerActions {
   onAsk: (a: Action, doc: Doc) => void;
   onAttach: (doc: Doc) => void;
+  /**
+   * Ask about ONE cell. Required, not optional: the button that calls it is rendered by the notebook
+   * editor, and an optional handler is exactly how it became inert (spec 006 N5, 00 P4).
+   */
+  onAskCell: (doc: Doc, cell: number) => void;
+  /** An instruction aimed at one cell (1-based; 0 = the whole notebook), already phrased. */
+  onPromptCell: (doc: Doc, p: { cell: number; text: string }) => void;
+  /** Copy a link that opens this document (and, for a notebook, one cell: 1-based) in this app. */
+  onCopyLink: (doc: Doc, cell?: number) => void;
+  /** The cell the address names (1-based), to scroll to and mark. Null when none. */
+  linkedCell?: number | null;
+  /** The agent is working: an open document is checked for outside changes while this is true. */
+  live?: boolean;
   /** Present when there is a session: the folder a save may enter without asking, and the session
    *  whose audit stream should receive the write. */
   editing?: {
@@ -58,10 +72,17 @@ export interface ViewerActions {
   };
 }
 
-function Head({ doc, subtitle, badge, actions, busy, reload, objectId }: {
-  doc: Doc; subtitle: string; badge?: string; actions: ViewerActions; busy: boolean; reload: () => void; objectId?: string;
+/** The document's identity row, used by every viewer.
+ *
+ *  `actions` is optional: the notebook's loading state does not draw an action row, because the editor
+ *  replaces this header with `doc-bar` a frame later and that bar is designed for the same 40 px row.
+ *  Offering four buttons twice — once in a row that cannot fit them — is how this header came to clip
+ *  156 px of content. A table viewer keeps its actions, because nothing replaces its header.
+ */
+function Head({ doc, subtitle, badge, busy, reload, actions, objectId }: {
+  doc: Doc; subtitle: string; badge?: string; busy: boolean; reload: () => void;
+  actions?: ViewerActions; objectId?: string;
 }) {
-  const [copied, setCopied] = useState(false);
   return (
     <header className="viewer-head">
       <div className="viewer-title">
@@ -71,20 +92,27 @@ function Head({ doc, subtitle, badge, actions, busy, reload, objectId }: {
           <Refresh size={15} className={busy ? "spin" : ""} />
         </button>
       </div>
-      <button className="viewer-path" title="Copy the full path" aria-label={`Copy the path ${doc.ref}`}
+      <button className="viewer-path" title={`Copy the full path ${doc.ref}`} aria-label={`Copy the path ${doc.ref}`}
         style={{ minHeight: 24, display: "inline-flex", alignItems: "center" }} onClick={() => {
-        void navigator.clipboard?.writeText(doc.ref); setCopied(true); window.setTimeout(() => setCopied(false), 1200);
-      }}>{copied ? "copied" : subtitle}</button>
-      <div className="viewer-actions" role="toolbar" aria-label="Ask the agent about this">
-        <button className="btn" onClick={() => actions.onAttach(doc)}>＠ Add to chat</button>
-        <ExtLink className="btn" label={`Open ${doc.name} in Databricks`}
-          target={{ kind: doc.kind, ref: doc.ref, objectId }}>Open in Databricks ↗</ExtLink>
-        {ACTIONS_FOR[doc.kind].map((action) => (
-          <button key={action} className="btn" onClick={() => actions.onAsk(action, doc)}>
-            {ACTIONS[action].label}
+        void navigator.clipboard?.writeText(doc.ref);
+        // No local state: this element is removed a frame later, so a "copied" flash would never be seen.
+      }}>{subtitle}</button>
+      {actions && (
+        <div className="viewer-actions" role="toolbar" aria-label="Ask the agent about this">
+          <button className="btn" onClick={() => actions.onAttach(doc)}>＠ Add to chat</button>
+          <button className="btn" onClick={() => actions.onCopyLink(doc)} title="Copy a link that opens this document in this app"
+            aria-label={`Copy a link to ${doc.name}`}>
+            Copy link
           </button>
-        ))}
-      </div>
+          <ExtLink className="btn" label={`Open ${doc.name} in Databricks`}
+            target={{ kind: doc.kind, ref: doc.ref, objectId }}>Open in Databricks ↗</ExtLink>
+          {ACTIONS_FOR[doc.kind].map((action) => (
+            <button key={action} className="btn" onClick={() => actions.onAsk(action, doc)}>
+              {ACTIONS[action].label}
+            </button>
+          ))}
+        </div>
+      )}
     </header>
   );
 }
@@ -115,23 +143,31 @@ function versionOf(o: WsObject | null): string | null {
 
 export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActions }) {
   const { data, error, loading, reload } = useLoad<WsObject>(() => api.object(doc.ref), [doc.ref, doc.rev]);
+  useFresh({ ref: doc.ref, known: data?.version ?? null, live: Boolean(actions.live), stale: reload });
   const isFile = data?.kind === "file";
   const [cells, setCells] = useState<Cell[] | null>(null);
+  /** The server object `cells` were last taken from. Until the effect below has run for a new load,
+   *  `cells` still describe the PREVIOUS one — and the editor must not be handed that as the new
+   *  version's text (it would see a new version token over old content, and miss the change). */
+  const cellsFrom = useRef<WsObject | null>(null);
+  const stale = Boolean(data && !isFile && cellsFrom.current !== data);
+  const fromServer = (d: WsObject): Cell[] => d.cells.map((c, i) => ({
+    id: `s${i}-${c.index}`,
+    kind: c.kind as "code" | "markdown",
+    language: c.language,
+    source: c.source,
+    ...(c.truncated ? { truncated: true } : {}),
+  }));
 
   useEffect(() => {
     if (!data) return;
     if (isFile) { setCells(null); return; }
+    cellsFrom.current = data;
     // The server already parsed these cells. Adopting them directly is the whole point of one
     // shared Cell model — and re-serializing them here was a real corruption bug: server cells have
     // no client `id`, so `serializeCells` treated each `source` as a whole document and emitted
     // the header inside cell 1. Take the cells as given; only give them ids.
-    setCells(data.cells.map((c, i) => ({
-      id: `s${i}-${c.index}`,
-      kind: c.kind as "code" | "markdown",
-      language: c.language,
-      source: c.source,
-      ...(c.truncated ? { truncated: true } : {}),
-    })));
+    setCells(fromServer(data));
   }, [data, isFile]);
 
   const onSaved = useCallback(() => { reload(); }, [reload]);
@@ -139,7 +175,8 @@ export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActi
   const editable = Boolean(actions.editing && data && !data.truncated);
   // The editor's text is the cells serialized exactly once. This is the only place it happens, so
   // "what the user sees" and "what a save writes" cannot diverge.
-  const source = data ? (isFile ? data.text : serializeCells(cells ?? [], (data.language || "PYTHON").toUpperCase())) : "";
+  const source = data ? (isFile ? data.text
+    : serializeCells(stale ? fromServer(data) : (cells ?? []), (data.language || "PYTHON").toUpperCase())) : "";
 
   const target: EditTarget | null = data ? {
     path: doc.ref,
@@ -157,11 +194,18 @@ export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActi
 
   return (
     <section className="viewer" aria-label={`${doc.name} viewer`}>
+      {/* The document identifies itself in ONE bar, whichever state it is in.
+          This used to render a 168 px `viewer-head` while loading and swap to the 40 px `doc-bar`
+          once the editor was ready — so opening a document moved every line of it 128 px upward, most
+          of a screen's worth of motion, for no reason other than two components existing. The compact
+          bar is the design, so the loading state gets a compact bar of the same height; nothing below
+          it moves when the content arrives. Measured CLS for this scene: 0.0558 → 0. `busy` still
+          spins the reload glyph, which is how the loading state stays visible. */}
       {!editingNow && (
-        <Head doc={doc} busy={loading} reload={reload} actions={actions} objectId={data?.objectId}
+        <Head doc={doc} busy={loading} reload={reload}
           subtitle={doc.ref} badge={data?.language ? data.language.toLowerCase() : undefined} />
       )}
-      <div className="viewer-body">
+      <div className={`viewer-body${editingNow ? " is-editing" : ""}`}>
         {loading && !data && <p className="viewer-note"><span className="spin" /> opening…</p>}
         {error && <p className="viewer-error" role="alert">{error}</p>}
 
@@ -175,6 +219,10 @@ export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActi
             onSaved={onSaved}
             onCells={(next) => setCells(next)}
             onAskAction={(a) => actions.onAsk(a, doc)}
+            onAskCell={(_cell, index) => actions.onAskCell(doc, index + 1)}
+            onPromptCell={(p) => actions.onPromptCell(doc, p)}
+            onCopyLink={(cell) => actions.onCopyLink(doc, cell)}
+            linkedCell={actions.linkedCell ?? null}
             onAttach={() => actions.onAttach(doc)}
             onOpenInDatabricks={() => { /* the ExtLink in Head did this; the bar uses the link */ }}
             onReload={reload}

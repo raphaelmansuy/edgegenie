@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import logging
 import os
@@ -23,6 +24,8 @@ from ..domain.redact import token_scopes
 from ..domain.workspace_ops import child_path, is_protected
 from ..domain.session import DomainError, Session
 from ..services import context as ctx_service
+from ..services.pyrun_service import PythonRuns
+from .llm_admin import can_configure
 from ..services.orchestrator import Orchestrator
 
 log = logging.getLogger("app.api")
@@ -122,7 +125,8 @@ async def whoami(request: Request) -> dict:
                           "orgId": os.environ.get("DATABRICKS_WORKSPACE_ID", "")},
             # What the signed-in token is allowed to do through this app. Names only, never the token.
             "tokenScopes": token_scopes(token),
-            "demo": request.app.state.settings.agent_mode == "fake"}
+            "demo": request.app.state.settings.agent_mode == "fake",
+            "pythonRun": python_run_policy(request)}
 
 
 @router.get("/models")
@@ -177,6 +181,9 @@ async def create_session(request: Request, body: CreateSession) -> dict:
         # Log it: in a deployed app the only diagnostic channel is stdout.
         log.exception("session provisioning failed")
         raise HTTPException(503, f"the agent did not start: {exc}") from exc
+    # Whether the agent may run notebooks (as the app) is decided once, by who this user is.
+    if python_run_policy(request)["enabled"]:
+        request.app.state.run_bridge.grant(s.id)
     return _session_json(s)
 
 
@@ -350,7 +357,23 @@ def _browser(request: Request):
 def _user_token(request: Request) -> str | None:
     """The signed-in user's token, forwarded by the Databricks proxy. Never stored."""
     headers = {k.lower(): v for k, v in request.headers.items()}
-    return headers.get("x-forwarded-access-token") or getattr(request.app.state, "dev_token", None)
+    forwarded = headers.get("x-forwarded-access-token")
+    if forwarded:
+        return forwarded
+    # Local development: the configured token, re-minted when it is close to expiring. A deployed app
+    # never takes this path (the proxy always forwards one), so this cannot affect production.
+    return _dev_token(request.app.state)
+
+
+def _dev_token(state) -> str | None:
+    """The development token, refreshed shortly before it expires.
+
+    The refresher itself lives in the Databricks adapter, because it shells out to a vendor command and
+    the core must not name one; this is only the one-line seam the routers call.
+    """
+    from ..adapters.databricks.devtoken import refresh_if_stale
+
+    return refresh_if_stale(state, normalize_host(os.environ.get("DATABRICKS_HOST", "")))
 
 
 @router.get("/workspace")
@@ -374,6 +397,10 @@ async def workspace_roots(request: Request) -> dict:
 
     A root that does not exist for this user is not shown: an entry that opens onto nothing is
     worse than an absent entry. The user's own home is always first when it exists.
+
+    The four listings run **concurrently**. Sequentially this endpoint took 3.6 s on a real
+    workspace — four round trips before the tree can draw its first row, paid on every page load.
+    Nothing here depends on anything else, so waiting for them in turn was pure latency.
     """
     home = _home(request)
     repo_owner = home.removeprefix("/Users/").split("@")[0].replace(".", "_")
@@ -383,14 +410,19 @@ async def workspace_roots(request: Request) -> dict:
         {"path": f"/Repos/{repo_owner}", "name": "Repos", "kind": "repo"},
         {"path": "/Repos", "name": "All repos", "kind": "repo"},
     ]
+    token = _user_token(request)
+    browser = _browser(request)
+    listed = await asyncio.gather(
+        *(browser.list_dir(c["path"], token) for c in candidates), return_exceptions=True)
+
     out = []
-    for c in candidates:
-        try:
-            children = await _browser(request).list_dir(c["path"], _user_token(request))
-        except (PermissionError, RuntimeError):
+    for candidate, result in zip(candidates, listed, strict=True):
+        if isinstance(result, BaseException):
+            # A root this user cannot read is not shown — but the failure of one must not hide the
+            # others, so it is skipped rather than raised.
             continue
-        if children or c["path"] == home:
-            out.append({**c, "childCount": len(children)})
+        if result or candidate["path"] == home:
+            out.append({**candidate, "childCount": len(result)})
     return {"roots": out or [{"path": "/", "name": "Workspace", "kind": "directory"}]}
 
 
@@ -424,6 +456,21 @@ async def workspace_object(request: Request, path: str) -> dict:
     with _dbx_errors("workspace read"):
         obj = await _browser(request).read(_ws_path(path), _user_token(request))
     return obj.to_dict()
+
+
+@router.get("/workspace/version")
+async def workspace_version(request: Request, path: str) -> dict:
+    """Has this object changed? One cheap `get-status`, no content.
+
+    The editor asks while the agent works, when the window regains focus and when a turn ends, so an
+    object changed by anyone (the agent, another tab, the Databricks UI) is brought up to date even
+    when no tool event named it. The token is the one `/workspace/object` returns, so the two are
+    directly comparable.
+    """
+    with _dbx_errors("workspace status"):
+        status = await _browser(request).status(_ws_path(path), _user_token(request))
+    v = version.of(status)
+    return {"path": path, "version": v.token if v else "", "modifiedAt": status.get("modified_at", 0)}
 
 
 @router.get("/workspace/search")
@@ -808,6 +855,131 @@ async def catalog_table(request: Request, name: str) -> dict:
 async def catalog_preview(request: Request, name: str) -> dict:
     with _dbx_errors("table preview"):
         return await request.app.state.catalog.preview(name, _user_token(request))
+
+
+class RunCell(BaseModel):
+    """A cell to execute. The text is the cell's source, which the client already holds."""
+
+    language: str = Field(default="sql", max_length=24)
+    source: str = Field(min_length=1, max_length=200_000)
+
+
+@router.post("/notebook/run-cell")
+async def notebook_run_cell(request: Request, body: RunCell) -> dict:
+    """Run one cell and return its result (spec 006 X1–X4).
+
+    Deliberately narrow: **SQL only**, on a SQL warehouse, as the signed-in user. A Python cell needs
+    a cluster and a runtime this app does not own, and offering a control that cannot run would be the
+    inert-button bug again (00 P4, NB-2). The refusal is a *state with a reason*, not an error, so the
+    UI can say what would work instead.
+    """
+    from ..domain import cellrun
+
+    ok, why = cellrun.is_runnable(body.language, body.source)
+    if not ok:
+        return cellrun.refused(why).to_dict()
+    clock = cellrun.Clock()
+    started = clock.start()
+    try:
+        payload, warehouse = await request.app.state.catalog.run_sql(
+            body.source, _user_token(request), limit=cellrun.MAX_ROWS,
+            wait_seconds=cellrun.MAX_WAIT_SECONDS)
+    except PermissionError as exc:
+        return cellrun.refused(str(exc)).to_dict()
+    except LookupError as exc:
+        return cellrun.refused(str(exc)).to_dict()
+    except RuntimeError as exc:
+        log.warning("cell run failed: %s", exc)
+        return cellrun.RunResult(state=cellrun.RunState.FAILED,
+                                 error=str(exc)[:400]).to_dict()
+    result = cellrun.result_from_statement(payload, waited=round(clock.since(started), 2))
+    # The warehouse is the adapter's knowledge, not the domain's: attach it here rather than teaching
+    # `result_from_statement` about a second parameter it would only ever pass through.
+    return dataclasses.replace(result, warehouse=warehouse).to_dict()
+
+
+# -- Python cells, on serverless compute, as the app -------------------------
+def python_run_policy(request: Request) -> dict:
+    """May this caller run Python cells, and if not, why not (in words they can act on).
+
+    The run is as the app's service principal, not as the caller, so it is an administrator's
+    capability: anyone allowed to run code there could read whatever the app can.
+    """
+    if not request.app.state.settings.python_run:
+        return {"enabled": False, "reason": "Python cells are switched off for this app (APP_PYTHON_RUN=false)."}
+    if not can_configure(request):
+        return {"enabled": False,
+                "reason": "Python cells run as the app's service principal, not as you, so only the app's "
+                          "administrators can run them. Ask the agent to run it, or ask an administrator."}
+    return {"enabled": True, "reason": "Runs on serverless compute as the app, not as you."}
+
+
+class PyCellIn(BaseModel):
+    language: str = Field(default="python", max_length=24)
+    source: str = Field(default="", max_length=200_000)
+
+
+class PythonRunIn(BaseModel):
+    """The notebook's cells as the client holds them, and which one(s) to run.
+
+    `show` are the cells whose output is wanted (0-based); every Python cell above the last of them runs
+    too, so it has the variables the cells above it made. Empty `show` means every Python cell.
+    """
+
+    cells: list[PyCellIn] = Field(max_length=200)
+    show: list[int] = Field(default_factory=list, max_length=200)
+
+
+def _pyruns(request: Request) -> PythonRuns:
+    policy = python_run_policy(request)
+    if not policy["enabled"]:
+        raise HTTPException(403, policy["reason"])
+    return request.app.state.pyruns
+
+
+def _who_ran(request: Request) -> str:
+    return (request.headers.get("x-forwarded-email") or request.state.user_id).strip().lower()
+
+
+@router.post("/notebook/python-runs")
+async def python_run_start(request: Request, body: PythonRunIn) -> dict:
+    """Start Python cells on serverless compute; returns a handle to poll. Administrators only."""
+    from ..domain import pyrun
+
+    runs = _pyruns(request)
+    cells = [pyrun.PyCell(i, c.language, c.source) for i, c in enumerate(body.cells)]
+    show = set(body.show) or None
+    if show is not None and any(i < 0 or i >= len(cells) for i in show):
+        raise HTTPException(422, "show names a cell that is not in the notebook")
+    upto = max(show) if show else None
+    try:
+        started = await runs.start(_who_ran(request), cells, upto=upto, show=show)
+    except Exception as exc:  # noqa: BLE001 - the platform's own words are the useful part
+        log.warning("python run could not start: %s", exc)
+        raise HTTPException(502, f"could not start the run: {str(exc)[:400]}") from exc
+    return started
+
+
+@router.get("/notebook/python-runs/{handle}")
+async def python_run_poll(request: Request, handle: str) -> dict:
+    runs = _pyruns(request)
+    try:
+        return await runs.poll(_who_ran(request), handle)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        log.warning("python run poll failed: %s", exc)
+        raise HTTPException(502, f"could not read the run: {str(exc)[:400]}") from exc
+
+
+@router.delete("/notebook/python-runs/{handle}")
+async def python_run_cancel(request: Request, handle: str) -> dict:
+    runs = _pyruns(request)
+    try:
+        await runs.cancel(_who_ran(request), handle)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"cancelled": True}
 
 
 # -- misc --------------------------------------------------------------------

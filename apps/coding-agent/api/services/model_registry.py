@@ -19,6 +19,7 @@ from ..adapters.llm.store.memory import MemoryRegistryStore
 from ..adapters.llm.store.seed_store import SeedRegistryStore
 from ..adapters.llm.store.seed import load as load_seed
 from ..adapters.llm.vault import EnvVault, MemoryVault, dev_kek_from_env
+from ..adapters.llm.vault.layered import LayeredVault
 from ..config import Settings
 from ..domain.llm import (
     CredentialKind,
@@ -75,6 +76,69 @@ async def build_registry(cfg: Settings, *, host: str = "") -> Registry:
                     allow_external=cfg.llm_allow_external, health=health)
 
 
+def has_database(cfg: Settings) -> bool:
+    """A database is configured, by Lakebase endpoint or by DSN. Says nothing about reachability."""
+    return bool(cfg.llm_pg_endpoint or cfg.llm_database_url)
+
+
+async def connect_database(cfg: Settings):
+    """Open the Postgres registry. Lakebase gets a per-connection OAuth token; a DSN is used as given."""
+    import asyncio
+
+    from ..adapters.llm.store.pg import PgRegistryStore
+
+    path = cfg.llm_seed_path or None
+    if cfg.llm_pg_endpoint:
+        from ..adapters.llm.store import lakebase
+
+        target = await asyncio.to_thread(lakebase.resolve_target, cfg.llm_pg_endpoint,
+                                         cfg.llm_pg_database, cfg.llm_pg_user)
+        source = lakebase.TokenSource(cfg.llm_pg_endpoint)
+        store = await PgRegistryStore.connect(
+            target.conninfo, seed_path=path, connection_class=lakebase.connection_class(source),
+            max_lifetime=lakebase.CONNECTION_MAX_LIFETIME)
+        store.location = f"{target.host}/{target.database}"
+        return store
+    store = await PgRegistryStore.connect(cfg.llm_database_url, seed_path=path)
+    store.location = "postgres"
+    return store
+
+
+async def adopt_database(registry: Registry, cfg: Settings) -> bool:
+    """Move a running registry from the seed onto the database, once it is reachable.
+
+    The app starts synchronously (so importing it never blocks on a network) and serves the seed
+    catalogue meanwhile, marked degraded. This swaps the storage under the services that already hold
+    references to it. Returns False, and leaves the app serving the seed, when the database is down.
+    """
+    if cfg.agent_mode == "fake" or not has_database(cfg) or registry.source == "database":
+        return registry.source == "database"
+    from ..adapters.llm.vault.pg import PgVault
+
+    try:
+        store = await connect_database(cfg)
+    except Exception as exc:  # noqa: BLE001 - an unreachable database is a state, not a crash
+        log.warning("the model database is not reachable yet (%s: %s)", type(exc).__name__, exc)
+        return False
+    kek = _configured_kek(cfg)
+    vault = LayeredVault(PgVault(store, kek), EnvVault()) if kek.usable else EnvVault()
+    # First boot on a database: the deployment's default model becomes the stored default. From then
+    # on the stored choice (made in the settings screen) wins, so a redeploy never undoes it.
+    if cfg.default_model and not await store.get_setting("default_model"):
+        spec = await store.find(cfg.default_model)
+        if spec is not None and spec.enabled:
+            await store.set_default_model(spec.id.value, "deployment")
+    registry.store, registry.vault = store, vault
+    registry.catalogue.rebind(store, vault)
+    registry.credentials.rebind(vault)
+    if registry.health is not None:
+        registry.health.rebind(store)
+    registry.default_model = getattr(store, "default_model", "") or registry.default_model
+    log.info("llm registry: now on the database (%s), vault=%s", getattr(store, "location", "?"),
+             getattr(vault, "mode", "?"))
+    return True
+
+
 async def _store_for(cfg: Settings):
     """Database when a DSN is set and reachable; else the seed — which is a first-class citizen (C-5).
 
@@ -84,13 +148,10 @@ async def _store_for(cfg: Settings):
     path = cfg.llm_seed_path or None
     if cfg.agent_mode == "fake":
         return demo_store(cfg)
-    if not cfg.llm_database_url:
+    if not has_database(cfg):
         return await SeedRegistryStore.open(path=path, source="seed")
     try:
-        from ..adapters.llm.store.pg import PgRegistryStore
-
-        store = await PgRegistryStore.connect(cfg.llm_database_url, seed_path=path)
-        return store
+        return await connect_database(cfg)
     except Exception as exc:  # noqa: BLE001 - a database we cannot reach is a state, not a crash
         log.warning("the model database is unreachable (%s); serving the seed catalogue", exc)
         degraded = await SeedRegistryStore.open(path=path, source="degraded")
@@ -148,7 +209,7 @@ def _vault_for(cfg: Settings):
     """Envelope vault when a KEK exists; env-only vault otherwise, with a visible mode."""
     kek = _configured_kek(cfg)
     if kek.usable:
-        return MemoryVault(kek)
+        return LayeredVault(MemoryVault(kek), EnvVault())
     if cfg.production:
         log.warning("no usable KEK in production: keys cannot be saved (R-5)")
     return EnvVault()
@@ -295,17 +356,17 @@ def build_registry_sync(cfg: Settings) -> Registry:
     if cfg.agent_mode == "fake":
         store = demo_store(cfg)
     else:
-        store = SeedRegistryStore(source="degraded" if cfg.llm_database_url else "seed",
+        store = SeedRegistryStore(source="degraded" if has_database(cfg) else "seed",
                                   path=cfg.llm_seed_path or None)
         # The seed file is small and local, so loading it inline keeps boot deterministic. A
         # configured DSN is *marked* degraded until the async lifespan upgrades it, which is honest
         # about the state rather than pretending the database was reached.
         _load_seed_inline(store)
-        if cfg.llm_database_url:
+        if has_database(cfg):
             store.mark_all_unknown("the model database has not been reached yet")
 
     kek = _configured_kek(cfg)
-    vault = MemoryVault(kek) if kek.usable else EnvVault()
+    vault = LayeredVault(MemoryVault(kek), EnvVault()) if kek.usable else EnvVault()
 
     discovery = DatabricksDiscovery(host, lambda: None,
                                     ttl=float(cfg.llm_discovery_seconds)) if host else None

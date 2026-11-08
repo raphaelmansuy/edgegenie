@@ -34,6 +34,9 @@ WORKSPACE_TOKEN_ENV = "DATABRICKS_TOKEN"
 class CredentialService:
     """`ref -> Secret`, with the scope check. Caches within one call, never across turns."""
 
+    def rebind(self, vault) -> None:
+        self._vault = vault
+
     def __init__(self, vault, *, allow_env: bool = True) -> None:
         self._vault = vault
         self._allow_env = allow_env

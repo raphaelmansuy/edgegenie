@@ -13,18 +13,24 @@ interface Props {
   open: boolean;
   onOpen: () => void;
   railVisible: boolean;
+  /** Whether the CONVERSATION is on screen. It was missing from this menu entirely, so a user who
+   *  hid the assistant and reached for the layout menu — the obvious place — found no way back. */
+  dockVisible: boolean;
   inspectorVisible: boolean;
-  /** False when there is no session: the inspector has nothing to show, so its item is unavailable. */
+  /** Kept as a prop for callers that may need to say why, but no longer gates the item: the
+   *  inspector always has something to show (the fence, the tools, the audit log), and a disabled
+   *  control with no alternative is how a panel becomes unrecoverable. */
   inspectorAvailable: boolean;
   onToggleRail: () => void;
+  onToggleDock: () => void;
   onToggleInspector: () => void;
   onReset: () => void;
   onKeys: () => void;
 }
 
 export const LayoutMenu = memo(function LayoutMenu({
-  open, onOpen, railVisible, inspectorVisible, inspectorAvailable,
-  onToggleRail, onToggleInspector, onReset, onKeys,
+  open, onOpen, railVisible, dockVisible, inspectorVisible, inspectorAvailable,
+  onToggleRail, onToggleDock, onToggleInspector, onReset, onKeys,
 }: Props) {
   return (
     <div className="menu-wrap">
@@ -37,6 +43,10 @@ export const LayoutMenu = memo(function LayoutMenu({
           <button role="menuitemcheckbox" aria-checked={railVisible} onClick={onToggleRail}>
             <span className="menu-tick" aria-hidden>{railVisible && <Check size={13} />}</span> Navigator
             <kbd>{display("mod+b")}</kbd>
+          </button>
+          <button role="menuitemcheckbox" aria-checked={dockVisible} onClick={onToggleDock}>
+            <span className="menu-tick" aria-hidden>{dockVisible && <Check size={13} />}</span> Assistant
+            <kbd>{display("mod+j")}</kbd>
           </button>
           {/* The tick must describe what is on screen, not what was last asked for. A session-less
               window saves inspector:true by default, so ticking it while rendering nothing is a lie. */}

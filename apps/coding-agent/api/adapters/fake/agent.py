@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from pathlib import Path
 
 SCENARIOS_DIR = Path(__file__).parent / "scenarios"
+#: Matches the orchestrator's FENCE_ENV: the folder a session may write to.
+FENCE_ENV = "APP_WORKSPACE_FOLDER"
 
 
 def load_scenario(name: str) -> dict:
@@ -30,6 +33,43 @@ class ScenarioAgent:
         self.delay = delay
         self._by_session: dict[str, dict] = {}
         self._prompted: dict[str, int] = {}
+        # The working folder this agent was started for. Scenarios name files with the placeholder
+        # `/Users/you/…`, which is not a real path: the app opens what a tool reports, so every demo
+        # turn navigated to `/Users/you/agent_scratch/taxi_hours`, the view 404'd, and the console
+        # filled with a failed request in tests that are otherwise about the UI. Substituting the real
+        # folder keeps each scenario's SHAPE (a notebook under the scratch folder) while making the
+        # path one that exists.
+        # Set by the orchestrator from the session's fenced folder. This is the authoritative answer
+        # to "where do this scenario's files live"; `cwd` is the child's scratch dir, which is not a
+        # workspace path at all.
+        self._root = os.environ.get(FENCE_ENV, "").rstrip("/")
+
+    def _real_path(self, path: str) -> str:
+        """`/Users/you/agent_scratch/x` → `<this deployment's folder>/x`, when we know the folder.
+
+        The placeholder already contains the scratch folder's own name, so the prefix to replace is
+        `/Users/you/agent_scratch/`, not `/Users/you/`: substituting only the latter produced
+        `<folder>/agent_scratch/agent_scratch/taxi_hours`, which is just as missing as the original.
+        """
+        if not self._root:
+            return path
+        if path.startswith("/Users/you/agent_scratch/"):
+            return f"{self._root}/{path[len('/Users/you/agent_scratch/'):]}"
+        if path.startswith("/Users/you/"):
+            return f"{self._root}/{path[len('/Users/you/'):]}"
+        return path
+
+    def _localise(self, updates: list[dict]) -> list[dict]:
+        """Rewrite placeholder paths in a scenario's tool arguments, leaving everything else alone."""
+        if not self._root:
+            return updates
+        out: list[dict] = []
+        for u in updates:
+            raw = u.get("rawInput")
+            if isinstance(raw, dict) and isinstance(raw.get("path"), str):
+                u = {**u, "rawInput": {**raw, "path": self._real_path(raw["path"])}}
+            out.append(u)
+        return out
 
     def scenario_for(self, session_id: str) -> dict:
         if session_id in self._by_session:
@@ -44,6 +84,14 @@ class ScenarioAgent:
         explicit = re.search(r"\[\[scenario:(\w+)\]\]", text)
         if explicit:
             self._by_session[session_id] = load_scenario(explicit.group(1))
+            return
+        # A supervisor nudge ("Audit pass. Re-read the original task…") is not the user choosing a
+        # behaviour: it is the app asking the same session to review itself. Treating it as a fresh
+        # prompt re-picked the default scenario and OVERWROTE the one the user's own words had
+        # selected — so `[[scenario:math]]` typeset a math answer and then reported "Revenue by
+        # pickup hour", and the math e2e failed on a scene whose marker had worked perfectly. Once a
+        # session has a scenario, only another explicit marker may change it.
+        if session_id in self._by_session:
             return
         # Fallback for hand-typed prompts: ordered, most specific first.
         if any(w in text for w in ("document the tables", "inject", "canary", "support ticket")):
@@ -129,7 +177,7 @@ class ScenarioAgent:
             # answer alone, or the transcript shows every tool three times.
             prompted_before = self._prompted.get(sid, 0)
             self._prompted[sid] = prompted_before + 1
-            updates = turn.get("updates", []) if prompted_before == 0 else []
+            updates = self._localise(turn.get("updates", [])) if prompted_before == 0 else []
             for u in updates:
                 notes.append(
                     {

@@ -16,9 +16,13 @@
     "audit:shell": "node scripts/shell-audit.mjs",
     "audit:cls": "node scripts/cls-selftest.mjs && node scripts/cls-audit.mjs && node scripts/cls-stress.mjs",
     "verify:spec-ascii": "node scripts/verify-spec-ascii.mjs ../../../specs/005-llm-models",
-  "verify:spec-005": "node scripts/verify-spec-links.mjs ../../../specs/005-llm-models && node scripts/verify-spec-ascii.mjs ../../../specs/005-llm-models",
-  "verify:spec-links": "node scripts/verify-spec-links.mjs ../../../specs/003-improve-dev-ux-ui",
-    "verify:editor-choice": "node scripts/verify-editor-choice.mjs"
+    "verify:spec-005": "node scripts/verify-spec-links.mjs ../../../specs/005-llm-models && node scripts/verify-spec-ascii.mjs ../../../specs/005-llm-models",
+    "verify:spec-links": "node scripts/verify-spec-links.mjs ../../../specs/003-improve-dev-ux-ui",
+    "verify:editor-choice": "node scripts/verify-editor-choice.mjs",
+    "verify:spec-006": "node scripts/verify-spec-links.mjs ../../../specs/006-databricks && node scripts/verify-spec-ascii.mjs ../../../specs/006-databricks",
+    "e2e:assistant": "node scripts/dock-e2e.mjs",
+    "audit:dock": "node scripts/dock-audit.mjs",
+    "verify:spec-mermaid": "node scripts/verify-spec-mermaid.mjs ../../../specs/006-databricks"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",
@@ -35,6 +39,7 @@
     "@codemirror/view": "^6.43.15",
     "@lezer/highlight": "^1.2.5",
     "codemirror": "^6.0.2",
+    "katex": "^0.19.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zustand": "^5.0.2"

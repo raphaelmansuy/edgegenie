@@ -483,3 +483,18 @@ async def test_demo_agent_picks_its_behaviour_from_the_prompt(tmp_path):
 async def test_scenario_fixtures_are_valid_json():
     for name in ("notebook", "blocked", "injection", "slow", "permission"):
         assert load_scenario(name)["turn"]["answer"]
+
+
+async def test_a_demo_hint_picks_the_scenario_but_is_never_stored(tmp_path):
+    """The start cards send `[[scenario:x]]` to choose a behaviour. Stripping it from the STORED prompt
+    is right; stripping it from the prompt the reference agent receives made every card play the same
+    notebook, so "investigate a number" answered with one. Both halves must hold."""
+    orch = await _orchestrator(tmp_path)
+    s = await orch.create("u", str(tmp_path), "fake/model-a", None)
+    live = orch.get(s.id)
+    await orch.submit(s.id, "Investigate why revenue dropped. [[scenario:blocked]]")
+    await _wait(live, timeout=20)
+    turn = live.state.turns[0]
+    assert "scenario:" not in turn.prompt                     # the user's words are clean
+    # …and the hint still reached the agent, so the blocked behaviour is the one that played.
+    assert turn.status is TurnStatus.BLOCKED

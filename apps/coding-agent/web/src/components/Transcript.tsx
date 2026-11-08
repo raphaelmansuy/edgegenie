@@ -1,25 +1,18 @@
 /** The transcript: turns, thinking, tool cards, evidence, blocked panel. */
 import { createElement, memo, useContext, useState, type ReactNode } from "react";
-import type { Turn } from "../domain/events";
-import { Alert, Check, ChevronDown, ChevronRight, Dot, Mark, Ring, User } from "./Icons";
+import { toolState, type Turn } from "../domain/events";
+import { Alert, Check, ChevronDown, ChevronRight, Dot, Refresh, Ring, User } from "./Icons";
+import { LogoMark } from "./Logo";
 import { touched } from "../domain/docs";
-import { stripEvidence, subject } from "../domain/toolview";
+import { stripEvidence, subject, toolLabel } from "../domain/toolview";
+import { modelTail } from "../domain/models";
 import { OpenDoc } from "./DocContext";
 import { ExtLink } from "./ExtLink";
 import { Chip } from "./Composer";
+import { CopyButton } from "./CopyButton";
 import { Markdown } from "./Markdown";
 
-const FRIENDLY: Record<string, string> = {
-  describe_table: "looked at the table", list_tables: "listed tables", run_sql: "ran SQL",
-  write_notebook: "wrote a notebook", run_notebook: "ran a notebook", read_notebook: "read a notebook",
-  grep_notebook: "searched a notebook", create_job: "created a job", run_job: "ran a job",
-  write_file: "wrote a file", lakebase_create: "created a database", skill: "read a skill",
-};
-
-function label(name: string): string {
-  const plain = name.replace(/^dbxnb_/, "").replace(/^dbx_/, "").replace(/^dbx/, "");
-  return FRIENDLY[plain] ?? plain.replace(/_/g, " ");
-}
+const label = toolLabel;
 
 /** A query result as a real table: alignment, numbers right, one header row. */
 function Grid({ table }: { table: { columns: string[]; rows: string[][]; truncated: boolean } }) {
@@ -46,22 +39,12 @@ export function ToolCard({ name, args, status, seconds, summary, error, table }:
 }) {
   const [open, setOpen] = useState(false);
   const openDoc = useContext(OpenDoc);
-  const hit = touched(name, args);
-  const state = status === "error" ? "error" : status === "completed" ? "completed" : "running";
+  const hit = touched(name, args, summary);
+  const state = toolState(status);
   // Drawn, not typed: a "✓" character sits on the font baseline and never centres in the badge.
   const glyph = state === "error" ? <Alert size={12} /> : state === "completed" ? <Check size={12} /> : null;
   return (
     <div className="tool" data-open={open}>
-      {hit && state === "completed" && (
-        <button className="tool-open" onClick={() => openDoc(hit.doc)}
-          title={`${hit.mutates ? "Open what the agent wrote" : "Open"}: ${hit.doc.ref}`}>
-          {hit.mutates ? "Open result" : "Open"}
-        </button>
-      )}
-      {hit && state === "completed" && (
-        <ExtLink className="tool-open ext" label={`Open ${hit.doc.name} in Databricks`}
-          target={{ kind: hit.doc.kind, ref: hit.doc.ref }}>Databricks ↗</ExtLink>
-      )}
       <button className="tool-row" onClick={() => setOpen((o) => !o)}
         aria-expanded={open} aria-label={`${label(name)} ${state}`}>
         <span className={`icon state-${state}`} aria-hidden>
@@ -72,6 +55,16 @@ export function ToolCard({ name, args, status, seconds, summary, error, table }:
         {seconds !== undefined && <span className="time">{seconds.toFixed(1)}s</span>}
         <span className="chev" aria-hidden>▶</span>
       </button>
+      {hit && state === "completed" && (
+        <div className="tool-actions">
+          <button className="tool-open" onClick={() => openDoc(hit.doc)}
+            title={`${hit.mutates ? "Open what the agent wrote" : "Open"}: ${hit.doc.ref}`}>
+            {hit.mutates ? "Open result" : "Open"}
+          </button>
+          <ExtLink className="tool-open ext" label={`Open ${hit.doc.name} in Databricks`}
+            target={{ kind: hit.doc.kind, ref: hit.doc.ref }}>Databricks ↗</ExtLink>
+        </div>
+      )}
       {table && state === "completed" && <Grid table={table} />}
       {open && (
         <div className="tool-body">
@@ -123,9 +116,30 @@ function Footer({ turn }: { turn: Turn }) {
     u && (u.input || u.output) ? `${tokens(u.output)} out` : "",
     u?.cached ? `${tokens(u.cached)} cached` : "",
   ].filter(Boolean);
-  const word = statusWord[turn.status] ?? turn.status;
-  const label = parts.length ? `${word} · ${parts.join(" · ")}` : word;
-  return <p className={`turn-foot ${turn.status}`}>{label}</p>;
+  // A blocked or failed turn already has a panel that says so. Repeating the word here, in its own
+  // red box, was the same sentence twice; the footer keeps only what the panel does not: the cost.
+  const said = Boolean(turn.blocked);
+  const word = said ? "" : statusWord[turn.status] ?? turn.status;
+  const label = [word, ...parts].filter(Boolean).join(" · ");
+  if (!label) return null;
+  return <p className={`turn-foot ${said ? "" : turn.status}`}>{label}</p>;
+}
+
+/** What a person does with an answer: take it, or ask again. Shown once the turn has ended. */
+function TurnActions({ turn, onRetry }: { turn: Turn; onRetry?: () => void }) {
+  const ended = ["completed", "blocked", "failed", "cancelled", "interrupted"].includes(turn.status);
+  const text = turn.evidence.length ? stripEvidence(turn.answer) : turn.answer;
+  if (!ended || (!text.trim() && !onRetry)) return null;
+  return (
+    <div className="turn-actions" role="group" aria-label="Answer actions">
+      {text.trim() && <CopyButton text={text} label="Copy answer" title="Copy the answer as text" />}
+      {onRetry && (
+        <button type="button" className="copy-btn" onClick={onRetry} title="Ask the same thing again">
+          <Refresh size={12} /> Retry
+        </button>
+      )}
+    </div>
+  );
 }
 
 function Evidence({ turn }: { turn: Turn }) {
@@ -145,7 +159,7 @@ function Evidence({ turn }: { turn: Turn }) {
         <div key={i} className={`evidence-row${r.verified ? "" : " unverified"}`}>
           <span className="tick" aria-hidden>{r.verified ? <Check size={13} /> : <Alert size={13} />}</span>
           <span className="req">{r.requirement || "(unnamed requirement)"}</span>
-          <span className="tool">{r.tool || "no tool"}</span>
+          <span className="ev-tool" title={r.tool || "no tool"}>{r.tool || "no tool"}</span>
         </div>
       ))}
     </section>
@@ -185,7 +199,7 @@ function ToolList({ tools }: { tools: Turn["tools"] }) {
   return (
     <>
       <button className="who tools-head" aria-expanded={open || !many} onClick={() => many && setOpen((o) => !o)}>
-        <span className="avatar agent" aria-hidden><Mark size={11} /></span> Agent
+        <span className="avatar agent" aria-hidden><LogoMark size={12} /></span> Agent
         <time>{tools.length} tool {tools.length === 1 ? "call" : "calls"}{failed ? ", one failed" : ""}</time>
         {many && <span className="chev" aria-hidden>{open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>}
       </button>
@@ -194,12 +208,15 @@ function ToolList({ tools }: { tools: Turn["tools"] }) {
   );
 }
 
+/** The most markdown this surface will parse in one answer. Past it, plain text (see the render). */
+export const MAX_MARKDOWN = 40_000;
+
 const statusWord: Record<string, string> = {
   running: "working", auditing: "checking the work", queued: "queued", completed: "done",
   blocked: "blocked", cancelled: "stopped", failed: "failed", interrupted: "interrupted",
 };
 
-function TurnViewInner({ turn }: { turn: Turn }) {
+function TurnViewInner({ turn, onRetry }: { turn: Turn; onRetry?: () => void }) {
   const streamingNow = turn.status === "running" || turn.status === "auditing";
   const [showThought, setShowThought] = useState(streamingNow);
   const streaming = turn.status === "running" || turn.status === "auditing";
@@ -207,7 +224,7 @@ function TurnViewInner({ turn }: { turn: Turn }) {
     <article className="turn">
       <div className="who">
         <span className="avatar you" aria-hidden><User size={12} /></span> You
-        {turn.model && <span className="chip" style={{ marginLeft: 6 }}>{turn.model.split("/").pop()}</span>}
+        {turn.model && <span className="chip" style={{ marginLeft: 6 }} title={turn.model}>{modelTail(turn.model)}</span>}
         <time>{statusWord[turn.status] ?? turn.status}</time>
       </div>
       <div className="prompt">
@@ -237,17 +254,30 @@ function TurnViewInner({ turn }: { turn: Turn }) {
               which the audit flagged on every turn. This also makes the transcript navigable by
               heading in a screen reader, which is the point of headings in a long log. */}
           <h2 className="sr-only">The agent's answer</h2>
-          {/* While a long answer streams, plain text: re-parsing markdown on every frame is what
-              made the tab unresponsive. The finished answer is rendered properly. */}
-          {streaming && turn.answer.length > 4000
-            ? <div className="answer streaming-plain">{turn.answer}</div>
-            : <Markdown text={turn.evidence.length ? stripEvidence(turn.answer) : turn.answer} />}
+          {/* Markdown is parsed only up to a bound. Streaming a long answer as plain text was already
+              the rule; a FINISHED 200 000-character answer was still handed to the markdown parser
+              whole, and that is enough DOM to crash the tab — which is exactly what happened while
+              measuring (the page died mid-run, taking an e2e with it). Past the bound the answer is
+              shown as text, with a line saying so, because a rendered answer nobody can read the end
+              of is worse than an honest one. */}
+          {turn.answer.length > MAX_MARKDOWN
+            ? (
+              <>
+                <div className="answer streaming-plain">{turn.answer}</div>
+                <p className="answer-clipped" role="note">
+                  This answer is {Math.round(turn.answer.length / 1000)}k characters, so it is shown as
+                  plain text rather than formatted.
+                </p>
+              </>
+            )
+            : <Markdown text={turn.evidence.length ? stripEvidence(turn.answer) : turn.answer} streaming={streaming} />}
           {streaming && <span className="caret" aria-hidden />}
         </section>
       )}
       {turn.status === "auditing" && !turn.answer && <p style={{ color: "var(--ink-3)" }}>Checking the work…</p>}
       <Evidence turn={turn} />
       <Blocked turn={turn} />
+      <TurnActions turn={turn} onRetry={onRetry} />
       <Footer turn={turn} />
     </article>
   );

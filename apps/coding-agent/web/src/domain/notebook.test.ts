@@ -136,3 +136,26 @@ describe("cell operations", () => {
     expect(checkCells(after)).toEqual([]);
   });
 });
+
+describe("a block that is only the notebook header is not a cell", () => {
+  it("drops it, so cell 1 is the first real statement", () => {
+    const src = [
+      "-- Databricks notebook source",
+      "-- COMMAND ----------",
+      "select 1 as one",
+    ].join("\n");
+    const cells = parseCells(src, "SQL");
+    expect(cells).toHaveLength(1);
+    expect(cells[0].source.trim()).toBe("select 1 as one");
+  });
+  it("keeps a cell that has a header comment among real code", () => {
+    const src = [
+      "-- Databricks notebook source",
+      "-- Databricks notebook source",
+      "select 2",
+    ].join("\n");
+    const cells = parseCells(src, "SQL");
+    expect(cells).toHaveLength(1);
+    expect(cells[0].source).toContain("select 2");
+  });
+});

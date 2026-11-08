@@ -16,6 +16,17 @@ def _cells_text(obj) -> str:
 
 async def _one(a: Attachment, ws, cat, token: str | None) -> Resolved:
     try:
+        if a.kind == "cell":
+            from ..domain.binding import BindingError, cell_text, content_sha, parse_cell_ref, render_cell
+
+            path, index = parse_cell_ref(a.ref)
+            obj = await ws.read(path, token)
+            if obj.kind != "notebook":
+                raise BindingError(f"{path} is not a notebook, so it has no cell {index}")
+            source, language = cell_text(obj.cells, index)
+            sha = content_sha(source)
+            text = render_cell(path, index, source, language, sha=sha, seen_sha=a.sha)
+            return Resolved(a, text, f"one cell of {len(obj.cells)}; read the others with the notebook tool")
         if a.kind in ("notebook", "file"):
             obj = await ws.read(a.ref, token)
             text = _cells_text(obj) if obj.kind == "notebook" else obj.text

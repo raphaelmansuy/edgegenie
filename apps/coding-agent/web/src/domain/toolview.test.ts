@@ -30,4 +30,22 @@ describe("stripEvidence", () => {
     expect(stripEvidence("Done. No table here.")).toBe("Done. No table here.");
     expect(stripEvidence("")).toBe("");
   });
+  it.each([
+    ["## Evidence", true], ["### **EVIDENCE**", true], ["  evidence  ", true], ["**Evidence:**", false],
+    ["Evidence of rain", false], ["##### Evidence", false], ["the evidence", false], ["", false],
+  ])("heading %j -> %s", (line, yes) => {
+    expect(stripEvidence(`Answer.\n${line}\n| a |`)).toBe(yes ? "Answer." : `Answer.\n${line}\n| a |`);
+  });
+
+  // Regression: `^\s*#{0,4}\s*\**\s*EVIDENCE\s*\**\s*$` backtracked cubically. 500 blank lines took
+  // 65 s and froze the tab ("Page Unresponsive") while a model padded its answer. Linear now.
+  it.each([
+    ["blank lines", "\n"], ["spaces", " "], ["asterisks", "*"], ["blank lines with spaces", " \n"],
+  ])("stays fast on a very long run of %s", (_n, unit) => {
+    const text = `Answer.\n${unit.repeat(200_000)}tail`;
+    const t0 = performance.now();
+    expect(stripEvidence(text)).toBe(text);
+    expect(stripEvidence(`${text}\nEVIDENCE\n| x |`)).toBe(text.trimEnd());
+    expect(performance.now() - t0).toBeLessThan(500);
+  });
 });

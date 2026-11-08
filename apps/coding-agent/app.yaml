@@ -14,7 +14,7 @@ env:
   - name: APP_REQUIRE_FORWARDED_USER
     value: "true"
   - name: APP_DEFAULT_MODEL
-    value: databricks/databricks-llama-4-maverick
+    value: google_vertex/google/gemini-3.8-flash
   - name: APP_MAX_CONCURRENT_AGENTS
     value: "4"
   # External models (spec 005). Off by default; on here because a provider key is attached below.
@@ -23,6 +23,16 @@ env:
     value: production
   - name: APP_LLM_ALLOW_EXTERNAL
     value: "true"
+  # Model configuration lives in Lakebase (managed Postgres), reached with the app's own service
+  # principal. `APP_LLM_ADMINS` are the people who may change the catalogue for everyone.
+  - name: APP_LLM_PG_ENDPOINT
+    value: projects/coding-agent-llm/branches/production/endpoints/primary
+  - name: APP_LLM_ADMINS
+    value: raphael.mansuy@gmail.com
+  # The key-encryption key for stored provider keys. It is an app RESOURCE (a Databricks secret), so a
+  # dump of the database is not a dump of the keys.
+  - name: APP_LLM_KEK
+    valueFrom: llm-kek
   # The Vertex service-account key arrives as an app RESOURCE (a Databricks secret), never as text
   # in this file. `LLM_VERTEX_PROJECT` names the project a key bills to when the key omits it.
   - name: LLM_VERTEX_KEY

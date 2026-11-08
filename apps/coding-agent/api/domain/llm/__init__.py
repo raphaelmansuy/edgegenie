@@ -7,6 +7,7 @@ match nothing).
 
 from __future__ import annotations
 
+from .custom import EXTERNAL, InvalidModel, ProviderDefaults, custom_model
 from .credentials import (
     CredentialError,
     CredentialParsed,
@@ -56,6 +57,10 @@ from .model import (
 from .policy import Decision, Verdict, may_use
 
 __all__ = [
+    "EXTERNAL",
+    "InvalidModel",
+    "ProviderDefaults",
+    "custom_model",
     "ALIASES",
     "Capability",
     "Cause",

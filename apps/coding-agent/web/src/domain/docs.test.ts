@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACTIONS, ACTIONS_FOR, docForNode, makeDoc, touched } from "./docs";
+import { ACTIONS, ACTIONS_FOR, canonicalPath, docForNode, makeDoc, parentOf, touched } from "./docs";
 import { tokenize } from "./highlight";
 import { reduce, emptySession, newTurn, PENDING } from "./events";
 
@@ -98,5 +98,33 @@ describe("streamed text is bounded", () => {
     const big = append("a".repeat(50), "b", 10);
     expect(big).toBe("…" + "a".repeat(9) + "b");
     expect(append("x".repeat(MAX_ANSWER), "y", MAX_ANSWER).length).toBe(MAX_ANSWER + 1);
+  });
+});
+
+describe("canonicalPath: one object, however it is spelled", () => {
+  it("drops the optional /Workspace prefix the API adds back", () => {
+    expect(canonicalPath("/Workspace/Users/me/x")).toBe("/Users/me/x");
+    expect(canonicalPath("/Users/me/x")).toBe("/Users/me/x");
+    expect(canonicalPath("/Workspace/Repos/me/demo/nb")).toBe("/Repos/me/demo/nb");
+  });
+  it("normalizes a trailing slash and the bare root", () => {
+    expect(canonicalPath("/Users/me/")).toBe("/Users/me");
+    expect(canonicalPath("/Workspace")).toBe("/");
+    expect(canonicalPath("/")).toBe("/");
+  });
+  it("gives the same document id (and tab) to both spellings", () => {
+    expect(makeDoc("notebook", "/Workspace/Repos/me/demo/nb").id).toBe(makeDoc("notebook", "/Repos/me/demo/nb").id);
+  });
+  it("reads a write against either spelling as the same file", () => {
+    const hit = touched("db_dbx_write_notebook", '{"path": "/Workspace/Repos/me/demo/nb"}', "");
+    expect(hit?.doc.id).toBe(makeDoc("notebook", "/Repos/me/demo/nb").id);
+  });
+});
+
+describe("parentOf", () => {
+  it("names the folder, whichever spelling", () => {
+    expect(parentOf("/Users/me/agent_scratch/x_with_kpi")).toBe("agent_scratch");
+    expect(parentOf("/Workspace/Repos/me/demo/nb")).toBe("demo");
+    expect(parentOf("/shared_top")).toBe("shared_top");
   });
 });

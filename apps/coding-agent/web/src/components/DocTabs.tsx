@@ -5,7 +5,7 @@
  * strip, and when tabs are hidden the count is stated (specs/001-perfect-shell SH-C1..C4).
  */
 import { useEffect, useRef, useState } from "react";
-import { Chat, CloseIcon, Notebook, Table } from "./Icons";
+import { CloseIcon, Notebook, Table } from "./Icons";
 import { tabKeys } from "./Tree";
 
 export interface DocTab {
@@ -17,8 +17,7 @@ export interface DocTab {
 
 const domId = (id: string) => `tab-${id.replace(/[^\w-]/g, "_")}`;
 
-export function DocTabs({ chatId, docs, active, onSelect, onClose }: {
-  chatId: string;
+export function DocTabs({ docs, active, onSelect, onClose }: {
   docs: DocTab[];
   active: string;
   onSelect: (id: string) => void;
@@ -61,19 +60,12 @@ export function DocTabs({ chatId, docs, active, onSelect, onClose }: {
   }, [active, docs.length]);
 
   if (docs.length === 0) return null;
-  const ids = [chatId, ...docs.map((d) => d.id)];
+  const ids = docs.map((d) => d.id);
 
   return (
     <div className="doc-tabs-wrap">
       <div className="doc-tabs" role="tablist" aria-label="Open items" ref={strip}
         onKeyDown={tabKeys(ids, active, onSelect)}>
-        <div id={domId(chatId)} data-tab className="doc-tab" role="tab" aria-selected={active === chatId}
-          aria-controls="doc-panel" tabIndex={active === chatId ? 0 : -1} onClick={() => onSelect(chatId)}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(chatId); } }}>
-          <span className="doc-tab-label">
-            <span className="tab-icon" aria-hidden><Chat size={13} /></span> Chat
-          </span>
-        </div>
         {docs.map((d) => (
           /* The close control lives INSIDE the tab, so it sits within the tab's own shape. One tab
              stop per tab: the strip is one widget, and Delete closes the focused tab. */

@@ -11,7 +11,7 @@
  *   ⌘S     -> onSave -> the app's save path
  */
 import { useEffect, useRef, useState } from "react";
-import { loadEditorHost, type EditorHost } from "../editor/host";
+import { loadEditorHost, type EditorChord, type EditorHost } from "../editor/host";
 
 interface Props {
   /** The document text to show. A change here *replaces* the buffer (load, recover, apply diff). */
@@ -25,10 +25,20 @@ interface Props {
   /** Focus the editor when it mounts (opening a document to type immediately). */
   autoFocus?: boolean;
   ariaLabel: string;
+  /** Cell chords (Shift/⌘/Alt+Enter, Esc). Return true when handled. */
+  onChord?: (chord: EditorChord) => boolean;
+  /** The caret moved (character offset): lets the app remember the user's place. */
+  onCaret?: (pos: number) => void;
+  /** A request to put the caret in this editor. `n` makes each request distinct, so asking twice for
+   *  the same place works, and a stale request is never replayed on a remount. It waits for the
+   *  editor to finish loading. `onFocusDone` fires once it has been honoured. */
+  focusRequest?: { n: number; at?: number } | null;
+  onFocusDone?: (n: number) => void;
 }
 
 export function Editor({
   value, language, readOnly = false, theme, onChange, onSave, autoFocus = false, ariaLabel,
+  onChord, onCaret, focusRequest, onFocusDone,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorHost | null>(null);
@@ -38,8 +48,9 @@ export function Editor({
   /** Captured once. `autoFocus` as a live prop would focus every cell whose flag flips, so typing
    *  in one cell could pull focus into another. */
   const focusOnMount = useRef(autoFocus);
-  const handlers = useRef({ onChange, onSave });
-  handlers.current = { onChange, onSave };
+  const handlers = useRef({ onChange, onSave, onChord, onCaret, onFocusDone });
+  handlers.current = { onChange, onSave, onChord, onCaret, onFocusDone };
+  const honoured = useRef(0);
 
   // Mount once. Language/theme/readOnly changes are reconfigurations, not remounts, so the document
   // and the cursor survive them — a remount on every prop change would lose the caret mid-typing.
@@ -54,9 +65,11 @@ export function Editor({
           readOnly,
           theme,
           onSave: () => handlers.current.onSave(),
+          onChord: (chord) => handlers.current.onChord?.(chord) ?? false,
         });
         local.mount(host.current, value, language);
         local.onChange((next) => handlers.current.onChange(next));
+        local.onCaret((pos) => handlers.current.onCaret?.(pos));
         applied.current = value;
         editor.current = local;
         setStatus("ready");
@@ -87,6 +100,18 @@ export function Editor({
        interleaved into the wrong cell. Focus belongs to the user (or to an explicit open), never to
        a data update. */
   }, [value, status]);
+
+  // An explicit request to put the caret here. Waits for `ready`, so a markdown cell that has just
+  // switched from rendered to editing still receives it once its editor has loaded.
+  const reqN = focusRequest?.n ?? 0;
+  const reqAt = focusRequest?.at;
+  useEffect(() => {
+    const ed = editor.current;
+    if (!ed || status !== "ready" || !reqN || reqN === honoured.current) return;
+    honoured.current = reqN;
+    ed.focus(reqAt);
+    handlers.current.onFocusDone?.(reqN);
+  }, [reqN, reqAt, status]);
 
   useEffect(() => {
     editor.current?.reconfigure(language);

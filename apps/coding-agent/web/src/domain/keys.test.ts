@@ -94,3 +94,84 @@ describe("fuzzy search", () => {
     expect(highlight("Alpha", "")).toEqual([{ text: "Alpha", hit: false }]);
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// 007: the registry is a contract. These tests are the reason a chord cannot have two owners.
+import { byScope, escapeTarget, platform, resolve, SCOPE } from "./keys";
+
+describe("the registry is a contract (KB-5, E-14)", () => {
+  it("declares every combo exactly once", () => {
+    const combos = SHORTCUTS.map((s) => s.combo);
+    expect(new Set(combos).size).toBe(combos.length);
+  });
+  it("gives every shortcut an owner and an id that is unique", () => {
+    expect(SHORTCUTS.every((s) => ["shell", "notebook", "composer"].includes(s.owner))).toBe(true);
+    expect(new Set(SHORTCUTS.map((s) => s.id)).size).toBe(SHORTCUTS.length);
+  });
+  it("names the inspector ⌘I and the cell prompt ⌘⇧I, so the sheet cannot lie (KB-2)", () => {
+    expect(SHORTCUTS.find((s) => s.id === "toggleInspector")?.combo).toBe("mod+i");
+    expect(SHORTCUTS.find((s) => s.id === "askCell")?.combo).toBe("mod+shift+i");
+  });
+  it("lists ⌘J, which used to be bound but undiscoverable", () => {
+    expect(SHORTCUTS.find((s) => s.id === "toggleDock")?.combo).toBe("mod+j");
+  });
+  it("groups by scope, so 'in a cell' is its own section", () => {
+    const scopes = byScope();
+    expect(scopes[0].scope).toBe(SCOPE.shell);
+    expect(scopes.find((g) => g.scope === SCOPE.notebook)?.items.map((s) => s.id)).toEqual(["askCell"]);
+  });
+});
+
+describe("resolve: one owner per press (KB-2, D3)", () => {
+  const ctx = (o: Partial<Parameters<typeof resolve>[1]> = {}) =>
+    ({ typing: false, dialog: false, cell: false, running: false, ...o });
+  /** `mod` is ⌘ on macOS and Ctrl elsewhere; the test must press the one this platform uses, or it is
+   *  testing a different chord than the registry declares. */
+  const MOD = platform() === "mac" ? "metaKey" : "ctrlKey";
+  const key = (k: string, m: Partial<{ metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }> = {}) =>
+    ({ key: k, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, ...m, [MOD]: true });
+  /** A key with no modifier at all: a bare letter, or Escape. */
+  const bare = (k: string) => ({ key: k, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false });
+
+  it("⌘I is the inspector, from a cell (the whole bug)", () => {
+    expect(resolve(key("i"), ctx({ cell: true }))?.shortcut.id).toBe("toggleInspector");
+  });
+  it("⌘⇧I is the cell prompt, but only while a cell has focus", () => {
+    expect(resolve(key("I", { shiftKey: true }), ctx({ cell: true }))?.shortcut.id).toBe("askCell");
+    expect(resolve(key("I", { shiftKey: true }), ctx({ cell: false }))).toBeNull();
+  });
+  it("a bare letter in a field is text, not a command", () => {
+    expect(resolve(bare("j"), ctx({ typing: true }))).toBeNull();
+    expect(resolve(bare("j"), ctx())).toBeNull();       // and not a shortcut either: ⌘J is
+  });
+  it("a modified chord still resolves while typing (E-12)", () => {
+    expect(resolve(key("k"), ctx({ typing: true }))?.shortcut.id).toBe("palette");
+    expect(resolve(key("i"), ctx({ typing: true }))?.shortcut.id).toBe("toggleInspector");
+  });
+  it("a dialog owns everything but Escape (E-13)", () => {
+    expect(resolve(key("k"), ctx({ dialog: true }))).toBeNull();
+    expect(resolve(key("i"), ctx({ dialog: true, cell: true }))).toBeNull();
+    expect(resolve(bare("Escape"), ctx({ dialog: true }))?.shortcut.id).toBe("stop");
+  });
+  it("⌘J toggles the dock", () => {
+    expect(resolve(key("j"), ctx())?.shortcut.id).toBe("toggleDock");
+  });
+  it("an unbound chord is nobody's", () => {
+    expect(resolve(key("r"), ctx())).toBeNull();
+  });
+});
+
+describe("escapeTarget: one ordered meaning (KB-8)", () => {
+  const base = { dialog: false, popover: false, drawer: false, editing: false, running: false, composerFocused: false };
+  it("unwinds from the topmost transient", () => {
+    expect(escapeTarget({ ...base, dialog: true, drawer: true, running: true })).toBe("dialog");
+    expect(escapeTarget({ ...base, popover: true, drawer: true })).toBe("popover");
+    expect(escapeTarget({ ...base, drawer: true, editing: true })).toBe("drawer");
+    expect(escapeTarget({ ...base, editing: true, running: true })).toBe("edit");
+  });
+  it("stops the agent only from the composer, and only when it is running", () => {
+    expect(escapeTarget({ ...base, running: true, composerFocused: true })).toBe("stop-agent");
+    expect(escapeTarget({ ...base, running: true })).toBe("nothing");
+    expect(escapeTarget(base)).toBe("nothing");
+  });
+});

@@ -76,7 +76,7 @@ PROFILE = os.environ.get("NBMCP_PROFILE", "full")
 _CORE = {
     "dbx_whoami", "dbx_list_tables", "dbx_describe_table", "dbx_search_tables", "dbx_run_sql",
     "dbx_list_notebooks", "dbx_read_notebook", "dbx_grep_notebook", "dbx_write_notebook",
-    "dbx_write_file", "dbx_run_notebook", "dbx_create_job", "dbx_run_job", "dbx_job_run_status",
+    "dbx_write_file", "dbx_run_notebook", "dbx_run_notebook_status", "dbx_create_job", "dbx_run_job", "dbx_job_run_status",
     "dbx_lakebase_create", "dbx_lakebase_status", "dbx_lakebase_sql", "dbx_create_app", "dbx_skill",
 }
 
@@ -757,6 +757,84 @@ def _run_summary(run_id: int, d: dict) -> str:
     return _trim(payload)
 
 
+RUN_URL = os.environ.get("NBMCP_RUN_URL", "")
+RUN_SESSION = os.environ.get("NBMCP_RUN_SESSION", "")
+RUN_KEY = os.environ.get("NBMCP_RUN_KEY", "")
+
+
+def _app_call(method: str, url: str, **kw: Any) -> dict:
+    """One call to the host app's run endpoint (loopback). Its refusals are sentences meant for the agent."""
+    try:
+        r = httpx.request(method, url, timeout=30.0, **kw)
+    except httpx.HTTPError as e:
+        raise RuntimeError(f"the app's run service is not reachable ({type(e).__name__}); "
+                           "tell the user to run the notebook in Databricks") from None
+    if r.status_code >= 400:
+        try:
+            detail = r.json().get("detail")
+        except ValueError:
+            detail = None
+        raise PermissionError(str(detail or f"the app refused the run ({r.status_code})")) if r.status_code == 403 \
+            else RuntimeError(str(detail or f"the app could not run it ({r.status_code})"))
+    return r.json()
+
+
+def _run_via_app(path: str, wait_seconds: int) -> str:
+    """Run the notebook on serverless compute AS THE APP and wait a little for it.
+
+    The notebook is read with the USER's token (so the user's own access decides what is read) and sent
+    to the app, which runs its Python cells in order in one namespace and returns each cell's printed
+    output, last value and tables. It runs as the app's service principal, not as the user: the result
+    says so, and the agent must say so too.
+    """
+    exported = _get("/api/2.0/workspace/export", {"path": path, "format": "SOURCE"})
+    source = base64.b64decode(exported.get("content") or "").decode(errors="replace")
+    started = _app_call("POST", RUN_URL, json={"session": RUN_SESSION, "key": RUN_KEY, "source": source,
+                                               "language": str(exported.get("language") or "PYTHON")})
+    if not started.get("handle"):
+        return _trim({"finished": True, "ran_as": "the app", "results": started.get("refused", {})})
+    return _poll_app_run(started["handle"], wait_seconds)
+
+
+def _poll_app_run(handle: str, wait_seconds: int) -> str:
+    import time
+    t0 = time.time()
+    while True:
+        d = _app_call("GET", f"{RUN_URL}/{handle}", params={"session": RUN_SESSION, "key": RUN_KEY})
+        if d.get("state") == "done" or time.time() - t0 >= min(wait_seconds, 55):
+            break
+        time.sleep(3)
+    if d.get("state") != "done":
+        return _trim({"finished": False, "handle": handle, "stage": d.get("stage"),
+                      "hint": f"still running as the app: call dbx_run_notebook_status('{handle}') to wait"})
+    cells = []
+    for index, r in sorted(((int(k), v) for k, v in (d.get("results") or {}).items())):
+        item = {"cell": index + 1, "state": r.get("state")}
+        if r.get("output"):
+            item["output"] = r["output"][:3000]
+        if r.get("rows") is not None and r.get("columns"):
+            item["table"] = {"columns": r["columns"], "rows": r["rows"][:20], "total_rows": r.get("totalRows")}
+        if r.get("error"):
+            item["error"] = r["error"][:1500]
+        cells.append(item)
+    ok = all(c["state"] == "succeeded" for c in cells)
+    return _trim({"finished": True, "result": "SUCCESS" if ok else "FAILED", "seconds": d.get("seconds"),
+                  "ran_as": "the app's service principal on serverless compute (not as the user)",
+                  "cells": cells})
+
+
+@tool()
+def dbx_run_notebook_status(handle: str, wait_seconds: int = 45) -> str:
+    """Wait for (or read) a notebook run that dbx_run_notebook left running as the app.
+
+    Pass the `handle` it returned. Same output as dbx_run_notebook: each Python cell's printed output,
+    last value and tables, or the error. Call again if it says finished=false.
+    """
+    if not RUN_URL:
+        return _trim({"error": "this server has no app run service; use dbx_job_run_status with a run_id"})
+    return _poll_app_run(handle, wait_seconds)
+
+
 @tool()
 def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int = 45) -> str:
     """Run a notebook ONCE on serverless compute and wait for the result.
@@ -765,6 +843,10 @@ def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int =
     error and the tail of the stack trace. If it is still running after
     wait_seconds you get finished=false and a run_id to poll with
     dbx_job_run_status.
+
+    In a deployed Databricks App the user's token cannot submit runs; then the notebook is run by the
+    app itself as its own service principal (only for administrators). The result says `ran_as`, and
+    you must tell the user it did not run as them. If finished=false, call dbx_run_notebook_status(handle).
 
     Kept short on purpose: a tool that blocks for minutes produces no ACP events, so the turn looks
     dead and the app's idle guard fires. Poll instead.
@@ -775,7 +857,14 @@ def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int =
     params = json.loads(parameters_json or "{}")
     if params:
         task["notebook_task"]["base_parameters"] = {k: str(v) for k, v in params.items()}
-    run_id = _post("/api/2.1/jobs/runs/submit", {"run_name": "nbmcp-run", "tasks": [task]})["run_id"]
+    try:
+        run_id = _post("/api/2.1/jobs/runs/submit", {"run_name": "nbmcp-run", "tasks": [task]})["run_id"]
+    except PermissionError:
+        # A Databricks App's user authorization has no jobs scope, so the user's token cannot submit a
+        # run. When the host app offers to run it itself (as the app, for administrators), ask it to.
+        if RUN_URL:
+            return _run_via_app(path, wait_seconds)
+        raise
     summary = _run_summary(run_id, _wait_run(run_id, wait_seconds))
     # On failure, hand back the tables the notebook reads and their real columns: a failed run is
     # exactly when the agent needs the truth, and making it guess again wastes a whole turn.

@@ -32,20 +32,33 @@ export function Chip({ a, auto, onRemove }: { a: Attachment; auto?: boolean; onR
 
 interface Option { a: Attachment; hint: string }
 
-export function Composer({ disabled, busy, onSend, onStop, attachments, auto, onAdd, onRemove, openDocs, placeholder, inputRef }: {
+export function Composer({ disabled, busy, onSend, onStop, attachments, auto, onAdd, onRemove, openDocs, placeholder, inputRef,
+  variant = "main", modelSlot, searchRoot }: {
   disabled?: boolean; busy: boolean; onSend: (text: string) => Promise<void>; onStop: () => void;
   /** Lets the app focus the box from a shortcut (⌘L) without prop-drilling a callback. */
   inputRef?: { current: HTMLTextAreaElement | null };
   attachments: Attachment[]; auto?: Attachment | null;
   onAdd: (a: Attachment) => void; onRemove: (a: Attachment) => void;
   openDocs: Doc[]; placeholder?: string;
+  /** `dock` narrows the padding and drops the max-width; it changes no behaviour (spec 006 D6). */
+  variant?: "main" | "dock";
+  /** The model control, placed in the action row so choosing a model never leaves the message (MC-3). */
+  modelSlot?: React.ReactNode;
+  /**
+   * The root an `@` search walks. Before this the composer called `api.search(q)` with no root, so the
+   * server used the user's home folder and files under /Shared or /Repos were unfindable (FX-6).
+   */
+  searchRoot?: string;
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  /** Why the last send did not go, in the server's words. Cleared as soon as the user edits. */
+  const [failure, setFailure] = useState("");
   const [caret, setCaret] = useState(0);
   const [found, setFound] = useState<WsHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [pick, setPick] = useState(0);
+  const [cmdPick, setCmdPick] = useState(0);
   const [dismissed, setDismissed] = useState("");
   const [tables, setTables] = useState<CatalogItem[]>([]);
   const [histAt, setHistAt] = useState(-1);
@@ -66,7 +79,7 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
   const query = m ? m[2] : null;
   const open = query !== null && dismissed !== `${caret}:${text}`;
   const cmd = commandAt(text, caret);
-  const cmdOpen = cmd.open && cmd.query.length > 0 && dismissed !== `c:${caret}:${text}`;
+  const cmdOpen = cmd.open && dismissed !== `c:${caret}:${text}`;
   const commands: Command[] = cmdOpen ? matchCommands(cmd.query) : [];
 
   useEffect(() => {
@@ -74,11 +87,11 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
     let live = true;
     setSearching(true);
     const id = window.setTimeout(() => {
-      api.search(query).then((r) => live && setFound(r.results.filter((x) => x.kind !== "directory").slice(0, 8)))
+      api.search(query, searchRoot).then((r) => live && setFound(r.results.filter((x) => x.kind !== "directory").slice(0, 8)))
         .catch(() => live && setFound([])).finally(() => live && setSearching(false));
     }, 300);
     return () => { live = false; window.clearTimeout(id); };
-  }, [query]);
+  }, [query, searchRoot]);
 
   // tables are searched server-side (Unity Catalog has no name search endpoint), debounced like files
   useEffect(() => {
@@ -112,6 +125,7 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
   }, [query, found, tables, openDocs, attachments]);
 
   useEffect(() => setPick(0), [query]);
+  useEffect(() => setCmdPick(0), [cmd.query, cmd.open]);
 
   const choose = (o: Option) => {
     onAdd(o.a);
@@ -125,12 +139,20 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
     const value = text.trim();
     if (!value || sending || disabled) return;
     setSending(true);
+    setFailure("");
     setText("");
     setHistAt(-1);
     const next = pushHistory(history, value);
     setHistory(next);
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* private mode */ }
-    try { await onSend(value); } finally { setSending(false); }
+    try {
+      await onSend(value);
+    } catch (e) {
+      // A refusal (no key for the model, no permission, the server down) must not eat the message:
+      // put it back and say why, so fixing the cause and pressing Enter is all that is left to do.
+      setText(value);
+      setFailure(e instanceof Error && e.message ? e.message : "The message could not be sent.");
+    } finally { setSending(false); }
   };
 
   const useHistory = (key: "ArrowUp" | "ArrowDown") => {
@@ -170,13 +192,20 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
   };
 
   return (
-    <section className="composer" role="region" aria-label="Message composer">
+    <section className={`composer${variant === "dock" ? " is-dock" : ""}`} role="region"
+      aria-label={variant === "dock" ? "Message the assistant" : "Message composer"}>
       <div className="composer-box">
         {(attachments.length > 0 || auto) && (
           <div className="ctx-row" aria-label="Context for this message">
             {auto && !attachments.some((x) => x.ref === auto.ref) && <Chip a={auto} auto />}
             {attachments.map((a) => <Chip key={`${a.kind}:${a.ref}`} a={a} onRemove={() => onRemove(a)} />)}
           </div>
+        )}
+        {failure && (
+          <p className="composer-error" role="alert">
+            {failure}
+            {/needs a key|API key|credential/i.test(failure) && <> Add one in <kbd>⌘ ,</kbd> Providers and keys.</>}
+          </p>
         )}
         <div className="composer-field">
           <textarea
@@ -186,7 +215,7 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
             aria-label="Message the agent"
             aria-autocomplete="list"
             aria-expanded={open}
-            onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); }}
+            onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); if (failure) setFailure(""); }}
             onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart)}
             onKeyDown={(e) => {
               if (open && (options.length > 0 || searching)) {
@@ -195,8 +224,10 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
                 if ((e.key === "Enter" || e.key === "Tab") && options[pick]) { e.preventDefault(); choose(options[pick]); return; }
               }
               if (open && e.key === "Escape") { e.preventDefault(); setDismissed(`${caret}:${text}`); return; }
-              if (cmdOpen && (e.key === "Enter" || e.key === "Tab") && commands[0]) {
-                e.preventDefault(); pickCommand(commands[0]); return;
+              if (cmdOpen && commands.length > 0) {
+                if (e.key === "ArrowDown") { e.preventDefault(); setCmdPick((p) => (p + 1) % commands.length); return; }
+                if (e.key === "ArrowUp") { e.preventDefault(); setCmdPick((p) => (p - 1 + commands.length) % commands.length); return; }
+                if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickCommand(commands[cmdPick] ?? commands[0]); return; }
               }
               if (cmdOpen && e.key === "Escape") { e.preventDefault(); setDismissed(`c:${caret}:${text}`); return; }
               // Up/Down browse history only on a single-line box, so they never fight a long draft
@@ -215,12 +246,13 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
             <div className="mention" role="listbox" aria-label="Commands">
               {commands.length === 0 && <div className="mention-empty">No command starts with “{cmd.query}”.</div>}
               {commands.map((c, i) => (
-                <button key={c.name} role="option" aria-selected={i === 0}
-                  className={`mention-opt${i === 0 ? " is-active" : ""}`}
+                <button key={c.name} role="option" aria-selected={i === cmdPick}
+                  className={`mention-opt${i === cmdPick ? " is-active" : ""}`}
+                  ref={(el) => { if (el && i === cmdPick) el.scrollIntoView({ block: "nearest" }); }}
                   onMouseDown={(e) => { e.preventDefault(); pickCommand(c); }}>
                   <span aria-hidden>/</span>
                   <span className="mention-name">{c.name.slice(1)}</span>
-                  <span className="mention-hint">{c.hint}</span>
+                  <span className="mention-hint is-cmd">{c.hint}</span>
                 </button>
               ))}
             </div>
@@ -258,6 +290,7 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
               setText(next); setCaret(at + lead.length + 1);
               requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(at + lead.length + 1, at + lead.length + 1); });
             }}>/</button>
+          {modelSlot}
           <span className="hint"><kbd>⏎</kbd> send · <kbd>⇧⏎</kbd> new line</span>
           {busy ? (
             <button className="btn stop" onClick={onStop}>Stop <kbd>Esc</kbd></button>

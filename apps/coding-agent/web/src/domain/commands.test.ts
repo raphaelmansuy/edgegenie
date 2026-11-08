@@ -8,9 +8,15 @@ describe("slash commands", () => {
     expect(commandAt("a/b", 3).open).toBe(false);
     expect(commandAt("/fix it", 7).open).toBe(false);
   });
+  it("a bare slash lists every command, so the menu is discoverable", () => {
+    expect(commandAt("/", 1)).toEqual({ query: "", open: true });
+    expect(matchCommands("").length).toBeGreaterThanOrEqual(10);
+    expect(matchCommands("").map((c) => c.name)).toContain("/optimize");
+  });
   it("filters by prefix and inserts the prompt in place", () => {
-    expect(matchCommands("fi").map((c) => c.name)).toEqual(["/fix"]);
-    const r = applyCommand("please /fi now", 10, matchCommands("fi")[0]);
+    expect(matchCommands("fi").map((c) => c.name)).toEqual(["/fix", "/findtables"]);
+    expect(matchCommands("fix").map((c) => c.name)).toEqual(["/fix"]);
+    const r = applyCommand("please /fi now", 10, matchCommands("fix")[0]);
     expect(r.text.startsWith("please Review the attached notebook")).toBe(true);
     expect(r.text.endsWith(" now")).toBe(true);
     expect(r.caret).toBe(r.text.indexOf(" now"));

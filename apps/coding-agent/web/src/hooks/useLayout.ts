@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  DEFAULTS, STORAGE_KEY, clampWidth, parse, reset, resetZone, resizeBy, serialize,
+  DEFAULTS, STORAGE_KEY, parse, reclamp, reset, resetZone, resizeBy, serialize, withWidth,
   type Layout, type RailTab, type Zone,
 } from "../domain/layout";
 
@@ -25,11 +25,7 @@ export function useLayout(viewport: number) {
   useEffect(() => {
     if (firstViewport.current === viewport) return;
     firstViewport.current = viewport;
-    setLayout((l) => ({
-      ...l,
-      railWidth: clampWidth("rail", l.railWidth, viewport, l),
-      inspectorWidth: clampWidth("inspector", l.inspectorWidth, viewport, l),
-    }));
+    setLayout((l) => reclamp(l, viewport));
   }, [viewport]);
 
   // Debounced write: a drag would otherwise hit storage once per frame.
@@ -41,9 +37,7 @@ export function useLayout(viewport: number) {
   }, [layout]);
 
   const setWidth = useCallback((zone: Zone, px: number) => {
-    setLayout((l) => (zone === "rail"
-      ? { ...l, railWidth: clampWidth("rail", px, viewport, l) }
-      : { ...l, inspectorWidth: clampWidth("inspector", px, viewport, l) }));
+    setLayout((l) => withWidth(zone, l, px, viewport));
   }, [viewport]);
 
   const nudge = useCallback((zone: Zone, delta: number) => {
@@ -53,9 +47,11 @@ export function useLayout(viewport: number) {
   const resetOne = useCallback((zone: Zone) => setLayout((l) => resetZone(zone, l)), []);
 
   const toggle = useCallback((zone: Zone, on?: boolean) => {
-    setLayout((l) => (zone === "rail"
-      ? { ...l, railVisible: on ?? !l.railVisible }
-      : { ...l, inspectorVisible: on ?? !l.inspectorVisible }));
+    setLayout((l) => {
+      if (zone === "rail") return { ...l, railVisible: on ?? !l.railVisible };
+      if (zone === "inspector") return { ...l, inspectorVisible: on ?? !l.inspectorVisible };
+      return { ...l, assistantVisible: on ?? !l.assistantVisible };
+    });
   }, []);
 
   const setRailTab = useCallback((railTab: RailTab) => setLayout((l) => ({ ...l, railTab })), []);

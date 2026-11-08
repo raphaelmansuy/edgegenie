@@ -47,6 +47,16 @@ class Settings(BaseSettings):
     # -- the LLM registry (spec 005, 12 §Configuration) -------------------------------------
     #: Lakebase Postgres DSN. Unset -> the seed catalogue (C-5); unreachable -> degraded (E-15).
     llm_database_url: str = ""
+    #: Lakebase (managed Postgres) by endpoint. Preferred over a DSN because the password is a
+    #: short-lived OAuth token: a static DSN stops working within the hour. Format:
+    #: `projects/{p}/branches/{b}/endpoints/{e}`. The host is read from the endpoint itself.
+    llm_pg_endpoint: str = ""
+    llm_pg_database: str = "databricks_postgres"
+    #: Postgres role. Empty -> the app's own service principal (DATABRICKS_CLIENT_ID).
+    llm_pg_user: str = ""
+    #: Who may change the model catalogue and providers for everyone (comma-separated emails).
+    #: Empty means nobody: a catalogue anyone can rewrite is a finding, not a default.
+    llm_admins: str = ""
     #: Where the seed rows live. Empty -> the packaged `seed/llm_models.yaml`.
     llm_seed_path: str = ""
     #: base64 AES-256 KEK. Development and pilot only; its use is logged at boot.
@@ -78,6 +88,13 @@ class Settings(BaseSettings):
     stream_heartbeat_seconds: int = 10
 
     demo_scenario: str = "notebook"
+
+    #: Run Python cells on serverless compute as the APP's service principal, for administrators only
+    #: (APP_LLM_ADMINS). Off switch for an owner who does not want user code to run under the app's
+    #: identity at all. SQL cells are unaffected: they run as the signed-in user.
+    python_run: bool = True
+    #: Where the app's tool servers reach the app itself. Empty = loopback on the app's own port.
+    internal_url: str = ""
 
     @property
     def production(self) -> bool:

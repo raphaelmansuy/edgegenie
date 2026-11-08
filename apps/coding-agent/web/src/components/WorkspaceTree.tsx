@@ -163,20 +163,26 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
   const [favorites, setFavorites] = useState<Favorite[]>(() => {
     try { return readFavorites(localStorage.getItem(FAV_KEY)); } catch { return []; }
   });
+  /** The root a search starts from, as a primitive: a stable value the effect may depend on. */
+  const rootPath = roots[0]?.path ?? "";
   const expanded = useRef(new Set<string>());
-  const first = useRef(true);
   const fileInput = useRef<HTMLInputElement>(null);
   const importParent = useRef("");
   const links = useContext(WorkspaceLinks);
 
+  /* The roots are a plain GET, so this effect is idempotent and needs no mount guard.
+     A `first.current` guard used to live here, and it was a real bug: under StrictMode the first
+     mount consumes the guard, is immediately unmounted, and the second mount then skips the fetch —
+     so the tree could render with no rows and no error, which reads as "your workspace is empty".
+     Effects must survive being run twice; the `live` flag is the only state that matters. */
   useEffect(() => {
-    if (!first.current) return;
-    first.current = false;
+    let live = true;
     fetch("/api/workspace/roots").then(async (r) => {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.detail ?? `the server answered ${r.status}`);
-      setRoots(d.roots ?? []);
-    }).catch((e) => setError(`cannot reach the workspace: ${e.message}`));
+      if (live) setRoots(d.roots ?? []);
+    }).catch((e) => { if (live) setError(`cannot reach the workspace: ${e.message}`); });
+    return () => { live = false; };
   }, []);
 
   // Search: debounced, a newer query always wins, and a slow walk narrates itself.
@@ -184,6 +190,9 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
   // seconds on a real workspace. Honest feedback is the requirement (SH-D1..D3), not speed.
   const abort = useRef<AbortController | null>(null);
   const [startedAt, setStartedAt] = useState(0);
+  /** Whole seconds since the search began, ticked once a second. Long enough to be honest, short
+   *  enough not to re-render the skeleton list every frame. */
+  const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     const q = filter.trim();
     if (q.length < 2) { setHits(null); setSearchErr(""); setSearching(false); return; }
@@ -204,7 +213,19 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
       } finally { if (live) setSearching(false); }
     }, 350);
     return () => { live = false; window.clearTimeout(id); };
-  }, [filter, focusFolder, roots]);
+  // `roots` is deliberately NOT a dependency: it is a fresh array on every render, so depending on it
+  // aborted the in-flight request on every keystroke and the search never completed — it sat on its
+  // skeleton forever (found by the scorecard). The *value* that matters is the root path, which is a
+  // string and only changes when the workspace does.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, focusFolder, rootPath]);
+
+  useEffect(() => {
+    if (!searching) { setElapsed(0); return; }
+    setElapsed(0);
+    const id = window.setInterval(() => setElapsed(Math.round((Date.now() - startedAt) / 1000)), 1000);
+    return () => window.clearInterval(id);
+  }, [searching, startedAt]);
 
   useEffect(() => {
     try { localStorage.setItem(FAV_KEY, JSON.stringify(favorites)); } catch { /* private mode */ }
@@ -376,12 +397,23 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
           {/* Skeleton rows while results are in flight, plus the honest slow hint. The count of
               bars is a placeholder, not a promise: the result count is shown as soon as it is known. */}
           {searching && (
-            <div className="sk-list" role="status" aria-label="Searching the workspace">
+            /* A search on a real workspace takes seconds: Unity Catalog and the workspace API have
+               no name-search endpoint, so this walks folders. Anonymous skeleton bars for four
+               seconds read as "broken", so the state names the query and counts the seconds — the
+               difference between waiting and wondering. */
+            <div className="sk-list" role="status" aria-live="polite" aria-label="Searching the workspace">
+              <p className="tree-search-status">
+                <span className="spin" aria-hidden /> searching for “{filter.trim()}” …
+                {elapsed >= 1 && <span className="tree-search-clock">{elapsed}s</span>}
+              </p>
               {[0, 1, 2, 3].map((i) => (
                 <div className="sk-row" key={i}><span className="sk a" /><span className="sk b" /></div>
               ))}
-              {Date.now() - startedAt > 1200 && (
-                <p className="tree-slow">This workspace is large; folders are walked in order.</p>
+              {elapsed >= 2 && (
+                <p className="tree-slow">
+                  This workspace is large, so folders are walked in order. The first matches appear as
+                  they are found.
+                </p>
               )}
             </div>
           )}

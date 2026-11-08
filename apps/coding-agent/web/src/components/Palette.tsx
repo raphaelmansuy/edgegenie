@@ -6,6 +6,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
+import { useReturnFocus } from "../hooks/useReturnFocus";
 import { highlight, rank, type Candidate } from "../domain/fuzzy";
 
 /** Live results from the workspace and the catalog, appended to the local ones.
@@ -31,7 +32,7 @@ function useRemote(query: string): Candidate[] {
         })))
         .then(take((rows) => setFound((cur) => [...rows, ...cur.filter((c) => !c.id.startsWith("open:table:"))])))
         .catch(() => {});
-      api.search(q)
+      api.search(q, PaletteActions.root || undefined)
         .then((r) => r.results.filter((h) => h.kind !== "directory").slice(0, 6).map((f) => ({
           id: `open:${f.kind}:${f.path}`, title: f.name, hint: f.path.split("/").slice(0, -1).join("/"),
           group: f.kind === "notebook" ? "Notebooks" : "Files", keywords: f.path, weight: 4,
@@ -45,8 +46,16 @@ function useRemote(query: string): Candidate[] {
   return found;
 }
 
-/** Wired by the app: the palette opens objects, it does not render them. */
-export const PaletteActions = { onOpenTable: (_ref: string) => {}, onOpenFile: (_kind: string, _path: string) => {} };
+/** Wired by the app: the palette opens objects, it does not render them.
+ *
+ * `root` is where a search starts: the folder of the open document when there is one, so the palette
+ * and the composer agree about what "here" means (006 FX-6).
+ */
+export const PaletteActions = {
+  onOpenTable: (_ref: string) => {},
+  onOpenFile: (_kind: string, _path: string) => {},
+  root: "",
+};
 const onOpenTable = (ref: string) => PaletteActions.onOpenTable(ref);
 const onOpenFile = (kind: string, path: string) => PaletteActions.onOpenFile(kind, path);
 
@@ -59,6 +68,8 @@ export function Palette({ items, onClose }: { items: Candidate[]; onClose: () =>
   useEffect(() => {
     input.current?.focus();
   }, []);
+  // KB-1: closing hands focus back to whatever was focused before the palette opened.
+  useReturnFocus();
 
   const remote = useRemote(query);
   const all = useMemo(() => {
@@ -66,7 +77,16 @@ export function Palette({ items, onClose }: { items: Candidate[]; onClose: () =>
     const seen = new Set(items.map((i) => i.id));
     return [...items, ...remote.filter((r) => !seen.has(r.id))];
   }, [items, remote]);
-  const results = useMemo(() => rank(all, query, 16), [all, query]);
+  /* Ranked, then gathered by group in order of first appearance. The ranking decides what is shown and
+     which group leads; it must not decide how often a heading repeats. `results` is the VISUAL order,
+     because the arrow keys and `pick` index into it: if the list were ranked one way and drawn another,
+     ↓ would jump around the screen. */
+  const results = useMemo(() => {
+    const ranked = rank(all, query, 16);
+    const order: string[] = [];
+    for (const r of ranked) if (!order.includes(r.candidate.group)) order.push(r.candidate.group);
+    return order.flatMap((g) => ranked.filter((r) => r.candidate.group === g));
+  }, [all, query]);
 
   useEffect(() => {
     setPick(0);

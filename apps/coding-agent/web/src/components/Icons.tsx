@@ -347,6 +347,49 @@ export const Bug = (p: IconProps) => (
   </Svg>
 );
 
+export const Play = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7.5 5.5v13l11-6.5z" />
+  </Svg>
+);
+
+export const PlayAll = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 5.5v13l8.5-6.5z" />
+    <path d="M13.5 7 19 12l-5.5 5" />
+  </Svg>
+);
+
+export const More = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth={3} />
+  </Svg>
+);
+
+export const Download = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" />
+  </Svg>
+);
+
+export const Wand = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m5 19 9.5-9.5M13 4.5l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8zM18.5 12l.6 1.2 1.2.6-1.2.6-.6 1.2-.6-1.2-1.2-.6 1.2-.6z" />
+  </Svg>
+);
+
+export const Trash = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4.5 7h15M9.5 7V4.8h5V7M6.5 7l.8 12h9.4l.8-12M10 10.5v6M14 10.5v6" />
+  </Svg>
+);
+
+export const LinkIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+  </Svg>
+);
+
 /** A registry so a data table can name an icon instead of embedding a glyph. */
 export const ICONS = {
   panelLeft: PanelLeft, panelRight: PanelRight, layout: LayoutGrid, refresh: Refresh, chat: Chat,
@@ -378,3 +421,11 @@ export function Icon({ kind, size = 14 }: { kind: string; size?: number }) {
 export function CloseIcon({ size = 12 }: { size?: number }) {
   return <Close size={size} />;
 }
+
+/** Leaving this surface for another: a small diagonal arrow, the conventional "goes elsewhere" mark. */
+export const ArrowUpRight = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7 17L17 7" />
+    <path d="M9 7h8v8" />
+  </Svg>
+);

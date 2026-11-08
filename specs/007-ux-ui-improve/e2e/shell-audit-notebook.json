@@ -1,0 +1,49 @@
+{
+  "areas": [
+    {
+      "sel": "div.cells",
+      "scrollH": 4048,
+      "clientH": 714,
+      "overscroll": "auto",
+      "chain": []
+    }
+  ],
+  "chained": {
+    "before": {
+      "cells": 3334,
+      "doc": 0
+    },
+    "after": {
+      "cells": 3334,
+      "doc": 0
+    }
+  },
+  "tabOrder": [
+    "button.chip|Model: llama-4-maverick",
+    "button.search-trigger|Search or run a command (⌘K)",
+    "button.btn|Hide the navigator",
+    "button.btn|Hide the assistant",
+    "button.theme-opt|System",
+    "button.theme-opt|Light",
+    "button.theme-opt|Dark",
+    "button.btn|Layout and panels",
+    "button.btn|Keyboard shortcuts",
+    "button.btn|Refresh sessions",
+    "button.avatar-btn|Account: raphael.mansuy@gmai",
+    "button.rail-collapse|Hide the left panel",
+    "div.separator|Resize the navigator",
+    "button.rail-tab|Sessions",
+    "button.btn|+ New",
+    "div.doc-tab|tall_demo",
+    "button.doc-crumbs|Copy the path /Users/raphael",
+    "button.icon-btn|Reload this document",
+    "button.icon-btn|Copy a link to tall_demo",
+    "button.icon-btn|Open in Databricks",
+    "button.btn|Ask",
+    "button.btn|Run all",
+    "section.cell-block|Cell 1, markdown",
+    "button.cell-collapse|Collapse cell 1",
+    "button.cell-act|→ code",
+    "button.cell-act|Ask the agent about cell 1"
+  ]
+}

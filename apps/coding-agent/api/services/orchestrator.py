@@ -57,6 +57,10 @@ from ..ports import AgentRuntime, RuntimeHandle, SessionSpec, ToolRegistry
 
 MAX_TURNS = 200
 TOOL_COUNT_CORE = 19
+#: The folder the agent may write to, handed to the child so it can name real paths. A reference
+#: agent's scenarios record `/Users/you/…` as a placeholder; without this it reported a path that
+#: does not exist and every demo turn opened a 404.
+FENCE_ENV = "APP_WORKSPACE_FOLDER"
 
 
 @dataclass
@@ -136,8 +140,13 @@ class Orchestrator:
             raise KeyError(session_id) from None
 
     def sessions_for(self, user_id: str) -> list[Session]:
+        """The user's conversations, newest first. An archived one is the user's "delete": it stays in
+        memory for the audit trail but is no longer something to list, or the delete control would
+        succeed and the row would still be there."""
         return sorted(
-            (live.state.session for live in self._live.values() if live.state.session.user_id == user_id),
+            (live.state.session for live in self._live.values()
+             if live.state.session.user_id == user_id
+             and live.state.session.status is not SessionStatus.ARCHIVED),
             key=lambda s: s.id,
             reverse=True,
         )
@@ -302,6 +311,11 @@ class Orchestrator:
         # 3. The agent process itself. It authenticates as the USER, and it receives exactly one
         #    provider key: the selected one (S6).
         env = await self._child_env(live, user_token)
+        # The folder the session may write to, so a reference agent's recorded file paths can name a
+        # real one. `/Users/you/…` in a scenario is a placeholder; an agent that opened it 404'd and
+        # filled the console with a failed request on every demo turn.
+        if live.workspace_folder:
+            env[FENCE_ENV] = live.workspace_folder
         spec = SessionSpec(session_id=s.id, cwd=cwd, model=s.model, mcp_url=live.mcp_url, env=env)
         live.handle = await self._rt.start(spec)
         # If the session was archived while this was in flight — a reaper pass, or the user closing
@@ -514,11 +528,17 @@ class Orchestrator:
             raise DomainError(f"this session reached its limit of {MAX_TURNS} turns")
         self._write_token(live, user_token)
         running = live.state.running()
+        asked = text
         text = DEMO_MARKER.sub(" ", text).strip()     # never store a demo hint as the user's words
         # A key pasted into a prompt is a user error the app must survive (S12/E-8): the stored
         # payload is redacted and labelled, and the turn continues.
         stored_text = redact_labelled(text)
-        turn = live.state.new_turn(stored_text, context)
+        # The reference agent still needs the hint: it is how one demo server plays every behaviour.
+        # It goes in `context`, which is sent but is not the user's words — stripping it from `prompt`
+        # alone had quietly stopped the start cards from choosing (the "investigate a number" card
+        # answered with a notebook).
+        hint = DEMO_MARKER.search(asked) if self._demo else None
+        turn = live.state.new_turn(stored_text, f"{context} {hint.group(0).strip()}" if hint else context)
         if not live.state.turns[:-1] and live.state.session.title == "New session":
             live.state.session = updated(live.state.session, title=title_from(text))
         # The pin is written BEFORE the prompt and never updated (Axiom A5, C-8).

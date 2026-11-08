@@ -95,10 +95,13 @@ async function scene(name, width, body, opts = {}) {
  */
 async function withSession(p) {
   await p.waitForFunction(() => {
-    // The empty state carries the model select; once a session is active the top bar does. Either
-    // way, a real model id (it contains a "/") is the signal that /api/models has landed.
-    const sel = document.querySelector(".setup select, .topbar select");
-    return !!sel && String(sel.value).includes("/");
+    /* The model control stopped being a native `<select>` when the picker landed: it is a button that
+       shows the chosen model's name. A real model id is the signal that /api/models has landed, and
+       the placeholder ("Choose a model") is the signal that it has not. Waiting on `select` therefore
+       never resolved, and this scene timed out before it did anything. */
+    const trigger = document.querySelector(".topbar .model-trigger-label, .composer .model-trigger-label");
+    const text = (trigger?.textContent ?? "").trim();
+    return text.length > 0 && !/choose a model/i.test(text);
   }, null, { timeout: 30000 });
   await p.locator(".composer textarea").fill("Build a notebook that shows revenue by pickup hour");
   await p.keyboard.press("Enter");
@@ -127,9 +130,18 @@ async function openNotebook(p) {
  */
 async function seedNotebook(p, marker = "e2e seed") {
   const path = await p.evaluate(async (marker) => {
+    /* Pick a session in the REAL workspace, not simply the newest one. `sessions[0]` is whatever ran
+       last, and a previous fixture run leaves sessions whose folder is a temp directory — seeding
+       there writes a notebook the Files tree cannot find, so the test then opened a same-named file
+       from the workspace (one cell of `# theirs`) and failed with "expected notebook cells, got 1".
+       The user's home is the one folder a real workspace search will reach. */
     const sessions = await (await fetch("/api/sessions")).json();
-    const sid = sessions.sessions?.[0]?.id ?? null;
-    const folder = sessions.sessions?.[0]?.folder ?? "";
+    const me = await (await fetch("/api/me")).json().catch(() => ({}));
+    const home = me.home ?? "/Users";
+    const inWorkspace = (sessions.sessions ?? []).filter((s) => String(s.folder ?? "").startsWith(home));
+    const chosen = inWorkspace[0] ?? sessions.sessions?.[0] ?? null;
+    const sid = chosen?.id ?? null;
+    const folder = chosen?.folder ?? me.scratch ?? "";
     const target = `${folder}/e2e_notes`;
     const text = [
       "# Databricks notebook source",
@@ -168,6 +180,14 @@ async function openPath(p, path) {
      the workspace, so it cannot open a file nobody has opened — verified by driving it. The tree is
      driven by name and does reach the workspace. */
   const name = path.split("/").pop();
+  /* At 900 px the navigator is a drawer and starts closed, so the Files tab does not exist until it
+     is opened. Clicking it directly timed out with no explanation; opening the drawer first is what a
+     person does, and the `.rail-tab` is then on screen. */
+  const filesTab = p.getByRole("tab", { name: /Files/i });
+  if (!(await filesTab.isVisible().catch(() => false))) {
+    const reveal = p.getByRole("button", { name: /Show the (navigator|Files panel)/i }).first();
+    if (await reveal.count()) { await reveal.click({ force: true }).catch(() => {}); await p.waitForTimeout(700); }
+  }
   await p.getByRole("tab", { name: /Files/i }).click();
   await p.waitForTimeout(500);
   await p.getByPlaceholder("Search notebooks and files…").fill(name);
@@ -180,7 +200,10 @@ async function openPath(p, path) {
 }
 
 const cellCount = (p) => p.locator(".cell-block").count();
-const dirty = (p) => p.locator(".editor-dirty").count();
+/** Is the document dirty? The app states this through the Save button, which is disabled until there
+ *  is something to save. The old probe looked for a `.editor-dirty` element that no longer exists —
+ *  the state is real, the label was not, so the scene failed while the app behaved correctly. */
+const dirty = (p) => p.locator(".doc-bar .btn.primary").isEnabled();
 
 await scene("editor-open", 1440, async (p) => {
   await withSession(p);
@@ -190,7 +213,7 @@ await scene("editor-open", 1440, async (p) => {
   if (cells < 2) fail(`expected notebook cells, got ${cells}`);
   if (await p.locator(".cm-editor").count() < 1) fail("no code editor mounted");
   if (await p.locator(".cell-rendered").count() < 1) fail("a markdown cell did not render as prose");
-  if (await dirty(p)) fail("a freshly opened document must not be dirty");
+  if (await dirty(p)) fail("a freshly opened document must not be dirty (Save is enabled)");
   const chip = (await p.locator(".fence-text").textContent())?.trim();
   if (!chip) fail("no fence chip");
   await shot(p, "editor-open", { x: 260, y: 52, width: 860, height: 700 });
@@ -203,8 +226,7 @@ await scene("editor-dirty", 1440, async (p) => {
   await p.locator(".cm-content").first().click();
   await p.keyboard.type("# edited in the e2e suite\n");
   await p.waitForTimeout(500);
-  if (!(await dirty(p))) fail("typing did not mark the document dirty");
-  if (await p.locator(".editor-bar .btn.primary").isDisabled()) fail("Save stayed disabled with unsaved changes");
+  if (!(await dirty(p))) fail("typing did not mark the document dirty (Save is still disabled)");
   await shot(p, "editor-dirty", { x: 260, y: 52, width: 860, height: 420 });
 });
 
@@ -219,9 +241,11 @@ await scene("editor-saved", 1440, async (p) => {
   /* Assert the outcome that lasts, not the notice that fades: the "saved" message clears itself
      after four seconds, so waiting on it is a race by construction. A clean buffer with an enabled
      Save button that is now disabled is what "saved" means. */
-  await p.waitForFunction(() => !document.querySelector(".editor-dirty"), null, { timeout: 30000 });
-  if (await dirty(p)) fail("the document is still dirty after a successful save");
-  if (!(await p.locator(".editor-bar .btn.primary").isDisabled())) fail("Save stayed enabled after a save");
+  await p.waitForFunction(() => {
+    const save = document.querySelector(".doc-bar .btn.primary");
+    return !!save && save.disabled;
+  }, null, { timeout: 30000 }).catch(() => {});
+  if (await dirty(p)) fail("the document is still dirty after a successful save (Save is enabled)");
   const text = (await p.locator(".editor-notice").textContent().catch(() => ""))?.trim() ?? "";
   if (text && !/saved/i.test(text)) fail(`unexpected save notice: ${text}`);
   await shot(p, "editor-saved", { x: 260, y: 52, width: 860, height: 420 });
@@ -232,7 +256,10 @@ await scene("notebook-add-cell", 1440, async (p) => {
   const path = await seedNotebook(p);
   await openPath(p, path);
   const before = await cellCount(p);
-  await p.locator(".cells-add .btn").last().click();
+  /* Adding a cell is now an in-place affordance between and after cells — "Add a cell at the end:
+     code" — rather than a single `.cells-add` button under the list. The old selector matched nothing,
+     so this scene timed out with no cells and no error message worth reading. */
+  await p.getByRole("button", { name: "Add a cell at the end: code" }).click();
   await p.waitForTimeout(900);
   const after = await cellCount(p);
   if (after !== before + 1) fail(`adding a cell gave ${after} cells, expected ${before + 1}`);
@@ -336,7 +363,11 @@ await scene("conflict", 1440, async (p) => {
   /* Make the server's copy move underneath us, the way a second tab would: save the same document
      from the page's own fetch, with the version we are holding. Then our save is stale. */
   const raced = await p.evaluate(async () => {
-    const path = document.querySelector(".viewer-path")?.textContent?.trim() ?? "";
+    /* The document's full path is the breadcrumb's title — `.viewer-path` was removed when the
+       document bar was consolidated, so this returned "no path", wrote nothing, and the scene failed
+       for the absence of a race rather than a missing panel. */
+    const crumbs = document.querySelector(".doc-crumbs");
+    const path = (crumbs?.getAttribute("title") ?? "").replace(/ — click to copy$/, "").trim();
     if (!path) return "no path";
     /* A second writer WITH the session — i.e. another tab of the same user. Sending no session made
        the fence treat the write as outside every folder and refuse it with 403, which is correct
@@ -396,7 +427,11 @@ await scene("editor-narrow", 900, async (p) => {
   const path = await seedNotebook(p);
   await openPath(p, path);
   const box = await p.locator(".editor-surface").boundingBox();
-  if (!box || box.width < 500) fail(`the surface is too narrow at 900px: ${box?.width}`);
+  /* The promise is `CENTRE_MIN` (480 px), not 500: at a 900 px window with the navigator open the
+     work area is 480 px by design, and the surface inside it measures 491. Asserting 500 turned a
+     correct layout into a failure — the threshold has to be the one the layout module actually
+     guarantees. */
+  if (!box || box.width < 480) fail(`the surface is narrower than CENTRE_MIN at 900px: ${box?.width}`);
   await shot(p, "editor-narrow");
 });
 

@@ -1,6 +1,7 @@
 /** Typed API client. One place that knows the HTTP surface. */
 import type { Attachment, SessionView } from "../domain/events";
 import type { CatalogueResponse, ModelSpec } from "../domain/models";
+import type { ModelConfig } from "../domain/modelconfig";
 
 const json = { "Content-Type": "application/json" };
 
@@ -57,16 +58,14 @@ export interface SaveCredentialResult {
   saved: boolean;
 }
 
+import { errorText } from "../domain/apierror";
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, init);
   if (!r.ok) {
     let detail = r.statusText;
     try {
-      const body = await r.json();
-      // A validation failure from `/api/llm/credentials` carries `{field, detail}`; a plain message
-      // is the common case. Both must reach the caller as one readable string.
-      detail = typeof body.detail === "string" ? body.detail
-        : body.detail?.detail ?? JSON.stringify(body.detail ?? body);
+      detail = errorText(await r.json(), detail);
     } catch { /* non-JSON error body */ }
     throw new ApiError(r.status, detail);
   }
@@ -90,6 +89,18 @@ export interface ModelFacts {
 }
 
 export const api = {
+  /** Model configuration for the settings screen (what is switched on, who may change it, where it is saved). */
+  llmConfig: () => call<ModelConfig>("/api/llm/config"),
+  addModel: (body: { provider: string; model: string; name: string; context: number; output: number;
+                     capability?: string; makeDefault?: boolean }) =>
+    call<{ saved: boolean }>("/api/llm/config/models", { method: "POST", headers: json, body: JSON.stringify(body) }),
+  setModelEnabled: (id: string, enabled: boolean) =>
+    call<{ saved: boolean }>(`/api/llm/config/models/${id}`, { method: "PATCH", headers: json, body: JSON.stringify({ enabled }) }),
+  removeModel: (id: string) => call<void>(`/api/llm/config/models/${id}`, { method: "DELETE" }),
+  setDefaultModel: (model: string) =>
+    call<{ saved: boolean; default: string }>("/api/llm/config/default", { method: "PUT", headers: json, body: JSON.stringify({ model }) }),
+  patchProvider: (id: string, body: { enabled?: boolean; baseUrl?: string }) =>
+    call<{ saved: boolean }>(`/api/llm/config/providers/${id}`, { method: "PATCH", headers: json, body: JSON.stringify(body) }),
   models: () => call<CatalogueResponse>("/api/models"),
   /** The full catalogue: state, limits with evidence, capability and credential hint per model. */
   catalogue: () => call<CatalogueResponse>("/api/llm/models"),
@@ -120,8 +131,11 @@ export const api = {
       headers: { ...json, "Idempotency-Key": key },
       // references only: the server reads the content with the user's own token
       body: JSON.stringify({ text, attachments: attachments.map(({ kind, ref }) => ({ kind, ref })) }) }),
-  me: () => call<{ user: string; scratch: string; demo: boolean; workspace?: { host: string; orgId?: string } }>("/api/me"),
+  me: () => call<{ user: string; scratch: string; demo: boolean; workspace?: { host: string; orgId?: string };
+    pythonRun?: import("../domain/cellrun").PythonPolicy }>("/api/me"),
   object: (path: string) => call<WsObject>(`/api/workspace/object?path=${encodeURIComponent(path)}`),
+  /** The version token only: one `get-status`, no content. Comparable with `WsObject.version`. */
+  version: (path: string) => call<{ path: string; version: string; modifiedAt: number }>(`/api/workspace/version?path=${encodeURIComponent(path)}`),
   search: (q: string, path?: string, signal?: AbortSignal) =>
     call<{ root: string; complete: boolean; results: WsHit[] }>(
       `/api/workspace/search?q=${encodeURIComponent(q)}${path ? `&path=${encodeURIComponent(path)}` : ""}`,
@@ -142,6 +156,37 @@ export const api = {
       body: JSON.stringify({ source, destination, mode }) }),
   permissions: (path: string) => call<{ path: string; entries: { who: string; principal: string; permission: string; inherited: boolean }[] }>(
     `/api/workspace/permissions?path=${encodeURIComponent(path)}`),
+  /** Execute one cell (SQL only). Returns a run state plus either data or a reason. */
+  runCell: (language: string, source: string) =>
+    call<import("../domain/cellrun").CellRun>("/api/notebook/run-cell", { method: "POST", headers: json,
+      body: JSON.stringify({ language, source }) }),
+  /**
+   * Run Python cells on serverless compute AS THE APP (administrators only; the server decides).
+   * `show` are the cells (0-based) whose output is wanted; the Python cells above the last of them run
+   * first, for their variables. A run takes a minute or more on cold compute, so this starts it and then
+   * polls, and resolves with one result per cell asked for. `stop` is asked between polls.
+   */
+  runPython: async (
+    cells: { language: string; source: string }[], show: number[],
+    hooks: { onStage?: (stage: string, seconds: number) => void; stop?: () => boolean } = {},
+  ): Promise<Record<string, import("../domain/cellrun").CellRun>> => {
+    type Poll = { state: "running" | "done"; stage?: string; seconds: number;
+      results?: Record<string, import("../domain/cellrun").CellRun> };
+    const started = await call<{ handle?: string; refused?: Record<string, import("../domain/cellrun").CellRun> }>(
+      "/api/notebook/python-runs", { method: "POST", headers: json, body: JSON.stringify({ cells, show }) });
+    if (!started.handle) return started.refused ?? {};
+    const url = `/api/notebook/python-runs/${started.handle}`;
+    const deadline = Date.now() + 20 * 60_000;
+    let cancelled = false;
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 1500));
+      if (!cancelled && hooks.stop?.()) { cancelled = true; await call(url, { method: "DELETE" }).catch(() => {}); }
+      const poll = await call<Poll>(url);
+      if (poll.state === "done") return { ...(started.refused ?? {}), ...(poll.results ?? {}) };
+      hooks.onStage?.(poll.stage ?? "working", poll.seconds);
+      if (Date.now() > deadline) throw new Error("the run is taking longer than 20 minutes; it was left running in Databricks");
+    }
+  },
   download: async (path: string, format: string, filename: string) => {
     const r = await fetch(`/api/workspace/export?path=${encodeURIComponent(path)}&format=${encodeURIComponent(format)}`);
     if (!r.ok) {

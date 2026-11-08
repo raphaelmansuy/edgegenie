@@ -15,8 +15,6 @@ const BATCH_MS = 40;
 
 export type Conn = "idle" | "connecting" | "live" | "reconnecting" | "lost";
 
-const cursorKey = (id: string) => `dbc-agents:cursor:${id}`;
-
 function hydrate(id: string, d: Partial<SessionView> | undefined): SessionView {
   const base = emptySession(id);
   return {
@@ -58,7 +56,11 @@ export function useSessionStream(sessionId: string | null) {
   // 2) one EventSource per session, reconnecting with the last seen seq
   useEffect(() => {
     if (!sessionId) return;
-    seq.current = Number(localStorage.getItem(cursorKey(sessionId)) ?? 0);
+    /* Always from the start. The view is rebuilt from nothing above, so the replay IS the transcript:
+       a cursor kept across page loads (it used to live in localStorage) resumed past events this
+       fresh view had never seen, and a reload, a second tab or a pasted session link showed an empty
+       conversation. The cursor in this ref only serves reconnects within the page. */
+    seq.current = 0;
     let source: EventSource | null = null;
     let stopped = false;
     let queued: AgentEvent[] = [];
@@ -70,9 +72,6 @@ export function useSessionStream(sessionId: string | null) {
       const batch = queued;
       queued = [];
       setSession((s) => batch.reduce(reduce, s));
-      // The cursor is written once per batch, not once per event: a synchronous disk write per
-      // token is what made a long turn look like a dead page.
-      try { localStorage.setItem(cursorKey(sessionId), String(seq.current)); } catch { /* private mode */ }
     };
 
     const open = () => {

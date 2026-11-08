@@ -24,5 +24,7 @@ cryptography>=43
 # The Lakebase registry and vault. Absent -> the app degrades to the seed catalogue (C-5).
 psycopg[binary]>=3.2
 psycopg-pool>=3.2
+# Lakebase authenticates with a short-lived OAuth token minted for the app's service principal.
+databricks-sdk>=0.60
 # `seed/llm_models.yaml` is data, parsed at boot rather than compiled in.
 pyyaml>=6
