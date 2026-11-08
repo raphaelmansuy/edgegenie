@@ -54,11 +54,19 @@ def _content(name: str):
 
 
 def _doc(rel: str, *, title_override: str = "", drop_first_h1: bool = True):
-    """A body function that renders a repository document verbatim."""
+    """A body function that renders a repository document verbatim.
+
+    A document that is not in this checkout (a partial clone, a build from a tarball, or a spec set whose
+    screenshots are too heavy to commit) does not crash the build. It becomes a page that says exactly
+    which file is missing and links to it on GitHub, because a missing page is a fact a reader can use
+    and a 500 is not (spec 008 [E-5], [PF-7]).
+    """
     def body(ctx: dict):
         from mdrender import render
 
         path = ROOT / rel
+        if not path.is_file():
+            return "", "", _missing_doc(rel, ctx), []
         text = path.read_text(encoding="utf-8")
         # A repository document is content, never markup: its HTML is escaped ([E-9]). Its relative links
         # are rewritten to the built route for that document, because the .md files are not published as
@@ -69,6 +77,21 @@ def _doc(rel: str, *, title_override: str = "", drop_first_h1: bool = True):
         return title_override, "", r.html, r.toc
 
     return body
+
+
+def _missing_doc(rel: str, ctx: dict) -> str:
+    """The page for a document this checkout does not contain."""
+    url = f"{ctx['repo']}/blob/main/{rel}"
+    return (
+        '<div class="callout callout-warning"><p><strong>This document is not in this checkout.</strong> '
+        f'The site renders <code>{rel}</code> at build time, and that file is not present here — most '
+        "often because a clone is partial, or because the document's screenshots are too heavy to commit."
+        "</p></div>"
+        f'<p>The document lives in the repository: <a href="{url}" target="_blank" '
+        f'rel="noopener noreferrer">{rel}</a>.</p>'
+        '<p>Every other page on this site is unaffected. The evidence, the tour and the tutorial do not '
+        "depend on this file.</p>"
+    )
 
 
 def _reference(ctx: dict):
@@ -96,12 +119,17 @@ def _reference(ctx: dict):
     for rel, label, slug, blurb in listing:
         items.append((rel, label, f"/reference/{slug}/", blurb))
 
-    rows = "".join(
-        f'<li><a href="{href}"><strong>{label}</strong></a>'
-        f'<span class="ref-blurb">{blurb}</span>'
-        f'<a class="ref-source" href="{ctx["repo"]}/blob/main/{rel}" target="_blank" rel="noopener noreferrer">source</a></li>'
-        for rel, label, href, blurb in items
-    )
+    def row(rel: str, label: str, href: str, blurb: str) -> str:
+        here = (ROOT / rel).is_file()
+        state = "" if here else ' <span class="ref-absent">in the repository, not in this checkout</span>'
+        return (
+            f'<li><a href="{href}"><strong>{label}</strong></a>'
+            f'<span class="ref-blurb">{blurb}{state}</span>'
+            f'<a class="ref-source" href="{ctx["repo"]}/blob/main/{rel}" target="_blank" '
+            f'rel="noopener noreferrer">source</a></li>'
+        )
+
+    rows = "".join(row(rel, label, href, blurb) for rel, label, href, blurb in items)
     body = (
         '<p class="lede">Every document below is rendered from the repository itself, so what you read '
         'here is what the repository says. Each one links to its source file.</p>'
@@ -225,6 +253,8 @@ def reference_routes() -> list[Route]:
     """One page per reference document. Generated, so a new document is one table row."""
     out: list[Route] = []
     for slug, rel, label, blurb in REFERENCE_PAGES:
+        # A document the checkout does not contain still gets a page (the stub above), but it is marked
+        # so the index can say "in the repository" rather than pretending it read it.
         out.append(Route(
             path=f"reference/{slug}/",
             nav="reference",

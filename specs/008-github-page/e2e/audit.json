@@ -1,6 +1,6 @@
 {
   "app": "http://127.0.0.1:8130",
-  "when": "2026-11-08T15:07:07.563Z",
+  "when": "2026-11-08T15:09:23.896Z",
   "scenes": {
     "S1": {
       "routes": {
@@ -622,7 +622,7 @@
               "alt": "Step 2",
               "w": "2364",
               "h": "538",
-              "loaded": true
+              "loaded": false
             },
             {
               "src": "../assets/tutorial/03-step-3-put-the-agent-kit-in-the-sandbox.png",
