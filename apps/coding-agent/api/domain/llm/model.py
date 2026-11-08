@@ -271,6 +271,11 @@ class ModelSpec:
     refusal: str = ""
     #: Where the discovery/health fact came from: `seed`, `database`, `discovery`, `probe`.
     origin: str = "seed"
+    #: Whether this model can consume an image. Declared, not inferred from its name: a name is a guess,
+    #: and a guess here either blocks a working feature or ships a picture the model cannot see
+    #: (specs/009 [D7], [CAP-2]). False is the safe default — refusing an image is recoverable, sending
+    #: one to a blind model is not.
+    sees_images: bool = False
 
     def with_health(self, state: ModelState, detail: str = "", checked_at: float = 0.0) -> ModelSpec:
         return replace(self, state=state, detail=detail, checked_at=checked_at)
@@ -295,6 +300,7 @@ class ModelSpec:
             "providerName": self.provider_name,
             "wire": self.wire.value,
             "capability": self.capability.value,
+            "seesImages": self.sees_images,
             "state": self.state.value,
             "selectable": self.selectable,
             "refusal": self.refusal,

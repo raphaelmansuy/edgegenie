@@ -2283,7 +2283,12 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
 .model-trigger-glyph { color: var(--ink-3); font-size: 10.5px; letter-spacing: 0.03em; }
 
 .composer.is-dock .model-picker .model-trigger.btn { max-width: 100%; }
-.composer.is-dock .composer-actions { flex-wrap: nowrap; overflow: hidden; }
+/* `overflow: hidden` here exists to make the model chip SHRINK instead of pushing the row wider — it was
+   measured at 969px in a 900px window before this. But it also clips a popover opened from inside the row,
+   and the attach menu is exactly that: rendered by measurement at the right size, and invisible because an
+   ancestor hid it (the same failure the document bar had). The shrink is achieved by `min-width: 0` on the
+   chip and `flex: none` on the fixed controls; the clip is not needed for it. */
+.composer.is-dock .composer-actions { flex-wrap: nowrap; }
 .composer.is-dock .composer-actions .btn.primary, .composer.is-dock .composer-actions .btn.stop { flex: none; }
 
 /* ============================================================================
@@ -2768,3 +2773,74 @@ h2.rail-group { margin: 0; text-transform: none; }
    round-3 finding at 1024 px where the scrim stole the model control's clicks). `is-clear` is the
    soft edge for those two — it still catches the click that dismisses them. */
 .drawer-scrim.is-clear { background: transparent; animation: none; }
+
+/* ---------- attachments (spec 009) ----------
+   The `+` menu, the drop target, and the chip's four states. The chip itself reuses `.ctx-chip`, so a
+   blob sits in the same row as every other attachment and cannot look like a different kind of thing. */
+
+.attach-wrap { position: relative; display: inline-flex; }
+/* 24x24 minimum, like every other pointer target in the shell (WCAG 2.5.8). The glyph is smaller than the
+   target on purpose: a `+` drawn at 24 px reads as a button competing with the message box. */
+.attach-trigger { width: 24px; height: 24px; min-width: 24px; padding: 0; }
+.attach-plus { font-size: 17px; line-height: 1; font-weight: 500; margin-top: -1px; }
+
+/* The menu opens ABOVE the field, aligned to the trigger: below it would cover the textarea the user is
+   about to type in. */
+.attach-menu {
+  position: absolute; left: 0; bottom: calc(100% + 6px); z-index: var(--z-dropdown);
+  min-width: 232px; padding: 4px; background: var(--surface);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg); animation: rise 0.12s ease-out;
+}
+.attach-row {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 9px;
+  border: 0; border-radius: 5px; background: transparent; color: var(--ink);
+  font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+}
+.attach-row.is-active { background: var(--blue-50); color: var(--blue-600); }
+.attach-row.is-disabled { color: var(--ink-3); cursor: not-allowed; }
+.attach-row.is-disabled:hover { background: transparent; }
+.attach-row-icon { display: grid; place-items: center; color: var(--ink-3); flex: none; }
+.attach-row.is-active .attach-row-icon { color: var(--blue-600); }
+.attach-row-label { flex: 1; min-width: 0; }
+.attach-row-hint { font-size: 10.5px; color: var(--ink-3); max-width: 96px; text-align: right;
+  line-height: 1.25; flex: none; }
+/* The focused row must be visible as focused, not only tinted: a keyboard user needs to see where the
+   arrow keys have taken them, and a 6% background tint is not that. */
+.attach-row:focus-visible { outline: 2px solid var(--blue-600); outline-offset: -2px; }
+.attach-row.is-active:focus-visible { outline-offset: -2px; }
+
+/* The drop target is drawn INSIDE the field, absolutely, so dropping never shifts the layout. */
+.composer-field { position: relative; }
+.drop-hint {
+  position: absolute; inset: 4px; z-index: var(--z-sticky);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  border: 2px dashed var(--blue-300); border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--blue-50) 88%, transparent);
+  color: var(--blue-600); pointer-events: none;
+}
+.drop-hint-big { font-size: 13.5px; font-weight: 620; }
+.drop-hint-small { font-size: 11px; color: var(--ink-3); }
+
+/* -- the chip in its four states -- */
+.ctx-chip {
+  /* The remove button is 18 px visually; the target is 24 px, which is what a pointer needs. */
+  min-height: 28px;
+}
+.ctx-chip .ctx-thumb {
+  width: 20px; height: 20px; border-radius: 4px; object-fit: cover; flex: none;
+  /* A dark screenshot on a light chip (and the reverse) is invisible without this ring. */
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+.ctx-chip.is-pending { border-style: dashed; color: var(--ink-3); }
+.ctx-chip.is-failed { border-color: var(--pink-300); background: var(--pink-100); color: var(--pink-700); }
+/* The state is a WORD, not only a tint: a chip that differs by colour alone is unreadable to a
+   colour-blind user (WCAG 1.4.1, spec 009 [AFC-17]). */
+.ctx-state { font-size: 10.5px; letter-spacing: 0.02em; text-transform: lowercase; color: var(--ink-3); flex: none; }
+.ctx-state.is-bad { color: var(--pink-700); font-weight: 600; }
+.ctx-retry {
+  border: 0; background: transparent; width: 24px; height: 24px; border-radius: 50%;
+  color: var(--pink-700); font-size: 13px; line-height: 1; cursor: pointer; flex: none;
+}
+.ctx-retry:hover { background: var(--pink-100); }
+.ctx-chip button { width: 24px; height: 24px; }

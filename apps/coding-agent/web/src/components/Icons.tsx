@@ -429,3 +429,19 @@ export const ArrowUpRight = (p: IconProps) => (
     <path d="M9 7h8v8" />
   </Svg>
 );
+
+/** A connector: the socket a plugin plugs into, not a plug on a cable. Used by the attach menu. */
+export const Plug = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 3v5M15 3v5" />
+    <path d="M6 8h12v3a6 6 0 0 1-12 0z" />
+    <path d="M12 17v4" />
+  </Svg>
+);
+
+/** A paperclip: "attach a file", the glyph every mail client and chat box trained people to recognise. */
+export const Paperclip = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 11.5 11.6 20a4.5 4.5 0 0 1-6.4-6.4l8.5-8.5a3 3 0 0 1 4.3 4.3l-8.5 8.5a1.5 1.5 0 0 1-2.1-2.1l7.8-7.8" />
+  </Svg>
+);

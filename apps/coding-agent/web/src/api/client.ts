@@ -102,6 +102,17 @@ export const api = {
   patchProvider: (id: string, body: { enabled?: boolean; baseUrl?: string }) =>
     call<{ saved: boolean }>(`/api/llm/config/providers/${id}`, { method: "PATCH", headers: json, body: JSON.stringify(body) }),
   models: () => call<CatalogueResponse>("/api/models"),
+  /** Upload bytes the user handed the browser (paste, drop, picker). The only route that takes content. */
+  uploadBlob: (sessionId: string, name: string, mime: string, contentB64: string) =>
+    call<{ blobId: string; name: string; mime: string; bytes: number; family: string; state: string }>(
+      "/api/blobs", { method: "POST", headers: json,
+        body: JSON.stringify({ sessionId, name, mime, content: contentB64 }) }),
+  /** Where a chip's thumbnail comes from. A URL, not a fetch: the browser caches it per blob. */
+  blobUrl: (blobId: string, thumb = false) => `/api/blobs/${blobId}${thumb ? "?thumb=1" : ""}`,
+  /** Write a blob into the workspace, fenced. `sessionId` lets the fence judge against the session scope. */
+  materialiseBlob: (blobId: string, folder: string, sessionId: string, approval?: string) =>
+    call<{ path: string; bytes: number }>(`/api/blobs/${blobId}/materialise`, {
+      method: "POST", headers: json, body: JSON.stringify({ folder, sessionId, approval }) }),
   /** The full catalogue: state, limits with evidence, capability and credential hint per model. */
   catalogue: () => call<CatalogueResponse>("/api/llm/models"),
   model: (id: string) => call<ModelSpec>(`/api/llm/models/${id}`),
@@ -129,8 +140,10 @@ export const api = {
   send: (id: string, text: string, key: string, attachments: Attachment[] = []) =>
     call<{ turnId: string }>(`/api/sessions/${id}/messages`, { method: "POST",
       headers: { ...json, "Idempotency-Key": key },
-      // references only: the server reads the content with the user's own token
-      body: JSON.stringify({ text, attachments: attachments.map(({ kind, ref }) => ({ kind, ref })) }) }),
+      // References only: the server reads the content with the user's own token, and a blob by its id.
+      // `name` travels because it is the user's word for the file — the transcript renders it on reload,
+      // and a chip that says "attachment" instead of "q3.csv" is a chip the user cannot recognise.
+      body: JSON.stringify({ text, attachments: attachments.map(({ kind, ref, name }) => ({ kind, ref, name })) }) }),
   me: () => call<{ user: string; scratch: string; demo: boolean; workspace?: { host: string; orgId?: string };
     pythonRun?: import("../domain/cellrun").PythonPolicy }>("/api/me"),
   object: (path: string) => call<WsObject>(`/api/workspace/object?path=${encodeURIComponent(path)}`),

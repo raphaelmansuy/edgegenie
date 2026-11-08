@@ -48,6 +48,11 @@ export interface DockProps {
   attachments: Attachment[];
   openDocs: Doc[];
   searchRoot: string;
+  /** The session the dock writes into: blobs are scoped to it and the fence judges by it. */
+  sessionId?: string | null;
+  /** Whether the active model can consume an image, so an impossible attachment is refused up front. */
+  modelSeesImages?: boolean;
+  modelName?: string;
   onOpenDoc: (d: Doc) => void;
   /** Below 1180 px the dock is a drawer; the header then offers a close control that returns focus. */
   overlay: boolean;
@@ -183,7 +188,7 @@ export function AssistantDock(p: DockProps) {
         variant="dock"
         disabled={p.session.status === "archived"}
         busy={state === "streaming"}
-        onSend={(text) => p.onSend(text, p.attachments)}
+        onSend={(text, mine = []) => p.onSend(text, [...p.attachments, ...mine])}
         onStop={p.onStop}
         attachments={p.attachments}
         auto={null}
@@ -192,6 +197,9 @@ export function AssistantDock(p: DockProps) {
         openDocs={p.openDocs}
         inputRef={p.composerRef}
         searchRoot={p.searchRoot}
+        sessionId={p.sessionId ?? null}
+        modelSeesImages={p.modelSeesImages ?? true}
+        modelName={p.modelName}
         modelSlot={p.modelSlot}
         placeholder={p.placeholder ?? (p.focus.doc ? `Ask about ${p.focus.doc.name}…` : "Ask anything…")}
       />

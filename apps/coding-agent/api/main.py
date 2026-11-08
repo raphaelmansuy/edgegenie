@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import tempfile
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -138,6 +139,15 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
         lambda: os.environ.get("DATABRICKS_TOKEN") or None,
     )
     app.state.dev_token = os.environ.get("APP_DEV_TOKEN") or os.environ.get("DATABRICKS_TOKEN")
+
+    # Bytes the user hands us (spec 009). A directory in dev, memory in tests; the port makes a third
+    # implementation additive rather than a migration ([BLB-5]).
+    from .adapters.blob import FileBlobStore
+    from .services.blobs import BlobService
+
+    blob_root = os.environ.get("APP_BLOB_DIR") or os.path.join(tempfile.gettempdir(), "agent-blobs")
+    app.state.blob_store = FileBlobStore(blob_root)
+    app.state.blobs = BlobService(app.state.blob_store)
     # A dev token expires in an hour. In a deployed app the proxy supplies a fresh one per request, so
     # this only affects local work — but there it silently turns into an empty file tree and a search
     # that never finishes, which reads as a product bug and costs an afternoon. When a dev token is

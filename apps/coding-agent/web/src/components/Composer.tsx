@@ -9,32 +9,30 @@ import { api, type CatalogItem, type WsHit } from "../api/client";
 import { applyCommand, commandAt, matchCommands, pushHistory, stepHistory, type Command } from "../domain/commands";
 import type { Attachment } from "../domain/events";
 import type { Doc } from "../domain/docs";
+import { ACCEPT } from "../domain/blob";
+import { AttachMenu } from "./AttachMenu";
+import { Chip } from "./Chip";
 import { FileIcon, Folder, Notebook, Table } from "./Icons";
+import { useBlobUpload } from "../hooks/useBlobUpload";
 
 const MENTION = /(^|\s)@([^\s@]*)$/;
 const HISTORY_KEY = "coding-agent:prompt-history";
 
 /** One source of truth for "what does a notebook look like" across chips, tabs, and mentions. */
 export const KIND_ICON: Record<string, (p: { size?: number }) => ReactNode> = {
-  notebook: Notebook, file: FileIcon, folder: Folder, table: Table,
+  notebook: Notebook, file: FileIcon, folder: Folder, table: Table, blob: FileIcon,
 };
 
-export function Chip({ a, auto, onRemove }: { a: Attachment; auto?: boolean; onRemove?: () => void }) {
-  return (
-    <span className={`ctx-chip${auto ? " auto" : ""}`} title={`${a.ref}${auto ? "\nOpen in the viewer, so it is sent with your message" : ""}`}>
-      <span className="chip-icon" aria-hidden>{createElement(KIND_ICON[a.kind] ?? FileIcon, { size: 13 })}</span>
-      <span className="ctx-name">{a.name}</span>
-      {auto && <span className="ctx-tag">open</span>}
-      {onRemove && <button aria-label={`Remove ${a.name}`} onClick={onRemove}>×</button>}
-    </span>
-  );
-}
+/** Kept for callers that already import it from here; the implementation moved to `Chip.tsx`. */
+export { Chip } from "./Chip";
 
 interface Option { a: Attachment; hint: string }
 
 export function Composer({ disabled, busy, onSend, onStop, attachments, auto, onAdd, onRemove, openDocs, placeholder, inputRef,
-  variant = "main", modelSlot, searchRoot }: {
-  disabled?: boolean; busy: boolean; onSend: (text: string) => Promise<void>; onStop: () => void;
+  variant = "main", modelSlot, searchRoot, sessionId = null, modelSeesImages = true, modelName }: {
+  /** `mine` is what THIS composer holds: ready blobs, which the parent's `attachments` cannot know about. */
+  disabled?: boolean; busy: boolean;
+  onSend: (text: string, mine?: Attachment[]) => Promise<void>; onStop: () => void;
   /** Lets the app focus the box from a shortcut (⌘L) without prop-drilling a callback. */
   inputRef?: { current: HTMLTextAreaElement | null };
   attachments: Attachment[]; auto?: Attachment | null;
@@ -49,6 +47,12 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
    * server used the user's home folder and files under /Shared or /Repos were unfindable (FX-6).
    */
   searchRoot?: string;
+  /** The session the composer writes into: a blob upload is scoped to it, and the fence judges by it. */
+  sessionId?: string | null;
+  /** Whether the active model can consume an image, so an impossible attachment is refused before upload. */
+  modelSeesImages?: boolean;
+  /** The model's own name, for the refusal sentence. */
+  modelName?: string;
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -67,6 +71,21 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
   });
   const own = useRef<HTMLTextAreaElement>(null);
   const ref = inputRef ?? own;
+  /* Bytes the user hands us. The hook owns the chip list AND the upload; the composer only draws it.
+     It deliberately does NOT mirror ready blobs into `onAdd`: doing that put every pasted file in the
+     composer twice — once from the hook, once from the parent's attachment list — which measured as two
+     identical chips per paste. The blobs reach the message through `onSend`'s second argument instead, so
+     there is exactly one list of them (spec 009 [D1], [P5]). */
+  const blobs = useBlobUpload(sessionId);
+  const [dragging, setDragging] = useState(false);
+
+  const attachCount = () => attachments.filter((a) => a.kind === "blob").length + blobs.chips.length;
+
+  const accept = (files: FileList | File[]) => {
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    blobs.add(list, { count: attachCount(), modelSeesImages, model: modelName });
+  };
 
   useEffect(() => {
     const el = ref.current;
@@ -137,7 +156,7 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
 
   const submit = async () => {
     const value = text.trim();
-    if (!value || sending || disabled) return;
+    if (!value || sending || disabled || blobs.busy) return;
     setSending(true);
     setFailure("");
     setText("");
@@ -146,7 +165,16 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
     setHistory(next);
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* private mode */ }
     try {
-      await onSend(value);
+      // Ready blobs, in the order they were attached. A failed chip is deliberately not sent: its bytes
+      // never landed, and the user can still retry or remove it.
+      const mine: Attachment[] = blobs.chips
+        .filter((c) => c.state === "ready" && c.blobId)
+        .map((c) => ({ kind: "blob" as const, ref: c.blobId as string, name: c.name }));
+      await onSend(value, mine);
+      // Sent, so the composer's chips are no longer a draft: the transcript owns them now. A CHIP THAT
+      // FAILED is not sent, so it stays with its sentence to be retried or removed.
+      blobs.clear();
+      blobs.setNotice("");
     } catch (e) {
       // A refusal (no key for the model, no permission, the server down) must not eat the message:
       // put it back and say why, so fixing the cause and pressing Enter is all that is left to do.
@@ -195,11 +223,31 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
     <section className={`composer${variant === "dock" ? " is-dock" : ""}`} role="region"
       aria-label={variant === "dock" ? "Message the assistant" : "Message composer"}>
       <div className="composer-box">
-        {(attachments.length > 0 || auto) && (
+        {(attachments.length > 0 || auto || blobs.chips.length > 0) && (
           <div className="ctx-row" aria-label="Context for this message">
             {auto && !attachments.some((x) => x.ref === auto.ref) && <Chip a={auto} auto />}
-            {attachments.map((a) => <Chip key={`${a.kind}:${a.ref}`} a={a} onRemove={() => onRemove(a)} />)}
+            {attachments.filter((a) => a.kind !== "blob").map((a) => (
+              <Chip key={`${a.kind}:${a.ref}`} a={a} onRemove={() => onRemove(a)} />
+            ))}
+            {blobs.chips.map((c) => (
+              <Chip
+                key={c.key}
+                a={{ kind: "blob", ref: c.blobId ?? c.key, name: c.name }}
+                state={c.state}
+                reason={c.reason}
+                // An image on a model with no vision is still attached; the chip says what the model gets.
+                unseen={!modelSeesImages && /^image\//.test(c.mime ?? "")}
+                onRetry={c.state === "failed" ? () => blobs.retry(c.key, {
+                  count: attachCount(), modelSeesImages, model: modelName }) : undefined}
+                onRemove={() => blobs.remove(c.key)}
+              />
+            ))}
           </div>
+        )}
+        {(blobs.notice || blobs.chips.some((c) => c.state === "failed")) && (
+          <p className="composer-error" role="alert">
+            {blobs.notice || blobs.chips.find((c) => c.state === "failed")?.reason}
+          </p>
         )}
         {failure && (
           <p className="composer-error" role="alert">
@@ -207,7 +255,31 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
             {/needs a key|API key|credential/i.test(failure) && <> Add one in <kbd>⌘ ,</kbd> Providers and keys.</>}
           </p>
         )}
-        <div className="composer-field">
+        <div
+          className={`composer-field${dragging ? " is-dropping" : ""}`}
+          onDragOver={(e) => {
+            if (!e.dataTransfer?.types.includes("Files")) return;
+            e.preventDefault();          // required, or the browser opens the file
+            setDragging(true);
+          }}
+          onDragLeave={(e) => {
+            // Only when the pointer leaves the FIELD, not when it crosses into a child.
+            if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+            setDragging(false);
+          }}
+          onDrop={(e) => {
+            if (!e.dataTransfer?.files?.length) return;
+            e.preventDefault();
+            setDragging(false);
+            accept(e.dataTransfer.files);
+          }}
+        >
+          {dragging && (
+            <div className="drop-hint" aria-hidden>
+              <span className="drop-hint-big">Drop to attach</span>
+              <span className="drop-hint-small">{ACCEPT.replace(/\./g, "").replace(/,/g, " · ")}</span>
+            </div>
+          )}
           <textarea
             ref={ref}
             value={text}
@@ -215,7 +287,15 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
             aria-label="Message the agent"
             aria-autocomplete="list"
             aria-expanded={open}
-            onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); if (failure) setFailure(""); }}
+            onPaste={(e) => {
+              /* The single most important line in this handler: return BEFORE preventDefault when there is
+                 nothing we can take, or pasting text stops working (spec 009 [E-14], [06 §Front-end]). */
+              const files = Array.from(e.clipboardData?.files ?? []);
+              if (files.length === 0) return;
+              e.preventDefault();
+              accept(files);
+            }}
+            onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); if (failure) setFailure(""); if (blobs.notice) blobs.setNotice(""); }}
             onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart)}
             onKeyDown={(e) => {
               if (open && (options.length > 0 || searching)) {
@@ -280,6 +360,11 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
         </div>
         <div className="composer-actions">
           {/* Tools on the left, the primary action on the right: the reading order of every chat UI. */}
+          <AttachMenu
+            disabled={disabled}
+            onFiles={accept}
+            onContext={mention}
+          />
           <button className="btn ghost icon-btn" aria-label="Add a notebook, file or table" title="Add context (⌘⇧A)" onClick={mention} disabled={disabled}>＠</button>
           <button className="btn ghost icon-btn" aria-label="Commands" title="Commands (/)" disabled={disabled}
             onClick={() => {
@@ -295,7 +380,10 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
           {busy ? (
             <button className="btn stop" onClick={onStop}>Stop <kbd>Esc</kbd></button>
           ) : (
-            <button className="btn primary" onClick={() => void submit()} disabled={!text.trim() || disabled}>
+            <button className="btn primary" onClick={() => void submit()} disabled={!text.trim() || disabled || blobs.busy}
+              title={blobs.busy
+                ? `Waiting for ${blobs.chips.find((c) => c.state === "pending")?.name ?? "an attachment"} to finish uploading`
+                : undefined}>
               Send <kbd>⌘⏎</kbd>
             </button>
           )}

@@ -303,6 +303,12 @@ def static_spec(model_id: str) -> ModelSpec:
                 id=mid, display_name=mid.name, provider_name="The demo agent",
                 wire=WireProtocol.FAKE, endpoint=mid.name, limits=DEFAULT_LIMITS,
                 capability=Capability.TOOLS, credential_kind=CredentialKind.NONE,
+                # Declared, like every other model's capability, and true for the reference agent: its
+                # scenarios are written by hand, so it can "consume" anything. This is what lets the
+                # attachment path be exercised end to end in demo mode and in the e2e suite without a
+                # vision model from a provider — the alternative was to fake the check, which would test
+                # nothing (spec 009 [D7], [S2]).
+                sees_images=True,
             )
         # An id the seed does not know may still be a served endpoint written directly:
         # `databricks/<endpoint>`. That is a lookup, not string surgery: the model name IS the endpoint.

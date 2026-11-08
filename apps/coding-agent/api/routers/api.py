@@ -20,6 +20,7 @@ from ..domain import approval, scope as scope_mod, version
 from ..domain.llm import ModelError
 from ..domain import context as ctx
 from ..domain import events
+from ..domain.blob import BlobRefusal
 from ..domain.redact import token_scopes
 from ..domain.workspace_ops import child_path, is_protected
 from ..domain.session import DomainError, Session
@@ -204,6 +205,7 @@ async def get_session(request: Request, sid: str) -> dict:
                 "prompt": t.prompt,
                 "model": t.model,
                 "queuedReason": t.queued_reason,
+                "attachments": t.attachments,
                 "usage": {"input": t.input_tokens, "output": t.output_tokens, "cached": t.cached_tokens},
             }
             for t in live.state.turns
@@ -266,8 +268,9 @@ async def send_message(
         items = ctx.parse(body.attachments)
     except ctx.ContextError as exc:
         raise HTTPException(422, str(exc)) from exc
-    resolved = await ctx_service.resolve(items, _browser(request), request.app.state.catalog,
-                                         _user_token(request))
+    resolved = await ctx_service.resolve(
+        items, _browser(request), request.app.state.catalog, _user_token(request),
+        blobs=getattr(request.app.state, "blobs", None), user_id=_user(request))
     orch.touch(sid)
     try:
         turn = await orch.submit(sid, body.text, ctx.render(resolved), [a.to_dict() for a in items],
@@ -995,3 +998,138 @@ async def ready(request: Request) -> dict:
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(503, f"store not ready: {exc}") from exc
     return {"ok": True, "agentMode": request.app.state.settings.agent_mode}
+
+
+# -- blobs (spec 009) ---------------------------------------------------------
+class UploadBlob(BaseModel):
+    """Bytes the browser hands us. The base64 cap is the framework's, checked before the handler runs."""
+    sessionId: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=400)
+    mime: str = Field(default="", max_length=120)
+    #: 8 MB decoded is ~10.7 MB of base64. The cap is that plus room for padding, and it refuses a
+    #: 2 GB body in the framework rather than in a check a handler might forget ([D3]).
+    content: str = Field(min_length=0, max_length=11_300_000)
+
+
+def _blobs(request: Request):
+    svc = getattr(request.app.state, "blobs", None)
+    if svc is None:                      # a server started without the stage: say so, do not 500
+        raise HTTPException(503, "attachment storage is not configured")
+    return svc
+
+
+async def _model_sees_images(request: Request, session_id: str) -> bool:
+    """Whether the session's model can consume an image — the DECLARED property, not a guess from its name.
+
+    The fact lives on `ModelSpec.sees_images`, seeded per model, and reaches the client on the catalogue so
+    the picker can refuse before an upload. A name is not evidence: matching on "llama" told a user their
+    model was blind based on a substring, which is a policy living in a string.
+
+    `find` is asynchronous — awaiting it matters. Called without `await`, it returns a coroutine, `getattr`
+    on that finds no `sees_images`, and every image is refused as if no model could see. That failure is
+    silent and looks like a policy decision.
+    """
+    try:
+        model = _orch(request).get(session_id).state.session.model
+    except (KeyError, AttributeError):
+        return False
+    try:
+        spec = await request.app.state.models.find(model)
+    except Exception:  # noqa: BLE001 - an unknown model is not evidence of sight
+        return False
+    return bool(getattr(spec, "sees_images", False))
+
+
+@router.post("/blobs", status_code=201)
+async def blob_upload(request: Request, body: UploadBlob) -> dict:
+    """Accept bytes the user handed the browser: paste, drop, or file picker.
+
+    This is the ONLY route that takes content from the client, and it takes it through the same rules as
+    every other write: validate (size, magic bytes, declared type, name, emptiness, capability), store
+    once under a server-generated id, and record an event that carries metadata but never bytes.
+    """
+    orch = _orch(request)
+    try:
+        orch.get(body.sessionId)
+    except KeyError:
+        raise HTTPException(404, "no such session") from None
+    svc = _blobs(request)
+    try:
+        row = await svc.accept(
+            body.sessionId, _user(request), body.name, body.mime, body.content,
+            model_sees_images=await _model_sees_images(request, body.sessionId),
+        )
+    except BlobRefusal as exc:
+        raise HTTPException(422, {"code": exc.code, "detail": exc.message}) from None
+    return row.to_dict()
+
+
+@router.get("/blobs/{blob_id}")
+async def blob_bytes(request: Request, blob_id: str, thumb: int = 0) -> Response:
+    """The blob's own bytes, served so a browser cannot execute them (spec 03 [SEC-4]).
+
+    Images are `inline` and the verified type, because a thumbnail that downloads is not a thumbnail.
+    Everything else is `attachment` and `application/octet-stream`, so a crafted HTML "text" file cannot
+    become a page on our origin.
+    """
+    svc = _blobs(request)
+    try:
+        row = await svc.store.meta(blob_id, _user(request))
+        raw = await svc.store.bytes_for(blob_id, _user(request))
+    except LookupError:
+        raise HTTPException(404, "no such attachment") from None
+    if thumb:
+        raw = await svc.thumb(row, raw)
+    inline = row.mime.startswith("image/")
+    media = row.mime if inline else "application/octet-stream"
+    disposition = "inline" if inline else f'attachment; filename="{row.stored_name}"'
+    return Response(content=raw, media_type=media, headers={
+        "Content-Disposition": disposition,
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, max-age=3600",
+    })
+
+
+class MaterialiseBlob(BaseModel):
+    folder: str = Field(min_length=1, max_length=512)
+    #: The session whose fence judges this write. Sent by the client because the folder alone cannot say
+    #: which scope it belongs to — and without it every save would ask, which is the wrong answer for a
+    #: file the user is putting inside the folder they already chose.
+    sessionId: str | None = None
+    approval: str | None = None
+
+
+@router.post("/blobs/{blob_id}/materialise", status_code=201)
+async def blob_materialise(request: Request, blob_id: str, body: MaterialiseBlob) -> dict:
+    """Write a blob into the workspace, through the fence, exactly as `workspace_save` does.
+
+    The order is the design ([D5]): path, verdict, approval, bytes, import, record. Nothing here is a
+    second policy — `scope.check_path` is called, not re-implemented, and a mutation test that forces it to
+    deny must make this route deny too.
+    """
+    folder = _ws_path(body.folder)
+    scope = _save_scope(request, body.sessionId)
+    svc = _blobs(request)
+    try:
+        row = await svc.store.meta(blob_id, _user(request))
+    except LookupError:
+        raise HTTPException(404, "no such attachment") from None
+    # `folder` IS the destination directory; the stored name is appended to it. Joining to its parent
+    # would put the file one level up, outside the folder the user named.
+    target = f"{folder.rstrip('/')}/{row.stored_name}"
+    decision = scope_mod.check_path(scope, target)
+    if decision.verdict is scope_mod.Verdict.DENY:
+        raise HTTPException(403, decision.reason or "this path cannot be written")
+    if decision.verdict is scope_mod.Verdict.ASK:
+        if not approval.verify(body.approval, target, ""):
+            raise HTTPException(403, {
+                "fence": "ask", "reason": decision.reason or "outside the working folder",
+                "approval": approval.issue(target, ""), "target": target,
+            })
+    raw = await svc.store.bytes_for(blob_id, _user(request))
+    with _dbx_errors("blob save"):
+        browser = _browser(request)
+        if await browser.exists(target, _user_token(request)):
+            raise FileExistsError(f"{row.stored_name} already exists in that folder")
+        await browser.import_content(target, raw, _user_token(request), format="AUTO")
+    return {"path": target, "bytes": row.size}

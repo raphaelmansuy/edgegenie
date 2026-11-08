@@ -98,6 +98,9 @@ class Turn:
     #: Text placed before `prompt` when talking to the agent (attached notebooks, tables). The
     #: transcript and the requirement extractor see `prompt` only: context is not the user's words.
     context: str = ""
+    #: What the user attached to this message, as `[{kind, ref, name}]`. References only — a blob is
+    #: referenced by id, never by content, so a replay costs nothing and the bytes live in one place.
+    attachments: list[dict] = field(default_factory=list)
 
     def start(self) -> Turn:
         if self.status not in (TurnStatus.QUEUED, TurnStatus.INTERRUPTED):
@@ -132,7 +135,7 @@ class SessionState:
     def next_index(self) -> int:
         return len(self.turns) + 1
 
-    def new_turn(self, prompt: str, context: str = "") -> Turn:
+    def new_turn(self, prompt: str, context: str = "", attachments: list[dict] | None = None) -> Turn:
         """Create the next turn. If one is already running, the new turn is queued behind it."""
         running = self.running()
         t = Turn(
@@ -142,6 +145,7 @@ class SessionState:
             prompt=prompt,
             context=context,
             model=self.session.model,
+            attachments=list(attachments or []),
             queued_reason=f"after turn {running.index}" if running else "",
         )
         self.turns.append(t)

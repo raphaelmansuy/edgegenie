@@ -13,6 +13,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type CatalogueResponse, type SessionSummary } from "./api/client";
+import { prettyId } from "./domain/models";
 import { ApprovalSheet, EmptyState, Inspector, SessionHome } from "./components/Chrome";
 import { artifactsOf, wroteElsewhere } from "./domain/artifacts";
 import { nameOf, recentDocs, rememberDoc } from "./domain/recent";
@@ -475,6 +476,15 @@ export function App() {
     [setLayoutTab, openRail]);
 
   const searchRoot = computeSearchRoot(focus, session.folder || folder, scratch);
+  /* Whether the active model can consume an image — the catalogue's DECLARED property, not a guess from
+     the model's name. A name is not evidence, and a substring match here either blocked a working feature
+     or shipped a picture to a blind model (spec 009 [CAP-2], [D7]). The server checks the same field again
+     before it stores a byte. */
+  const activeModel = active ? session.model : (model || defaultModel);
+  const modelSeesImages = useMemo(() => {
+    const hit = catalogue?.available?.find((m) => m.id === activeModel);
+    return Boolean(hit?.seesImages);
+  }, [catalogue, activeModel]);
   useEffect(() => { PaletteActions.root = searchRoot; }, [searchRoot]);
 
   const paletteItems = useMemo<Candidate[]>(() => {
@@ -751,7 +761,7 @@ export function App() {
       running={busy}
       conn={conn}
       error={error}
-      onSend={(text) => message(text)}
+      onSend={(text, mine) => message(text, mine)}
       onStop={stop}
       onSuggestion={fromSuggestion}
       onApprove={(a, outcome) => void decide(a.approvalId, outcome)}
@@ -763,6 +773,9 @@ export function App() {
       attachments={attachments}
       openDocs={docs}
       searchRoot={searchRoot}
+      sessionId={active}
+      modelSeesImages={modelSeesImages}
+      modelName={prettyId(activeModel ?? "")}
       onOpenDoc={(d) => selectTab(d.id)}
       overlay={overlay}
       className={extra}
@@ -971,6 +984,9 @@ export function App() {
                 onAdd={addContext} onRemove={(a) => setAttachments((cur) => cur.filter((x) => x !== a))}
                 openDocs={docs}
                 searchRoot={searchRoot}
+                sessionId={active}
+                modelSeesImages={modelSeesImages}
+                modelName={prettyId(activeModel ?? "")}
                 modelSlot={modelControl("inline")}
                 placeholder={viewDoc ? `Ask about ${viewDoc.name}…` : !active ? "Describe what you want to build, or pick an example above…" : undefined}
               />

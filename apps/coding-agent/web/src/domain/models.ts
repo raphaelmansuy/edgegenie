@@ -42,6 +42,9 @@ export interface ModelSpec {
   providerName: string;
   wire: string;
   capability: Capability;
+  /** Declared by the catalogue, never inferred from the name: whether this model can consume an image.
+   *  Absent means "not declared", which is treated as false (spec 009 [D7]). */
+  seesImages?: boolean;
   state: ModelState;
   selectable: boolean;
   /** Why this model may not be offered, when it may not. Empty means "no reason to refuse". */

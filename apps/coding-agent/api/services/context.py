@@ -14,8 +14,22 @@ def _cells_text(obj) -> str:
     return "\n\n".join(f"# --- cell {c.index + 1} ({c.language}) ---\n{c.source}" for c in obj.cells)
 
 
-async def _one(a: Attachment, ws, cat, token: str | None) -> Resolved:
+async def _one(a: Attachment, ws, cat, token: str | None, blobs=None, user_id: str = "") -> Resolved:
     try:
+        if a.kind == "blob":
+            # Bytes the user handed us. There is no token to re-read them with and no path to re-check:
+            # the store already decided who may see this row, and the READER decides what a read means
+            # for its family. A missing blob is REPORTED, never silently dropped, so the agent cannot
+            # answer as if it had seen something (spec 009 [AFC-15]).
+            if blobs is None:
+                return Resolved(a, error="this attachment is no longer available")
+            try:
+                row = await blobs.store.meta(a.ref, user_id)
+                raw = await blobs.store.bytes_for(a.ref, user_id)
+            except LookupError:
+                return Resolved(a, error="this attachment is no longer available")
+            text, note = await blobs.describe(row, raw)
+            return Resolved(a, text, note)
         if a.kind == "cell":
             from ..domain.binding import BindingError, cell_text, content_sha, parse_cell_ref, render_cell
 
@@ -52,5 +66,7 @@ async def _one(a: Attachment, ws, cat, token: str | None) -> Resolved:
         return Resolved(a, error=f"{type(exc).__name__}: {str(exc)[:120]}")
 
 
-async def resolve(items: list[Attachment], ws, cat, token: str | None) -> list[Resolved]:
-    return list(await asyncio.gather(*(_one(a, ws, cat, token) for a in items)))
+async def resolve(items: list[Attachment], ws, cat, token: str | None,
+                  blobs=None, user_id: str = "") -> list[Resolved]:
+    """Every attachment, resolved independently: one unreadable item must not block the message."""
+    return list(await asyncio.gather(*(_one(a, ws, cat, token, blobs, user_id) for a in items)))

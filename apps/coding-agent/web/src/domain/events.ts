@@ -9,7 +9,8 @@ export type EventType =
   | "approval.requested" | "approval.decided"
   | "evidence.proposed" | "turn.auditing"
   | "turn.completed" | "turn.blocked" | "turn.cancelled" | "turn.interrupted"
-  | "turn.failed" | "turn.retrying" | "session.compacted" | "usage.updated";
+  | "turn.failed" | "turn.retrying" | "session.compacted" | "usage.updated"
+  | "blob.attached";
 
 export const EVENT_TYPES: EventType[] = [
   "session.created", "session.ready", "session.degraded", "session.archived", "document.saved",
@@ -19,6 +20,7 @@ export const EVENT_TYPES: EventType[] = [
   "evidence.proposed", "turn.auditing",
   "turn.completed", "turn.blocked", "turn.cancelled", "turn.interrupted",
   "turn.failed", "turn.retrying", "session.compacted", "usage.updated",
+  "blob.attached",
 ];
 
 export interface AgentEvent {
@@ -77,7 +79,12 @@ export type TurnStatus =
   | "queued" | "running" | "auditing" | "completed" | "blocked" | "cancelled" | "interrupted" | "failed";
 
 /** `cell` is a fragment on a notebook path (`/path#3`); the server renders only that cell (006 FX-3). */
-export interface Attachment { kind: "notebook" | "file" | "folder" | "table" | "cell"; ref: string; name: string }
+export interface Attachment {
+  /** `blob` is bytes the user handed us (paste, drop, picker); the rest are references to the workspace. */
+  kind: "notebook" | "file" | "folder" | "table" | "cell" | "blob";
+  ref: string;
+  name: string;
+}
 export interface PlanEntry { content: string; status: "pending" | "in_progress" | "completed" | string; priority?: string }
 
 export interface Turn {

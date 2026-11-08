@@ -252,3 +252,56 @@ class ModelResolver(Protocol):
 
     async def resolve(self, model_id: str, *, user_id: str,
                       session_id: str = "") -> tuple[object, Secret | None]: ...
+
+
+# -- blobs (spec 009) ----------------------------------------------------------------------------
+@dataclass(frozen=True, slots=True)
+class BlobRow:
+    """A stored blob's metadata. The bytes are addressed by `storage_key`, never carried here."""
+
+    id: str
+    session_id: str
+    user_id: str
+    original_name: str
+    stored_name: str
+    mime: str
+    family: str
+    size: int
+    sha256: str
+    storage_key: str
+    state: str          # pending | ready | attached | swept
+    created_at: float
+    attached_at: float | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "blobId": self.id, "name": self.original_name, "mime": self.mime,
+            "bytes": self.size, "family": self.family, "state": self.state,
+            "sha256": self.sha256, "createdAt": self.created_at,
+        }
+
+
+class BlobStore(Protocol):
+    """Bytes the user handed us, addressed by an opaque id (spec 009 [BLB-1], [BLB-5]).
+
+    Two implementations exist today — memory for tests, files for development — and the contract test runs
+    against both, which is what makes Liskov a fact rather than a claim. A database implementation is a
+    third implementation of this same interface, not a migration of the feature.
+    """
+
+    async def put(self, session_id: str, user_id: str, spec, raw: bytes) -> BlobRow: ...
+    async def meta(self, blob_id: str, user_id: str) -> BlobRow: ...
+    async def bytes_for(self, blob_id: str, user_id: str) -> bytes: ...
+    async def mark_attached(self, blob_id: str, turn_id: str, display_name: str) -> None: ...
+    async def refcount(self, blob_id: str) -> int: ...
+    async def sweep(self, now: float) -> dict[str, int]: ...
+    async def delete_session(self, session_id: str) -> int: ...
+
+
+class BlobReader(Protocol):
+    """What a *read* of a blob means, decided by its verified family (spec 009 [D9]).
+
+    One method, so a new family is a new class rather than a new branch in a shared function.
+    """
+
+    async def read(self, row: BlobRow, raw: bytes, *, offset: int = 0, max_chars: int = 0) -> tuple[str, str]: ...

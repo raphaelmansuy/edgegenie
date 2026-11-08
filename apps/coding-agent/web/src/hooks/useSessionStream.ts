@@ -7,13 +7,41 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
-import { emptySession, newTurn, PENDING, reduce, type AgentEvent, type Attachment, type SessionView } from "../domain/events";
+import { emptySession, newTurn, PENDING, reduce, type AgentEvent, type Attachment, type SessionView, type Turn } from "../domain/events";
 
 /** How long streamed events are collected before one state update. One long answer arrives as
  *  hundreds of deltas; rendering each one re-parses the whole markdown tree and froze the tab. */
 const BATCH_MS = 40;
 
 export type Conn = "idle" | "connecting" | "live" | "reconnecting" | "lost";
+
+/** Adapt one server turn into the client's `Turn`.
+ *
+ *  The server's detail route has always returned the turns; this function did not carry them, so a reload
+ *  showed an empty transcript for a session that had four of them (measured: 0 turns after a reload, 2
+ *  before). The attachment list is why it matters now — a turn's chips are HISTORY, rendered from what was
+ *  sent, and they only come from here (spec 009 [AFC-8], [D6]).
+ *
+ *  Built from `newTurn` rather than object-literal: a `Turn` has nine fields the reducer reads (`tools`,
+ *  `evidence`, `thought`, `answer` …), and spelling them by hand crashed the page with
+ *  "Cannot read properties of undefined (reading 'length')" the moment a reload found a turn. Taking the
+ *  defaults from the one constructor that already knows them cannot go stale.
+ */
+function adoptTurn(t: Record<string, unknown>): Turn {
+  const base = newTurn(
+    String(t.id ?? ""),
+    Number(t.index ?? 0),
+    String(t.prompt ?? ""),
+    String(t.model ?? ""),
+  );
+  return {
+    ...base,
+    status: (t.status as Turn["status"]) ?? "completed",
+    // Absent on an older session, which is not an error: the turn simply had nothing attached.
+    attachments: Array.isArray(t.attachments) ? (t.attachments as Attachment[]) : [],
+    usage: (t.usage as Turn["usage"]) ?? base.usage,
+  };
+}
 
 function hydrate(id: string, d: Partial<SessionView> | undefined): SessionView {
   const base = emptySession(id);
@@ -29,6 +57,9 @@ function hydrate(id: string, d: Partial<SessionView> | undefined): SessionView {
     agent: d?.agent ?? "",
     agentVersion: d?.agentVersion ?? "",
     scope: d?.scope,
+    // Hydration is what a reload reads. Without the turns it is a session with no history, and every chip
+    // the user sent is gone from the screen while the server still has it.
+    turns: Array.isArray(d?.turns) ? (d.turns as unknown as Record<string, unknown>[]).map(adoptTurn) : [],
   };
 }
 

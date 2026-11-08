@@ -55,7 +55,7 @@ describe("Composer context", () => {
     const box = screen.getByRole("textbox", { name: "Message the agent" }) as HTMLTextAreaElement;
     fireEvent.change(box, { target: { value: "  hello  " } });
     fireEvent.keyDown(box, { key: "Enter", metaKey: true });
-    await waitFor(() => expect(onSend).toHaveBeenCalledWith("hello"));
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith("hello", []));
     await waitFor(() => expect(box.value).toBe(""));
   });
 });
@@ -99,7 +99,7 @@ describe("Tree keyboard", () => {
     const box = container.querySelector("textarea")!;
     fireEvent.change(box, { target: { value: "hello" } });
     fireEvent.keyDown(box, { key: "Enter" });
-    await waitFor(() => expect(sent).toHaveBeenCalledWith("hello"));
+    await waitFor(() => expect(sent).toHaveBeenCalledWith("hello", []));
     fireEvent.change(box, { target: { value: "line" } });
     fireEvent.keyDown(box, { key: "Enter", shiftKey: true });
     expect(sent).toHaveBeenCalledTimes(1);

@@ -538,7 +538,13 @@ class Orchestrator:
         # alone had quietly stopped the start cards from choosing (the "investigate a number" card
         # answered with a notebook).
         hint = DEMO_MARKER.search(asked) if self._demo else None
-        turn = live.state.new_turn(stored_text, f"{context} {hint.group(0).strip()}" if hint else context)
+        turn = live.state.new_turn(
+            stored_text,
+            f"{context} {hint.group(0).strip()}" if hint else context,
+            # References, not content: the transcript renders these chips on reload, and a blob is one id.
+            [{"kind": a.get("kind", ""), "ref": a.get("ref", ""), "name": a.get("name", "")}
+             for a in (attachments or [])],
+        )
         if not live.state.turns[:-1] and live.state.session.title == "New session":
             live.state.session = updated(live.state.session, title=title_from(text))
         # The pin is written BEFORE the prompt and never updated (Axiom A5, C-8).

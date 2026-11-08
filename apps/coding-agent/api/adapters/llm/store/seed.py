@@ -146,6 +146,9 @@ def _spec(row: dict[str, Any], providers: dict[ProviderKind, SeedProvider]) -> M
                            else CredentialSource.NONE),
         state=_state(row.get("state")),
         group=str(row.get("group") or ""),
+        # Declared in the seed, never inferred from the name: a name is a guess, and a wrong "yes" ships
+        # a picture to a model that cannot see it (specs/009 [D7]).
+        sees_images=bool(row.get("sees_images", False)),
         origin="seed",
     )
 

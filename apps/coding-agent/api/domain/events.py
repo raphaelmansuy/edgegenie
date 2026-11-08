@@ -35,6 +35,7 @@ EventType = Literal[
     "session.compacted",
     "usage.updated",
     "document.saved",
+    "blob.attached",
 ]
 
 EVENT_TYPES: tuple[str, ...] = EventType.__args__  # type: ignore[attr-defined]

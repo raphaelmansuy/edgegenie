@@ -23,6 +23,7 @@
   "turn.retrying",
   "session.compacted",
   "usage.updated",
-  "document.saved"
+  "document.saved",
+  "blob.attached"
  ]
 }

@@ -104,6 +104,7 @@ models:
     output: 16000
     evidence: documented
     source: https://docs.anthropic.com/en/docs/about-claude/models
+    sees_images: true
     state: not_enabled
 
   # ---- Google Vertex / Gemini. 1M context and 30k output are the repository's working template. ----
