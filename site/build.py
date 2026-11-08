@@ -304,8 +304,10 @@ def localise(body: str, prefix: str) -> str:
     so it catches links in markdown, in this site's trusted HTML, and in a rendered repository document
     alike — the one place all three pass through.
     """
-    if not prefix:
-        return body
+    # At the site root the prefix is empty, and `/assets/x.png` must become `assets/x.png`: the site never
+    # knows its own mount point, so an absolute path is correct at a domain root and broken at a project
+    # subpath. That was a real defect — the home page 404'd its hero image on Pages while every other
+    # page worked, because those had a prefix and this one did not.
     return re.sub(r'(href|src)="/(?!/)', lambda m: f'{m.group(1)}="{prefix}', body)
 
 

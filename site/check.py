@@ -7,6 +7,7 @@ mistakes. It reads `site/dist` as a stranger would (spec 008 [D2]).
 Passes, each because of a specific way a static site goes wrong:
 
   --links    a href to a route that was never built, or an anchor to a heading that was renamed
+  --absolute a site-absolute path, which works at a domain root and 404s at a project subpath
   --markup   an unclosed tag, a second h1, a skipped heading level
   --images   a missing file, `alt="screenshot"`, no width/height
   --claims   an unsubstituted {{CL-n}}, or a percentage in prose that no claim produced
@@ -194,6 +195,22 @@ def resolve(where: str, href: str) -> Path | None:
     if candidate.is_dir():
         candidate = candidate / "index.html"
     return candidate
+
+
+def check_absolute_paths(parsed: dict[Path, Page]) -> None:
+    """No built page may link an asset with a site-absolute path.
+
+    Pages serves this site from `/opengenie/`, so `/assets/site.css` resolves to the domain root and
+    404s. That is exactly what happened to the home page's hero image: the root page has an empty
+    prefix, and a rewrite that skipped the empty case left its `src` absolute. Local tests passed
+    because a local server *does* serve from the root. This check is the one that is true in both.
+    """
+    for path, p in parsed.items():
+        where = route_of(path)
+        raw = path.read_text(encoding="utf-8")
+        for m in re.finditer(r'(?:href|src)="/(?!/)', raw):
+            snippet = raw[m.start():m.start() + 70].split('"')[1]
+            fail("links", where, f"site-absolute path {snippet!r} breaks at a project subpath")
 
 
 def check_links(parsed: dict[Path, Page]) -> None:
@@ -429,6 +446,7 @@ def check_tokens() -> None:
 PASSES = {
     "markup": check_markup,
     "links": check_links,
+    "absolute": check_absolute_paths,
     "images": check_images,
     "claims": check_claims,
     "meta": check_meta,

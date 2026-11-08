@@ -1,6 +1,6 @@
 {
   "app": "http://127.0.0.1:8130",
-  "when": "2026-11-08T15:09:23.896Z",
+  "when": "2026-11-08T15:13:32.324Z",
   "scenes": {
     "S1": {
       "routes": {
@@ -116,7 +116,7 @@
           "canonical": "https://raphaelmansuy.github.io/opengenie/",
           "images": [
             {
-              "src": "/assets/shots/app-1440.png",
+              "src": "assets/shots/app-1440.png",
               "alt": "The OpenGenie shell at 1440 px: sessions and files in the left rail, a notebook in the centre, and the assistant docked on the right, labelled with the notebook it is bound to.",
               "w": "2880",
               "h": "1800",
@@ -622,7 +622,7 @@
               "alt": "Step 2",
               "w": "2364",
               "h": "538",
-              "loaded": false
+              "loaded": true
             },
             {
               "src": "../assets/tutorial/03-step-3-put-the-agent-kit-in-the-sandbox.png",
@@ -1470,7 +1470,7 @@
     },
     "S9": {
       "sizes": {
-        "/": 56302,
+        "/": 56293,
         "tour/": 64504,
         "tutorial/": 93455,
         "evidence/": 61410,
@@ -1478,7 +1478,7 @@
         "reference/": 53333,
         "about/": 54957
       },
-      "totalHtml": 171449,
+      "totalHtml": 171440,
       "weight": 0
     },
     "S10": {
@@ -1827,7 +1827,7 @@
       "scene": "S2",
       "name": "a product screenshot exists",
       "ok": true,
-      "detail": "{\"top\":613.921875,\"height\":542.5,\"src\":\"/assets/shots/app-1440.png\",\"alt\":\"The OpenGenie shell at 1440 px: sessions and files in the left rail, a notebook in the centre, and the assistant docked on the right, labelled with the notebook it is bound to.\"}"
+      "detail": "{\"top\":613.921875,\"height\":542.5,\"src\":\"assets/shots/app-1440.png\",\"alt\":\"The OpenGenie shell at 1440 px: sessions and files in the left rail, a notebook in the centre, and the assistant docked on the right, labelled with the notebook it is bound to.\"}"
     },
     {
       "scene": "S2",
