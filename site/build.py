@@ -494,7 +494,11 @@ def make_og(path: Path) -> None:
         fallback = STATIC / "og.png"
         if fallback.is_file():
             shutil.copy2(fallback, path)
-        return
+            return
+        raise SystemExit(
+            "build: cannot produce assets/og.png — install Pillow, or commit the fallback at "
+            f"{fallback.relative_to(ROOT)}"
+        )
     W, H = 1200, 630
     img = Image.new("RGB", (W, H), "#faf9f7")
     d = ImageDraw.Draw(img)
@@ -532,9 +536,19 @@ def make_og(path: Path) -> None:
 
 
 def make_icon(path: Path, size: int) -> None:
+    """Draw the app icon, or copy the committed one.
+
+    The site must build with `python3` alone (`[D3]`), so neither of these images may depend on Pillow
+    being installed. When it is, the icon is drawn from the same mark the header uses; when it is not,
+    the PNG committed beside this script is used. Either way the file exists, so `check.py`'s
+    `--files` pass means what it says on a machine with no optional dependency.
+    """
     try:
         from PIL import Image, ImageDraw
     except ImportError:
+        fallback = STATIC / f"icon-{size}.png"
+        if fallback.is_file():
+            shutil.copy2(fallback, path)
         return
     scale = 4
     s = size * scale

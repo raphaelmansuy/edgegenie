@@ -52,13 +52,37 @@ jobs:
       - name: check every link, claim, image and heading
         run: python site/check.py
 
-      - name: the spec set must not contain a dead link
+      - name: the build must not need an optional dependency
+        # The site promises to build with `python3` alone (spec 008 [D3]). Pillow is used only to *draw*
+        # the social card and the app icons; committed fallbacks cover a machine without it. This step
+        # proves the promise on the runner that actually deploys, instead of trusting a local check.
         run: |
-          if [ -d apps/coding-agent/web/node_modules ]; then
-            echo "node_modules present; skipping the spec verifiers (they run in the app's CI)"
-          else
-            echo "spec link verification runs in the app's own CI job; the site check is authoritative here"
-          fi
+          python - <<'PY'
+          import subprocess, sys
+
+          blocker = """
+          import sys
+          class Block:
+              def find_module(self, name, path=None):
+                  return self if name == "PIL" or name.startswith("PIL.") else None
+              def load_module(self, name):
+                  raise ImportError("PIL is blocked for this check")
+          sys.meta_path.insert(0, Block())
+          """
+          for script in ("site/build.py", "site/check.py"):
+              r = subprocess.run([sys.executable, "-c",
+                                  blocker + f"\nimport runpy; runpy.run_path({script!r}, run_name='__main__')"],
+                                 capture_output=True, text=True)
+              if r.returncode != 0:
+                  print(r.stdout[-2000:]); print(r.stderr[-2000:])
+                  sys.exit(f"{script} failed without Pillow")
+              print(f"{script}: ok without Pillow")
+          PY
+
+      - name: the wireframes are not stale
+        # 04-wireframes.md is generated on a character grid. If someone edits a box by hand, this fails
+        # rather than shipping a drawing that is one character out (spec 008 [PG-11]).
+        run: python specs/008-github-page/tools/draw_wireframes.py --check
 
       - uses: actions/upload-pages-artifact@v3
         with:
