@@ -1,0 +1,195 @@
+{
+  "summary": {
+    "app": "https://coding-agent-7474654624275247.aws.databricksapps.com",
+    "measuredAt": "2026-11-08T00:19:23.722Z",
+    "chromePx": {
+      "760": 146,
+      "1024": 146,
+      "1180": 146,
+      "1600": 146
+    },
+    "transcriptVisibleWithDocOpen": {
+      "760": false,
+      "1024": false,
+      "1180": false,
+      "1600": false
+    },
+    "turnsRenderedWithDocOpen": {
+      "760": 0,
+      "1024": 0,
+      "1180": 0,
+      "1600": 0
+    },
+    "composerVisible": {
+      "760": true,
+      "1024": true,
+      "1180": true,
+      "1600": true
+    },
+    "modelChipVisible": {
+      "760": false,
+      "1024": false,
+      "1180": true,
+      "1600": true
+    },
+    "modelInteractions": {
+      "760": 1,
+      "1024": 1,
+      "1180": 1,
+      "1600": 1
+    },
+    "deadControls": {
+      "760": 0,
+      "1024": 0,
+      "1180": 0,
+      "1600": 0
+    }
+  },
+  "report": [
+    {
+      "width": 1600,
+      "opened": true,
+      "chromePx": 146,
+      "transcriptVisible": false,
+      "turnsRendered": 0,
+      "composerVisible": true,
+      "chipVisible": true,
+      "chipLabel": "modelllama-4-maverick?",
+      "modelInteractions": 1,
+      "cells": {
+        "run": 0,
+        "ask": 0
+      },
+      "zones": {
+        "rail": {
+          "x": 0,
+          "y": 52,
+          "w": 276,
+          "h": 848
+        },
+        "centre": {
+          "x": 277,
+          "y": 52,
+          "w": 982,
+          "h": 848
+        },
+        "inspector": {
+          "x": 1260,
+          "y": 52,
+          "w": 340,
+          "h": 848
+        },
+        "dock": null
+      },
+      "beforeDoc": {
+        "turns": 1,
+        "modelChip": 201
+      }
+    },
+    {
+      "width": 1180,
+      "opened": true,
+      "chromePx": 146,
+      "transcriptVisible": false,
+      "turnsRendered": 0,
+      "composerVisible": true,
+      "chipVisible": true,
+      "chipLabel": "modelllama-4-maverick?",
+      "modelInteractions": 1,
+      "cells": {
+        "run": 0,
+        "ask": 0
+      },
+      "zones": {
+        "rail": {
+          "x": 0,
+          "y": 52,
+          "w": 276,
+          "h": 848
+        },
+        "centre": {
+          "x": 277,
+          "y": 52,
+          "w": 903,
+          "h": 848
+        },
+        "inspector": null,
+        "dock": null
+      },
+      "beforeDoc": {
+        "turns": 1,
+        "modelChip": 201
+      }
+    },
+    {
+      "width": 1024,
+      "opened": true,
+      "chromePx": 146,
+      "transcriptVisible": false,
+      "turnsRendered": 0,
+      "composerVisible": true,
+      "chipVisible": false,
+      "chipLabel": "modelllama-4-maverick?",
+      "modelInteractions": 1,
+      "cells": {
+        "run": 0,
+        "ask": 0
+      },
+      "zones": {
+        "rail": {
+          "x": 0,
+          "y": 52,
+          "w": 276,
+          "h": 848
+        },
+        "centre": {
+          "x": 277,
+          "y": 52,
+          "w": 747,
+          "h": 848
+        },
+        "inspector": null,
+        "dock": null
+      },
+      "beforeDoc": {
+        "turns": 1,
+        "modelChip": 0
+      }
+    },
+    {
+      "width": 760,
+      "opened": true,
+      "chromePx": 146,
+      "transcriptVisible": false,
+      "turnsRendered": 0,
+      "composerVisible": true,
+      "chipVisible": false,
+      "chipLabel": "modelllama-4-maverick?",
+      "modelInteractions": 1,
+      "cells": {
+        "run": 0,
+        "ask": 0
+      },
+      "zones": {
+        "rail": {
+          "x": 0,
+          "y": 52,
+          "w": 320,
+          "h": 848
+        },
+        "centre": {
+          "x": 0,
+          "y": 52,
+          "w": 760,
+          "h": 848
+        },
+        "inspector": null,
+        "dock": null
+      },
+      "beforeDoc": {
+        "turns": 1,
+        "modelChip": 0
+      }
+    }
+  ]
+}

@@ -34,3 +34,6 @@ specs/001-databricks-coding-agents/e2e/screenshots/*.png
 .venv2
 .env
 *.tok
+
+# the site build output: CI rebuilds it, and a committed copy is a second thing to drift
+site/dist/

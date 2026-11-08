@@ -1,0 +1,250 @@
+{
+  "app": "http://127.0.0.1:8061",
+  "at": "2026-11-08T03:00:50.254Z",
+  "averagePct": 100,
+  "byGroup": {
+    "context": 25,
+    "model": 12,
+    "execution": 20,
+    "agent": 12,
+    "find": 12,
+    "craft": 19
+  },
+  "perWidth": [
+    {
+      "width": 1180,
+      "total": 100,
+      "max": 100,
+      "m": {
+        "docOpen": true,
+        "dockTurns": 1,
+        "dockContext": "in context:e2e_sql_demo2",
+        "cellAsk": 2,
+        "cellRun": 2,
+        "cellOutput": 1,
+        "cellTiming": true,
+        "cellOutputControls": true,
+        "scopeStated": true,
+        "breadcrumb": true,
+        "chipRemovable": true,
+        "modelVisible": true,
+        "modelInComposer": 1,
+        "pickerGroups": 2,
+        "modelPinHint": true,
+        "toolCalls": 4,
+        "failureHasAction": true,
+        "inlineApproval": false,
+        "turnModelShown": true,
+        "listView": true,
+        "palette": true,
+        "atMentions": true,
+        "recentSessions": true,
+        "shortcutsListed": 42,
+        "chromePx": 90,
+        "overflow": false,
+        "deadControls": 0,
+        "darkOk": true,
+        "errorCopyOk": true,
+        "runText": "done\n1 row · 2.5s\nServerless Starter Warehouse\none\ttwo\n1\t2"
+      },
+      "items": [
+        {
+          "id": "C1",
+          "pts": 6,
+          "group": "context",
+          "name": "the conversation is visible while a document is open",
+          "pass": true
+        },
+        {
+          "id": "C2",
+          "pts": 5,
+          "group": "context",
+          "name": "the assistant states what it is about",
+          "pass": true
+        },
+        {
+          "id": "C3",
+          "pts": 4,
+          "group": "context",
+          "name": "a cell can be bound, not just the file",
+          "pass": true
+        },
+        {
+          "id": "C4",
+          "pts": 4,
+          "group": "context",
+          "name": "the working folder is stated where the agent acts",
+          "pass": true
+        },
+        {
+          "id": "C5",
+          "pts": 3,
+          "group": "context",
+          "name": "the open document is identifiable at a glance (breadcrumb)",
+          "pass": true
+        },
+        {
+          "id": "C6",
+          "pts": 3,
+          "group": "context",
+          "name": "attachments are chips, and removable",
+          "pass": true
+        },
+        {
+          "id": "M1",
+          "pts": 5,
+          "group": "model",
+          "name": "the current model is on screen at every width",
+          "pass": true
+        },
+        {
+          "id": "M2",
+          "pts": 3,
+          "group": "model",
+          "name": "it can be changed without leaving the message",
+          "pass": true
+        },
+        {
+          "id": "M3",
+          "pts": 2,
+          "group": "model",
+          "name": "the picker is searchable and grouped",
+          "pass": true
+        },
+        {
+          "id": "M4",
+          "pts": 2,
+          "group": "model",
+          "name": "the switch is stated as applying to the next turn",
+          "pass": true
+        },
+        {
+          "id": "X1",
+          "pts": 6,
+          "group": "execution",
+          "name": "a cell can be run from the notebook",
+          "pass": true
+        },
+        {
+          "id": "X2",
+          "pts": 6,
+          "group": "execution",
+          "name": "a cell shows its own output, in place",
+          "pass": true
+        },
+        {
+          "id": "X3",
+          "pts": 4,
+          "group": "execution",
+          "name": "a run states its state and duration",
+          "pass": true
+        },
+        {
+          "id": "X4",
+          "pts": 4,
+          "group": "execution",
+          "name": "outputs can be cleared and refolded",
+          "pass": true
+        },
+        {
+          "id": "A1",
+          "pts": 4,
+          "group": "agent",
+          "name": "tool calls are visible and collapsible",
+          "pass": true
+        },
+        {
+          "id": "A2",
+          "pts": 3,
+          "group": "agent",
+          "name": "a failure names a next action",
+          "pass": true
+        },
+        {
+          "id": "A3",
+          "pts": 3,
+          "group": "agent",
+          "name": "an approval can be answered inline",
+          "pass": true
+        },
+        {
+          "id": "A4",
+          "pts": 2,
+          "group": "agent",
+          "name": "the turn's model is stated",
+          "pass": true
+        },
+        {
+          "id": "F1",
+          "pts": 4,
+          "group": "find",
+          "name": "files offers a list view with sortable columns",
+          "pass": true
+        },
+        {
+          "id": "F2",
+          "pts": 3,
+          "group": "find",
+          "name": "a command palette reaches everything",
+          "pass": true
+        },
+        {
+          "id": "F3",
+          "pts": 3,
+          "group": "find",
+          "name": "@ search starts from where you are",
+          "pass": true
+        },
+        {
+          "id": "F4",
+          "pts": 2,
+          "group": "find",
+          "name": "recent work is one click away",
+          "pass": true
+        },
+        {
+          "id": "Q1",
+          "pts": 4,
+          "group": "craft",
+          "name": "the keyboard does everything (documented in ⌘/)",
+          "pass": true
+        },
+        {
+          "id": "Q2",
+          "pts": 3,
+          "group": "craft",
+          "name": "chrome above the first line of code ≤ 150 px",
+          "pass": true
+        },
+        {
+          "id": "Q3",
+          "pts": 3,
+          "group": "craft",
+          "name": "no horizontal overflow at this width",
+          "pass": true
+        },
+        {
+          "id": "Q4",
+          "pts": 3,
+          "group": "craft",
+          "name": "no dead controls",
+          "pass": true
+        },
+        {
+          "id": "Q5",
+          "pts": 3,
+          "group": "craft",
+          "name": "dark mode is a first-class design",
+          "pass": true
+        },
+        {
+          "id": "Q6",
+          "pts": 3,
+          "group": "craft",
+          "name": "a failure is never a bare 'something went wrong'",
+          "pass": true
+        }
+      ]
+    }
+  ]
+}

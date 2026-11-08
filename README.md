@@ -1,81 +1,101 @@
-# Replacing Databricks Genie Code with a general coding agent
+# OpenGenie
 
-**One sentence:** you can get most of what Genie Code does by running an ordinary coding agent
-(**OpenCode** or **GitHub Copilot CLI**) *inside* the Databricks shell, pointing it at the AI Gateway, and giving it
-Databricks' command-line tool, a small tool server with a **write fence**, and a few written rules. We tested that claim
-with **11 graded tasks** against a live workspace, and this repository holds the setup scripts, the agent, the exam harness
-and every saved result.
+**A Databricks App that hosts a coding agent: the model you choose, writes fenced to the folder you name,
+and proof before it says done.**
 
-Everything here was run for real against `dbc-cb61f1e1-bd8e.cloud.databricks.com`. Nothing is simulated. Numbers in the
-documents are generated from the saved result files, so they cannot drift from the data.
+Genie Code is good and it gives you one model, on a meter, with the choice made for you. This repository
+measures what that costs you, and then ships the alternative: an Apache-2.0 Databricks App where the model
+is a control with sixteen options, the agent can only write inside a folder you named, and a requirement
+counts as done only when a tool call proves it.
 
-[![Tutorial](https://img.shields.io/badge/start%20here-tutorial%20with%20screenshots-4C6EF5?style=flat-square)](docs/tutorial.md)
-[![Evidence](https://img.shields.io/badge/evidence-17%20task%20runs%20saved-37B24D?style=flat-square)](exams/results)
-[![Agents](https://img.shields.io/badge/agents-OpenCode%20%C2%B7%20Copilot%20CLI-F59F00?style=flat-square)](docs/03-toolbox-cli-skills-mcp.md)
-[![No local shell](https://img.shields.io/badge/runs%20in-the%20Databricks%20shell-E8590C?style=flat-square)](docs/02-setup-in-the-databricks-shell.md)
+[![Site](https://img.shields.io/badge/raphaelmansuy.github.io-opengenie-4C6EF5?style=flat-square)](https://raphaelmansuy.github.io/opengenie/)
+[![Licence](https://img.shields.io/badge/licence-Apache--2.0-37B24D?style=flat-square)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-466%20python%20%C2%B7%20509%20front--end-F59F00?style=flat-square)](apps/coding-agent/tests)
+[![Evidence](https://img.shields.io/badge/evidence-174%20saved%20runs-E8590C?style=flat-square)](exams/results)
 
-## Start here
+<img src="specs/006-databricks/e2e/home/deployed-1440-home.png" width="1440"
+     alt="The OpenGenie shell at 1440 px: sessions and files in the left rail, a notebook in the centre, and the assistant docked on the right, labelled with the notebook it is bound to.">
 
-| If you want to... | Go to |
+*The three-pane shell. The assistant is a zone beside the notebook rather than a tab, so opening a file
+does not close the conversation that is about it.*
+
+---
+
+## Three things you cannot get from the default
+
+| | Claim | Where it is implemented |
+|---|---|---|
+| **1** | **The model is yours.** Sixteen models across four providers (Databricks AI Gateway, OpenAI, Anthropic, Google Vertex), plus live discovery, plus your own key held encrypted in Lakebase. | [`seed/llm_models.yaml`](apps/coding-agent/seed/llm_models.yaml), [`api/adapters/llm/`](apps/coding-agent/api/adapters/llm) |
+| **2** | **The fence is real.** Every write target is classified `allow` / `ask` / `deny` before it leaves the server, against the folder and schema you named at the start of the session. | [`api/domain/scope.py`](apps/coding-agent/api/domain/scope.py) |
+| **3** | **Proof, not promises.** A requirement counts as done only when a tool call proves it. A citation to a call that never happened is an explicit verdict, not a warning. | [`api/domain/evidence.py`](apps/coding-agent/api/domain/evidence.py) |
+
+## Why the model is the first claim
+
+Because it is the largest lever we could measure, and it is the one a workspace does not control. Same
+agent, same stock tools, same rules, two models:
+
+| Setup | gpt-oss-120b | Gemini 3.8 Flash |
+|---|---|---|
+| Stock tools and rules, 8 development tasks | **39%** (60/152) | **86%** (130/152) |
+
+One run each. The second task has the widest natural spread of the eight, and a repeatability check on a
+different setup spread about three points. Every figure on the site is computed from
+[`exams/results/`](exams/results) by [`site/claims.py`](site/claims.py), and the build fails if a number
+and its source ever disagree.
+
+## What it does
+
+- **Answers by running SQL.** Not by describing a query. It runs it, sees the error, corrects itself.
+- **Builds notebooks that run.** Writes the cells, runs them in order, stops at the first failure, quotes
+  the engine's own words when one fails.
+- **Finds the table.** Searches the catalogue, reads columns and comments, and says which table it used.
+- **Documents what exists.** Comments grounded in real queries rather than in the model's imagination.
+- **Debugs a failing job.** Reads the run history, finds the cause, fixes it, and re-runs it.
+- **Says when it cannot.** Refuses Python on a cluster it does not have, a cluster picker it cannot
+  honour, and any write outside the fence — with the reason.
+
+## Start
+
+The site is the front door; this README is its text version.
+
+| If you want to | Go to |
 |---|---|
-| **Set it up and use it**, with screenshots of every step | [**Tutorial**](docs/tutorial.md) — about 30 minutes, no local shell |
-| Run the exams on your own tasks | [Exam suite](docs/05-exam-suite.md) |
-| Understand the idea in 10 minutes | [Big picture](docs/01-big-picture.md) |
-| See the evidence | [Results and lessons](docs/06-results-and-lessons.md) |
-| Know what is safe | [Safety and governance](docs/04-safety-and-governance.md) |
-| Decide what to deploy | [Decision guide](docs/07-decision-guide.md) |
-| Look up a term | [Glossary](docs/glossary.md) |
-| Go deep: the first, longer study | [Original specification](docs/genie-code-replacement-spec.md) (1,060 lines) |
-| **Build the product**: a Databricks App that hosts coding agents (React + FastAPI + ACP) | [Spec 001: Databricks Coding Agents](specs/001-databricks-coding-agents/README.md) |
+| See what it looks like | [**The tour**](https://raphaelmansuy.github.io/opengenie/tour/) — 17 real screenshots, four widths, both themes |
+| Set it up, with no local shell | [**The tutorial**](docs/tutorial.md) — about 30 minutes, from a notebook in Databricks |
+| Check the numbers | [**The evidence**](https://raphaelmansuy.github.io/opengenie/evidence/) — every score with its denominator and its caveat |
+| Deploy it as an App | [**Install**](https://raphaelmansuy.github.io/opengenie/install/) — three paths, what each needs |
+| Read the reasoning | [001](specs/001-databricks-coding-agents/README.md) (the app) · [005](specs/005-llm-models/README.md) (models) · [006](specs/006-databricks/README.md) (parity) · [007](specs/007-ux-ui-improve/README.md) (the shell) · [008](specs/008-github-page/README.md) (this site) |
 
-## Headline results
+Build the site locally, with nothing but Python:
 
-Each number is a score over 8 development tasks (M1–M8), or 3 held-out tasks (X1–X3) that were never used while tuning.
-
-<!-- BEGIN:summary_dev -->
-**Development set (M1-M8), total score**
-
-| Variant | copilot / gpt-oss-120b | opencode / gemini-3.8-flash | opencode / gpt-oss-120b |
-|---|---|---|---|
-| V0 | - | - | 19% |
-| V1 | - | - | 20% |
-| V2 | - | - | 82% |
-| V3 | - | - | 94% |
-| V4 | 70% | 100% | 94% |
-| V5 | - | 86% | 39% |
-| V6 | 71% | 99% | 88% |
-
-(`*` = not every task was run)
-<!-- END:summary_dev -->
-
-<!-- BEGIN:summary_held -->
-**Held-out set (X1-X3), total score**
-
-| Variant | copilot / gpt-oss-120b | opencode / gemini-3.8-flash | opencode / gpt-oss-120b |
-|---|---|---|---|
-| V1 | - | 100% | 43% |
-| V4 | 92% | 100% | 86% |
-| V5 | - | 95% | 76% |
-| V6 | - | 100% | 95% |
-
-(`*` = not every task was run)
-<!-- END:summary_held -->
-
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#E8F0FE','primaryTextColor':'#1F2937','primaryBorderColor':'#A8C0E8','lineColor':'#94A3B8','xyChart':{'plotColorPalette':'#F5C29C, #A8D5B5'}}}}%%
-xychart-beta
-    title "Development set: Gemini 3.8 Flash by setup"
-    x-axis ["V4 custom tools", "V5 stock CLI", "V6 hybrid"]
-    y-axis "Total score (%)" 0 --> 100
-    bar [100, 86, 99]
-    bar [94, 39, 88]
+```bash
+python3 -m pip install -r requirements-site.txt   # pygments
+python3 site/build.py && python3 site/check.py    # build, then verify every link and claim
+bash site/verify.sh                               # the above, plus every screenshot and audit
 ```
 
-(first bar in each pair: Gemini 3.8 Flash; second: gpt-oss-120b. Setups are described in
-[Results](docs/06-results-and-lessons.md#the-variant-ladder). Only these three setups were run with both models.)
+## What is in this repository
 
-(first series: gpt-oss-120b, the model reachable through the Databricks AI Gateway; second: Gemini 3.8 Flash through Vertex.
-The setup names are explained in [Results](docs/06-results-and-lessons.md#the-variant-ladder).)
+```
+apps/coding-agent/       the application: FastAPI + React 19 + ACP agent over stdio
+  api/                   domain (pure), ports, adapters, routers — 12,974 lines
+  web/src/               React 19, CodeMirror 6, 105 files, 509 tests
+  tests/                 466 Python tests
+  tools/                 the MCP tool server: 28 tools, 20 in the core profile
+mcp/                     the original standalone tool server and its conformance tests
+exams/                   the exam harness: 11 graded missions, 7 setups, 174 saved runs
+docs/                    the documentation: tutorial, big picture, setup, safety, results
+specs/                   five specifications, each a cross-referenced set
+site/                    this site: build.py, claims.py, check.py, content/, static/
+notebooks/               the whole tutorial as one notebook, for a workspace with no shell
+templates/               the original shell-only kit (setup, fence, supervisor, ask)
+```
+
+## The study behind the app
+
+The application is the second half of this repository. The first half is the measurement that justified
+it: eleven graded tasks run in a live workspace, seven setups, and every result saved. Nothing below is
+summary — the tables are generated from the saved run files.
 
 ## The six findings that matter most
 
@@ -92,7 +112,7 @@ The setup names are explained in [Results](docs/06-results-and-lessons.md#the-va
 6. **Never trust a self-reported "done".** Our most dangerous failures were confident, well-written and wrong. Every claim is
    checked against live workspace state. → [Exam suite](docs/05-exam-suite.md)
 
-## Quick start
+### Quick start (shell-only path)
 
 Three commands, from a copy of this repository inside the Databricks sandbox:
 
@@ -103,39 +123,8 @@ bash templates/ask.sh "How many trips are in samples.nyctaxi.trips, and over wha
 ```
 
 You need `DATABRICKS_HOST` set and your token in `/tmp/dbx_token.txt`. Full walkthrough with screenshots:
-[**the tutorial**](docs/tutorial.md). To get the sandbox itself without a local shell, run
+[the tutorial](docs/tutorial.md). To get the sandbox itself without a local shell, run
 [`notebooks/launch_agent_from_notebook.py`](notebooks/launch_agent_from_notebook.py) in a notebook.
-
-## What is in this repository
-
-```
-docs/                          the documentation (read docs/tutorial.md first)
-  tutorial.md                  step-by-step, with screenshots of real output
-  01..07                       big picture, setup, toolbox, safety, exams, results, decision guide
-  glossary.md                  plain-words definitions
-  genie-code-replacement-spec.md   the original, deeper study
-  e2e/                         evidence: transcripts, conformance results, screenshots
-templates/                     the kit you copy into the sandbox
-  setup_agent.sh               install the agent, write its config, copy rules and skills
-  start_mcp.sh                 start the tool server with a one-schema, one-folder write fence
-  ask.sh / run_agent.sh        ask a question; a supervisor keeps the agent working until it has proof
-  AGENTS.rules.md              the working agreement given to the agent
-notebooks/
-  launch_agent_from_notebook.py    the whole tutorial as one notebook (no local shell needed)
-specs/                         product specifications
-  001-databricks-coding-agents/  the Databricks App that hosts ACP agents (React + FastAPI)
-mcp/
-  databricks_notebook_mcp.py   the tool server: 26 tools, 19 in the default profile, scoped writes
-  skills/                      four short how-to skills the agent can read on demand
-  test_mcp_v2.py               conformance tests
-exams/                         the exam harness
-  missions/                    11 graded tasks (M1-M8 development, X1-X3 held out)
-  variants.py                  the 7 setups (V0-V6) and their exact differences
-  run_exam.py                  seed state, run an agent, grade the live workspace
-  run_notebook_locally.py ...  (experiments/) capture and render the tutorial screenshots
-  results/                     every saved run: JSON summary + raw agent event log
-experiments/                   the experiments behind the findings, plus the screenshot tooling
-```
 
 ## How the exams work, in three lines
 
@@ -144,30 +133,14 @@ request, then **grades the live workspace afterwards**: does the table match the
 actually run, does the job's latest run succeed, is the injection ignored. A grader is only trusted once the reference
 solution scores 100% and a do-nothing agent fails. → [Exam suite](docs/05-exam-suite.md)
 
-## What this study does not claim
-
-- **No cost comparison.** We measured tokens, not money, and had no Genie Code usage history. Do not quote a saving from
-  this repository. → [Cost in plain words](docs/07-decision-guide.md#cost-in-plain-words)
-- **Small, clean data.** Production lakehouses are messier and larger.
-- **Well-specified tasks.** Our exams name the tables. We did not test finding the right table in a large catalogue, which is
-  where Genie's ontology helps most.
-- **One run per setup, except V4.** Only V4 with the gateway model was repeated (three runs, spread about 2.6 points).
-- **Real screenshots of the web UI.** Single sign-on blocked automated capture; the tutorial renders real *output* as images
-  and describes click-only steps in words.
-
-## Safety
+### Safety in the shell-only path
 
 - The token in `.env` is a live personal access token. It is git-ignored; never print it, and rotate it if it leaks. The exam
   harness fails any run whose transcript contains it.
 - Writes are limited server-side to one schema, one folder and a name prefix. Keep `NBMCP_ALLOW_WRITES` off outside dev.
-- **Never run an agent with auto-approve against production.** The plain `databricks` command-line path inside the sandbox is
-  *not* fenced: the real boundary is the token you give it. Use a scoped service principal.
-- Agents can be **prompt-injected** by text inside data. Our exam M8 plants an instruction in a support ticket. Read the
-  "Anything odd or suspicious" section of every report.
+- **The plain `databricks` command-line path inside the sandbox is *not* fenced:** the real boundary is the token you give it.
 
-See [Safety and governance](docs/04-safety-and-governance.md) before running anything that can write.
-
-## Reproducing the tables
+### Reproducing the tables
 
 ```bash
 python3 exams/make_tables.py          # print every table
@@ -180,5 +153,44 @@ Requirements for the harness: Python 3.12 with `requests`, the `databricks` CLI,
 
 ---
 
-*Last updated: 6 November 2026. Every figure is generated from `exams/results/`; see
-[Results and lessons](docs/06-results-and-lessons.md) for the caveats behind each number.*
+## What this is not
+
+- **Not a replacement for Genie's business-term understanding.** Our exams named the tables. Finding the
+  right table in a catalogue of ten thousand is where an ontology earns its keep, and it is untested here.
+- **Not a cost comparison.** We measured tokens, not money, and we hold no Genie Code usage history. Any
+  saving you read elsewhere, including here, would be invented.
+- **Not a hosted demo.** The app needs a token for *your* workspace, so there is nothing to click.
+- **Not a guarantee.** One run per setup on most configurations, small clean data, well-specified tasks.
+  Only one configuration was run three times (spread about 2.6 points), so a one- or two-point gap between
+  two setups is not a difference.
+- **The tutorial's step images are renderings of real notebook output,** not photographs of the Databricks
+  web UI: single sign-on blocked automated capture, and the click-only steps are described in words.
+
+## Safety
+
+- **The token is the boundary.** Locally there is no single sign-on, so the app acts as the token's owner.
+  Use a service principal with rights on one scratch schema. The fence limits what the agent *asks for*;
+  the token limits what it *may do*.
+- **A write outside the fence is refused before it happens,** and the refusal names the folder that would
+  have been allowed.
+- **Agents can be prompt-injected by data.** Exam M8 plants an instruction inside a support ticket. Read
+  the "anything odd or suspicious" section of every report.
+- **Never run an agent with auto-approve against production.**
+
+See [Safety and governance](docs/04-safety-and-governance.md) before running anything that can write.
+
+## Licence
+
+[Apache-2.0](LICENSE). Use it, fork it, ship it inside a company; keep the attribution.
+
+## Author
+
+**Raphael Mansuy** — data engineering and AI strategist. Twenty years of global technology leadership,
+a startup studio in Hong Kong, co-author of *The Definitive Guide to Data Integration* (Packt, 2024).
+
+[LinkedIn](https://www.linkedin.com/in/raphaelmansuy/) · [GitHub](https://github.com/raphaelmansuy) ·
+[The book](https://www.oreilly.com/library/view/the-definitive-guide/9781837631919/) ·
+[EdgePii](https://raphaelmansuy.github.io/edgepii/) · [EdgeQuake](https://edgequake.com/)
+
+<p align="center"><sub>Every figure here is generated from <code>exams/results/</code>. The caveats behind each one are in
+<a href="docs/06-results-and-lessons.md">Results and lessons</a>.</sub></p>

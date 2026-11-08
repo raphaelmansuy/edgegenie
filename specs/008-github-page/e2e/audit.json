@@ -1,0 +1,2560 @@
+{
+  "app": "http://127.0.0.1:8130",
+  "when": "2026-11-08T15:07:07.563Z",
+  "scenes": {
+    "S1": {
+      "routes": {
+        "/": {
+          "contrast": [],
+          "unnamed": [],
+          "small": [
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 123,
+              "h": 17
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 105,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 141,
+              "h": 20
+            }
+          ],
+          "headings": [
+            {
+              "level": 1,
+              "text": "Genie Code gives you one model. You cannot choose it, and yo"
+            },
+            {
+              "level": 2,
+              "text": "Three things you cannot get from the default"
+            },
+            {
+              "level": 3,
+              "text": "The model is yours"
+            },
+            {
+              "level": 3,
+              "text": "The fence is real"
+            },
+            {
+              "level": 3,
+              "text": "Proof, not promises"
+            },
+            {
+              "level": 2,
+              "text": "Why the model is the first claim"
+            },
+            {
+              "level": 2,
+              "text": "What it does, concretely"
+            },
+            {
+              "level": 3,
+              "text": "Answers by running SQL"
+            },
+            {
+              "level": 3,
+              "text": "Builds notebooks that run"
+            },
+            {
+              "level": 3,
+              "text": "Finds the table"
+            },
+            {
+              "level": 3,
+              "text": "Documents what exists"
+            },
+            {
+              "level": 3,
+              "text": "Debugs a failing job"
+            },
+            {
+              "level": 3,
+              "text": "Says when it cannot"
+            },
+            {
+              "level": 2,
+              "text": "What this is not"
+            },
+            {
+              "level": 2,
+              "text": "Start"
+            },
+            {
+              "level": 3,
+              "text": "Tutorial"
+            },
+            {
+              "level": 3,
+              "text": "Install"
+            },
+            {
+              "level": 3,
+              "text": "Reference"
+            }
+          ],
+          "landmarks": {
+            "header": 1,
+            "nav": 2,
+            "main": 1,
+            "footer": 1
+          },
+          "overflow": 0,
+          "docWidth": 1440,
+          "viewport": 1440,
+          "h1": 1,
+          "title": "OpenGenie — a Databricks coding agent with the model you choose",
+          "description": "Genie Code gives you one model and a metered bill. OpenGenie is an Apache-2.0 Databricks App that does the same work with 16 models, a write fence, and proof before it says done.",
+          "canonical": "https://raphaelmansuy.github.io/opengenie/",
+          "images": [
+            {
+              "src": "/assets/shots/app-1440.png",
+              "alt": "The OpenGenie shell at 1440 px: sessions and files in the left rail, a notebook in the centre, and the assistant docked on the right, labelled with the notebook it is bound to.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            }
+          ]
+        },
+        "tour/": {
+          "contrast": [],
+          "unnamed": [],
+          "small": [
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 72,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 71,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 69,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 173,
+              "h": 20
+            }
+          ],
+          "headings": [
+            {
+              "level": 1,
+              "text": "Tour"
+            },
+            {
+              "level": 2,
+              "text": "The shell at 1440 px"
+            },
+            {
+              "level": 2,
+              "text": "The shell at 800 px — one zone at a time"
+            },
+            {
+              "level": 2,
+              "text": "The notebook"
+            },
+            {
+              "level": 2,
+              "text": "Running all of it, and stopping at the first failure"
+            },
+            {
+              "level": 2,
+              "text": "Asking about one cell, from the cell"
+            },
+            {
+              "level": 2,
+              "text": "The message that was actually sent"
+            },
+            {
+              "level": 2,
+              "text": "What is offered after an answer"
+            },
+            {
+              "level": 2,
+              "text": "Fixing an error with the engine's own words"
+            },
+            {
+              "level": 2,
+              "text": "The model picker"
+            },
+            {
+              "level": 2,
+              "text": "The workspace browser"
+            },
+            {
+              "level": 2,
+              "text": "A conversation that opens with a notebook"
+            },
+            {
+              "level": 2,
+              "text": "The same conversation at 800 px"
+            },
+            {
+              "level": 2,
+              "text": "Dark"
+            },
+            {
+              "level": 2,
+              "text": "Markdown renders LaTeX, because notebooks have formulae"
+            },
+            {
+              "level": 2,
+              "text": "Slash commands"
+            },
+            {
+              "level": 2,
+              "text": "Conversation history"
+            },
+            {
+              "level": 2,
+              "text": "The fence, when it refuses"
+            },
+            {
+              "level": 2,
+              "text": "What these screenshots do not show"
+            }
+          ],
+          "landmarks": {
+            "header": 1,
+            "nav": 2,
+            "main": 1,
+            "footer": 1
+          },
+          "overflow": 0,
+          "docWidth": 1440,
+          "viewport": 1440,
+          "h1": 1,
+          "title": "Tour — what OpenGenie looks like",
+          "description": "The app at four widths and in both themes: the notebook, the assistant dock bound to it, the model picker, and the fence.",
+          "canonical": "https://raphaelmansuy.github.io/opengenie/tour/",
+          "images": [
+            {
+              "src": "../assets/shots/app-1440.png",
+              "alt": "The shell at 1440 px: a left rail listing sessions and files, a notebook with four cells in the centre, and the assistant dock on the right headed 'in context: parity_demo'.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/app-800.png",
+              "alt": "The shell at 800 px: the left rail and the assistant are collapsed into buttons, and the notebook takes the full width.",
+              "w": "1600",
+              "h": "1000",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/notebook-1440.png",
+              "alt": "A notebook named parity_demo with two markdown-free SQL cells, each showing Ask and Run buttons, and a bar above with Run all and the warehouse name.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/run-all-1440.png",
+              "alt": "A notebook after Run all: two cells succeeded, the third shows an error from the SQL engine, and a button labelled Fix with agent sits beside it.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/cell-prompt-1440.png",
+              "alt": "A prompt open on cell three with the placeholder naming that cell, and chips for Explain, Fix, Optimise and Comment.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/prompt-sent.png",
+              "alt": "The assistant dock showing the sent message, with a chip reading cell 3 and a sentence saying to change only that cell.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/follow-ups.png",
+              "alt": "The dock scrolled to the end of a turn, with three follow-up chips under the answer.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/fix-agent.png",
+              "alt": "The dock after Fix with agent: the sent message quotes the SQL engine's error and is bound to cell four.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/app-1440-picker.png",
+              "alt": "The model picker open over the shell, listing models grouped by provider with their context and output limits.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/app-1440-tree.png",
+              "alt": "The workspace tree open, showing folders and notebooks, with a chooser for the working folder.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/session-1440.png",
+              "alt": "A session opened on a notebook: the dock is headed with the notebook name and offers three starter questions.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/session-800.png",
+              "alt": "The same session at 800 px, with the assistant available as a drawer over the notebook.",
+              "w": "1600",
+              "h": "1000",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/notebook-dark.png",
+              "alt": "The notebook and the assistant in dark theme, with the in-cell prompt open and readable.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/math-dark.png",
+              "alt": "A markdown cell rendering LaTeX as typeset mathematics in dark theme.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/math-narrow.png",
+              "alt": "The same LaTeX rendering at a narrow width, with the formula still legible and no horizontal scroll on the page.",
+              "w": "1120",
+              "h": "900",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/slash-1440.png",
+              "alt": "The composer with a slash typed, showing a list of commands with descriptions.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/history.png",
+              "alt": "A history popover over the dock: a search field, a day heading, and a list of conversations with the active one marked.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            },
+            {
+              "src": "../assets/shots/zones-1440.png",
+              "alt": "The shell with all zones visible, showing the working folder and the fence notice in the inspector.",
+              "w": "2880",
+              "h": "1800",
+              "loaded": true
+            }
+          ]
+        },
+        "tutorial/": {
+          "contrast": [],
+          "unnamed": [],
+          "small": [
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 364,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 72,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 74,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 74,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 110,
+              "h": 17
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 110,
+              "h": 17
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 18,
+              "h": 17
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 73,
+              "h": 17
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 184,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 69,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 184,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 17,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 20,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 91,
+              "h": 17
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 127,
+              "h": 17
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 64,
+              "h": 17
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 70,
+              "h": 17
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 118,
+              "h": 17
+            }
+          ],
+          "headings": [
+            {
+              "level": 1,
+              "text": "Tutorial"
+            },
+            {
+              "level": 2,
+              "text": "The big picture in 60 seconds"
+            },
+            {
+              "level": 2,
+              "text": "Before you start"
+            },
+            {
+              "level": 2,
+              "text": "The steps at a glance"
+            },
+            {
+              "level": 2,
+              "text": "Step 1 · Import the notebook"
+            },
+            {
+              "level": 2,
+              "text": "Step 2 · Get a sandbox"
+            },
+            {
+              "level": 2,
+              "text": "Step 3 · Copy the kit into the sandbox"
+            },
+            {
+              "level": 2,
+              "text": "Step 4 · Give the agent your token"
+            },
+            {
+              "level": 2,
+              "text": "Step 5 · Install the agent"
+            },
+            {
+              "level": 2,
+              "text": "Step 5b · Start the tool server and set the fence"
+            },
+            {
+              "level": 2,
+              "text": "Step 6 · Ask your first question"
+            },
+            {
+              "level": 2,
+              "text": "Step 7 · Ask for something real: build a notebook and prove "
+            },
+            {
+              "level": 2,
+              "text": "Step 8 · Test the fence"
+            },
+            {
+              "level": 2,
+              "text": "Step 9 · Tidy up"
+            },
+            {
+              "level": 2,
+              "text": "Part 2 · The same thing from a real shell"
+            },
+            {
+              "level": 3,
+              "text": "1 · Look around before installing anything"
+            },
+            {
+              "level": 3,
+              "text": "2 · Install the agent and the rules"
+            },
+            {
+              "level": 3,
+              "text": "3 · Start the fence"
+            },
+            {
+              "level": 3,
+              "text": "4 · See the tools the agent actually has"
+            },
+            {
+              "level": 3,
+              "text": "5 · Ask a question"
+            },
+            {
+              "level": 3,
+              "text": "6 · Read the log of every step"
+            },
+            {
+              "level": 3,
+              "text": "7 · The same shell can use the Databricks CLI directly"
+            },
+            {
+              "level": 3,
+              "text": "The commands you will use most"
+            },
+            {
+              "level": 2,
+              "text": "Make it yours"
+            },
+            {
+              "level": 2,
+              "text": "When something goes wrong"
+            },
+            {
+              "level": 2,
+              "text": "What this tutorial does not prove"
+            },
+            {
+              "level": 2,
+              "text": "Where to go next"
+            }
+          ],
+          "landmarks": {
+            "header": 1,
+            "nav": 2,
+            "main": 1,
+            "footer": 1
+          },
+          "overflow": 0,
+          "docWidth": 1440,
+          "viewport": 1440,
+          "h1": 1,
+          "title": "Tutorial — set it up in about 30 minutes",
+          "description": "From a notebook in Databricks to an agent that runs real SQL, builds a notebook and proves it works. No local shell.",
+          "canonical": "https://raphaelmansuy.github.io/opengenie/tutorial/",
+          "images": [
+            {
+              "src": "../assets/tutorial/01-step-1-helpers-just-run-this-cell.png",
+              "alt": "Step 1",
+              "w": "2364",
+              "h": "2726",
+              "loaded": true
+            },
+            {
+              "src": "../assets/tutorial/02-step-2-get-a-sandbox-your-temporary-linu.png",
+              "alt": "Step 2",
+              "w": "2364",
+              "h": "538",
+              "loaded": true
+            },
+            {
+              "src": "../assets/tutorial/03-step-3-put-the-agent-kit-in-the-sandbox.png",
+              "alt": "Step 3",
+              "w": "2364",
+              "h": "498",
+              "loaded": false
+            },
+            {
+              "src": "../assets/tutorial/04-step-4-give-the-agent-your-token.png",
+              "alt": "Step 4",
+              "w": "2364",
+              "h": "616",
+              "loaded": false
+            },
+            {
+              "src": "../assets/tutorial/05-step-5-install-the-agent.png",
+              "alt": "Step 5",
+              "w": "2364",
+              "h": "732",
+              "loaded": false
+            },
+            {
+              "src": "../assets/tutorial/06-step-5b-start-the-tool-server-and-choose.png",
+              "alt": "Step 5b",
+              "w": "2364",
+              "h": "538",
+              "loaded": false
+            },
+            {
+              "src": "../assets/tutorial/07-step-6-ask-the-agent-to-do-something.png",
+              "alt": "Step 6",
+              "w": "2364",
+              "h": "1356",
+              "loaded": false
+            },
+            {
+              "src": "../assets/tutorial/08-step-7-ask-for-something-real-build-a-no.png",
+              "alt": "Step 7",
+              "w": "2364",
+              "h": "1512",
+              "loaded": false
+            },
+            {
+              "src": "../assets/tutorial/09-step-8-see-the-safety-fence-work.png",
+              "alt": "Step 8",
+              "w": "2364",
+              "h": "1162",
+              "loaded": false
+            },
+            {
+              "src": "../assets/tutorial/10-step-9-tidy-up.png",
+              "alt": "Step 9",
+              "w": "2364",
+              "h": "460",
+              "loaded": false
+            },
+            {
+              "src": "../assets/tutorial/shell-01-what-is-on-the-machine-before-we-start.png",
+              "alt": "Shell: what is on the machine",
+              "w": "2364",
+              "h": "386",
+              "loaded": false
+            },
+            {
+              "src": "../assets/tutorial/shell-02-install-the-agent.png",
+              "alt": "Shell: install the agent",
+              "w": "2364",
+              "h": "668",
+              "loaded": false
+            },
+            {
+              "src": "../assets/tutorial/shell-03-start-the-tool-server-the-fence.png",
+              "alt": "Shell: start the tool server",
+              "w": "2364",
+              "h": "386",
+              "loaded": false
+            },
+            {
+              "src": "../assets/tutorial/shell-04-the-tools-the-agent-can-use.png",
+              "alt": "Shell: the tools",
+              "w": "2364",
+              "h": "1072",
+              "loaded": false
+            },
+            {
+              "src": "../assets/tutorial/shell-05-ask-a-question-from-the-shell.png",
+              "alt": "Shell: ask a question",
+              "w": "2364",
+              "h": "1232",
+              "loaded": false
+            },
+            {
+              "src": "../assets/tutorial/shell-06-the-log-shows-every-tool-call.png",
+              "alt": "Shell: the event log",
+              "w": "2364",
+              "h": "306",
+              "loaded": false
+            },
+            {
+              "src": "../assets/tutorial/shell-07-use-the-databricks-cli-directly-same-tok.png",
+              "alt": "Shell: the Databricks CLI",
+              "w": "2364",
+              "h": "628",
+              "loaded": false
+            }
+          ]
+        },
+        "evidence/": {
+          "contrast": [],
+          "unnamed": [],
+          "small": [
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 111,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 105,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 114,
+              "h": 20
+            }
+          ],
+          "headings": [
+            {
+              "level": 1,
+              "text": "Evidence"
+            },
+            {
+              "level": 2,
+              "text": "How the score is produced"
+            },
+            {
+              "level": 2,
+              "text": "What the numbers are, and are not"
+            },
+            {
+              "level": 3,
+              "text": "Small"
+            },
+            {
+              "level": 3,
+              "text": "Clean"
+            },
+            {
+              "level": 3,
+              "text": "Well specified"
+            },
+            {
+              "level": 3,
+              "text": "Single-run"
+            },
+            {
+              "level": 3,
+              "text": "Tokens, not money"
+            },
+            {
+              "level": 3,
+              "text": "Tuned where it says so"
+            },
+            {
+              "level": 2,
+              "text": "The excluded runs, named"
+            },
+            {
+              "level": 2,
+              "text": "The one thing the evidence does not answer"
+            }
+          ],
+          "landmarks": {
+            "header": 1,
+            "nav": 2,
+            "main": 1,
+            "footer": 1
+          },
+          "overflow": 0,
+          "docWidth": 1440,
+          "viewport": 1440,
+          "h1": 1,
+          "title": "Evidence — every score, with its denominator",
+          "description": "Eleven graded tasks in a live workspace, 174 saved runs. Each number here carries its fraction, its run count, and what it does not prove.",
+          "canonical": "https://raphaelmansuy.github.io/opengenie/evidence/",
+          "images": []
+        },
+        "install/": {
+          "contrast": [],
+          "unnamed": [],
+          "small": [
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 110,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 173,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 139,
+              "h": 20
+            }
+          ],
+          "headings": [
+            {
+              "level": 1,
+              "text": "Install"
+            },
+            {
+              "level": 2,
+              "text": "Which one is yours"
+            },
+            {
+              "level": 3,
+              "text": "As a Databricks App"
+            },
+            {
+              "level": 3,
+              "text": "Locally, against your workspace"
+            },
+            {
+              "level": 3,
+              "text": "The shell-only setup"
+            },
+            {
+              "level": 2,
+              "text": "A · As a Databricks App"
+            },
+            {
+              "level": 2,
+              "text": "B · Locally, against your workspace"
+            },
+            {
+              "level": 2,
+              "text": "C · The shell-only setup"
+            },
+            {
+              "level": 2,
+              "text": "What none of the three paths can do"
+            },
+            {
+              "level": 2,
+              "text": "After it runs"
+            },
+            {
+              "level": 2,
+              "text": "Uninstalling"
+            }
+          ],
+          "landmarks": {
+            "header": 1,
+            "nav": 2,
+            "main": 1,
+            "footer": 1
+          },
+          "overflow": 0,
+          "docWidth": 1440,
+          "viewport": 1440,
+          "h1": 1,
+          "title": "Install — three ways to run OpenGenie",
+          "description": "A Databricks App with the asset bundle, a local run against your workspace, or the original shell-only setup. What each one needs, and what each one cannot do.",
+          "canonical": "https://raphaelmansuy.github.io/opengenie/install/",
+          "images": []
+        },
+        "reference/": {
+          "contrast": [],
+          "unnamed": [],
+          "small": [
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "ref-source",
+              "w": 43,
+              "h": 19
+            }
+          ],
+          "headings": [
+            {
+              "level": 1,
+              "text": "Reference"
+            }
+          ],
+          "landmarks": {
+            "header": 1,
+            "nav": 2,
+            "main": 1,
+            "footer": 1
+          },
+          "overflow": 0,
+          "docWidth": 1440,
+          "viewport": 1440,
+          "h1": 1,
+          "title": "Reference — the docs and the specifications",
+          "description": "The nine documents and five specifications, rendered from the repository. Every number traces to a file you can open.",
+          "canonical": "https://raphaelmansuy.github.io/opengenie/reference/",
+          "images": []
+        },
+        "about/": {
+          "contrast": [],
+          "unnamed": [],
+          "small": [
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 84,
+              "h": 18
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 73,
+              "h": 18
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 98,
+              "h": 18
+            }
+          ],
+          "headings": [
+            {
+              "level": 1,
+              "text": "About"
+            },
+            {
+              "level": 2,
+              "text": "Raphael Mansuy"
+            },
+            {
+              "level": 3,
+              "text": "Recognition"
+            },
+            {
+              "level": 3,
+              "text": "The Definitive Guide to Data Integration"
+            },
+            {
+              "level": 3,
+              "text": "Other projects by Raphael"
+            },
+            {
+              "level": 3,
+              "text": "EdgeQuake"
+            },
+            {
+              "level": 3,
+              "text": "EdgeCrab"
+            },
+            {
+              "level": 3,
+              "text": "EdgeWhisper"
+            }
+          ],
+          "landmarks": {
+            "header": 1,
+            "nav": 2,
+            "main": 1,
+            "footer": 1
+          },
+          "overflow": 0,
+          "docWidth": 1440,
+          "viewport": 1440,
+          "h1": 1,
+          "title": "About — who built OpenGenie, and why",
+          "description": "Raphael Mansuy on why a model choice is a product decision, and the evidence behind the page. Links to the repository, LinkedIn and the book.",
+          "canonical": "https://raphaelmansuy.github.io/opengenie/about/",
+          "images": [
+            {
+              "src": "../assets/author/raphael-mansuy.jpg",
+              "alt": "Portrait of Raphael Mansuy, author of OpenGenie.",
+              "w": "132",
+              "h": "132",
+              "loaded": true
+            },
+            {
+              "src": "../assets/book/definitive-guide-data-integration.jpg",
+              "alt": "Cover of The Definitive Guide to Data Integration, co-authored by Raphael Mansuy.",
+              "w": "120",
+              "h": "148",
+              "loaded": false
+            },
+            {
+              "src": "../assets/projects/edgequake.jpg",
+              "alt": "EdgeQuake knowledge graph view: 200 nodes and 840 edges over an AI research corpus.",
+              "w": "800",
+              "h": "500",
+              "loaded": false
+            },
+            {
+              "src": "../assets/projects/edgecrab.jpg",
+              "alt": "EdgeCrab illustration: a comic battle between EdgeCrab and a crab-like rival.",
+              "w": "800",
+              "h": "500",
+              "loaded": false
+            },
+            {
+              "src": "../assets/projects/edgewhisper.jpg",
+              "alt": "EdgeWhisper banner: voice dictation, on-device AI for macOS.",
+              "w": "800",
+              "h": "500",
+              "loaded": false
+            }
+          ]
+        }
+      }
+    },
+    "S3": {
+      "cards": [
+        {
+          "id": "CL-1",
+          "value": "100%37/37",
+          "caveat": "Three tasks only, one run each. It says the setup generalises; it does not say it is complete.",
+          "sources": [
+            "exams/results/heldout_v4_gemini",
+            "python3 site/claims.py"
+          ],
+          "runs": "3 held-out tasks (X1-X3), never used for tuning · 3 graded runs"
+        },
+        {
+          "id": "CL-2",
+          "value": "86%32/37",
+          "caveat": "One run each. X2 lost three points because the fixed job was never re-run.",
+          "sources": [
+            "exams/results/heldout_v4_gptoss",
+            "python3 site/claims.py"
+          ],
+          "runs": "3 held-out tasks (X1-X3), never used for tuning · 3 graded runs"
+        },
+        {
+          "id": "CL-3",
+          "value": "86%130/152",
+          "caveat": "One run each, and M2 has the widest natural spread of the eight tasks.",
+          "sources": [
+            "exams/results/v5_gptoss",
+            "exams/results/v5_gemini",
+            "python3 site/claims.py"
+          ],
+          "runs": "8 development tasks (M1-M8), one run per model · 16 graded runs"
+        },
+        {
+          "id": "CL-4",
+          "value": "94%143/152",
+          "caveat": "The ladder was tuned on these tasks, so this is a ceiling for the method, not an unbiased score.",
+          "sources": [
+            "exams/results/v4_gptoss",
+            "python3 site/claims.py"
+          ],
+          "runs": "8 development tasks (M1-M8), one run per setup · 8 graded runs"
+        },
+        {
+          "id": "CL-5",
+          "value": "100%37/37",
+          "caveat": "Three tasks. It shows the machinery was unnecessary there, not that it is useless.",
+          "sources": [
+            "exams/results/heldout_v1_gemini",
+            "python3 site/claims.py"
+          ],
+          "runs": "3 held-out tasks (X1-X3), never used for tuning · 3 graded runs"
+        },
+        {
+          "id": "CL-6",
+          "value": "95%95/100",
+          "caveat": "One setup only. Every other setup was run once, so no other spread is known.",
+          "sources": [
+            "exams/results/v4_gptoss",
+            "exams/results/v4_gptoss_t2",
+            "exams/results/v4_gptoss_t3",
+            "python3 site/claims.py"
+          ],
+          "runs": "8 development tasks (M1-M8), repeated complete runs of one setup · 3 graded runs"
+        },
+        {
+          "id": "CL-7",
+          "value": "671k tokens/task vs 311k",
+          "caveat": "Tokens, never money: no Genie Code usage history exists, so no saving can be quoted.",
+          "sources": [
+            "exams/results/v4_gptoss",
+            "exams/results/v4_gemini",
+            "python3 site/claims.py"
+          ],
+          "runs": "8 development tasks (M1-M8), thousands of tokens per task · 8 graded runs"
+        },
+        {
+          "id": "CL-8",
+          "value": "11missions",
+          "caveat": "The tasks are small, clean and well specified: our exams name the tables.",
+          "sources": [
+            "exams/missions",
+            "python3 site/claims.py"
+          ],
+          "runs": "8 development (M1-M8) and 3 held-out (X1-X3) missions · 123 graded runs"
+        }
+      ]
+    },
+    "S5": {
+      "/": {
+        "current": [
+          "Home"
+        ],
+        "navHrefs": [
+          "",
+          "tour/",
+          "tutorial/",
+          "evidence/",
+          "install/",
+          "reference/",
+          "about/"
+        ],
+        "skipFirst": "skip"
+      },
+      "tour/": {
+        "current": [
+          "Tour"
+        ],
+        "navHrefs": [
+          "../",
+          "../tour/",
+          "../tutorial/",
+          "../evidence/",
+          "../install/",
+          "../reference/",
+          "../about/"
+        ],
+        "skipFirst": "skip"
+      },
+      "tutorial/": {
+        "current": [
+          "Tutorial"
+        ],
+        "navHrefs": [
+          "../",
+          "../tour/",
+          "../tutorial/",
+          "../evidence/",
+          "../install/",
+          "../reference/",
+          "../about/"
+        ],
+        "skipFirst": "skip"
+      },
+      "evidence/": {
+        "current": [
+          "Evidence"
+        ],
+        "navHrefs": [
+          "../",
+          "../tour/",
+          "../tutorial/",
+          "../evidence/",
+          "../install/",
+          "../reference/",
+          "../about/"
+        ],
+        "skipFirst": "skip"
+      },
+      "install/": {
+        "current": [
+          "Install"
+        ],
+        "navHrefs": [
+          "../",
+          "../tour/",
+          "../tutorial/",
+          "../evidence/",
+          "../install/",
+          "../reference/",
+          "../about/"
+        ],
+        "skipFirst": "skip"
+      },
+      "reference/": {
+        "current": [
+          "Reference"
+        ],
+        "navHrefs": [
+          "../",
+          "../tour/",
+          "../tutorial/",
+          "../evidence/",
+          "../install/",
+          "../reference/",
+          "../about/"
+        ],
+        "skipFirst": "skip"
+      },
+      "about/": {
+        "current": [
+          "About"
+        ],
+        "navHrefs": [
+          "../",
+          "../tour/",
+          "../tutorial/",
+          "../evidence/",
+          "../install/",
+          "../reference/",
+          "../about/"
+        ],
+        "skipFirst": "skip"
+      }
+    },
+    "S7": {
+      "byWidth": {
+        "1440-light": {
+          "overflow": 0,
+          "contrast": [],
+          "unnamed": [],
+          "small": [
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 123,
+              "h": 17
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 105,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 141,
+              "h": 20
+            }
+          ],
+          "docWidth": 1440,
+          "viewport": 1440
+        },
+        "1440-dark": {
+          "overflow": 0,
+          "contrast": [],
+          "unnamed": [],
+          "small": [
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 123,
+              "h": 17
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 105,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 141,
+              "h": 20
+            }
+          ],
+          "docWidth": 1440,
+          "viewport": 1440
+        },
+        "1100-light": {
+          "overflow": 0,
+          "contrast": [],
+          "unnamed": [],
+          "small": [
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 123,
+              "h": 17
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 105,
+              "h": 20
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 141,
+              "h": 20
+            }
+          ],
+          "docWidth": 1100,
+          "viewport": 1100
+        },
+        "860-light": {
+          "overflow": 0,
+          "contrast": [],
+          "unnamed": [],
+          "small": [
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 102,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 137,
+              "h": 19
+            }
+          ],
+          "docWidth": 860,
+          "viewport": 860
+        },
+        "390-light": {
+          "overflow": 0,
+          "contrast": [],
+          "unnamed": [],
+          "small": [
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 102,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 137,
+              "h": 19
+            }
+          ],
+          "docWidth": 390,
+          "viewport": 390
+        },
+        "390-dark": {
+          "overflow": 0,
+          "contrast": [],
+          "unnamed": [],
+          "small": [
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 102,
+              "h": 19
+            },
+            {
+              "tag": "A",
+              "cls": "",
+              "w": 137,
+              "h": 19
+            }
+          ],
+          "docWidth": 390,
+          "viewport": 390
+        }
+      }
+    },
+    "S9": {
+      "sizes": {
+        "/": 56302,
+        "tour/": 64504,
+        "tutorial/": 93455,
+        "evidence/": 61410,
+        "install/": 57968,
+        "reference/": 53333,
+        "about/": 54957
+      },
+      "totalHtml": 171449,
+      "weight": 0
+    },
+    "S10": {
+      "sitemapUrls": 22,
+      "commit": "0000000"
+    }
+  },
+  "checks": [
+    {
+      "scene": "S1",
+      "name": "/ responds 200",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "scene": "S1",
+      "name": "/ has exactly one h1",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "scene": "S1",
+      "name": "/ headings never skip",
+      "ok": true,
+      "detail": "[1,2,3,3,3,2,2,3,3,3,3,3,3,2,2,3,3,3]"
+    },
+    {
+      "scene": "S1",
+      "name": "/ has a description",
+      "ok": true,
+      "detail": "178"
+    },
+    {
+      "scene": "S1",
+      "name": "/ has a canonical",
+      "ok": true,
+      "detail": "https://raphaelmansuy.github.io/opengenie/"
+    },
+    {
+      "scene": "S1",
+      "name": "/ has no console error",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scene": "S1",
+      "name": "/ landmarks",
+      "ok": true,
+      "detail": "{\"header\":1,\"nav\":2,\"main\":1,\"footer\":1}"
+    },
+    {
+      "scene": "S1",
+      "name": "/ fits 390 px",
+      "ok": true,
+      "detail": "0 px over"
+    },
+    {
+      "scene": "S1",
+      "name": "tour/ responds 200",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "scene": "S1",
+      "name": "tour/ has exactly one h1",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "scene": "S1",
+      "name": "tour/ headings never skip",
+      "ok": true,
+      "detail": "[1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2]"
+    },
+    {
+      "scene": "S1",
+      "name": "tour/ has a description",
+      "ok": true,
+      "detail": "121"
+    },
+    {
+      "scene": "S1",
+      "name": "tour/ has a canonical",
+      "ok": true,
+      "detail": "https://raphaelmansuy.github.io/opengenie/tour/"
+    },
+    {
+      "scene": "S1",
+      "name": "tour/ has no console error",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scene": "S1",
+      "name": "tour/ landmarks",
+      "ok": true,
+      "detail": "{\"header\":1,\"nav\":2,\"main\":1,\"footer\":1}"
+    },
+    {
+      "scene": "S1",
+      "name": "tour/ fits 390 px",
+      "ok": true,
+      "detail": "0 px over"
+    },
+    {
+      "scene": "S1",
+      "name": "tutorial/ responds 200",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "scene": "S1",
+      "name": "tutorial/ has exactly one h1",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "scene": "S1",
+      "name": "tutorial/ headings never skip",
+      "ok": true,
+      "detail": "[1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,2,2,2,2]"
+    },
+    {
+      "scene": "S1",
+      "name": "tutorial/ has a description",
+      "ok": true,
+      "detail": "116"
+    },
+    {
+      "scene": "S1",
+      "name": "tutorial/ has a canonical",
+      "ok": true,
+      "detail": "https://raphaelmansuy.github.io/opengenie/tutorial/"
+    },
+    {
+      "scene": "S1",
+      "name": "tutorial/ has no console error",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scene": "S1",
+      "name": "tutorial/ landmarks",
+      "ok": true,
+      "detail": "{\"header\":1,\"nav\":2,\"main\":1,\"footer\":1}"
+    },
+    {
+      "scene": "S1",
+      "name": "tutorial/ fits 390 px",
+      "ok": true,
+      "detail": "0 px over"
+    },
+    {
+      "scene": "S1",
+      "name": "evidence/ responds 200",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "scene": "S1",
+      "name": "evidence/ has exactly one h1",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "scene": "S1",
+      "name": "evidence/ headings never skip",
+      "ok": true,
+      "detail": "[1,2,2,3,3,3,3,3,3,2,2]"
+    },
+    {
+      "scene": "S1",
+      "name": "evidence/ has a description",
+      "ok": true,
+      "detail": "138"
+    },
+    {
+      "scene": "S1",
+      "name": "evidence/ has a canonical",
+      "ok": true,
+      "detail": "https://raphaelmansuy.github.io/opengenie/evidence/"
+    },
+    {
+      "scene": "S1",
+      "name": "evidence/ has no console error",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scene": "S1",
+      "name": "evidence/ landmarks",
+      "ok": true,
+      "detail": "{\"header\":1,\"nav\":2,\"main\":1,\"footer\":1}"
+    },
+    {
+      "scene": "S1",
+      "name": "evidence/ fits 390 px",
+      "ok": true,
+      "detail": "0 px over"
+    },
+    {
+      "scene": "S1",
+      "name": "install/ responds 200",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "scene": "S1",
+      "name": "install/ has exactly one h1",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "scene": "S1",
+      "name": "install/ headings never skip",
+      "ok": true,
+      "detail": "[1,2,3,3,3,2,2,2,2,2,2]"
+    },
+    {
+      "scene": "S1",
+      "name": "install/ has a description",
+      "ok": true,
+      "detail": "159"
+    },
+    {
+      "scene": "S1",
+      "name": "install/ has a canonical",
+      "ok": true,
+      "detail": "https://raphaelmansuy.github.io/opengenie/install/"
+    },
+    {
+      "scene": "S1",
+      "name": "install/ has no console error",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scene": "S1",
+      "name": "install/ landmarks",
+      "ok": true,
+      "detail": "{\"header\":1,\"nav\":2,\"main\":1,\"footer\":1}"
+    },
+    {
+      "scene": "S1",
+      "name": "install/ fits 390 px",
+      "ok": true,
+      "detail": "0 px over"
+    },
+    {
+      "scene": "S1",
+      "name": "reference/ responds 200",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "scene": "S1",
+      "name": "reference/ has exactly one h1",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "scene": "S1",
+      "name": "reference/ headings never skip",
+      "ok": true,
+      "detail": "[1]"
+    },
+    {
+      "scene": "S1",
+      "name": "reference/ has a description",
+      "ok": true,
+      "detail": "117"
+    },
+    {
+      "scene": "S1",
+      "name": "reference/ has a canonical",
+      "ok": true,
+      "detail": "https://raphaelmansuy.github.io/opengenie/reference/"
+    },
+    {
+      "scene": "S1",
+      "name": "reference/ has no console error",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scene": "S1",
+      "name": "reference/ landmarks",
+      "ok": true,
+      "detail": "{\"header\":1,\"nav\":2,\"main\":1,\"footer\":1}"
+    },
+    {
+      "scene": "S1",
+      "name": "reference/ fits 390 px",
+      "ok": true,
+      "detail": "0 px over"
+    },
+    {
+      "scene": "S1",
+      "name": "about/ responds 200",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "scene": "S1",
+      "name": "about/ has exactly one h1",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "scene": "S1",
+      "name": "about/ headings never skip",
+      "ok": true,
+      "detail": "[1,2,3,3,3,3,3,3]"
+    },
+    {
+      "scene": "S1",
+      "name": "about/ has a description",
+      "ok": true,
+      "detail": "141"
+    },
+    {
+      "scene": "S1",
+      "name": "about/ has a canonical",
+      "ok": true,
+      "detail": "https://raphaelmansuy.github.io/opengenie/about/"
+    },
+    {
+      "scene": "S1",
+      "name": "about/ has no console error",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scene": "S1",
+      "name": "about/ landmarks",
+      "ok": true,
+      "detail": "{\"header\":1,\"nav\":2,\"main\":1,\"footer\":1}"
+    },
+    {
+      "scene": "S1",
+      "name": "about/ fits 390 px",
+      "ok": true,
+      "detail": "0 px over"
+    },
+    {
+      "scene": "S2",
+      "name": "a product screenshot exists",
+      "ok": true,
+      "detail": "{\"top\":613.921875,\"height\":542.5,\"src\":\"/assets/shots/app-1440.png\",\"alt\":\"The OpenGenie shell at 1440 px: sessions and files in the left rail, a notebook in the centre, and the assistant docked on the right, labelled with the notebook it is bound to.\"}"
+    },
+    {
+      "scene": "S2",
+      "name": "the product screenshot is within two viewport heights",
+      "ok": true,
+      "detail": "613.921875"
+    },
+    {
+      "scene": "S2",
+      "name": "the product screenshot has a described alt",
+      "ok": true,
+      "detail": "The OpenGenie shell at 1440 px: sessions and files in the left rail, a notebook in the centre, and the assistant docked on the right, labelled with the notebook it is bound to."
+    },
+    {
+      "scene": "S2",
+      "name": "the three claims are present as cards",
+      "ok": true,
+      "detail": "12"
+    },
+    {
+      "scene": "S2",
+      "name": "one primary button above the fold",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "scene": "S2",
+      "name": "claim cards link onward",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "scene": "S3",
+      "name": "eight claim cards",
+      "ok": true,
+      "detail": "8"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-1: has a value",
+      "ok": true,
+      "detail": "100%37/37"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-1: has a caveat",
+      "ok": true,
+      "detail": "Three tasks only, one run each. It says the setup generalises; it does not say it is complete."
+    },
+    {
+      "scene": "S3",
+      "name": "CL-1: cites a source",
+      "ok": true,
+      "detail": "[\"exams/results/heldout_v4_gemini\",\"python3 site/claims.py\"]"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-1: states its runs",
+      "ok": true,
+      "detail": "3 held-out tasks (X1-X3), never used for tuning · 3 graded runs"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-2: has a value",
+      "ok": true,
+      "detail": "86%32/37"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-2: has a caveat",
+      "ok": true,
+      "detail": "One run each. X2 lost three points because the fixed job was never re-run."
+    },
+    {
+      "scene": "S3",
+      "name": "CL-2: cites a source",
+      "ok": true,
+      "detail": "[\"exams/results/heldout_v4_gptoss\",\"python3 site/claims.py\"]"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-2: states its runs",
+      "ok": true,
+      "detail": "3 held-out tasks (X1-X3), never used for tuning · 3 graded runs"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-3: has a value",
+      "ok": true,
+      "detail": "86%130/152"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-3: has a caveat",
+      "ok": true,
+      "detail": "One run each, and M2 has the widest natural spread of the eight tasks."
+    },
+    {
+      "scene": "S3",
+      "name": "CL-3: cites a source",
+      "ok": true,
+      "detail": "[\"exams/results/v5_gptoss\",\"exams/results/v5_gemini\",\"python3 site/claims.py\"]"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-3: states its runs",
+      "ok": true,
+      "detail": "8 development tasks (M1-M8), one run per model · 16 graded runs"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-4: has a value",
+      "ok": true,
+      "detail": "94%143/152"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-4: has a caveat",
+      "ok": true,
+      "detail": "The ladder was tuned on these tasks, so this is a ceiling for the method, not an unbiased score."
+    },
+    {
+      "scene": "S3",
+      "name": "CL-4: cites a source",
+      "ok": true,
+      "detail": "[\"exams/results/v4_gptoss\",\"python3 site/claims.py\"]"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-4: states its runs",
+      "ok": true,
+      "detail": "8 development tasks (M1-M8), one run per setup · 8 graded runs"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-5: has a value",
+      "ok": true,
+      "detail": "100%37/37"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-5: has a caveat",
+      "ok": true,
+      "detail": "Three tasks. It shows the machinery was unnecessary there, not that it is useless."
+    },
+    {
+      "scene": "S3",
+      "name": "CL-5: cites a source",
+      "ok": true,
+      "detail": "[\"exams/results/heldout_v1_gemini\",\"python3 site/claims.py\"]"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-5: states its runs",
+      "ok": true,
+      "detail": "3 held-out tasks (X1-X3), never used for tuning · 3 graded runs"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-6: has a value",
+      "ok": true,
+      "detail": "95%95/100"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-6: has a caveat",
+      "ok": true,
+      "detail": "One setup only. Every other setup was run once, so no other spread is known."
+    },
+    {
+      "scene": "S3",
+      "name": "CL-6: cites a source",
+      "ok": true,
+      "detail": "[\"exams/results/v4_gptoss\",\"exams/results/v4_gptoss_t2\",\"exams/results/v4_gptoss_t3\",\"python3 site/claims.py\"]"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-6: states its runs",
+      "ok": true,
+      "detail": "8 development tasks (M1-M8), repeated complete runs of one setup · 3 graded runs"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-7: has a value",
+      "ok": true,
+      "detail": "671k tokens/task vs 311k"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-7: has a caveat",
+      "ok": true,
+      "detail": "Tokens, never money: no Genie Code usage history exists, so no saving can be quoted."
+    },
+    {
+      "scene": "S3",
+      "name": "CL-7: cites a source",
+      "ok": true,
+      "detail": "[\"exams/results/v4_gptoss\",\"exams/results/v4_gemini\",\"python3 site/claims.py\"]"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-7: states its runs",
+      "ok": true,
+      "detail": "8 development tasks (M1-M8), thousands of tokens per task · 8 graded runs"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-8: has a value",
+      "ok": true,
+      "detail": "11missions"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-8: has a caveat",
+      "ok": true,
+      "detail": "The tasks are small, clean and well specified: our exams name the tables."
+    },
+    {
+      "scene": "S3",
+      "name": "CL-8: cites a source",
+      "ok": true,
+      "detail": "[\"exams/missions\",\"python3 site/claims.py\"]"
+    },
+    {
+      "scene": "S3",
+      "name": "CL-8: states its runs",
+      "ok": true,
+      "detail": "8 development (M1-M8) and 3 held-out (X1-X3) missions · 123 graded runs"
+    },
+    {
+      "scene": "S4",
+      "name": "portrait loads",
+      "ok": true,
+      "detail": "{\"src\":\"../assets/author/raphael-mansuy.jpg\",\"loaded\":true,\"w\":400}"
+    },
+    {
+      "scene": "S4",
+      "name": "LinkedIn link",
+      "ok": true,
+      "detail": "https://www.linkedin.com/in/raphaelmansuy/,https://github.com/raphaelmansuy,https://github.com/raphaelmansuy/opengenie,https://www.oreilly.com/library/view/the-definitive-guide/9781837631919/"
+    },
+    {
+      "scene": "S4",
+      "name": "GitHub link",
+      "ok": true,
+      "detail": "https://www.linkedin.com/in/raphaelmansuy/,https://github.com/raphaelmansuy,https://github.com/raphaelmansuy/opengenie,https://www.oreilly.com/library/view/the-definitive-guide/9781837631919/"
+    },
+    {
+      "scene": "S4",
+      "name": "three other projects",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "scene": "S4",
+      "name": "the book is shown",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "scene": "S5",
+      "name": "/: exactly one current nav item",
+      "ok": true,
+      "detail": "[\"Home\"]"
+    },
+    {
+      "scene": "S5",
+      "name": "/: the skip link is the first tab stop",
+      "ok": true,
+      "detail": "skip"
+    },
+    {
+      "scene": "S5",
+      "name": "/: seven nav links",
+      "ok": true,
+      "detail": "7"
+    },
+    {
+      "scene": "S5",
+      "name": "tour/: exactly one current nav item",
+      "ok": true,
+      "detail": "[\"Tour\"]"
+    },
+    {
+      "scene": "S5",
+      "name": "tour/: the skip link is the first tab stop",
+      "ok": true,
+      "detail": "skip"
+    },
+    {
+      "scene": "S5",
+      "name": "tour/: seven nav links",
+      "ok": true,
+      "detail": "7"
+    },
+    {
+      "scene": "S5",
+      "name": "tutorial/: exactly one current nav item",
+      "ok": true,
+      "detail": "[\"Tutorial\"]"
+    },
+    {
+      "scene": "S5",
+      "name": "tutorial/: the skip link is the first tab stop",
+      "ok": true,
+      "detail": "skip"
+    },
+    {
+      "scene": "S5",
+      "name": "tutorial/: seven nav links",
+      "ok": true,
+      "detail": "7"
+    },
+    {
+      "scene": "S5",
+      "name": "evidence/: exactly one current nav item",
+      "ok": true,
+      "detail": "[\"Evidence\"]"
+    },
+    {
+      "scene": "S5",
+      "name": "evidence/: the skip link is the first tab stop",
+      "ok": true,
+      "detail": "skip"
+    },
+    {
+      "scene": "S5",
+      "name": "evidence/: seven nav links",
+      "ok": true,
+      "detail": "7"
+    },
+    {
+      "scene": "S5",
+      "name": "install/: exactly one current nav item",
+      "ok": true,
+      "detail": "[\"Install\"]"
+    },
+    {
+      "scene": "S5",
+      "name": "install/: the skip link is the first tab stop",
+      "ok": true,
+      "detail": "skip"
+    },
+    {
+      "scene": "S5",
+      "name": "install/: seven nav links",
+      "ok": true,
+      "detail": "7"
+    },
+    {
+      "scene": "S5",
+      "name": "reference/: exactly one current nav item",
+      "ok": true,
+      "detail": "[\"Reference\"]"
+    },
+    {
+      "scene": "S5",
+      "name": "reference/: the skip link is the first tab stop",
+      "ok": true,
+      "detail": "skip"
+    },
+    {
+      "scene": "S5",
+      "name": "reference/: seven nav links",
+      "ok": true,
+      "detail": "7"
+    },
+    {
+      "scene": "S5",
+      "name": "about/: exactly one current nav item",
+      "ok": true,
+      "detail": "[\"About\"]"
+    },
+    {
+      "scene": "S5",
+      "name": "about/: the skip link is the first tab stop",
+      "ok": true,
+      "detail": "skip"
+    },
+    {
+      "scene": "S5",
+      "name": "about/: seven nav links",
+      "ok": true,
+      "detail": "7"
+    },
+    {
+      "scene": "S6",
+      "name": "the tutorial rendered with its own headings",
+      "ok": true,
+      "detail": "145"
+    },
+    {
+      "scene": "S6",
+      "name": "the first paragraph is not a nav line",
+      "ok": true,
+      "detail": "Time: about 30 minutes the first time. Skills needed: you can run a notebook and"
+    },
+    {
+      "scene": "S6",
+      "name": "the reference lists fifteen documents",
+      "ok": true,
+      "detail": "15"
+    },
+    {
+      "scene": "S6",
+      "name": "a rendered doc keeps its tables",
+      "ok": true,
+      "detail": "13"
+    },
+    {
+      "scene": "S6",
+      "name": "a rendered doc has one h1",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "scene": "S7",
+      "name": "1440-light: no horizontal overflow",
+      "ok": true,
+      "detail": "1440 > 1440"
+    },
+    {
+      "scene": "S7",
+      "name": "1440-light: contrast meets AA",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "scene": "S7",
+      "name": "1440-light: every control has a name",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "scene": "S7",
+      "name": "1440-dark: no horizontal overflow",
+      "ok": true,
+      "detail": "1440 > 1440"
+    },
+    {
+      "scene": "S7",
+      "name": "1440-dark: contrast meets AA",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "scene": "S7",
+      "name": "1440-dark: every control has a name",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "scene": "S7",
+      "name": "1100-light: no horizontal overflow",
+      "ok": true,
+      "detail": "1100 > 1100"
+    },
+    {
+      "scene": "S7",
+      "name": "1100-light: contrast meets AA",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "scene": "S7",
+      "name": "1100-light: every control has a name",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "scene": "S7",
+      "name": "860-light: no horizontal overflow",
+      "ok": true,
+      "detail": "860 > 860"
+    },
+    {
+      "scene": "S7",
+      "name": "860-light: contrast meets AA",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "scene": "S7",
+      "name": "860-light: every control has a name",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "scene": "S7",
+      "name": "860-light: the menu opens",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "scene": "S7",
+      "name": "860-light: Escape closes the menu",
+      "ok": true,
+      "detail": "false"
+    },
+    {
+      "scene": "S7",
+      "name": "860-light: Escape returns focus to the button",
+      "ok": true,
+      "detail": "nav-toggle"
+    },
+    {
+      "scene": "S7",
+      "name": "390-light: no horizontal overflow",
+      "ok": true,
+      "detail": "390 > 390"
+    },
+    {
+      "scene": "S7",
+      "name": "390-light: contrast meets AA",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "scene": "S7",
+      "name": "390-light: every control has a name",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "scene": "S7",
+      "name": "390-light: the menu opens",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "scene": "S7",
+      "name": "390-light: Escape closes the menu",
+      "ok": true,
+      "detail": "false"
+    },
+    {
+      "scene": "S7",
+      "name": "390-light: Escape returns focus to the button",
+      "ok": true,
+      "detail": "nav-toggle"
+    },
+    {
+      "scene": "S7",
+      "name": "390-dark: no horizontal overflow",
+      "ok": true,
+      "detail": "390 > 390"
+    },
+    {
+      "scene": "S7",
+      "name": "390-dark: contrast meets AA",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "scene": "S7",
+      "name": "390-dark: every control has a name",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "scene": "S7",
+      "name": "390-dark: the menu opens",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "scene": "S7",
+      "name": "390-dark: Escape closes the menu",
+      "ok": true,
+      "detail": "false"
+    },
+    {
+      "scene": "S7",
+      "name": "390-dark: Escape returns focus to the button",
+      "ok": true,
+      "detail": "nav-toggle"
+    },
+    {
+      "scene": "S7",
+      "name": "diagram:light renders",
+      "ok": true,
+      "detail": "4"
+    },
+    {
+      "scene": "S7",
+      "name": "diagram:light does not paint a dark canvas",
+      "ok": true,
+      "detail": "rgb(250, 249, 247)"
+    },
+    {
+      "scene": "S7",
+      "name": "diagram:dark renders",
+      "ok": true,
+      "detail": "4"
+    },
+    {
+      "scene": "S7",
+      "name": "diagram:dark does not paint a light canvas",
+      "ok": true,
+      "detail": "rgb(32, 31, 28)"
+    },
+    {
+      "scene": "S7",
+      "name": "theme:system sets data-theme",
+      "ok": true,
+      "detail": "light"
+    },
+    {
+      "scene": "S7",
+      "name": "theme:light sets data-theme",
+      "ok": true,
+      "detail": "light"
+    },
+    {
+      "scene": "S7",
+      "name": "theme:dark sets data-theme",
+      "ok": true,
+      "detail": "dark"
+    },
+    {
+      "scene": "S7",
+      "name": "the theme choice persists across a reload",
+      "ok": true,
+      "detail": "dark"
+    },
+    {
+      "scene": "S7",
+      "name": "200% zoom: no horizontal overflow",
+      "ok": true,
+      "detail": "720 > 720"
+    },
+    {
+      "scene": "S8",
+      "name": "no-JS: the content is present",
+      "ok": true,
+      "detail": "{\"cards\":12,\"claims\":0,\"nav\":8,\"img\":1}"
+    },
+    {
+      "scene": "S8",
+      "name": "no-JS: a diagram keeps its source readable",
+      "ok": true,
+      "detail": "%%{init: {'theme':'base','themeVariables':{'primaryColor':'#"
+    },
+    {
+      "scene": "S8",
+      "name": "no-JS: the diagram's source is visible as text",
+      "ok": true,
+      "detail": "Skip to content\nOpenGenie\nHome\nTour\nTutorial\nEvidence\nInstall\nReference\nAbout\nSy"
+    },
+    {
+      "scene": "S8",
+      "name": "images blocked: every image has meaningful alt",
+      "ok": true,
+      "detail": "[173,119,149,145,116,119,84,104,110,94,109,87,88,69,112,78,119,99]"
+    },
+    {
+      "scene": "S8",
+      "name": "the 404 is a real page",
+      "ok": true,
+      "detail": "200 6"
+    },
+    {
+      "scene": "S9",
+      "name": "/ under 400 KB",
+      "ok": true,
+      "detail": "55 KB"
+    },
+    {
+      "scene": "S9",
+      "name": "tour/ under 400 KB",
+      "ok": true,
+      "detail": "63 KB"
+    },
+    {
+      "scene": "S9",
+      "name": "tutorial/ under 400 KB",
+      "ok": true,
+      "detail": "91 KB"
+    },
+    {
+      "scene": "S9",
+      "name": "evidence/ under 400 KB",
+      "ok": true,
+      "detail": "60 KB"
+    },
+    {
+      "scene": "S9",
+      "name": "install/ under 400 KB",
+      "ok": true,
+      "detail": "57 KB"
+    },
+    {
+      "scene": "S9",
+      "name": "reference/ under 400 KB",
+      "ok": true,
+      "detail": "52 KB"
+    },
+    {
+      "scene": "S9",
+      "name": "about/ under 400 KB",
+      "ok": true,
+      "detail": "54 KB"
+    },
+    {
+      "scene": "S10",
+      "name": "sitemap lists every route",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "scene": "S10",
+      "name": "robots points at the sitemap",
+      "ok": true,
+      "detail": "User-agent: *\nAllow: /\nSitemap: https://raphaelmansuy.github.io/opengenie/sitemap.xml"
+    },
+    {
+      "scene": "S10",
+      "name": "the build manifest records a commit",
+      "ok": true,
+      "detail": "0000000"
+    },
+    {
+      "scene": "S10",
+      "name": "the build manifest has no missing claim",
+      "ok": true,
+      "detail": "8"
+    }
+  ],
+  "failures": []
+}

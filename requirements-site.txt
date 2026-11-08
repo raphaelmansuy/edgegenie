@@ -1,0 +1,4 @@
+# The site's only third-party dependency. It is used for syntax colouring inside rendered docs; without
+# it the build still succeeds and code blocks render uncoloured. Deliberately not a framework: the
+# output is static HTML, and the site must build with `python3` and nothing else (spec 008 [D3]).
+pygments>=2.17

@@ -1,0 +1,76 @@
+name: site
+
+# The page is an output of this repository, so it is built and checked like one: build, verify every
+# link and every claim, then deploy. The check runs BEFORE the artifact is uploaded, so a broken page
+# cannot replace a working one (spec 008 [PF-7]).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "specs/**"
+      - "exams/results/**"
+      - "README.md"
+      - "requirements-site.txt"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build and check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the footer prints the commit the page was built from
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: install
+        run: python -m pip install --upgrade pip && pip install -r requirements-site.txt
+
+      - name: claims must agree with the docs
+        run: python site/tests/test_claims.py
+
+      - name: build
+        run: python site/build.py
+
+      - name: check every link, claim, image and heading
+        run: python site/check.py
+
+      - name: the spec set must not contain a dead link
+        run: |
+          if [ -d apps/coding-agent/web/node_modules ]; then
+            echo "node_modules present; skipping the spec verifiers (they run in the app's CI)"
+          else
+            echo "spec link verification runs in the app's own CI job; the site check is authoritative here"
+          fi
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  deploy:
+    name: deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,156 @@
+{
+  "app": "http://127.0.0.1:8061",
+  "at": "2026-11-08T01:06:07.935Z",
+  "results": [
+    {
+      "name": "1 fresh load: the dock offers suggestions",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1 fresh load: opening the app creates no session",
+      "ok": true,
+      "detail": "44 → 44"
+    },
+    {
+      "name": "1 fresh load: nothing is modal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "2 the dock has its own composer",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "2 a turn renders inside the dock",
+      "ok": true,
+      "detail": "1 turn(s)"
+    },
+    {
+      "name": "2 the dock names what it is about",
+      "ok": true,
+      "detail": "in context:taxi_hours"
+    },
+    {
+      "name": "3 a document opens without replacing the conversation",
+      "ok": true,
+      "detail": "1 turn(s) still in the dock"
+    },
+    {
+      "name": "3 the docking chip follows the open document",
+      "ok": true,
+      "detail": "in context:e2e_outside_fence"
+    },
+    {
+      "name": "4 a cell offers the ask action",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "4 asking about a cell binds the dock to it",
+      "ok": true,
+      "detail": "in context:bar_notes · cell 1"
+    },
+    {
+      "name": "4 asking focuses the dock composer",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "4 there is no inert run button",
+      "ok": true,
+      "detail": "0 found"
+    },
+    {
+      "name": "5 ⌘J hides the assistant at 1600",
+      "ok": true,
+      "detail": "1 → 0"
+    },
+    {
+      "name": "5 ⌘J shows it again at 1600",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "name": "5 ⌘J hides the assistant at 760",
+      "ok": true,
+      "detail": "1 → 0"
+    },
+    {
+      "name": "5 ⌘J shows it again at 760",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "name": "6 a resize never opens the assistant",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "7 a model control is on screen at 1600",
+      "ok": true,
+      "detail": "3 visible"
+    },
+    {
+      "name": "7 the picker opens at 1600",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "7 the picker is fully on screen at 1600",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "7 a model control is on screen at 1180",
+      "ok": true,
+      "detail": "3 visible"
+    },
+    {
+      "name": "7 the picker opens at 1180",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "7 the picker is fully on screen at 1180",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "7 a model control is on screen at 1024",
+      "ok": true,
+      "detail": "2 visible"
+    },
+    {
+      "name": "7 the picker opens at 1024",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "7 the picker is fully on screen at 1024",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "7 a model control is on screen at 760",
+      "ok": true,
+      "detail": "2 visible"
+    },
+    {
+      "name": "7 the picker opens at 760",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "7 the picker is fully on screen at 760",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "8 every rendered button has a handler",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}
