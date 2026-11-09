@@ -103,7 +103,7 @@ export const api = {
     call<{ saved: boolean }>(`/api/llm/config/providers/${id}`, { method: "PATCH", headers: json, body: JSON.stringify(body) }),
   models: () => call<CatalogueResponse>("/api/models"),
   /** Upload bytes the user handed the browser (paste, drop, picker). The only route that takes content. */
-  uploadBlob: (sessionId: string, name: string, mime: string, contentB64: string) =>
+  uploadBlob: (sessionId: string | null, name: string, mime: string, contentB64: string) =>
     call<{ blobId: string; name: string; mime: string; bytes: number; family: string; state: string }>(
       "/api/blobs", { method: "POST", headers: json,
         body: JSON.stringify({ sessionId, name, mime, content: contentB64 }) }),

@@ -65,11 +65,11 @@ export function useBlobUpload(sessionId: string | null, onUploaded?: (c: Chip) =
 
   /** Send the bytes. Never called before the chip exists, so the UI cannot wait on it. */
   const upload = useCallback(async (chip: Chip) => {
-    if (!sessionId) {
-      patch(chip.key, { state: "failed", code: "upload_failed",
-        reason: say("upload_failed", { name: chip.name, reason: "no session is open" }) });
-      return;
-    }
+    /* No session yet is NOT an error: a session does not exist until the first message, and the moment a
+       user most wants to attach a screenshot is exactly then. The server holds the bytes under a
+       per-user pending key and the session adopts them when the message is sent (spec 009 [D2]).
+       Measured on the deployment: attaching on the home screen failed with "no session is open" — the
+       first attachment of every conversation, refused. */
     try {
       const content = b64(await chip.file.arrayBuffer());
       const row = await api.uploadBlob(sessionId, chip.name, chip.file.type, content);

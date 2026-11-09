@@ -1038,7 +1038,12 @@ async def ready(request: Request) -> dict:
 # -- blobs (spec 009) ---------------------------------------------------------
 class UploadBlob(BaseModel):
     """Bytes the browser hands us. The base64 cap is the framework's, checked before the handler runs."""
-    sessionId: str = Field(min_length=1, max_length=64)
+    #: Optional, and that is the fix for a real bug: a session does not exist until the FIRST message, so
+    #: requiring one here made the first attachment of every conversation fail with "no session is open".
+    #: That is the moment a user most wants to attach something — a screenshot they are about to ask
+    #: about. When absent the blob is held under a per-USER pending key and bound to the session when the
+    #: message that references it is sent (spec 009 [D2]).
+    sessionId: str | None = Field(default=None, max_length=64)
     name: str = Field(min_length=1, max_length=400)
     mime: str = Field(default="", max_length=120)
     #: 8 MB decoded is ~10.7 MB of base64. The cap is that plus room for padding, and it refuses a
@@ -1084,19 +1089,30 @@ async def blob_upload(request: Request, body: UploadBlob) -> dict:
     once under a server-generated id, and record an event that carries metadata but never bytes.
     """
     orch = _orch(request)
-    try:
-        orch.get(body.sessionId)
-    except KeyError:
-        raise HTTPException(404, "no such session") from None
+    user = _user(request)
+    if body.sessionId:
+        try:
+            orch.get(body.sessionId)
+        except KeyError:
+            raise HTTPException(404, "no such session") from None
+        scope_id = body.sessionId
+    else:
+        # No session yet. The blob is still the user's, and still validated — only its owner-scoped key
+        # differs. It is not a "session" and never pretends to be one: `pending:` cannot collide with a
+        # session id, and every read is authorised by user_id anyway.
+        scope_id = f"pending:{user}"
     svc = _blobs(request)
     try:
         row = await svc.accept(
-            body.sessionId, _user(request), body.name, body.mime, body.content,
-            model_sees_images=await _model_sees_images(request, body.sessionId),
+            scope_id, user, body.name, body.mime, body.content,
+            model_sees_images=await _model_sees_images(request, body.sessionId or ""),
         )
     except BlobRefusal as exc:
         raise HTTPException(422, {"code": exc.code, "detail": exc.message}) from None
-    return row.to_dict()
+    out = row.to_dict()
+    # The client must not have to know about the pending key; it gets a blob id and nothing else.
+    out.pop("sessionId", None)
+    return out
 
 
 @router.get("/blobs/{blob_id}")

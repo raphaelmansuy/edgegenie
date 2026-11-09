@@ -267,3 +267,58 @@ def test_the_catalogue_tells_the_client_who_can_see(session, client):
     for row in rows:
         assert "seesImages" in row, f"{row.get('id')} does not declare whether it can see"
         assert isinstance(row["seesImages"], bool)
+
+
+# -- attaching BEFORE a session exists -------------------------------------------------------
+# The reported bug: on the home screen, attaching a file failed with "no session is open". A session does
+# not exist until the first message — so the FIRST attachment of every conversation was refused, which is
+# the moment a user most wants to show the agent something.
+
+def test_a_blob_can_be_uploaded_with_no_session_yet(client):
+    """[D2]: bytes are the user's before they are any session's."""
+    r = client.post("/api/blobs", json={"name": "early.png", "mime": "image/png",
+                                        "content": base64.b64encode(PNG).decode()})
+    assert r.status_code == 201, r.text
+    assert r.json()["blobId"].startswith("blb_")
+    # The pending key is an implementation detail: the client gets an id and must not see it.
+    assert "sessionId" not in r.json()
+
+
+def test_a_pre_session_blob_is_readable_by_its_owner(client):
+    blob_id = client.post("/api/blobs", json={"name": "e.png", "mime": "image/png",
+                                             "content": base64.b64encode(PNG).decode()}).json()["blobId"]
+    r = client.get(f"/api/blobs/{blob_id}")
+    assert r.status_code == 200
+    assert r.content == PNG
+
+
+def test_another_user_cannot_read_a_pre_session_blob(client):
+    blob_id = client.post("/api/blobs", json={"name": "e.png", "mime": "image/png",
+                                             "content": base64.b64encode(PNG).decode()}).json()["blobId"]
+    from tests.test_api import make_client
+
+    with make_client() as other:
+        other.app.state.blob_store = client.app.state.blob_store
+        other.app.state.blobs = client.app.state.blobs
+        other.headers.update({"X-Forwarded-Email": "someone.else@example.com"})
+        assert other.get(f"/api/blobs/{blob_id}").status_code == 404
+
+
+def test_a_pre_session_blob_is_adopted_by_the_session_that_sends_it(client):
+    """Adoption is what keeps the sweep safe: a blob left under `pending:` would never be reached by
+    `delete_session`, and would outlive the conversation that used it.
+
+    It is also what makes the turn's reference real: the message must carry the id the upload returned, and
+    the blob must still be readable afterwards.
+    """
+    blob_id = client.post("/api/blobs", json={"name": "e.csv", "mime": "text/csv",
+                                              "content": base64.b64encode(CSV).decode()}).json()["blobId"]
+    sid = client.post("/api/sessions", json={"folder": "/tmp/agent-work"}).json()["id"]
+
+    sent = client.post(f"/api/sessions/{sid}/messages",
+                       json={"text": "look", "attachments": [{"kind": "blob", "ref": blob_id, "name": "e.csv"}]})
+    assert sent.status_code == 202, sent.text
+
+    detail = client.get(f"/api/sessions/{sid}").json()
+    assert detail["turns"][-1]["attachments"][0]["ref"] == blob_id
+    assert client.get(f"/api/blobs/{blob_id}").status_code == 200

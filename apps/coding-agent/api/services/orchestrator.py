@@ -612,6 +612,11 @@ class Orchestrator:
         ended: dict = {"error": "no result"}
         usage: dict = {}
         try:
+            # Bind the blobs to this turn BEFORE the prompt: refcount is what protects them from the
+            # sweeper, and until this was called every attached blob had refcount 0 — so a transcript chip
+            # would survive 24 hours and then point at bytes that no longer existed ([AFC-8], [BLB-3]).
+            # It is also where a blob uploaded before a session existed adopts the session.
+            await self._bind_blobs(live, turn)
             images = await self._images_for(live, turn)
             await self._rt.prompt_in_background(  # type: ignore[attr-defined]
                 live.handle, turn.context + turn.prompt, images)
@@ -622,6 +627,20 @@ class Orchestrator:
         except Exception as exc:  # noqa: BLE001 - a runtime failure must not escape
             ended = {"error": str(exc)[:400]}
         await self._settle(live, turn, "".join(parts), ended, usage, time.time() - started)
+
+    async def _bind_blobs(self, live: Live, turn) -> None:
+        """Record that this turn references these blobs. Best-effort: never fail a turn over bookkeeping."""
+        if self._blobs is None or not turn.attachments:
+            return
+        for att in turn.attachments:
+            if att.get("kind") != "blob":
+                continue
+            ref = att.get("ref") or ""
+            try:
+                await self._blobs.store.mark_attached(
+                    ref, turn.id, att.get("name") or "", live.state.session.id)
+            except Exception:  # noqa: BLE001 - provenance must not block a turn
+                pass
 
     async def _images_for(self, live: Live, turn) -> list[dict]:
         """The image attachments this turn carries, as ACP image blocks.

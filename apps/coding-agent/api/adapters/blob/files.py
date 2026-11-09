@@ -128,14 +128,33 @@ class FileBlobStore:
             raise LookupError("the bytes for this attachment are gone")
         return path.read_bytes()
 
-    async def mark_attached(self, blob_id: str, turn_id: str, display_name: str) -> None:
+    async def mark_attached(self, blob_id: str, turn_id: str, display_name: str,
+                            session_id: str = "") -> None:
+        """Record the reference, and adopt the session a pre-session blob was waiting for.
+
+        Adoption also MOVES THE FILE: the bytes live under `<root>/<session_id>/`, so a blob stored under
+        `pending:<user>` has to follow its new session or `delete_session` could never reach it.
+        """
         row = self._rows.get(blob_id)
         if row is None:
             return
         self._refs.setdefault(blob_id, set()).add(turn_id)
+        updates: dict = {}
         if row.state == "ready":
-            self._rows[blob_id] = BlobRow(**{**_as_dict(row), "state": "attached",
-                                             "attached_at": self._clock()})
+            updates = {"state": "attached", "attached_at": self._clock()}
+        adopt = bool(session_id) and row.session_id.startswith("pending:")
+        if adopt:
+            old_path = self._blob_path(row)
+            updates["session_id"] = session_id
+            moved = BlobRow(**{**_as_dict(row), **updates})
+            new_dir = self._dir(session_id)
+            new_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                os.replace(old_path, self._blob_path(moved))
+            except OSError:
+                pass       # the row is still correct; a stranded file is swept with the pending folder
+        if updates:
+            self._rows[blob_id] = BlobRow(**{**_as_dict(row), **updates})
             self._save()
 
     async def refcount(self, blob_id: str) -> int:

@@ -64,14 +64,25 @@ class MemoryBlobStore:
             raise LookupError("the bytes for this attachment are gone")
         return raw
 
-    async def mark_attached(self, blob_id: str, turn_id: str, display_name: str) -> None:
+    async def mark_attached(self, blob_id: str, turn_id: str, display_name: str,
+                            session_id: str = "") -> None:
+        """Record the reference, and ADOPT the session when the blob was uploaded before one existed.
+
+        A blob attached on the home screen is stored under `pending:<user>`, because there is no session to
+        name yet. The moment a message carries it, the session is known and the row moves to it — otherwise
+        it would never be swept with its session, and `delete_session` would not reach it.
+        """
         row = self._rows.get(blob_id)
         if row is None:
             return
         self._refs.setdefault(blob_id, set()).add(turn_id)
+        updates = {}
         if row.state == "ready":
-            self._rows[blob_id] = BlobRow(**{**_as_dict(row), "state": "attached",
-                                             "attached_at": self._clock()})
+            updates = {"state": "attached", "attached_at": self._clock()}
+        if session_id and row.session_id.startswith("pending:"):
+            updates["session_id"] = session_id
+        if updates:
+            self._rows[blob_id] = BlobRow(**{**_as_dict(row), **updates})
 
     async def refcount(self, blob_id: str) -> int:
         return len(self._refs.get(blob_id, ()))
