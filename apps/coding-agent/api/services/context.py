@@ -28,7 +28,12 @@ async def _one(a: Attachment, ws, cat, token: str | None, blobs=None, user_id: s
                 raw = await blobs.store.bytes_for(a.ref, user_id)
             except LookupError:
                 return Resolved(a, error="this attachment is no longer available")
-            text, note = await blobs.describe(row, raw)
+            # Whether the model can consume this family decides the SENTENCE, not the bytes: an image on
+            # a vision model must not be described as unseeable, or the model reads the claim instead of
+            # the picture (measured: a correct image_url block plus "you cannot see this" produced
+            # "I can't see the image").
+            unseen = bool(getattr(row, "family", "") == "image" and not blobs.model_sees_images)
+            text, note = await blobs.describe(row, raw, unseen=unseen)
             return Resolved(a, text, note)
         if a.kind == "cell":
             from ..domain.binding import BindingError, cell_text, content_sha, parse_cell_ref, render_cell

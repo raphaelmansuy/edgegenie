@@ -108,6 +108,8 @@ class ModelResolver:
             base_url=desc.base_url,
             limits=limits,
             capability=spec.capability,
+            # The declared fact travels with the resolution, so the agent file can state it.
+            sees_images=bool(getattr(spec, "sees_images", False)),
             env_var=adapter.env_var(spec) if spec.credential_kind is not CredentialKind.NONE else "",
             npm=desc.npm,
             options=_options(desc),

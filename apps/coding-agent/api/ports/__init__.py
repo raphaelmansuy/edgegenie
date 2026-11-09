@@ -309,4 +309,5 @@ class BlobReader(Protocol):
     One method, so a new family is a new class rather than a new branch in a shared function.
     """
 
-    async def read(self, row: BlobRow, raw: bytes, *, offset: int = 0, max_chars: int = 0) -> tuple[str, str]: ...
+    async def read(self, row: BlobRow, raw: bytes, *, offset: int = 0, max_chars: int = 0,
+                   unseen: bool = False) -> tuple[str, str]: ...

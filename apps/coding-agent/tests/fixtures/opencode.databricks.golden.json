@@ -28,6 +28,16 @@
           "limit": {
             "context": 128000,
             "output": 8000
+          },
+          "attachment": true,
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
           }
         }
       }

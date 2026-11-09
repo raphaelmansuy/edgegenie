@@ -287,6 +287,10 @@ class Orchestrator:
             id=ModelId.parse(model), provider=cfg.provider, wire=cfg.wire,
             endpoint=cfg.endpoint, base_url=cfg.base_url,
             limits=Limits(cfg.context, cfg.output), capability=Capability.TOOLS,
+            # The capability travels with the resolution. Without it, this fallback path built a config
+            # that told opencode the model was text-only — so the agent stripped the image and the model
+            # answered "Can't see the image" while the catalogue claimed it could. Measured.
+            sees_images=bool(getattr(cfg, "sees_images", False)),
         )
 
     async def _provision(self, live: Live) -> None:

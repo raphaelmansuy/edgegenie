@@ -165,7 +165,7 @@ one of three things, and the choice must be explicit:
 | B. Extend the ACP wire with an image content block | Real pixels | requires the child agent to support it; not verifiable here | ⏸ not this spec |
 | C. The server describes the image, and exposes the bytes to a tool | A description + a reference | one extra pass; honest about what the model saw | ✅ **this spec** |
 
-**Decision: C, with B named as the follow-up.** Concretely:
+**Decision: C, with B available where the agent supports it.** Concretely:
 
 - `BlobReader` for an image family returns a `Resolved` whose text is a **manifest**: file name, verified
   MIME, pixel dimensions, byte length, sha256, and (when the workspace model has vision) a description
@@ -176,11 +176,36 @@ one of three things, and the choice must be explicit:
 - The capability matrix in [03](./03-requirements.md) is generated from one table,
   `api/domain/blob.py::CAPABILITY`, which both the picker's `accept` list and the tests read.
 
-**The honest limitation, stated where it will be read.** Until option B lands, an attached screenshot
-reaches the model as a manifest and — on a vision-capable model — a description, never as pixels. On a
-text-only model the image is accepted and *stated to be unseeable*: the chip says "not visible to this
-model" and the manifest tells the model so, because refusing would leave the user no way to hand the file
-over at all, and silence is the only truly unacceptable outcome.
+**Option B is implemented — and it took two fixes.** Measured with a logging proxy between opencode
+1.18.19 and the Databricks endpoint:
+
+1. **opencode resolves capabilities on the CLIENT, before any request.** For a custom
+   `@ai-sdk/openai-compatible` provider the default is `attachment: false`, so an attached image is
+   rewritten into the literal text *"ERROR: Cannot read image (this model does not support image
+   input)"* and never leaves the process. The fix is to declare it per model in the generated config:
+
+   ```json
+   "attachment": true,
+   "modalities": { "input": ["text", "image"], "output": ["text"] }
+   ```
+
+   Both fields are required and neither is sufficient. `ModelSpec.sees_images` is their one source, and
+   `agent_config.model_entry` is the one place that writes them.
+
+2. **The manifest must not contradict the picture.** It said "you cannot see the pixels" for *every*
+   image, so a model holding a perfectly good `image_url` block read the sentence instead and answered
+   *"I can't see the image."* Whether the model can see is a fact about the MODEL, not about the blob's
+   family; the sentence now depends on it, and on nothing else.
+
+With both fixed, a solid-blue 64×64 PNG sent through opencode produced `Blue`, and the proxy recorded an
+`image_url` part in the request: the pixels reached the model.
+
+The limitation that remains is narrower and stated plainly. opencode's own `bash` and `read` tools are
+denied by this app's least-privilege config, so an agent asked to look at a *path* (`./chart.png`) tries a
+denied tool and gives up. An image **attached to the message** — which is what this feature sends — travels
+correctly. On a text-only model the image is still accepted and labelled: the chip says "not visible to
+this model" and the manifest says so too, because refusing would leave the user no way to hand the file
+over at all.
 [11 §what is not true yet](./11-outcome.md#what-is-not-true-yet) repeats this in the outcome document,
 because a spec that hides its own limit is a trap.
 

@@ -349,6 +349,9 @@ class ResolvedModel:
     #: An opaque credential reference for the audit record. Never the credential.
     credential_ref: str = ""
     credential_source: CredentialSource = CredentialSource.NONE
+    #: Whether the model accepts image input (spec 009 [D7]). Carried to the agent's config, where it
+    #: becomes `attachment` + `modalities` — without which opencode strips images client-side.
+    sees_images: bool = False
 
     @property
     def context(self) -> int:

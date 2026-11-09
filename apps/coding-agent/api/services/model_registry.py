@@ -336,6 +336,7 @@ def resolve_static(model_id: str, host: str = "") -> AgentConfig:
     resolved = ResolvedModel(
         id=spec.id, provider=spec.id.provider, wire=spec.wire, endpoint=spec.endpoint,
         base_url=desc.base_url, limits=clamp(spec.limits), capability=spec.capability,
+        sees_images=bool(getattr(spec, "sees_images", False)),
         env_var="", npm=desc.npm,
     )
     return AgentConfig.from_resolved(resolved, host=host)

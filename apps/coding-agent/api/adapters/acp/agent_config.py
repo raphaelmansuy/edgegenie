@@ -97,6 +97,13 @@ class AgentConfig:
     provider_display_name: str = "Databricks serving endpoints"
     tool_streaming: bool | None = None
     headers: dict[str, str] = field(default_factory=dict)
+    #: Whether this model accepts image input, declared by the catalogue (spec 009 [D7]).
+    #: It is written into `opencode.json` as `attachment` + `modalities`, because opencode resolves
+    #: capabilities CLIENT-SIDE: a model it believes is text-only has its images silently replaced by
+    #: "ERROR: Cannot read image (this model does not support image input)" before any request is sent.
+    #: That default is `attachment: false` for custom OpenAI-compatible models, so declaring it is the
+    #: only way an image ever reaches the provider.
+    sees_images: bool = False
     #: A second block, when the session also needs another provider present in the file. Empty for
     #: every Databricks session, which is why the golden file is unchanged.
     secondary: tuple[ProviderBlock, ...] = ()
@@ -121,6 +128,9 @@ class AgentConfig:
             provider_display_name=_display(resolved),
             tool_streaming=resolved.options.get("toolStreaming") if resolved.options else None,
             headers=dict((resolved.options or {}).get("headers") or {}),
+            # Carried from the model spec through the resolver, so the agent is told the same fact the
+            # catalogue publishes and the server enforces.
+            sees_images=bool(getattr(resolved, "sees_images", False)),
         )
 
     # -- serialisation --------------------------------------------------------
@@ -131,8 +141,8 @@ class AgentConfig:
             base_url=self.base_url or f"{self.host.rstrip('/')}{GATEWAY_PATH}",
             env=self.env_var,
             display_name=self.provider_display_name,
-            models={self.endpoint: {"name": self.model_name,
-                                    "limit": {"context": self.context, "output": self.output}}},
+            models={self.endpoint: model_entry(self.model_name, self.context, self.output,
+                                              sees_images=self.sees_images)},
             headers=self.headers,
             tool_streaming=self.tool_streaming,
             builtin=self.wire is WireProtocol.VERTEX_NATIVE,
@@ -169,6 +179,32 @@ class AgentConfig:
         if not rules.exists() or rules.read_text().startswith(MARKER):
             rules.write_text(MARKER + "\n" + WORKING_AGREEMENT + session_rules)
         return path
+
+
+def model_entry(name: str, context: int, output: int, *, sees_images: bool = False) -> dict:
+    """One `models.<id>` entry in `opencode.json`.
+
+    Capability is declared, and it has to be: opencode resolves a model's modalities on the CLIENT, before
+    any request. For a custom `@ai-sdk/openai-compatible` provider the default is `attachment: false`, so
+    an image is rewritten into the literal text
+    "ERROR: Cannot read image (this model does not support image input)" and never leaves the process.
+    Measured with a logging proxy between opencode and Databricks: the request carried a `text` part where
+    the image should have been. With both fields below, the request carries `image_url` and the model
+    answers correctly.
+
+    Two fields are needed, and neither is sufficient alone:
+      `attachment: true`          — this model may receive attachments at all;
+      `modalities.input`          — which kinds, and `image` is what makes the bytes travel.
+
+    `modalities` is deliberately ABSENT for a text-only model rather than set to `["text"]`: leaving it out
+    is opencode's own default, and declaring `image` for a model that cannot take one moves the failure
+    from the client (visible, immediate) to the provider (late, confusing).
+    """
+    entry: dict = {"name": name, "limit": {"context": context, "output": output}}
+    if sees_images:
+        entry["attachment"] = True
+        entry["modalities"] = {"input": ["text", "image"], "output": ["text"]}
+    return entry
 
 
 def _templated(value: str, env: str) -> str:

@@ -95,17 +95,29 @@ the composer here), which is the argument for the rule below.
 Stated plainly, because a spec that hides its limits is a trap
 ([D7](./07-architecture.md#d7-capability-is-declared-not-assumed)).
 
-### 1. The model does not receive image pixels
+### 1. ~~The model does not receive image pixels~~ — FIXED
 
-The ACP wire here carries `{type: "text"}` only (`api/adapters/acp/runtime.py:197`, `:218`). An attached
-image reaches the model as a **manifest** — name, verified type, size, sha256, and any description a vision
-model produced. It never receives the bytes as an image block.
+This said the wire carried text only. It was wrong twice over, and the proxy found both:
 
-**What this means for a user:** a screenshot is described, not *read pixel by pixel*. For "what does this
-chart show" a description is enough; for "what is the exact value in row 3 of this screenshot" it is not.
+**opencode resolves capabilities client-side.** A custom `@ai-sdk/openai-compatible` model defaults to
+`attachment: false`; the agent then rewrites the image into the literal text *"ERROR: Cannot read image
+(this model does not support image input)"* and never sends it. Fixed by declaring, per model in the
+generated config: `"attachment": true` and `"modalities": {"input": ["text","image"]}` — both required,
+neither sufficient, generated from `ModelSpec.sees_images`.
 
-**What would change it:** an image content block on the ACP wire, or a tool that returns image bytes to a
-vision model. Both are additive to this design: `BlobReader` is the seam.
+**The manifest contradicted the picture.** It told every model it "cannot see the pixels", so a model
+holding a valid `image_url` block read that sentence and answered *"I can't see the image"*. Fixed: the
+sentence now depends on the model's capability.
+
+Verified: a solid-blue 64×64 PNG through opencode produced `Blue`, and the proxy recorded an `image_url`
+part in the request body. The pixels reach the model.
+
+### 1b. The remaining limit is narrower than it was
+
+opencode's built-in `bash` and `read` tools are denied by this app's least-privilege config (deliberately:
+the agent reaches the workspace only through the fenced tool server). So an agent asked to look at a
+**path** — `./chart.png` — calls a denied tool and gives up. An image **attached to the message**, which is
+what this feature sends, is unaffected.
 
 ### 2. The models served here cannot see — and the app says so instead of hiding it
 
