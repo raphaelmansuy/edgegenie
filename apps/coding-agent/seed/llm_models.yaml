@@ -56,6 +56,11 @@ models:
     output: 8000
     evidence: measured
     source: docs/genie-code-replacement-spec.md §3.2
+    # MEASURED, not assumed: POST /serving-endpoints/databricks-llama-4-maverick/invocations with an
+    # image_url block returned a description of the pixels ("solid, vibrant coral pink") and billed 161
+    # prompt tokens for a 1×1 PNG. The image was consumed, so this model can see. Recorded here because
+    # capability must be a declared fact with provenance — the whole point of `sees_images`.
+    sees_images: true
     default: true
 
   - id: databricks/databricks-gpt-oss-120b

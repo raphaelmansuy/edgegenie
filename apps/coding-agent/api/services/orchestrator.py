@@ -16,6 +16,7 @@ Three things this module owns that the spec is precise about:
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 import shutil
 import tempfile
@@ -121,7 +122,16 @@ class Orchestrator:
         self._credentials = credentials
         self._llm_store = store_llm
         self._health = health
+        self._blobs = None
         self._live: dict[str, Live] = {}
+
+    def attach_blobs(self, blobs) -> None:
+        """Wire the blob stage after construction, the same way the registry is wired.
+
+        The orchestrator reads image bytes here rather than in the agent: the store already decided who may
+        see this row, and the bytes must not travel through the prompt as text (spec 009 [D7]).
+        """
+        self._blobs = blobs
 
     def attach_registry(self, registry) -> None:
         """Wire the registry after construction, so `build()` can hand it in either order."""
@@ -586,7 +596,9 @@ class Orchestrator:
         ended: dict = {"error": "no result"}
         usage: dict = {}
         try:
-            await self._rt.prompt_in_background(live.handle, turn.context + turn.prompt)  # type: ignore[arg-type]
+            images = await self._images_for(live, turn)
+            await self._rt.prompt_in_background(  # type: ignore[attr-defined]
+                live.handle, turn.context + turn.prompt, images)
             ended, usage, new_text = await self._drain(live)
             parts.append(new_text)
             if live.cancel:
@@ -594,6 +606,33 @@ class Orchestrator:
         except Exception as exc:  # noqa: BLE001 - a runtime failure must not escape
             ended = {"error": str(exc)[:400]}
         await self._settle(live, turn, "".join(parts), ended, usage, time.time() - started)
+
+    async def _images_for(self, live: Live, turn) -> list[dict]:
+        """The image attachments this turn carries, as ACP image blocks.
+
+        Only images: everything else is already text in `render()`, and sending a CSV twice would double
+        the prompt for no benefit. A blob that has gone missing is skipped here and was already reported to
+        the model by `render()` as unavailable, so this adds nothing to say.
+        """
+        if self._blobs is None or not turn.attachments:
+            return []
+        out: list[dict] = []
+        for att in turn.attachments:
+            if att.get("kind") != "blob":
+                continue
+            try:
+                row = await self._blobs.store.meta(att.get("ref", ""), live.state.session.user_id)
+                if not str(row.mime).startswith("image/"):
+                    continue
+                raw = await self._blobs.store.bytes_for(att["ref"], live.state.session.user_id)
+            except (LookupError, KeyError):
+                continue
+            out.append({
+                "data": base64.b64encode(raw).decode(),
+                "mimeType": row.mime,
+                "name": att.get("name") or row.original_name,
+            })
+        return out
 
     async def _drain(self, live: Live) -> tuple[dict, dict, str]:
         """Consume one turn's events. Returns (end, usage, answer text)."""

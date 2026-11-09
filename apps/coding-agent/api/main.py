@@ -148,6 +148,9 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
     blob_root = os.environ.get("APP_BLOB_DIR") or os.path.join(tempfile.gettempdir(), "agent-blobs")
     app.state.blob_store = FileBlobStore(blob_root)
     app.state.blobs = BlobService(app.state.blob_store)
+    # The orchestrator reads image bytes through the same stage, so an image reaches the model as an
+    # image block when the agent advertises the capability — not as base64 in a prompt.
+    orch.attach_blobs(app.state.blobs)
     # A dev token expires in an hour. In a deployed app the proxy supplies a fresh one per request, so
     # this only affects local work — but there it silently turns into an empty file tree and a search
     # that never finishes, which reads as a product bug and costs an afternoon. When a dev token is

@@ -16,6 +16,7 @@ from collections.abc import AsyncIterator
 import httpx
 
 from ...domain.events import Event
+from .blocks import prompt_blocks
 from ...ports import AgentAuthError, AgentCrashed, Capabilities, RuntimeHandle, SessionSpec
 from .mapper import from_update, model_options, turn_end_from_prompt_response, turn_end_from_state
 
@@ -152,15 +153,18 @@ class HttpAcpAgentRuntime:
             current_model=current,
         )
 
-    async def prompt(self, h: RuntimeHandle, text: str) -> dict:
+    async def prompt(self, h: RuntimeHandle, text: str, images: list[dict] | None = None) -> dict:
         ch = self._channels[h.session_id]
         await ch.stream(
-            "session/prompt", {"sessionId": h.session_id, "prompt": [{"type": "text", "text": text}]}
+            "session/prompt",
+            {"sessionId": h.session_id,
+             "prompt": prompt_blocks(text, images, self._capabilities.get(h.session_id))},
         )
         return {}
 
-    async def prompt_in_background(self, h: RuntimeHandle, text: str) -> None:
-        await self.prompt(h, text)
+    async def prompt_in_background(self, h: RuntimeHandle, text: str,
+                                   images: list[dict] | None = None) -> None:
+        await self.prompt(h, text, images)
 
     async def cancel(self, h: RuntimeHandle) -> None:
         ch = self._channels[h.session_id]

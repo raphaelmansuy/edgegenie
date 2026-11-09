@@ -26,6 +26,11 @@ class Capabilities:
     agent: str = ""
     version: str = ""
     load_session: bool = False
+    #: From `agentCapabilities.promptCapabilities`. ACP says an agent MUST support `text` and
+    #: `resource_link`; everything else is opted in per agent. Sending an unadvertised block gets a
+    #: `-32602` rejection, so this is asked, never assumed (spec 009 [D7]).
+    images: bool = False
+    embedded_context: bool = False
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -60,7 +65,7 @@ class AgentRuntime(Protocol):
     """One agent process, possibly serving many sessions."""
 
     async def start(self, spec: SessionSpec) -> RuntimeHandle: ...
-    async def prompt(self, h: RuntimeHandle, text: str) -> dict: ...
+    async def prompt(self, h: RuntimeHandle, text: str, images: list[dict] | None = None) -> dict: ...
     async def cancel(self, h: RuntimeHandle) -> None: ...
     async def set_model(self, h: RuntimeHandle, model: str) -> None: ...
     async def respond_permission(

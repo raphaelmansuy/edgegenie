@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 
 from ...domain.events import Event
 from ...ports import AgentAuthError, AgentCrashed, AgentError, Capabilities, RuntimeHandle, SessionSpec
+from .blocks import prompt_blocks
 from .jsonrpc import StdioChannel, TransportError
 from .mapper import from_permission, from_update, model_options, turn_end_from_prompt_response
 
@@ -98,6 +99,11 @@ class AcpAgentRuntime:
             agent=str((init.get("agentInfo") or {}).get("name", "agent")),
             version=str((init.get("agentInfo") or {}).get("version", "")),
             load_session=bool((init.get("agentCapabilities") or {}).get("loadSession")),
+            # Measured on opencode 1.18.19: `promptCapabilities: {embeddedContext: true, image: true}`.
+            # Reading it is what lets the wire carry pixels when the agent can take them.
+            images=bool(((init.get("agentCapabilities") or {}).get("promptCapabilities") or {}).get("image")),
+            embedded_context=bool(((init.get("agentCapabilities") or {}).get("promptCapabilities") or {})
+                                  .get("embeddedContext")),
             raw=init.get("agentCapabilities") or {},
         )
         self._capabilities[spec.session_id] = caps
@@ -188,13 +194,17 @@ class AcpAgentRuntime:
             proc.kill()
 
     # -- turns ----------------------------------------------------------------
-    async def prompt(self, h: RuntimeHandle, text: str) -> dict:
+    def _blocks(self, h: RuntimeHandle, text: str, images: list[dict] | None) -> list[dict]:
+        """The prompt array, built by the one function that knows ACP's capability rule."""
+        return prompt_blocks(text, images, self._capabilities.get(h.session_id))
+
+    async def prompt(self, h: RuntimeHandle, text: str, images: list[dict] | None = None) -> dict:
         ch = self._channel(h)
         # opencode accepts prompt as a request; the response carries the stop reason in v1.
         task = asyncio.create_task(
             ch.request(
                 "session/prompt",
-                {"sessionId": h.session_id, "prompt": [{"type": "text", "text": text}]},
+                {"sessionId": h.session_id, "prompt": self._blocks(h, text, images)},
                 timeout=None,
             )
         )
@@ -209,13 +219,14 @@ class AcpAgentRuntime:
         await self._turn_ends[self._ours(h)].put(end)
         return result
 
-    async def prompt_in_background(self, h: RuntimeHandle, text: str) -> None:
+    async def prompt_in_background(self, h: RuntimeHandle, text: str,
+                                   images: list[dict] | None = None) -> None:
         """Same as prompt, but does not wait: completion arrives through events()."""
         ch = self._channel(h)
         task = asyncio.create_task(
             ch.request(
                 "session/prompt",
-                {"sessionId": h.session_id, "prompt": [{"type": "text", "text": text}]},
+                {"sessionId": h.session_id, "prompt": self._blocks(h, text, images)},
                 timeout=None,
             )
         )
