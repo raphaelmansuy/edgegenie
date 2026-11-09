@@ -26,7 +26,8 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 .PHONY: help doctor setup dev dev-real shell-pg check types unit audits vision \
-        sync deploy-only deploy verify status url logs stop start clean clean-all
+        long-running
+.PHONY: sync deploy-only deploy verify status url logs stop start clean clean-all
 
 APP        := coding-agent
 APP_DIR    := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
@@ -173,3 +174,7 @@ clean: ## Remove local build output
 clean-all: clean ## ...and node_modules and caches
 	@rm -rf $(WEB)/node_modules $(APP_DIR)/.pytest_cache $(APP_DIR)/.ruff_cache
 	@printf '  removed node_modules and caches\n'
+
+# Spec 010: disposable local server + deterministic browser disconnect/recovery evidence.
+long-running: ## Verify durable sessions and save browser evidence in specs/010-long-running
+	@cd $(WEB) && npm run build && npm run e2e:long-running

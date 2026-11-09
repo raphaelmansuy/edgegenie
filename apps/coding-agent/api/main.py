@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import inspect
 import os
+import re
 import tempfile
 import sys
 from contextlib import asynccontextmanager
@@ -41,7 +43,14 @@ WEB_DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
 
 def build(settings: Settings | None = None, *, llm: Registry | None = None) -> FastAPI:
     cfg = settings or load_settings()
-    store = MemoryEventStore()
+    if cfg.session_database_url or cfg.session_use_lakebase:
+        from .adapters.durable.postgres import PostgresSessionStore
+        store = PostgresSessionStore(cfg)
+    elif cfg.session_db_path:
+        from .adapters.durable.sqlite import SqliteSessionStore
+        store = SqliteSessionStore(cfg.session_db_path)
+    else:
+        store = MemoryEventStore()
     identity = ForwardedIdentity(cfg)
     groups = NullGroups()
 
@@ -55,7 +64,7 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
         # package root on PYTHONPATH: the child's cwd is the user's working folder, not the app.
         pkg_root = str(Path(__file__).resolve().parents[1])
         runtime = AcpAgentRuntime(
-            f"{sys.executable} -m api.adapters.fake.agent {cfg.demo_scenario}",
+            f"{sys.executable} -m api.adapters.fake.agent {cfg.demo_scenario} {cfg.demo_event_delay}",
             extra_env={
                 "PYTHONPATH": os.pathsep.join(filter(None, [pkg_root, os.environ.get("PYTHONPATH")]))
             },
@@ -87,10 +96,14 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
                         resolver=llm.resolver if llm is not None else None,
                         credentials=llm.credentials if llm is not None else None,
                         store_llm=llm.store if llm is not None else None,
-                        health=llm.health if llm is not None else None)
+                        health=llm.health if llm is not None else None,
+                        max_run_seconds=cfg.session_max_run_seconds, max_concurrent=cfg.max_concurrent_agents)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        if cfg.production and not (cfg.session_db_path or cfg.session_database_url or cfg.session_use_lakebase):
+            raise RuntimeError("a durable session journal is required in production (Lakebase, Postgres, or persistent SQLite)")
+        await orch.restore()
         # A background reaper, because `archive()` tears a session down properly but nothing called
         # it: every session a user opened kept its agent subprocess for the life of the server. An
         # afternoon of testing accumulated 29 live agents, which is what exhausted the machine and
@@ -105,9 +118,11 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
-            for live in list(app.state.orchestrator._live.values()):  # noqa: SLF001 - orderly shutdown
-                if live.handle:
-                    await runtime.close(live.handle)
+            await orch.shutdown()
+            if hasattr(store, "close"):
+                result = store.close()
+                if inspect.isawaitable(result):
+                    await result
             registry = getattr(app.state, "llm", None)
             if registry is not None:
                 with contextlib.suppress(Exception):
@@ -119,7 +134,6 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
     app.state.store = store
     app.state.models = models
     app.state.orchestrator = orch
-    app.state.idempotency = {}
     app.state.groups = groups
     app.state.workspace = WorkspaceBrowser(
         os.environ.get("DATABRICKS_HOST", ""),
@@ -181,6 +195,13 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
             request.state.groups = groups.groups_for(request.state.user_id)
         except PermissionError as exc:
             return JSONResponse({"detail": str(exc)}, status_code=401)
+        # Every route under a session (including replay, approvals and mutations) has one owner
+        # boundary. Returning 404 avoids disclosing the existence of another person's journal.
+        match = re.match(r"^/api/(?:sessions|approvals)/([^/]+)(?:/|$)", request.url.path)
+        if match:
+            live = orch._live.get(match.group(1))
+            if live is None or live.state.session.user_id != request.state.user_id:
+                return JSONResponse({"detail": "no such session"}, status_code=404)
         return await call_next(request)
 
     app.include_router(router)

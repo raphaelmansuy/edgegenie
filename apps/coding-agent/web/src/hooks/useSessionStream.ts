@@ -79,7 +79,10 @@ function hydrate(id: string, d: Partial<SessionView> | undefined): SessionView {
     tools: d?.tools ?? 0,
     agent: d?.agent ?? "",
     agentVersion: d?.agentVersion ?? "",
+    approvals: d?.approvals ?? [],
     scope: d?.scope,
+    requiresResume: d?.requiresResume,
+    execution: d?.execution,
     // Hydration is what a reload reads. Without the turns it is a session with no history, and every chip
     // the user sent is gone from the screen while the server still has it.
     turns: Array.isArray(d?.turns) ? (d.turns as unknown as Record<string, unknown>[]).map(adoptTurn) : [],
@@ -110,6 +113,12 @@ export function useSessionStream(sessionId: string | null) {
           // `hydrate` reads `turns` and would replace the streamed answer with the detail's copy,
           // which has the prompt and not the answer. Keep what the stream already painted.
           const next = hydrate(sessionId, { ...prev, ...detail, turns: undefined });
+          // A slow metadata response must not overwrite newer permission/lifecycle events.
+          if (seq.current > 0) {
+            next.status = prev.status;
+            next.requiresResume = prev.requiresResume;
+            next.approvals = prev.approvals;
+          }
           const server = Array.isArray(rawTurns)
             ? (rawTurns as Record<string, unknown>[]).map(adoptTurn) : [];
           if (prev.id !== sessionId || prev.turns.length === 0) return { ...next, turns: server };
@@ -163,11 +172,17 @@ export function useSessionStream(sessionId: string | null) {
     const onVisible = () => {
       if (document.visibilityState === "visible" && source?.readyState === EventSource.CLOSED) open();
     };
+    const onOnline = () => { if (!stopped) open(); };
+    const onOffline = () => setConn("lost");
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       stopped = true;
       if (timer !== null) window.clearTimeout(timer);
       queued = [];
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisible);
       source?.close();
     };
@@ -194,5 +209,11 @@ export function useSessionStream(sessionId: string | null) {
 
   const stop = useCallback(async () => { if (sessionId) await api.cancel(sessionId); }, [sessionId]);
 
-  return { session, conn, error, send, stop, setSession };
+  const restore = useCallback(async () => {
+    if (!sessionId) return;
+    const result = await api.resume(sessionId);
+    setSession((s) => ({ ...s, ...result }));
+  }, [sessionId]);
+
+  return { session, conn, error, send, stop, restore, setSession };
 }

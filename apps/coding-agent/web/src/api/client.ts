@@ -9,6 +9,8 @@ export interface SessionSummary {
   id: string; title: string; folder: string; model: string; status: string; tools: number;
   /** Epoch seconds. Absent for a session created before this field existed. */
   createdAt?: number;
+  requiresResume?: boolean;
+  execution?: import("../domain/mission").Execution;
 }
 
 export interface Cell { index: number; kind: "code" | "markdown"; language: string; source: string; truncated: boolean }
@@ -136,6 +138,7 @@ export const api = {
     call<SessionSummary>("/api/sessions", { method: "POST", headers: json,
       body: JSON.stringify({ folder, model, schema: schema ?? null }) }),
   session: (id: string) => call<SessionView & { turns: any[]; scope: any; running: number | null }>(`/api/sessions/${id}`),
+  resume: (id: string) => call<SessionSummary>(`/api/sessions/${id}/resume`, { method: "POST" }),
   archive: (id: string) => call<void>(`/api/sessions/${id}`, { method: "DELETE" }),
   send: (id: string, text: string, key: string, attachments: Attachment[] = []) =>
     call<{ turnId: string }>(`/api/sessions/${id}/messages`, { method: "POST",

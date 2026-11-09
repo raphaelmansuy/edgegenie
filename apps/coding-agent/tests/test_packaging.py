@@ -5,6 +5,7 @@ Databricks App runtime actually reads. Each one corresponds to a real failure.
 """
 from __future__ import annotations
 
+import ast
 import json
 import re
 from pathlib import Path
@@ -31,16 +32,21 @@ def test_every_runtime_import_is_declared():
     alias = {"pydantic_settings": "pydantic-settings", "psycopg_pool": "psycopg-pool"}
     missing: set[str] = set()
     for py in (APP / "api").rglob("*.py"):
-        for line in py.read_text().splitlines():
-            m = re.match(r"\s*(?:from|import)\s+([a-zA-Z_][\w]*)", line)
-            if not m:
+        # Parse actual imports. Notebook runner templates are string data executed remotely,
+        # and optional serverless packages inside them are not app runtime dependencies.
+        for node in ast.walk(ast.parse(py.read_text())):
+            if isinstance(node, ast.Import):
+                modules = [a.name.split(".")[0] for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                modules = [node.module.split(".")[0]]
+            else:
                 continue
-            mod = m.group(1)
-            if mod in stdlib or mod in ("api",) or mod.startswith("_"):
-                continue
-            name = alias.get(mod, mod).lower()
-            if name not in declared:
-                missing.add(mod)
+            for mod in modules:
+                if mod in stdlib or mod in ("api",) or mod.startswith("_"):
+                    continue
+                name = alias.get(mod, mod).lower()
+                if name not in declared:
+                    missing.add(mod)
     assert not missing, f"imported but not in requirements.txt: {sorted(missing)}"
 
 

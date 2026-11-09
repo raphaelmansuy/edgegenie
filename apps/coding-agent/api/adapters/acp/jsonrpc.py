@@ -41,6 +41,7 @@ class StdioChannel:
         self._reader_task = asyncio.create_task(self._read_loop())
         self._notify_task = asyncio.create_task(self._dispatch_notifications())
         self.closed = False
+        self._discard_history = False
 
     # -- public ---------------------------------------------------------------
     def on_request(self, method: str, handler: Handler) -> None:
@@ -64,6 +65,13 @@ class StdioChannel:
 
     def notify(self, method: str, params: dict) -> None:
         self._write({"jsonrpc": "2.0", "method": method, "params": params})
+
+    def discard_session_history(self, enabled: bool) -> None:
+        """During session/load the caller already has this history in its own journal."""
+        self._discard_history = enabled
+
+    async def enqueue_notification(self, message: dict) -> None:
+        await self._notifications.put(message)
 
     def next_notification_nowait(self) -> dict:
         """Non-blocking read of an already-delivered notification. Raises LookupError when empty."""
@@ -115,7 +123,7 @@ class StdioChannel:
                     msg = json.loads(text)
                 except json.JSONDecodeError:
                     continue  # agent noise on stdout must never kill the session
-                self._route(msg)
+                await self._route(msg)
         except asyncio.CancelledError:
             pass
         finally:
@@ -125,7 +133,7 @@ class StdioChannel:
                     fut.set_exception(TransportError("agent process ended"))
             await self._notifications.put({"method": "$/closed", "params": {}})
 
-    def _route(self, msg: dict) -> None:
+    async def _route(self, msg: dict) -> None:
         if "id" in msg and ("result" in msg or "error" in msg):
             fut = self._pending.get(msg["id"])
             if fut and not fut.done():
@@ -135,10 +143,9 @@ class StdioChannel:
             asyncio.create_task(self._serve_request(msg))
             return
         if "method" in msg:  # notification
-            try:
-                self._notifications.put_nowait(msg)
-            except asyncio.QueueFull:
-                pass  # drop under extreme back-pressure rather than block the reader
+            if self._discard_history and msg["method"] == "session/update":
+                return
+            await self._notifications.put(msg)
 
     async def _serve_request(self, msg: dict) -> None:
         handler = self._handlers.get(msg["method"])

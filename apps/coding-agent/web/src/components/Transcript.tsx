@@ -170,7 +170,7 @@ function Blocked({ turn }: { turn: Turn }) {
   if (!turn.blocked) return null;
   return (
     <section className="blocked" aria-label="Blocked">
-      <h3>⛔ I could not finish this</h3>
+      <h3><Alert size={14} /> {turn.status === "interrupted" ? "Work was interrupted" : "I could not finish this"}</h3>
       <p>{turn.blocked.reason}</p>
       {turn.blocked.missing.length > 0 && (
         <>
@@ -186,7 +186,7 @@ function Blocked({ turn }: { turn: Turn }) {
           ))}</ul>
         </>
       )}
-      <p style={{ marginBottom: 0 }}>Nothing outside your working scope was changed.</p>
+      <p style={{ marginBottom: 0 }}>Review saved tool results before repeating an operation. Some changes may already have completed.</p>
     </section>
   );
 }

@@ -3,6 +3,7 @@
  * The reducer is a pure function over these, which is what makes replay and reconnection free.
  */
 export type EventType =
+  | "session.recovery_required" | "session.checkpoint"
   | "session.created" | "session.ready" | "session.degraded" | "session.archived" | "document.saved"
   | "turn.started" | "turn.queued" | "thought.delta" | "message.delta"
   | "tool_call.started" | "tool_call.updated" | "plan.updated"
@@ -13,6 +14,7 @@ export type EventType =
   | "blob.attached";
 
 export const EVENT_TYPES: EventType[] = [
+  "session.recovery_required", "session.checkpoint",
   "session.created", "session.ready", "session.degraded", "session.archived", "document.saved",
   "turn.started", "turn.queued", "thought.delta", "message.delta",
   "tool_call.started", "tool_call.updated", "plan.updated",
@@ -119,6 +121,8 @@ export interface SessionView {
   approvals: Approval[];
   /** Human writes, in the same stream as the agent's tool calls (WR-4). */
   saves?: { path: string; size: number; by: string; at: string }[];
+  requiresResume?: boolean;
+  execution?: import("./mission").Execution;
   scope?: { folder: string; schema: string | null; jobPrefix: string; appPrefix: string };
 }
 
@@ -169,8 +173,12 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
       return { ...s, folder: String(e.folder ?? s.folder), model: String(e.model ?? s.model),
         schema: (e.schema as string | null) ?? s.schema, status: "provisioning" };
     case "session.ready":
-      return { ...s, status: "ready", tools: Number(e.toolCount ?? 0),
+      return { ...s, requiresResume: false, status: "ready", tools: Number(e.toolCount ?? 0),
         agent: String(e.agent ?? ""), agentVersion: String(e.agentVersion ?? "") };
+    case "session.recovery_required":
+      return { ...s, requiresResume: true, status: "blocked", approvals: s.approvals.map((a) => ({ ...a, outcome: a.outcome || "expired" })) };
+    case "session.checkpoint":
+      return s;
     case "session.degraded":
       return { ...s, status: "failed" };
     case "session.archived":
@@ -197,6 +205,8 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
         || previous?.status === "cancelled" || previous?.status === "blocked";
       return { ...s, status: alreadyDone ? s.status : "streaming", turns: [...kept, turn] };
     }
+    case "turn.retrying":
+      return { ...patchTurn(s, e.turnId, (t) => ({ ...t, status: "running" })), status: "streaming" };
     case "turn.queued":
       return patchTurn(s, e.turnId, (t) => ({ ...t, status: "queued" }));
     case "plan.updated":

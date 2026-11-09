@@ -10,7 +10,7 @@
  *  - **the approval is inline**, because the modal sheet covers the code the approval is about (D4);
  *  - **it never opens itself**: below 1180 px it is a drawer that only `⌘J` or the toggle opens (AD-4).
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Approval, Attachment, SessionView, Turn } from "../domain/events";
 import { dockState, dockStateWord, dockTitle, suggestionsFor, type DockState, type Suggestion } from "../domain/dock";
 import { focusLabel, type Focus } from "../domain/focus";
@@ -21,6 +21,7 @@ import { DockHistory, DockMenu } from "./DockTools";
 import { followUps } from "../domain/followups";
 import { conversationMarkdown, exportName } from "../domain/transcript";
 import type { SessionSummary } from "../api/client";
+import { RunStatus } from "./RunStatus";
 import { Composer } from "./Composer";
 import { TurnView } from "./Transcript";
 import type { Doc } from "../domain/docs";
@@ -37,9 +38,10 @@ export interface DockProps {
   modelSlot?: React.ReactNode;
   /** Called with the text and the binding, exactly as the composer produced them. */
   onSend: (text: string, attachments: Attachment[]) => Promise<void>;
-  onStop: () => void;
+  onStop: () => Promise<void>;
+  onRestore: () => Promise<void>;
   onSuggestion: (s: Suggestion) => void;
-  onApprove: (a: Approval, outcome: "allow_once" | "allow_session" | "deny") => void;
+  onApprove: (a: Approval, outcome: "allow_once" | "allow_session" | "deny") => Promise<void>;
   onRetry: () => void;
   onNewSession: () => void;
   onHide?: () => void;
@@ -147,13 +149,15 @@ export function AssistantDock(p: DockProps) {
         )}
       </header>
 
+      <RunStatus key={p.session.id} session={p.session} conn={p.conn} onRestore={p.onRestore} onStop={p.onStop} />
+
       <div className="dock-body" ref={scroller as React.RefObject<HTMLDivElement>} onScroll={onScroll} role="log"
         aria-label="Conversation" aria-live="polite" aria-busy={state === "streaming"}>
         {empty && <Start focus={p.focus} onSuggestion={p.onSuggestion} hasSession={p.hasSession} />}
 
         {turns.map((t) => (
           // Retry is offered on the last turn only, and only when it is not the thing already running.
-          <TurnView key={t.id} turn={t} onRetry={t === last && state !== "streaming" ? p.onRetry : undefined} />
+          <TurnView key={t.id} turn={t} onRetry={t === last && state !== "streaming" && !p.session.requiresResume && t.status !== "interrupted" ? p.onRetry : undefined} />
         ))}
 
         {/* The next step, derived from what this turn actually did. Only on the last turn, and only when
@@ -163,7 +167,7 @@ export function AssistantDock(p: DockProps) {
         )}
 
         {state === "asking" && pending.map((a) => (
-          <InlineApproval key={a.approvalId} approval={a} onDecide={p.onApprove} />
+          <InlineApproval key={a.approvalId} approval={a} disabled={p.conn !== "live"} onDecide={p.onApprove} />
         ))}
 
         {state === "failed" && (
@@ -186,7 +190,7 @@ export function AssistantDock(p: DockProps) {
       )}
       <Composer
         variant="dock"
-        disabled={p.session.status === "archived"}
+        disabled={p.session.status === "archived" || p.session.requiresResume || p.conn !== "live" && p.hasSession}
         busy={state === "streaming"}
         onSend={(text, mine = []) => p.onSend(text, [...p.attachments, ...mine])}
         onStop={p.onStop}
@@ -253,9 +257,18 @@ function FollowUps({ items, onPick }: { items: { label: string; prompt: string }
   );
 }
 
-function InlineApproval({ approval, onDecide }: {
-  approval: Approval; onDecide: (a: Approval, outcome: "allow_once" | "allow_session" | "deny") => void;
+export function InlineApproval({ approval, onDecide, disabled = false }: {
+  approval: Approval; disabled?: boolean;
+  onDecide: (a: Approval, outcome: "allow_once" | "allow_session" | "deny") => Promise<void>;
 }) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const decide = async (outcome: "allow_once" | "allow_session" | "deny") => {
+    setPending(true); setError("");
+    try { await onDecide(approval, outcome); }
+    catch (e) { setError(e instanceof Error ? e.message : "Could not record the decision. Try again."); }
+    finally { setPending(false); }
+  };
   // Deliberately not dismissible with Escape: refusing an action must be a decision, not an accident.
   return (
     <section className="dock-approval" role="alert" aria-label="Approval required">
@@ -270,10 +283,13 @@ function InlineApproval({ approval, onDecide }: {
       {approval.reason && <p className="dock-approval-reason">{approval.reason}</p>}
       {approval.blastRadius && <p className="dock-approval-reason">Blast radius: {approval.blastRadius}</p>}
       <div className="dock-approval-actions">
-        <button className="btn sm primary" onClick={() => onDecide(approval, "allow_once")}>Allow once</button>
-        <button className="btn sm" onClick={() => onDecide(approval, "allow_session")}>Allow this session</button>
-        <button className="btn sm ghost stop" onClick={() => onDecide(approval, "deny")}>Deny</button>
+        <button className="btn sm primary" disabled={disabled || pending || !approval.options.some((o) => o.kind === "allow_once")}
+          onClick={() => void decide("allow_once")}>Allow once</button>
+        <button className="btn sm" disabled={disabled || pending || !approval.options.some((o) => o.kind === "allow_always")}
+          onClick={() => void decide("allow_session")}>Allow this session</button>
+        <button className="btn sm ghost stop" disabled={disabled || pending} onClick={() => void decide("deny")}>Deny</button>
       </div>
+      {error && <p className="dock-error" role="alert">{error}</p>}
       <p className="dock-approval-note">Recorded in the audit log with your name and the object.</p>
     </section>
   );

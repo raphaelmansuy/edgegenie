@@ -82,10 +82,17 @@ class Settings(BaseSettings):
     llm_demo_seed: bool = False
 
     # limits (see specs/001 12 and 15)
-    max_concurrent_agents: int = 4
+    max_concurrent_agents: int = Field(default=4, ge=1, le=64)
     max_tools: int = 24
     max_turns_per_session: int = 200
     stream_heartbeat_seconds: int = 10
+
+    # Empty path is explicitly volatile (tests/demo); production requires a persistent journal.
+    session_db_path: str = ""
+    session_database_url: str = ""
+    session_use_lakebase: bool = False
+    session_max_run_seconds: int = Field(default=21600, ge=1, le=604800)
+    demo_event_delay: float = Field(default=0, ge=0, le=5)
 
     demo_scenario: str = "notebook"
 

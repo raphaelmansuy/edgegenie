@@ -71,6 +71,7 @@ class Session:
     agent: str = ""
     agent_version: str = ""
     tokens: int = 0
+    requires_resume: bool = False
 
     def transition(self, to: SessionStatus) -> Session:
         if to == self.status:
@@ -98,6 +99,8 @@ class Turn:
     #: Text placed before `prompt` when talking to the agent (attached notebooks, tables). The
     #: transcript and the requirement extractor see `prompt` only: context is not the user's words.
     context: str = ""
+    request_key: str = ""
+    request_hash: str = ""
     #: What the user attached to this message, as `[{kind, ref, name}]`. References only — a blob is
     #: referenced by id, never by content, so a replay costs nothing and the bytes live in one place.
     attachments: list[dict] = field(default_factory=list)

@@ -378,7 +378,7 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
           {modelSlot}
           <span className="hint"><kbd>⏎</kbd> send · <kbd>⇧⏎</kbd> new line</span>
           {busy ? (
-            <button className="btn stop" onClick={onStop}>Stop <kbd>Esc</kbd></button>
+            <button className="btn stop" disabled={disabled} onClick={onStop}>Stop <kbd>Esc</kbd></button>
           ) : (
             <button className="btn primary" onClick={() => void submit()} disabled={!text.trim() || disabled || blobs.busy}
               title={blobs.busy

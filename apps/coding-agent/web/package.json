@@ -22,7 +22,9 @@
     "verify:spec-006": "node scripts/verify-spec-links.mjs ../../../specs/006-databricks && node scripts/verify-spec-ascii.mjs ../../../specs/006-databricks",
     "e2e:assistant": "node scripts/dock-e2e.mjs",
     "audit:dock": "node scripts/dock-audit.mjs",
-    "verify:spec-mermaid": "node scripts/verify-spec-mermaid.mjs ../../../specs/006-databricks"
+    "verify:spec-mermaid": "node scripts/verify-spec-mermaid.mjs ../../../specs/006-databricks",
+    "e2e:long-running": "node scripts/long-running-e2e.mjs",
+    "verify:spec-010": "node scripts/verify-spec-links.mjs ../../../specs/010-long-running && node scripts/verify-spec-ascii.mjs ../../../specs/010-long-running"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",

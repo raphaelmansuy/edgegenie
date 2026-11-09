@@ -17,6 +17,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
+import dataclasses
+import copy
+import json
+import logging
 import os
 import shutil
 import tempfile
@@ -41,8 +46,8 @@ from ..domain.events import (
     turn_started,
 )
 from ..domain.evidence import DEMO_MARKER, ToolCall, extract_requirements, is_read_only, says_no_tools
-from ..domain.llm import ProviderKind, ResolvedModel, WireProtocol, clamp
-from ..domain.redact import redact_labelled
+from ..domain.llm import ResolvedModel
+from ..domain.redact import redact_labelled, redact_value
 from ..domain.scope import Scope, describe
 from ..domain.session import (
     DomainError,
@@ -69,6 +74,7 @@ class Live:
     """Everything belonging to one running session. Rebuilt on restart; the store is truth."""
 
     state: SessionState
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     #: The folder the agent may write to in the WORKSPACE (the fence), e.g. /Users/me/agent_scratch.
     #: Distinct from the agent process's local cwd; conflating them made the fence meaningless.
     workspace_folder: str = ""
@@ -111,8 +117,11 @@ class Live:
 class Orchestrator:
     def __init__(
         self, runtime: AgentRuntime, tools: ToolRegistry, store, models, demo: bool = False,
-        *, resolver=None, credentials=None, store_llm=None, health=None,
+        *, resolver=None, credentials=None, store_llm=None, health=None, max_run_seconds=21600, max_concurrent=4,
     ) -> None:
+        self._slots = asyncio.Semaphore(max_concurrent)
+        self._max_run_seconds = max_run_seconds
+        self._shutting_down = False
         self._rt = runtime
         self._tools = tools
         self._store = store
@@ -124,6 +133,92 @@ class Orchestrator:
         self._health = health
         self._blobs = None
         self._live: dict[str, Live] = {}
+
+    def _snapshot(self, live: Live) -> dict:
+        # A whitelist: never serialize extra, a forwarded token, secret file, or provider key.
+        return {
+            "version": 1,
+            "session": dataclasses.asdict(live.state.session),
+            "turns": [dataclasses.asdict(t) for t in live.state.turns],
+            "calls": copy.deepcopy(live.state.calls),
+            "agentCwd": live.agent_cwd,
+            "agentSessionId": live.handle.session_id if live.handle else live.extra.get("agent_session_id", ""),
+            "lastSeen": live.last_seen,
+            "approvals": copy.deepcopy(live.extra.get("approvals", {})),
+        }
+
+    async def _emit(self, event: Event) -> Event:
+        live = self.get(event.session_id)
+        safe = dataclasses.replace(event, payload=redact_value(event.payload))
+        return await self._store.commit(safe, redact_value(self._snapshot(live)))
+
+    async def restore(self) -> None:
+        """Restore committed state, never replay a potentially non-idempotent tool operation."""
+        for row in await self._store.snapshots():
+            if not row:
+                continue
+            if row.get("version") != 1:
+                raise RuntimeError("unsupported session snapshot version")
+            s = Session(**{**row["session"], "status": SessionStatus(row["session"]["status"])})
+            turns = [Turn(**{**t, "status": TurnStatus(t["status"])}) for t in row["turns"]]
+            live = Live(SessionState(s, turns, row.get("calls", {})), workspace_folder=s.folder,
+                        agent_cwd=row.get("agentCwd", ""), last_seen=row.get("lastSeen", 0))
+            live.extra["agent_session_id"] = row.get("agentSessionId", "")
+            self._live[s.id] = live
+            if s.status is SessionStatus.ARCHIVED:
+                continue
+            # Permissions belong to the dead transport. They must be requested afresh after load.
+            for aid in row.get("approvals", {}):
+                await self._emit(approval_decided(s.id, None, aid, "expired", "server"))
+            interrupted = []
+            for t in turns:
+                if t.status in (TurnStatus.RUNNING, TurnStatus.AUDITING, TurnStatus.QUEUED):
+                    live.state.update(t.finish(TurnStatus.INTERRUPTED, error="Server restarted; review saved progress before continuing."))
+                    interrupted.append(t)
+            live.state.session = updated(s, status=SessionStatus.BLOCKED, requires_resume=True)
+            for t in interrupted:
+                await self._emit(turn_ended(s.id, t.id, "interrupted",
+                    "Server restarted. Saved progress is available; no operation was automatically repeated."))
+            await self._emit(Event(s.id, "session.recovery_required", {"requiresResume": True}))
+
+    async def shutdown(self) -> None:
+        self._shutting_down = True
+        for live in self._live.values():
+            if live.task and not live.task.done():
+                live.task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await live.task
+            if live.handle:
+                await self._rt.close(live.handle)
+                live.handle = None
+            await self._tools.stop(live.state.session.id)
+            # Private credentials are disposable; the journal is not.
+            for key in ("token_file", "secret_dir"):
+                path = live.extra.pop(key, "")
+                if path:
+                    shutil.rmtree(os.path.dirname(path) if key == "token_file" else path, ignore_errors=True)
+
+    async def resume(self, session_id: str, user_token: str | None = None) -> Session:
+        live = self.get(session_id)
+        async with live.lock:
+            if not live.state.session.requires_resume:
+                return live.state.session
+            if live.state.session.status is SessionStatus.ARCHIVED:
+                raise DomainError("this session is archived")
+            if live.task and not live.task.done():
+                raise DomainError("a turn is still running")
+            live.extra["user_token"] = user_token
+            live.resolved = await self._resolve(live.state.session.model, live.state.session.user_id,
+                                                session_id=session_id)
+            live.state.session = updated(live.state.session, status=SessionStatus.PROVISIONING)
+            try:
+                await self._provision(live)
+            except Exception:
+                live.state.session = updated(live.state.session, status=SessionStatus.BLOCKED, requires_resume=True)
+                await self._tools.stop(session_id)
+                await self._emit(Event(session_id, "session.recovery_required", {"requiresResume": True}))
+                raise
+            return live.state.session
 
     def agent_stderr(self, session_id: str) -> str:
         """The agent's own last words, for a turn that ended without an answer.
@@ -173,6 +268,18 @@ class Orchestrator:
             reverse=True,
         )
 
+    def activity(self, session_id: str) -> dict:
+        live = self.get(session_id)
+        last = live.state.turns[-1] if live.state.turns else None
+        approvals = live.extra.get("approvals", {})
+        return {"persistence": "durable" if self._store.durable else "memory",
+                "state": "needs_attention" if live.state.session.requires_resume else
+                         "waiting_for_approval" if approvals else
+                         "running" if live.state.running() else last.status.value if last else "ready",
+                "queued": sum(t.status is TurnStatus.QUEUED for t in live.state.turns),
+                "pendingApprovals": len(approvals),
+                "maxRunSeconds": self._max_run_seconds}
+
     def touch(self, session_id: str) -> None:
         """Record activity. A turn, a stream connect, or an explicit read all count.
 
@@ -213,7 +320,19 @@ class Orchestrator:
         open_now = sum(1 for c in self.idle_candidates(now) if c.status != "archived")
         for c in self.idle_candidates(now):
             if reapable(c, now=now, live_count=open_now, policy=policy) is None:
-                await self.archive(c.session_id)
+                if self._store.durable:
+                    live = self.get(c.session_id)
+                    if live.state.session.requires_resume:
+                        continue
+                    if live.handle:
+                        live.extra["agent_session_id"] = live.handle.session_id
+                        await self._rt.close(live.handle)
+                        live.handle = None
+                    await self._tools.stop(c.session_id)
+                    live.state.session = updated(live.state.session, requires_resume=True)
+                    await self._emit(Event(c.session_id, "session.recovery_required", {"requiresResume": True}))
+                else:
+                    await self.archive(c.session_id)
                 reaped.append(c.session_id)
                 open_now -= 1
         return reaped
@@ -269,12 +388,12 @@ class Orchestrator:
         # The user's forwarded token: the agent and the tool server act as this user, not as the app.
         live.extra["user_token"] = user_token
         self._live[sid] = live
-        await self._store.append(session_created(sid, folder, resolved.id.value, schema))
+        await self._emit(session_created(sid, folder, resolved.id.value, schema))
         try:
             await self._provision(live)
         except Exception as exc:  # noqa: BLE001 - a failed provision is a visible state, not a crash
             live.state.session = live.state.session.transition(SessionStatus.FAILED)
-            await self._store.append(Event(sid, "session.degraded", {"detail": str(exc)[:400]}))
+            await self._emit(Event(sid, "session.degraded", {"detail": str(exc)[:400]}))
             raise
         return live.state.session
 
@@ -314,7 +433,7 @@ class Orchestrator:
         A workspace path cannot be a process cwd, and conflating them broke session creation.
         """
         s = live.state.session
-        cwd = os.environ.get("APP_AGENT_CWD") or tempfile.mkdtemp(prefix=f"agent-{s.id[:8]}-")
+        cwd = live.agent_cwd or os.environ.get("APP_AGENT_CWD") or tempfile.mkdtemp(prefix=f"agent-{s.id[:8]}-")
         os.makedirs(cwd, exist_ok=True)
         live.agent_cwd = cwd
         live.workspace_folder = live.workspace_folder or s.folder
@@ -342,7 +461,8 @@ class Orchestrator:
         # filled the console with a failed request on every demo turn.
         if live.workspace_folder:
             env[FENCE_ENV] = live.workspace_folder
-        spec = SessionSpec(session_id=s.id, cwd=cwd, model=s.model, mcp_url=live.mcp_url, env=env)
+        spec = SessionSpec(session_id=s.id, cwd=cwd, model=s.model, mcp_url=live.mcp_url, env=env,
+                           agent_session_id=live.extra.get("agent_session_id", ""))
         live.handle = await self._rt.start(spec)
         # If the session was archived while this was in flight — a reaper pass, or the user closing
         # it — the process we just started has no session to serve and `archive()` already ran with
@@ -352,14 +472,14 @@ class Orchestrator:
             await self._rt.close(live.handle)
             live.handle = None
             return
-        live.state.session = s.transition(SessionStatus.READY)
+        live.state.session = updated(s.transition(SessionStatus.READY), requires_resume=False)
         live.state.session = updated(
             live.state.session,
             agent=live.handle.capabilities.agent,
             agent_version=live.handle.capabilities.version,
             tools=live.tools,
         )
-        await self._store.append(
+        await self._emit(
             session_ready(s.id, live.tools, live.handle.capabilities.agent,
                           live.handle.capabilities.version, live.handle.capabilities.raw))
 
@@ -424,6 +544,13 @@ class Orchestrator:
         """Keep the tool server's credential current. A forwarded user token lasts about an hour."""
         if not token:
             return
+        live.extra["user_token"] = token
+        try:
+            segment = token.split(".")[1]
+            expiry = json.loads(base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))).get("exp")
+            live.extra["token_expires_at"] = float(expiry) if expiry is not None else None
+        except (IndexError, ValueError, TypeError):
+            live.extra["token_expires_at"] = None
         path = live.extra.get("token_file")
         if not path:
             folder = tempfile.mkdtemp(prefix="nbmcp-")        # mode 0700
@@ -471,6 +598,7 @@ class Orchestrator:
                         f"the agent refused the switch: {redact_labelled(str(exc))[:300]}") from exc
             live.resolved = resolved
         live.state.session = updated(live.state.session, model=resolved.id.value)
+        await self._emit(Event(session_id, "session.checkpoint", {}))
         options = await self.model_options(session_id)
         return {**options, "restartRequired": restart}
 
@@ -500,7 +628,7 @@ class Orchestrator:
         live.handle = await self._rt.start(
             SessionSpec(session_id=sid, cwd=cwd, model=resolved.id.value,
                         mcp_url=live.mcp_url, env=env))
-        await self._store.append(Event(sid, "session.ready", {
+        await self._emit(Event(sid, "session.ready", {
             "switched": True, "model": resolved.id.value, "wire": resolved.wire.value,
             "toolCount": live.tools, "agent": live.handle.capabilities.agent,
             "agentVersion": live.handle.capabilities.version,
@@ -511,10 +639,10 @@ class Orchestrator:
         live = self._live.get(session_id)
         if not live or live.state.session.status is SessionStatus.ARCHIVED:
             return
+        await self.cancel(session_id)
         if live.task and not live.task.done():
-            live.cancel = True
-            if live.handle:
-                await self._rt.cancel(live.handle)
+            with contextlib.suppress(asyncio.CancelledError):
+                await live.task
         live.state.session = live.state.session.transition(SessionStatus.ARCHIVED)
         live.cancel = True          # a provision still in flight must not finish
         if live.handle:
@@ -526,13 +654,43 @@ class Orchestrator:
         secret_dir = live.extra.get("secret_dir")
         if secret_dir:       # the provider key files; same rule: only our own mkdtemp folder
             shutil.rmtree(secret_dir, ignore_errors=True)
-        await self._store.append(Event(session_id, "session.archived", {}))
+        await self._emit(Event(session_id, "session.archived", {}))
 
     async def cancel(self, session_id: str) -> None:
         live = self.get(session_id)
-        live.cancel = True
-        if live.handle:
-            await self._rt.cancel(live.handle)
+        async with live.lock:
+            # Stop means the entire accepted queue stops. It must not launch another write next.
+            live.cancel = True
+            live.extra["stopping"] = True
+            for turn in list(live.state.turns):
+                if turn.status is TurnStatus.QUEUED:
+                    live.state.update(turn.finish(TurnStatus.CANCELLED))
+                    await self._emit(turn_ended(session_id, turn.id, "cancelled"))
+            for aid in list(live.extra.get("approvals", {})):
+                del live.extra["approvals"][aid]
+                await self._emit(approval_decided(session_id, None, aid, "cancelled", "user"))
+            if live.handle:
+                await self._rt.cancel(live.handle)
+            if live.task and not live.task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(live.task), 2)
+                except TimeoutError:
+                    live.task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await live.task
+                    if live.handle:
+                        live.extra["agent_session_id"] = live.handle.session_id
+                        await self._rt.close(live.handle)
+                        live.handle = None
+                    for active in list(live.state.turns):
+                        if active.status in (TurnStatus.RUNNING, TurnStatus.AUDITING):
+                            live.state.update(active.finish(TurnStatus.CANCELLED))
+                            await self._emit(turn_ended(session_id, active.id, "cancelled"))
+                    live.state.session = updated(live.state.session, status=SessionStatus.BLOCKED, requires_resume=True)
+                    await self._emit(Event(session_id, "session.recovery_required", {"requiresResume": True}))
+            if not live.task or live.task.done():
+                live.cancel = False
+                live.extra["stopping"] = False
 
     async def record_document_saved(self, session_id: str, path: str, size: int, *, by: str) -> None:
         """Put a human write into the session's event stream (spec 003 WR-4).
@@ -542,17 +700,37 @@ class Orchestrator:
         already saved should not fail because recording did not — the route decides that.
         """
         self.get(session_id)          # KeyError if there is no such session
-        await self._store.append(document_saved(session_id, path, size, by=by))
+        await self._emit(document_saved(session_id, path, size, by=by))
 
     # -- turns ----------------------------------------------------------------
     async def submit(self, session_id: str, text: str, context: str = "",
-                     attachments: list[dict] | None = None, user_token: str | None = None) -> Turn:
+                     attachments: list[dict] | None = None, user_token: str | None = None,
+                     request_key: str = "", request_hash: str = "") -> Turn:
         live = self.get(session_id)
+        async with live.lock:
+            if request_key:
+                previous = next((t for t in live.state.turns if t.request_key == request_key), None)
+                if previous:
+                    if previous.request_hash != request_hash:
+                        raise DomainError("this retry key was already used for another message")
+                    return previous
+            return await self._submit(live, text, context, attachments, user_token, request_key, request_hash)
+
+    async def _submit(self, live: Live, text: str, context: str, attachments, user_token,
+                      request_key: str, request_hash: str) -> Turn:
+        session_id = live.state.session.id
         if live.state.session.status is SessionStatus.ARCHIVED:
             raise DomainError("this session is archived")
+        if live.state.session.requires_resume:
+            raise DomainError("restore this session before sending a new message")
+        if live.state.session.status not in (SessionStatus.READY, SessionStatus.STREAMING, SessionStatus.BLOCKED):
+            raise DomainError("this session is not ready")
         if len(live.state.turns) >= MAX_TURNS:
             raise DomainError(f"this session reached its limit of {MAX_TURNS} turns")
+        if live.extra.get("stopping"):
+            raise DomainError("the agent is stopping; wait before sending another message")
         self._write_token(live, user_token)
+        live.cancel = False
         running = live.state.running()
         asked = text
         text = DEMO_MARKER.sub(" ", text).strip()     # never store a demo hint as the user's words
@@ -571,12 +749,21 @@ class Orchestrator:
             [{"kind": a.get("kind", ""), "ref": a.get("ref", ""), "name": a.get("name", "")}
              for a in (attachments or [])],
         )
+        turn = updated(turn, request_key=request_key, request_hash=request_hash,
+                       context=redact_labelled(turn.context))
+        live.state.update(turn)
         if not live.state.turns[:-1] and live.state.session.title == "New session":
-            live.state.session = updated(live.state.session, title=title_from(text))
+            live.state.session = updated(live.state.session, title=title_from(stored_text))
         # The pin is written BEFORE the prompt and never updated (Axiom A5, C-8).
         await self._pin_turn(live, turn)
-        await self._store.append(
-            turn_started(session_id, turn.id, stored_text, live.state.session.model, attachments))
+        # The accepted prompt, retry receipt, and queue entry are one commit before HTTP 202.
+        try:
+            await self._emit(turn_started(session_id, turn.id, stored_text, live.state.session.model, attachments))
+        except Exception:
+            live.state.turns.remove(turn)
+            raise
+        if running is not None:
+            await self._emit(Event(session_id, "turn.queued", {}, turn_id=turn.id))
         if running is None:
             live.task = asyncio.create_task(self._run_turn(live, turn.id))
         return turn
@@ -602,11 +789,57 @@ class Orchestrator:
         except Exception:  # noqa: BLE001 - recording provenance must not block a turn
             pass
 
+    async def _interrupt_pending(self, live: Live, reason: str) -> None:
+        for queued in list(live.state.turns):
+            if queued.status is TurnStatus.QUEUED:
+                live.state.update(queued.finish(TurnStatus.INTERRUPTED, error=reason))
+                await self._emit(turn_ended(live.state.session.id, queued.id, "interrupted", reason))
+
     async def _run_turn(self, live: Live, turn_id: str) -> None:
+        if next(t for t in live.state.turns if t.id == turn_id).status is TurnStatus.CANCELLED:
+            live.cancel = False
+            live.extra["stopping"] = False
+            return
+        try:
+            async with self._slots:
+                expiry = live.extra.get("token_expires_at")
+                budget = min(self._max_run_seconds, max(0, expiry - time.time() - 15)) if expiry else self._max_run_seconds
+                async with asyncio.timeout(budget):
+                    await self._execute_turn(live, turn_id)
+        except TimeoutError:
+            live.cancel = True
+            if live.handle:
+                await self._rt.close(live.handle)
+                live.extra["agent_session_id"] = live.handle.session_id
+                live.handle = None
+            turn = next(t for t in live.state.turns if t.id == turn_id)
+            live.state.update(turn.finish(TurnStatus.INTERRUPTED, error="The runtime or delegated credential limit was reached."))
+            live.state.session = updated(live.state.session, status=SessionStatus.BLOCKED, requires_resume=True)
+            await self._emit(turn_ended(live.state.session.id, turn_id, "interrupted", "The runtime or delegated credential limit was reached. Restore with a fresh sign-in and review progress before continuing."))
+            await self._interrupt_pending(live, "Queued work was not started because the preceding turn was interrupted.")
+            await self._emit(Event(live.state.session.id, "session.recovery_required", {"requiresResume": True}))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.getLogger("app.runner").exception("session journal or worker failed; closing agent")
+            if live.handle:
+                live.extra["agent_session_id"] = live.handle.session_id
+                await self._rt.close(live.handle)
+                live.handle = None
+            live.state.session = updated(live.state.session, status=SessionStatus.BLOCKED, requires_resume=True)
+
+    async def _execute_turn(self, live: Live, turn_id: str) -> None:
         sid = live.state.session.id
+        candidate = next(t for t in live.state.turns if t.id == turn_id)
+        if candidate.status is TurnStatus.CANCELLED or live.state.session.status is SessionStatus.ARCHIVED:
+            live.cancel = False
+            live.extra["stopping"] = False
+            return
         turn = live.state.claim(turn_id)
         live.state.session = live.state.session.transition(SessionStatus.STREAMING)
         self._rt.set_turn(sid, turn.id)
+        live.state.calls.clear()  # evidence is scoped to THIS turn
+        await self._emit(Event(sid, "turn.retrying", {}, turn_id=turn.id))
         started = time.time()
         parts: list[str] = []
         ended: dict = {"error": "no result"}
@@ -686,7 +919,9 @@ class Orchestrator:
                 else:
                     ended = {"error": str(value)}
                 break
-            await self._store.append(item)
+            if item.type == "approval.requested":
+                live.extra.setdefault("approvals", {})[item.payload["approvalId"]] = item.payload
+            await self._emit(item)
             if item.type == "message.delta":
                 parts.append(item.payload.get("text", ""))
             elif item.type == "tool_call.started":
@@ -715,17 +950,24 @@ class Orchestrator:
         sid = live.state.session.id
         if live.cancel or ended.get("stop") == "cancelled":
             live.cancel = False
+            live.extra["stopping"] = False
             self._finish(live, turn.finish(TurnStatus.CANCELLED))
-            await self._store.append(turn_ended(sid, turn.id, "cancelled"))
             live.state.session = live.state.session.transition(SessionStatus.READY)
+            await self._emit(turn_ended(sid, turn.id, "cancelled"))
             self._start_next(live)
             return
         if "error" in ended:
             await self._classify_failure(live, ended["error"], turn.id)
             self._finish(live, turn.finish(TurnStatus.FAILED, error=ended["error"][:400]))
-            await self._store.append(turn_ended(sid, turn.id, "failed", ended["error"][:400]))
             live.state.session = live.state.session.transition(SessionStatus.BLOCKED)
-            self._start_next(live)
+            if live.handle:
+                live.extra["agent_session_id"] = live.handle.session_id
+                await self._rt.close(live.handle)
+                live.handle = None
+            live.state.session = updated(live.state.session, requires_resume=True)
+            await self._emit(turn_ended(sid, turn.id, "failed", ended["error"][:400]))
+            await self._emit(Event(sid, "session.recovery_required", {"requiresResume": True}))
+            await self._interrupt_pending(live, "Queued work was not started because the preceding turn failed.")
             return
 
         requirements = extract_requirements(turn.prompt)
@@ -745,18 +987,18 @@ class Orchestrator:
             return
         if decision.verdict is supervisor.Verdict.AUDIT:
             live.state.update(updated(turn, status=TurnStatus.AUDITING))
-            await self._store.append(turn_auditing(sid, turn.id, audits + 1, list(decision.missing)))
+            await self._emit(turn_auditing(sid, turn.id, audits + 1, list(decision.missing)))
             await self._nudge(live, turn, decision.message, answer, continuations, audits + 1)
             return
         if decision.evidence:  # recorded once, with the outcome, never per audit pass
-            await self._store.append(evidence_proposed(sid, turn.id, list(decision.evidence)))
+            await self._emit(evidence_proposed(sid, turn.id, list(decision.evidence)))
         if decision.verdict is supervisor.Verdict.DONE:
             self._finish(live, turn.finish(TurnStatus.COMPLETED, ended.get("stop", "end_turn"), usage))
+            live.state.session = live.state.session.transition(SessionStatus.READY)
             # committed above, so _start_next sees no running turn
-            await self._store.append(
+            await self._emit(
                 turn_completed(sid, turn.id, ended.get("stop", "end_turn"), usage, seconds)
             )
-            live.state.session = live.state.session.transition(SessionStatus.READY)
             self._start_next(live)
             return
         self._finish(live, turn.finish(TurnStatus.BLOCKED, error=decision.message))
@@ -764,10 +1006,11 @@ class Orchestrator:
             {"tool": c["name"], "status": c.get("status", ""), "summary": c.get("summary", "")}
             for c in live.state.calls.values()
         ][:8]
-        await self._store.append(
+        live.state.session = live.state.session.transition(SessionStatus.BLOCKED)
+        await self._emit(
             turn_blocked(sid, turn.id, decision.message, list(decision.missing), attempted)
         )
-        live.state.session = live.state.session.transition(SessionStatus.BLOCKED)
+        await self._interrupt_pending(live, "Queued work was not started because the preceding turn needs attention.")
 
     async def _classify_failure(self, live: Live, error: str, turn_id: str) -> None:
         """Name the failure, and let a cap rejection lower the stored cap (E-4).
@@ -804,6 +1047,8 @@ class Orchestrator:
         answered by `live.task` (that is this very task). The question that matters is whether any
         OTHER turn is already running.
         """
+        if self._shutting_down or live.cancel or live.state.session.requires_resume or live.state.session.status is SessionStatus.ARCHIVED:
+            return
         nxt = next((t for t in live.state.turns if t.status is TurnStatus.QUEUED), None)
         if nxt is None:
             return
@@ -840,11 +1085,21 @@ class Orchestrator:
         self, session_id: str, approval_id: str, outcome: str, option_id: str | None, user_id: str
     ) -> None:
         live = self.get(session_id)
-        if live.handle:
-            await self._rt.respond_permission(
-                live.handle, option_id or approval_id, option_id if outcome != "deny" else None
-            )
-        turn = live.state.running()
-        await self._store.append(
-            approval_decided(session_id, turn.id if turn else None, approval_id, outcome, user_id)
-        )
+        async with live.lock:
+            pending = live.extra.get("approvals", {})
+            request = pending.get(approval_id)
+            if request is None or live.handle is None:
+                raise DomainError("this approval expired or was already decided")
+            # Match the selected option to the kind offered by the agent, server-side.
+            offered = request.get("options", [])
+            expected = {"allow_once": "allow_once", "allow_session": "allow_always"}.get(outcome)
+            selected = next((o for o in offered if o.get("optionId") == option_id
+                             and o.get("kind") == expected), None) if expected else None
+            if outcome != "deny" and selected is None:
+                raise DomainError("the selected permission option was not offered")
+            del pending[approval_id]
+            turn = live.state.running()
+            await self._emit(approval_decided(session_id, turn.id if turn else None,
+                                               approval_id, outcome, user_id))
+            await self._rt.respond_permission(live.handle, approval_id,
+                                               selected["optionId"] if selected else None)

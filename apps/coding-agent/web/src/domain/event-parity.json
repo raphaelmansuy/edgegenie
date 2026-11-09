@@ -24,6 +24,8 @@
   "session.compacted",
   "usage.updated",
   "document.saved",
-  "blob.attached"
+  "blob.attached",
+  "session.recovery_required",
+  "session.checkpoint"
  ]
 }

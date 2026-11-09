@@ -7,10 +7,14 @@ from collections import defaultdict
 from dataclasses import replace
 
 from ...domain.events import Event
+from .broadcast import Broadcast
 
 
-class MemoryEventStore:
+class MemoryEventStore(Broadcast):
+    durable = False
     def __init__(self) -> None:
+        super().__init__()
+        self._snapshots: dict[str, dict] = {}
         self._rows: dict[str, list[dict]] = defaultdict(list)
         self._subs: dict[str, list[asyncio.Queue]] = defaultdict(list)
         self._lock = asyncio.Lock()
@@ -21,35 +25,29 @@ class MemoryEventStore:
             rows = self._rows[event.session_id]
             stored = event if event.seq else replace(event, seq=len(rows) + 1)
             rows.append(stored.to_dict())
-        for q in list(self._subs[event.session_id]):
-            if not q.full():
-                q.put_nowait(stored.to_dict())
+        self.publish(event.session_id, stored.to_dict())
         return stored
 
-    async def since(self, session_id: str, seq: int) -> list[dict]:
-        return [r for r in self._rows.get(session_id, []) if r["seq"] > seq]
+    async def since(self, session_id: str, seq: int, limit: int = 2000) -> list[dict]:
+        return [r for r in self._rows.get(session_id, []) if r["seq"] > seq][:limit]
 
     async def latest_seq(self, session_id: str) -> int:
         rows = self._rows.get(session_id, [])
         return rows[-1]["seq"] if rows else 0
 
-    def subscriber_count(self, session_id: str) -> int:
-        """How many live streams this session has. The reaper treats a watcher as activity."""
-        return len(self._subs.get(session_id, []))
+    async def commit(self, event: Event, snapshot: dict) -> Event:
+        import copy
+        self._snapshots[event.session_id] = copy.deepcopy(snapshot)
+        return await self.append(event)
 
-    def subscribe(self, session_id: str) -> asyncio.Queue:
-        q: asyncio.Queue = asyncio.Queue(maxsize=2_000)
-        self._subs[session_id].append(q)
-        return q
-
-    def unsubscribe(self, session_id: str, q: asyncio.Queue) -> None:
-        subs = self._subs.get(session_id, [])
-        if q in subs:
-            subs.remove(q)
+    async def snapshots(self) -> list[dict]:
+        import copy
+        return copy.deepcopy(list(self._snapshots.values()))
 
     def all_rows(self, session_id: str) -> list[dict]:
         return list(self._rows.get(session_id, []))
 
     def clear(self) -> None:
+        self._snapshots.clear()
         self._rows.clear()
         self._subs.clear()

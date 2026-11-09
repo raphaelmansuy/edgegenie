@@ -91,6 +91,10 @@ notebooks/               the whole tutorial as one notebook, for a workspace wit
 templates/               the original shell-only kit (setup, fence, supervisor, ask)
 ```
 
+## Durable coding sessions
+
+[Specification and implementation](specs/010-long-running/README.md): server-owned work, Lakebase/Postgres or SQLite journals, explicit recovery, and a return-oriented UI. [Browser evidence](specs/010-long-running/e2e/README.md) includes disconnect, page close, restart, permissions and responsive screenshots.
+
 ## The study behind the app
 
 The application is the second half of this repository. The first half is the measurement that justified

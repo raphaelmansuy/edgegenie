@@ -34,7 +34,7 @@ LABELS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"sk-[A-Za-z0-9_\-]{20,}"), "openai key"),
     (re.compile(r"AIza[0-9A-Za-z_\-]{35}"), "google api key"),
     (re.compile(r"ya29\.[0-9A-Za-z_\-]{20,}"), "google access token"),
-    (re.compile(r"-----BEGIN (RSA )?PRIVATE KEY-----", re.S), "private key"),
+    (re.compile(r"-----BEGIN (RSA )?PRIVATE KEY-----.*?-----END (RSA )?PRIVATE KEY-----", re.S), "private key"),
     (re.compile(r"Bearer [A-Za-z0-9._\-]{20,}"), "bearer token"),
 )
 
@@ -86,3 +86,14 @@ def token_scopes(token: str | None) -> list[str]:
     raw = claims.get("scope", claims.get("scp", [])) if isinstance(claims, dict) else []
     names = raw.split() if isinstance(raw, str) else [str(x) for x in raw] if isinstance(raw, list) else []
     return sorted({n for n in names if n})
+
+
+def redact_value(value):
+    """Redact recognized secret formats in structured journal data without serializing JSON text."""
+    if isinstance(value, str):
+        return redact_labelled(value)
+    if isinstance(value, dict):
+        return {key: redact_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [redact_value(item) for item in value]
+    return value

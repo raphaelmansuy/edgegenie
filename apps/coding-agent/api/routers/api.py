@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import hashlib
 import json
 import logging
 import os
@@ -58,7 +59,7 @@ class ModelChoice(BaseModel):
     model: str
 
 
-def _session_json(s: Session) -> dict[str, Any]:
+def _session_json(s: Session, orch: Orchestrator | None = None) -> dict[str, Any]:
     return {
         "id": s.id,
         "title": s.title,
@@ -69,6 +70,8 @@ def _session_json(s: Session) -> dict[str, Any]:
         "tools": s.tools,
         "agent": s.agent,
         "agentVersion": s.agent_version,
+        "requiresResume": s.requires_resume,
+        **({"execution": orch.activity(s.id)} if orch else {}),
         # Omitted rather than null when unknown, so the client can tell "no timestamp" from "epoch 0".
         **({"createdAt": s.created_at} if s.created_at is not None else {}),
     }
@@ -178,7 +181,7 @@ async def models(request: Request) -> dict:
 
 @router.get("/sessions")
 async def list_sessions(request: Request) -> dict:
-    return {"sessions": [_session_json(s) for s in _orch(request).sessions_for(_user(request))]}
+    return {"sessions": [_session_json(s, _orch(request)) for s in _orch(request).sessions_for(_user(request))]}
 
 
 @router.post("/sessions", status_code=201)
@@ -199,7 +202,7 @@ async def create_session(request: Request, body: CreateSession) -> dict:
     # Whether the agent may run notebooks (as the app) is decided once, by who this user is.
     if python_run_policy(request)["enabled"]:
         request.app.state.run_bridge.grant(s.id)
-    return _session_json(s)
+    return _session_json(s, _orch(request))
 
 
 @router.get("/sessions/{sid}")
@@ -210,7 +213,7 @@ async def get_session(request: Request, sid: str) -> dict:
         raise HTTPException(404, "no such session") from None
     turn = live.state.running()
     return {
-        **_session_json(live.state.session),
+        **_session_json(live.state.session, _orch(request)),
         "turns": [
             {
                 "id": t.id,
@@ -274,10 +277,9 @@ async def send_message(
     request: Request, sid: str, body: Message, idempotency_key: str | None = Header(default=None)
 ) -> dict:
     orch = _orch(request)
-    cache = request.app.state.idempotency
-    key = f"{sid}:{idempotency_key}" if idempotency_key else None
-    if key and key in cache:
-        return cache[key]
+    if idempotency_key and len(idempotency_key) > 200:
+        raise HTTPException(422, "retry key must be at most 200 characters")
+    fingerprint = hashlib.sha256(json.dumps(body.model_dump(), sort_keys=True).encode()).hexdigest()
     try:
         orch.get(sid)
     except KeyError:
@@ -292,14 +294,13 @@ async def send_message(
     orch.touch(sid)
     try:
         turn = await orch.submit(sid, body.text, ctx.render(resolved), [a.to_dict() for a in items],
-                                user_token=_user_token(request))
+                                user_token=_user_token(request), request_key=idempotency_key or "",
+                                request_hash=fingerprint)
     except KeyError:
         raise HTTPException(404, "no such session") from None
     except DomainError as exc:
         raise HTTPException(409, str(exc)) from exc
     out = {"turnId": turn.id, "status": turn.status.value}
-    if key:
-        cache[key] = out
     return out
 
 
@@ -318,7 +319,22 @@ async def decide(request: Request, sid: str, approval_id: str, body: Approval) -
         await _orch(request).approve(sid, approval_id, body.outcome, body.optionId, _user(request))
     except KeyError:
         raise HTTPException(404, "no such session") from None
+    except DomainError as exc:
+        raise HTTPException(409, str(exc)) from exc
     return {"ok": True}
+
+
+@router.post("/sessions/{sid}/resume")
+async def resume_session(request: Request, sid: str) -> dict:
+    try:
+        s = await _orch(request).resume(sid, _user_token(request))
+    except DomainError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(503, f"the agent could not restore this session: {exc}") from exc
+    if python_run_policy(request)["enabled"]:
+        request.app.state.run_bridge.grant(s.id)
+    return _session_json(s, _orch(request))
 
 
 # -- stream ------------------------------------------------------------------
@@ -339,8 +355,12 @@ async def session_events(request: Request, sid: str, after: int = 0, limit: int 
         orch.get(sid)
     except KeyError:
         raise HTTPException(404, "no such session") from None
-    rows = await request.app.state.store.since(sid, after)
-    return {"events": rows[:limit], "after": after, "count": min(len(rows), limit)}
+    if after < 0 or not 1 <= limit <= 2000:
+        raise HTTPException(422, "after must be nonnegative and limit must be between 1 and 2000")
+    rows = await request.app.state.store.since(sid, after, limit)
+    next_after = rows[-1]["seq"] if rows else after
+    return {"events": rows, "after": after, "count": len(rows), "nextAfter": next_after,
+            "hasMore": next_after < await request.app.state.store.latest_seq(sid)}
 
 
 @router.get("/sessions/{sid}/stream")
@@ -355,7 +375,11 @@ async def stream(
         raise HTTPException(404, "no such session") from None
     # A reloaded page cannot set a header from EventSource, so ?after= is the primary cursor;
     # Last-Event-ID covers a browser-initiated reconnect of the same EventSource.
-    cursor = after or (int(last_event_id) if last_event_id and last_event_id.isdigit() else 0)
+    if after < 0:
+        raise HTTPException(422, "after must be nonnegative")
+    cursor = max(after, int(last_event_id) if last_event_id and last_event_id.isdigit() else 0)
+    if cursor > await store.latest_seq(sid):
+        raise HTTPException(409, "the replay cursor is ahead of the session journal")
     heartbeat = request.app.state.settings.stream_heartbeat_seconds
     # An open stream is a watcher: the reaper must never archive a session someone is looking at.
     orch.touch(sid)
@@ -363,20 +387,20 @@ async def stream(
     async def gen() -> AsyncIterator[str]:
         queue = store.subscribe(sid)
         try:
-            backlog = await store.since(sid, cursor)
-            for ev in backlog:
-                yield _sse(ev)
-            seq = backlog[-1]["seq"] if backlog else cursor
+            seq = cursor
             while True:
+                # The queue is a wakeup, the committed journal is truth. This also closes the
+                # subscribe/replay race and heals slow-viewer overflow without dropping events.
+                backlog = await store.since(sid, seq)
+                for ev in backlog:
+                    seq = ev["seq"]
+                    yield _sse(ev)
+                if backlog:
+                    continue
                 try:
-                    ev = await __import__("asyncio").wait_for(queue.get(), heartbeat)
-                except __import__("asyncio").TimeoutError:
+                    await asyncio.wait_for(queue.get(), heartbeat)
+                except TimeoutError:
                     yield ": heartbeat\n\n"
-                    continue
-                if ev["seq"] <= seq:
-                    continue
-                seq = ev["seq"]
-                yield _sse(ev)
         finally:
             store.unsubscribe(sid, queue)
 
