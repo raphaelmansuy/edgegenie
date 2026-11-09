@@ -5,9 +5,11 @@ and what it does not prove. Nothing here is typed by hand: `site/claims.py` read
 `exams/results/*.json` and produces this page, and the build fails if a figure and its source ever
 disagree.
 
-<p class="lede">There are eleven graded tasks and 174 saved run files. Every score below was produced by
+<p class="lede">There are eleven graded tasks (the harness calls them missions) and 174 saved run files. Every score below was produced by
 seeding a real workspace, handing an agent a plain-language request, and then grading the workspace
 afterwards &mdash; not by asking a model whether the work looked right.</p>
+
+## The claims
 
 {{claims}}
 
@@ -23,7 +25,7 @@ Three steps, and the third is the one that makes the number mean anything:
    instruction ignored. A grader is trusted only once a reference solution scores 100% on it and a
    do-nothing agent fails it.
 
-<p class="wide">The full method, including how the graders could be wrong, is
+<p>The full method, including how the graders could be wrong, is
 <a href="../reference/doc-exams/">the exam suite</a>.</p>
 
 ## What the numbers are, and are not
@@ -74,7 +76,7 @@ the repository and are counted nowhere above:
 | `smoke_v5` | A smoke test, not a graded run. |
 | `v4_gptoss_t2`, `v4_gptoss_t3` | Repeats of one setup. They are the subject of the repeatability claim and are counted there, and nowhere else. |
 
-<p class="wide">Every accepted run file is in
+<p>Every accepted run file is in
 <a href="https://github.com/raphaelmansuy/opengenie/tree/main/exams/results" target="_blank" rel="noopener noreferrer">exams/results</a>,
 one JSON per task plus the agent's full event log. Regenerate every table with
 <code>python3 exams/make_tables.py</code>; regenerate this page with <code>python3 site/build.py</code>.</p>
@@ -86,7 +88,7 @@ product inside a workspace, and this study had a token for a workspace but no wa
 itself. So the comparison here is between *configurations of an open agent*, not between OpenGenie and
 Genie Code on the same ruler.
 
-<p class="wide">What that changes: the claims are about which model and which guard rails you should
+<p>What that changes: the claims are about which model and which guard rails you should
 choose, not about beating a specific product. What it does not change: the model, the fence and the
 evidence rule matter for the reasons given on
 <a href="/">the home page</a>, and those reasons do not depend on a competitor's score.</p>

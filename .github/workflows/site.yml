@@ -13,6 +13,9 @@ on:
       - "specs/**"
       - "exams/results/**"
       - "README.md"
+      - "tests/sites/**"
+      - "apps/coding-agent/seed/llm_models.yaml"
+      - "apps/coding-agent/tools/**"
       - "requirements-site.txt"
       - ".github/workflows/site.yml"
   workflow_dispatch:
@@ -83,6 +86,28 @@ jobs:
         # 04-wireframes.md is generated on a character grid. If someone edits a box by hand, this fails
         # rather than shipping a drawing that is one character out (spec 008 [PG-11]).
         run: python specs/008-github-page/tools/draw_wireframes.py --check
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: end-to-end, every page, four widths, both themes
+        # Served at /opengenie/ exactly as Pages serves it, so a path that only works at a domain root
+        # fails here instead of in production. Playwright lives outside the repository: the site itself
+        # still needs nothing but python3.
+        run: |
+          npm install --no-save --prefix /tmp/pw playwright@1.65.0
+          /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
+          PLAYWRIGHT_MODULE=/tmp/pw/node_modules/playwright/index.js node tests/sites/e2e/site.e2e.mjs
+
+      - name: keep the e2e screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-e2e-screenshots
+          path: |
+            tests/sites/e2e/screenshots
+            tests/sites/e2e/report.json
 
       - uses: actions/upload-pages-artifact@v3
         with:

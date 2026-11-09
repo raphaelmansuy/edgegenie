@@ -219,6 +219,8 @@ img { max-width: 100%; height: auto; display: block; }
   align-items: start;
 }
 .shell.no-rail { grid-template-columns: minmax(0, 1fr); max-width: 900px; }
+/* The landing page is a set of sections, not a document: no contents rail, and room for two columns. */
+.shell.is-home { max-width: 1100px; }
 
 .main { min-width: 0; }
 .main > * { max-width: var(--measure); }
@@ -410,6 +412,73 @@ a.badge:hover { border-color: var(--line-strong); color: var(--ink); }
   font-size: 0.78rem; font-weight: 700;
 }
 
+/* ------------------------------------------------------------------ home sections */
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 26px 0; }
+.main > .grid-2 { max-width: none; }
+
+.kicker {
+  margin: 0 0 6px;
+  font-size: 0.78rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--blue-600);
+}
+
+/* "Choose X if…": a list whose markers are the argument, so they are drawn, not typed */
+.choose ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 9px; }
+.choose li {
+  position: relative; padding-left: 22px;
+  font-size: 0.94rem; color: var(--ink-2); line-height: 1.5;
+}
+.choose li::before {
+  content: ""; position: absolute; left: 2px; top: 0.55em;
+  width: 8px; height: 8px; border-radius: 2px;
+  background: var(--line-strong);
+}
+.choose.is-ours { border-color: var(--blue-300); }
+.choose.is-ours li::before { background: var(--blue-600); }
+
+/* The architecture as an ordered list: it reads in order without CSS, and stacks on a phone. */
+.flow {
+  list-style: none; margin: 22px 0 10px; padding: 0;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 26px;
+  counter-reset: flow;
+}
+.flow > li {
+  position: relative;
+  padding: 14px 14px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  font-size: 0.86rem; color: var(--ink-2); line-height: 1.45;
+}
+.flow > li strong { display: block; margin-bottom: 3px; font-size: 0.95rem; color: var(--ink); }
+.flow > li code { font-size: 0.78rem; }
+.flow > li + li::before {
+  content: "→"; position: absolute; left: -21px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-3); font-size: 1rem;
+}
+.flow > li.is-fence { border-color: var(--blue-300); background: var(--blue-50); }
+.flow-side {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0 0 22px;
+}
+.flow-side > div {
+  padding: 12px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  font-size: 0.86rem; color: var(--ink-2); line-height: 1.45;
+}
+.flow-side strong { color: var(--ink); }
+
+.measure-box {
+  margin: 24px 0; padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.measure-box h3 { margin: 0 0 4px; }
+.measure-box .claim-bars { max-width: 640px; margin: 16px 0 10px; }
+.measure-box p:last-child { margin-bottom: 0; }
+
 /* ------------------------------------------------------------------ shots */
 figure.shot { margin: 24px 0; }
 figure.shot .frame {
@@ -436,6 +505,8 @@ figure.shot .shot-meta {
 
 /* a narrow reader scrolls a wide screenshot inside its frame rather than squashing it */
 .shot-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+/* a phone screenshot at its own width: full-bleed it would be a metre tall */
+figure.shot.is-phone { max-width: 300px; }
 
 /* ------------------------------------------------------------------ claims */
 .claim {
@@ -607,7 +678,7 @@ blockquote p:last-child { margin-bottom: 0; }
 }
 .panel-title { margin: 0 0 8px; font-size: 0.95rem; font-weight: 640; }
 .author-panel p { font-size: 0.92rem; color: var(--ink-2); }
-.author-panel .source { font-size: 0.78rem; color: var(--ink-3); }
+.author-panel .source { font-size: 0.84rem; color: var(--ink-3); }
 .book-panel { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 18px; align-items: start; }
 .book-panel img { border-radius: 5px; box-shadow: var(--shadow); }
 
@@ -715,7 +786,10 @@ blockquote p:last-child { margin-bottom: 0; }
   .site-nav.is-open { display: flex; }
   .site-nav a { min-height: 44px; padding: 12px 14px; font-size: 1rem; }
 
-  .grid-3, .author-grid, .project-grid { grid-template-columns: minmax(0, 1fr); }
+  .grid-3, .grid-2, .author-grid, .project-grid { grid-template-columns: minmax(0, 1fr); }
+  .flow { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+  .flow > li + li::before { content: "↓"; left: 50%; top: -19px; transform: translateX(-50%); }
+  .flow-side { grid-template-columns: minmax(0, 1fr); }
   .author-card { grid-template-columns: minmax(0, 1fr); }
   .portrait { width: 96px; height: 96px; }
   .book-panel { grid-template-columns: 96px minmax(0, 1fr); gap: 14px; }
@@ -811,3 +885,267 @@ blockquote p:last-child { margin-bottom: 0; }
 /* A repository document's own `<h1>` is replaced by the page's, and its `##` headings continue from it.
    The anchor alias keeps a document's self-links alive without adding a visible node. */
 .anchor-alias { display: block; height: 0; overflow: hidden; }
+
+/* ------------------------------------------------------------------ visual review, Nov 2026
+   Each rule below answers a defect seen in tests/sites/e2e/screenshots and recorded in
+   tests/sites/e2e/visual-inspection.md. Kept together so the reason travels with the rule. */
+
+/* score bars: the track and fill are spans, and an inline box ignores width and height, so every
+   bar on the site rendered empty */
+.claim-bar .track, .claim-bar .fill { display: block; }
+
+/* captions: chips then prose, wrapping as one line of text rather than as flex items, which split
+   "<strong>Run all</strong> and the warehouse…" across rows */
+figure.shot figcaption { display: block; }
+figure.shot .shot-meta { display: inline-block; margin: 0 4px 4px 0; vertical-align: 1px; }
+figure.shot .shot-meta:last-of-type { margin-right: 8px; }
+figure.shot.is-phone { margin-left: auto; margin-right: auto; }
+figure.shot.is-phone figcaption { text-align: center; }
+/* a light screenshot on a dark page is the brightest thing on screen; take the edge off it */
+[data-theme="dark"] figure.shot .frame img { filter: brightness(0.9); }
+
+/* a card that is a link reads as a card, with one affordance, not three underlines */
+a.card { color: inherit; text-decoration: none; transition: border-color 0.14s ease, box-shadow 0.14s ease; }
+a.card h3 { color: var(--blue-600); }
+a.card:hover { border-color: var(--blue-300); box-shadow: var(--shadow); }
+a.card:hover h3 { text-decoration: underline; text-underline-offset: 3px; }
+.card p, .card .card-foot, .choose li { text-wrap: pretty; }
+.card-foot .nw { white-space: nowrap; }
+
+/* hero: centred above the full-width screenshot, so the wide layout has no empty right half */
+@media (min-width: 861px) {
+  .page-home .hero { text-align: center; }
+  .page-home .hero h1 { max-width: 20ch; margin-left: auto; margin-right: auto; }
+  .page-home .hero .lede { margin-left: auto; margin-right: auto; max-width: 60ch; }
+  .page-home .hero .badges, .page-home .hero .cta-row { justify-content: center; }
+}
+.page-home .pager { display: none; }
+
+/* wide blocks share one right edge with each other, prose keeps its measure */
+.main > .code, .main > .callout, .main > .claim, .main > .diagram { max-width: none; }
+
+/* tables: identifiers break only where they must, and a narrow screen scrolls the table */
+.table-wrap code { overflow-wrap: normal; word-break: normal; }
+@media (max-width: 640px) { .table-wrap table { min-width: 560px; } }
+
+/* code: a long line scrolls, and the scrollbar says so */
+.code pre { overflow-x: auto; scrollbar-gutter: stable; }
+[data-theme="dark"] .code { border-color: var(--line-strong); }
+
+/* pager: a link should look like one */
+.pager a { padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); min-height: 44px; }
+.pager a:hover { border-color: var(--blue-300); background: var(--surface); }
+.pager .prev::before { content: "←"; margin-right: 4px; color: var(--ink-3); }
+.pager .next::after { content: "→"; margin-left: 4px; color: var(--ink-3); }
+
+/* footer: its columns start where the content column starts */
+.foot-inner { max-width: 1180px; padding-left: 28px; padding-right: 28px; }
+
+/* reference index: rows align with the heading, the first has a rule, "source" looks like a link */
+.ref-list { border-top: 1px solid var(--line); }
+.ref-list li { padding-left: 0; padding-right: 0; }
+.ref-source { font-family: var(--sans); font-size: 0.82rem; color: var(--ink-2) !important; }
+.ref-source::after { content: " ↗"; }
+
+/* about: panels keep their own height; images are framed so they separate from the card in both themes */
+.author-grid { align-items: start; }
+.portrait, .book-panel img, .project-media { outline: 1px solid var(--line); outline-offset: -1px; }
+.project-media img { object-position: center 30%; }
+
+/* the in-page contents, for the widths where the rail is hidden */
+.toc-inline { display: none; margin: 0 0 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.toc-inline summary { cursor: pointer; padding: 11px 14px; font-weight: 600; font-size: 0.92rem; min-height: 44px; }
+.toc-inline ul { list-style: none; margin: 0; padding: 0 14px 12px; columns: 2 220px; column-gap: 20px; }
+.toc-inline li { break-inside: avoid; padding: 3px 0; font-size: 0.9rem; }
+.toc-inline li.toc-l3 { padding-left: 12px; font-size: 0.86rem; }
+.toc-inline a { color: var(--ink-2); text-decoration: none; }
+.toc-inline a:hover { color: var(--blue-600); text-decoration: underline; }
+.toc { max-height: calc(100vh - var(--head-h) - 44px); overflow-y: auto; overscroll-behavior: contain; }
+
+@media (max-width: 1100px) {
+  .toc-inline { display: block; }
+  .shell { padding-left: clamp(18px, 4vw, 40px); padding-right: clamp(18px, 4vw, 40px); }
+  .foot-inner { grid-template-columns: minmax(0, 1fr) repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 860px) {
+  /* the menu button and tools sit at the right edge, where a reader looks for them */
+  .head-tools { margin-left: auto; }
+  .nav-toggle { order: 3; }
+  /* the open menu dims the page under it, without dimming the header */
+  .site-nav.is-open { box-shadow: var(--shadow-lg), 0 100vh 0 100vh rgba(20, 18, 15, 0.38); clip-path: inset(0 0 -200vh 0); }
+  /* two columns while two still fit */
+  .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .foot-inner { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .foot-inner > :first-child { grid-column: 1 / -1; }
+  .site-foot a { padding: 7px 0; }
+  .main > .wide.is-flow-note { max-width: none; }
+}
+
+@media (max-width: 640px) {
+  .grid-2, .grid-3 { grid-template-columns: minmax(0, 1fr); }
+  .project-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 520px) {
+  .head-tools { margin-left: auto; }
+  /* a bar needs its width: the label goes above it */
+  .claim-bar { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label pct" "track track"; row-gap: 4px; }
+  .claim-bar .label { grid-area: label; }
+  .claim-bar .pct { grid-area: pct; }
+  .claim-bar .track { grid-area: track; }
+  .foot-inner { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .page-doc .main > h1, .page-title { margin-top: 10px; }
+}
+
+@media (min-width: 641px) and (max-width: 860px) {
+  .project-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .author-card { grid-template-columns: 96px minmax(0, 1fr); }
+}
+/* a tall narrow screenshot at a size that shows it, centred */
+figure.shot.is-narrow { max-width: 520px; margin-left: auto; margin-right: auto; }
+
+/* ------------------------------------------------------------------ visual review, round 2 */
+/* screenshots open full size; the hint appears where the picture is smallest */
+a.frame, a.zoom { display: block; position: relative; color: inherit; text-decoration: none; cursor: zoom-in; }
+a.frame:focus-visible { outline-offset: 3px; }
+@media (max-width: 860px) {
+  a.frame::after, a.zoom::after {
+    content: "Open full size ↗"; position: absolute; right: 8px; bottom: 8px;
+    padding: 3px 8px; border-radius: 999px;
+    background: rgba(20, 18, 15, 0.72); color: #fff; font-size: 0.72rem; font-weight: 600;
+  }
+}
+figure.shot .shot-metas { display: block; margin-bottom: 2px; }
+figure.shot figcaption { text-wrap: pretty; }
+figure.shot.is-phone figcaption { text-align: left; }
+[data-theme="dark"] figure.shot .frame img { filter: brightness(0.86); }
+[data-theme="dark"] figure.shot .frame { border-color: var(--line-strong); }
+
+/* short inline code is one unit */
+code.nw { white-space: nowrap; }
+
+/* hero heading keeps its two lines */
+@media (min-width: 861px) { .page-home .hero h1 { max-width: 24ch; } }
+@media (max-width: 860px) { .page-home .cta-row .btn.ghost { padding-left: 4px; } }
+
+/* footer: the same container as the page above it */
+.layout-home .foot-inner { max-width: 1100px; }
+.layout-narrow .foot-inner { max-width: 900px; }
+@media (max-width: 1100px) { .foot-inner { padding-left: clamp(18px, 4vw, 40px); padding-right: clamp(18px, 4vw, 40px); } }
+
+/* tool cards: the footers start on one line whatever their length */
+.tools-grid .card-foot .nw { display: block; }
+.tools-grid .card-foot { min-height: 3.6em; }
+
+/* a lone last card on a two-column row spans it */
+@media (min-width: 641px) and (max-width: 860px) {
+  .grid-3 > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+
+/* the inline contents box is as wide as the blocks below it */
+.main > .toc-inline { max-width: none; }
+
+/* evidence cards: even padding, tag on the score's line */
+.claim { padding: 18px 22px; }
+.claim-head { align-items: center; }
+
+/* tables and code that scroll sideways say so, with a shadow at the edge that has more. Only when they
+   do: site.js marks an element `is-scrollable` when its content is wider than its box. */
+.table-wrap.is-scrollable {
+  --edge: rgba(28, 25, 20, 0.3);
+  background:
+    linear-gradient(to right, var(--surface) 30%, transparent) left / 44px 100% no-repeat local,
+    linear-gradient(to left, var(--surface) 30%, transparent) right / 44px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, var(--edge), transparent) left / 18px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, var(--edge), transparent) right / 18px 100% no-repeat scroll,
+    var(--surface);
+}
+[data-theme="dark"] .table-wrap.is-scrollable { --edge: rgba(255, 255, 255, 0.3); }
+figure.diagram.is-scrollable {
+  --edge: rgba(28, 25, 20, 0.3);
+  background:
+    linear-gradient(to right, var(--surface) 30%, transparent) left / 44px 100% no-repeat local,
+    linear-gradient(to left, var(--surface) 30%, transparent) right / 44px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, var(--edge), transparent) left / 18px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, var(--edge), transparent) right / 18px 100% no-repeat scroll,
+    var(--surface);
+}
+[data-theme="dark"] figure.diagram.is-scrollable { --edge: rgba(255, 255, 255, 0.3); }
+.table-wrap table { background: transparent; }
+.code pre.is-scrollable {
+  background:
+    linear-gradient(to right, #16181d 30%, transparent) left / 44px 100% no-repeat local,
+    linear-gradient(to left, #16181d 30%, transparent) right / 44px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(255, 255, 255, 0.45), transparent) left / 22px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(255, 255, 255, 0.45), transparent) right / 22px 100% no-repeat scroll;
+}
+
+/* on a phone a table of up to five columns is a list of cards: the first cell is the title, each
+   other cell is labelled with its column. Wider tables are data matrices and scroll instead. */
+@media (max-width: 640px) {
+  .table-wrap table:not(:has(th:nth-child(6))) { min-width: 0; }
+  .table-wrap table:not(:has(th:nth-child(6))) thead { display: none; }
+  .table-wrap table:not(:has(th:nth-child(6))),
+  .table-wrap table:not(:has(th:nth-child(6))) tbody,
+  .table-wrap table:not(:has(th:nth-child(6))) tr,
+  .table-wrap table:not(:has(th:nth-child(6))) td { display: block; width: auto; }
+  .table-wrap table:not(:has(th:nth-child(6))) tr { padding: 11px 14px; border-bottom: 1px solid var(--line); }
+  .table-wrap table:not(:has(th:nth-child(6))) tr:last-child { border-bottom: 0; }
+  .table-wrap table:not(:has(th:nth-child(6))) td { padding: 0; border: 0; }
+  .table-wrap table:not(:has(th:nth-child(6))) td + td { margin-top: 4px; }
+  .table-wrap table:not(:has(th:nth-child(6))) td:first-child { font-weight: 640; margin-bottom: 2px; }
+  .table-wrap table:not(:has(th:nth-child(6))) td code { white-space: normal; overflow-wrap: anywhere; }
+  .table-wrap table:has(th:nth-child(3)):not(:has(th:nth-child(6))) td + td[data-label]:not([data-label=""])::before {
+    content: attr(data-label) ": "; font-weight: 600; color: var(--ink-3); font-size: 0.86em;
+  }
+}
+
+/* menu button: a cross while the menu is open */
+.nav-toggle .icon-close { display: none; }
+.nav-toggle[aria-expanded="true"] .icon-close { display: block; }
+.nav-toggle[aria-expanded="true"] svg:not(.icon-close) { display: none; }
+
+/* about */
+.author-body > :last-child { margin-bottom: 0; }
+.project-media img { object-fit: contain; object-position: center; }
+
+/* ------------------------------------------------------------------ visual review, round 3 */
+/* file and tool names in a card footer: one per line, no separator left alone on a line */
+.card-foot .nw { display: block; }
+.card-foot .sep { display: none; }
+.tools-grid .card-foot { min-height: calc(2 * 1.62em + 11px); }
+.page-home .shell { padding-bottom: 36px; }
+@media (max-width: 520px) { .site-nav .nav-gh { display: block; } }
+/* the full-size hint is a strip under the picture, never on top of it */
+@media (max-width: 860px) {
+  a.frame::after, a.zoom::after {
+    position: static; display: block; text-align: right;
+    padding: 5px 10px; border-radius: 0;
+    border-top: 1px solid var(--line);
+    background: var(--surface-2); color: var(--ink-2);
+    font-size: 0.74rem; font-weight: 600;
+  }
+}
+@media (max-width: 1100px) { .layout-rail .foot-inner { max-width: 940px; } }
+.claim-value { line-height: 1.05; }
+.claim-head { margin-top: -2px; }
+.card .card-title { margin: 0 0 4px; font-weight: 640; color: var(--blue-600); }
+@media (min-width: 861px) { .grid-3 { grid-auto-rows: 1fr; } }
+.shell { padding-bottom: 44px; }
+.site-foot { margin-top: 28px; }
+.pager { margin-top: 40px; }
+/* a diagram too wide for a phone: shown whole, and offered full size like the screenshots */
+.diagram-open {
+  display: block; width: 100%; margin-top: 10px; min-height: 40px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface-2); color: var(--ink-2);
+  font: inherit; font-size: 0.8rem; font-weight: 600; cursor: zoom-in;
+}
+.diagram-open:hover { color: var(--blue-600); border-color: var(--blue-300); }
+.code.is-drawing pre { line-height: 1.18; }
+/* the first section after a page title needs no extra distance from it */
+.page-title + h2, .page-title + .toc-inline + h2, .page-title + p + h2 { margin-top: 0.9em; }
+/* a long rail fades at its bottom edge rather than cutting a line in half */
+.toc { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+       mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); padding-bottom: 24px; }

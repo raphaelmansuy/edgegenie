@@ -22,6 +22,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -43,27 +44,72 @@ LICENCE = "Apache-2.0"
 #: exist in this repository and a second copy would be a second thing to keep in step ([D1]).
 SHOTS: dict[str, str] = {
     "app-1440": "specs/006-databricks/e2e/home/deployed-1440-home.png",
-    "app-1440-picker": "specs/006-databricks/e2e/home/deployed-1440-picker.png",
     "app-1440-tree": "specs/006-databricks/e2e/home/deployed-1440-tree.png",
-    "app-800": "specs/006-databricks/e2e/home/deployed-800-home.png",
     "notebook-1440": "specs/006-databricks/e2e/improve-parity-databricks/01-notebook-toolbar.png",
     "notebook-dark": "specs/006-databricks/e2e/improve-parity-databricks/12-dark-cell-prompt.png",
-    "seam-1440": "specs/006-databricks/e2e/improve-parity-databricks/02-insert-seam.png",
     "run-all-1440": "specs/006-databricks/e2e/improve-parity-databricks/03-run-all-failed.png",
     "cell-prompt-1440": "specs/006-databricks/e2e/improve-parity-databricks/04-cell-prompt.png",
     "prompt-sent": "specs/006-databricks/e2e/improve-parity-databricks/05-prompt-sent.png",
     "follow-ups": "specs/006-databricks/e2e/improve-parity-databricks/06-follow-ups.png",
-    "fix-agent": "specs/006-databricks/e2e/improve-parity-databricks/07-fix-with-agent.png",
-    "history": "specs/006-databricks/e2e/improve-parity-databricks/09-dock-history.png",
     "slash-1440": "specs/006-databricks/e2e/improve-parity-databricks/11-slash-commands.png",
-    "cell-prompt-1024": "specs/006-databricks/e2e/improve-parity-databricks/13-w1024-cell-prompt.png",
-    "cell-prompt-760": "specs/006-databricks/e2e/improve-parity-databricks/14-w760-cell-prompt.png",
-    "session-1440": "specs/006-databricks/e2e/session-journey/1440-1-conversation-opens.png",
-    "session-800": "specs/006-databricks/e2e/session-journey/800-1-conversation-opens.png",
-    "zones-1440": "specs/007-ux-ui-improve/e2e/screenshot/22-deployed-zones.png",
-    "math-dark": "specs/007-ux-ui-improve/e2e/screenshot/54-math-dark.png",
-    "math-narrow": "specs/007-ux-ui-improve/e2e/screenshot/55-math-narrow.png",
+    "plot-1440": "specs/007-ux-ui-improve/e2e/screenshot/71-plot-done.png",
+    "run-map-1440": "specs/010-notebook/e2e/screenshots/03-map-open-1440.png",
+    "attach-answer": "specs/009-attach-file-clipboard-support/e2e/screenshots/S2-answer-with-evidence.png",
+    "attach-refused": "specs/009-attach-file-clipboard-support/e2e/screenshots/S3-refused-no-vision.png",
+    "mission-achieved": "specs/011-ux-coding-mission/e2e/iteration-03/05-achieved-desktop.png",
+    "mission-evidence": "specs/011-ux-coding-mission/e2e/iteration-03/06-evidence-source.png",
+    "mission-approval": "specs/011-ux-coding-mission/e2e/iteration-03/07-approval.png",
+    "mission-mobile": "specs/011-ux-coding-mission/e2e/iteration-03/11-mobile-light.png",
+    "durable-restart": "specs/010-long-running/e2e/screenshots/09-server-restarted.png",
+    "durable-return": "specs/010-long-running/e2e/screenshots/04-return-after-page-close.png",
+    "model-picker": "specs/005-llm-models/e2e/01-picker-open.png",
+    "fence-copy": "specs/003-improve-dev-ux-ui/e2e/screenshots/07-fence-outside.png",
+    "drawer-800": "specs/007-ux-ui-improve/e2e/screenshot/14-800-drawer.png",
+    "mission-dark": "specs/011-ux-coding-mission/e2e/iteration-03/09-wide-dark.png",
 }
+
+
+APP = ROOT / "apps" / "coding-agent"
+SEED = APP / "seed" / "llm_models.yaml"
+TOOL_SERVER = APP / "tools" / "databricks_notebook_mcp.py"
+SKILLS = APP / "tools" / "skills"
+
+
+# ========================================================================================== facts
+def facts() -> dict[str, int]:
+    """Counts the prose quotes about the application, read from the files that define them.
+
+    The site once said "16 models" while the catalogue held 13. A count typed into prose drifts the day
+    someone edits the catalogue, so prose writes `{{models}}` and the build fills it in from source. No
+    YAML or AST import: the shapes read here are fixed by the files' own conventions and are asserted.
+    """
+    section, providers, models = "", 0, 0
+    for line in SEED.read_text(encoding="utf-8").splitlines():
+        if re.match(r"^[a-z_]+:", line):
+            section = line.split(":", 1)[0]
+        elif re.match(r"^  - id:\s*\S", line):
+            providers += section == "providers"
+            models += section == "models"
+    source = TOOL_SERVER.read_text(encoding="utf-8")
+    tools = len(re.findall(r"^@tool\(\)\s*\n(?:async\s+)?def dbx_\w+", source, re.M))
+    core_block = re.search(r"^_CORE = \{(.*?)\}", source, re.M | re.S)
+    core = len(re.findall(r'"dbx_\w+"', core_block.group(1))) if core_block else 0
+    skills = len(list(SKILLS.glob("*.md"))) if SKILLS.is_dir() else 0
+    out = {"models": models, "providers": providers, "tools": tools, "core_tools": core, "skills": skills}
+    empty = [k for k, v in out.items() if not v]
+    if empty:
+        raise SystemExit(f"build: could not count {', '.join(empty)} from the application source")
+    return out
+
+
+def fill_facts(text: str, values: dict[str, int], where: str) -> str:
+    """Replace `{{name}}` with a fact; an unknown name is a build failure, never a published brace."""
+    def sub(m: re.Match) -> str:
+        key = m.group(1)
+        if key not in values:
+            raise SystemExit(f"build: {where} uses {{{{{key}}}}}, which is not a known fact")
+        return str(values[key])
+    return re.sub(r"\{\{([a-z_]+)\}\}", sub, text)
 
 
 # ========================================================================================== helpers
@@ -117,6 +163,8 @@ MARK = (
 
 ICON_MENU = ('<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" '
              'stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>')
+ICON_CLOSE = ('<svg class="icon-close" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" '
+              'stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>')
 ICON_GH = ('<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
            '<path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49 '
            '0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.49-1.11-1.49-.91-.63'
@@ -136,6 +184,12 @@ ICON_AUTO = ('<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx
              'stroke="currentColor" stroke-width="1.8"/><path d="M12 3.6v16.8" stroke="currentColor" '
              'stroke-width="1.8"/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8z" fill="currentColor"/>'
              '</svg>')
+
+
+#: Pages serves `404.html` at whatever path was missing (`/opengenie/a/b/`), so the relative links every
+#: other page uses would resolve against that path and lose the stylesheet. The 404 page alone pins its
+#: base to the project root; `check.py --absolute` allows exactly this one tag.
+BASE_404 = f'<base href="{urlsplit(SITE_URL).path}" />\n'
 
 
 def prefix_for(route: str) -> str:
@@ -159,7 +213,7 @@ def head(*, route: str, title: str, description: str, canonical_route: str, json
 <html lang="en" data-root="{prefix}">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+{BASE_404 if route == "404" else ""}<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>{esc(title)}</title>
 <meta name="description" content="{esc(description)}" />
 <link rel="canonical" href="{esc(canonical)}" />
@@ -214,7 +268,7 @@ def header(route: str, *, prefix: str, nav_key: str) -> str:
     <span><span class="wordmark-a">Open</span><span class="wordmark-b">Genie</span></span>
   </a>
   <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="site-nav" data-nav-toggle>
-    {ICON_MENU}<span>Menu</span>
+    {ICON_MENU}{ICON_CLOSE}<span>Menu</span>
   </button>
   <nav id="site-nav" class="site-nav" aria-label="Main">{nav}
     <a class="nav-gh" href="{REPO}" target="_blank" rel="noopener noreferrer">Repository on GitHub</a>
@@ -277,6 +331,18 @@ def toc_html(toc: list[tuple[int, str, str]]) -> str:
             f'<p class="toc-title">On this page</p><ul>{items}</ul></aside>')
 
 
+def toc_inline(toc: list[tuple[int, str, str]]) -> str:
+    """The same contents as the rail, collapsed, for the widths where the rail is hidden (CSS decides)."""
+    rows = [r for r in toc if 1 < r[0] <= 3]
+    if len(rows) < 3:
+        return ""
+    items = "".join(
+        f'<li class="toc-l{level}"><a href="#{anchor}">{esc(text)}</a></li>'
+        for level, anchor, text in rows
+    )
+    return f'<details class="toc-inline"><summary>On this page</summary><ul>{items}</ul></details>'
+
+
 def pager(route: str, routes: list[pages.Route], *, prefix: str) -> str:
     order = [r.path for r in routes]
     if route not in order:
@@ -293,6 +359,23 @@ def pager(route: str, routes: list[pages.Route], *, prefix: str) -> str:
                      f'<span><span class="dir">Next</span>{esc(nxt.label)}</span></a>')
     parts.append("</nav>")
     return "".join(parts)
+
+
+def zoomable(body: str) -> str:
+    """Every screenshot opens at full size, and its provenance chips sit on their own line.
+
+    A 1440 px capture on a 390 px phone is a quarter of its size, so the frame becomes a link to the
+    image itself. The chips are grouped so the caption's sentence starts on a line of its own instead of
+    wrapping one word after the last chip (both seen in tests/sites/e2e/screenshots).
+    """
+    body = re.sub(
+        r'<div class="frame">(\s*<img [^>]*?src="([^"]+)"[^>]*>\s*)</div>',
+        r'<a class="frame" href="\2" title="Open the full-size screenshot">\1</a>', body)
+    # a picture on its own in a rendered document (the tutorial's terminal captures) opens the same way
+    body = re.sub(r'<p>(<img [^>]*?src="([^"]+)"[^>]*>)</p>',
+                  r'<p><a class="zoom" href="\2" title="Open the full-size image">\1</a></p>', body)
+    return re.sub(r'((?:<span class="shot-meta">[^<]*</span>\s*)+)',
+                  r'<span class="shot-metas">\1</span>', body)
 
 
 def localise(body: str, prefix: str) -> str:
@@ -315,9 +398,9 @@ def page(*, route: str, routes: list[pages.Route], title: str, description: str,
          body: str, nav_key: str, toc: list[tuple[int, str, str]], hero: bool,
          commit: str, built: str, source: str = "", h1: str = "", origin: str = "content") -> str:
     prefix = prefix_for(route)
-    body = localise(body, prefix)
-    rail = toc_html(toc)
-    shell_class = "shell" if rail else "shell no-rail"
+    body = localise(zoomable(body), prefix)
+    rail = "" if hero else toc_html(toc)
+    shell_class = "shell" if rail else ("shell no-rail is-home" if hero else "shell no-rail")
     # One h1, exactly: the body may supply its own (the home hero, the author page), and if it does not,
     # the route's own heading is emitted here. `check.py` fails on any page with zero or two ([AX-2]).
     heading = "" if re.search(r"<h1[\s>]", body) else f'<h1 class="page-title">{esc(h1 or title.split(" — ")[0])}</h1>'
@@ -346,12 +429,13 @@ def page(*, route: str, routes: list[pages.Route], title: str, description: str,
     }
     return f"""{head(route=route, title=title, description=description, canonical_route=route,
         jsonld=jsonld, prefix=prefix, choice="system")}
-<body class="{'page-home' if hero else 'page-doc'}" data-origin="{origin}">
+<body class="{'page-home' if hero else 'page-doc'} layout-{'rail' if rail else ('home' if hero else 'narrow')}" data-origin="{origin}">
 {header(route, prefix=prefix, nav_key=nav_key)}
 <div class="{shell_class}">
   {rail}
   <main id="main" class="main">
 {heading}
+{toc_inline(toc) if rail else ""}
 {body}
 {pager(route, routes, prefix=prefix)}
   </main>
@@ -403,10 +487,12 @@ def claim_cards(claim_list: list) -> str:
         if c.kind.value == "percent":
             value_html = f'{c.value}%<span class="of">{c.fraction}</span>'
         elif c.kind.value == "tokens":
-            value_html = (f'{c.extra["strong_k"]}<span class="of">k tokens/task vs '
+            value_html = (f'{c.extra["strong_k"]}k<span class="of">tokens per task, against '
                           f'{c.extra["weak_k"]}k</span>')
         else:
-            value_html = f'{c.value}<span class="of">{esc(c.unit)}</span>'
+            # the harness calls them missions; the page calls them what a reader knows: tasks
+            unit = "graded tasks" if c.unit == "missions" else c.unit
+            value_html = f'{c.value}<span class="of">{esc(unit)}</span>'
 
         sources = " · ".join(f"<code>{esc(s)}</code>" for s in c.sources)
         out.append(f"""<article class="claim" id="{esc(c.id.lower())}">
@@ -532,7 +618,7 @@ def make_og(path: Path) -> None:
     text((72, 300), "A Databricks coding agent", small, "#57544e")
     text((72, 356), "with the model you choose.", small, "#57544e")
     tiny = ImageFont.truetype(sans.path, 28) if hasattr(sans, "path") else sans
-    text((72, 470), "16 models · a write fence · proof before it says done", tiny, "#6b6760")
+    text((72, 470), "Your model · a write fence · proof before it says done", tiny, "#6b6760")
     text((72, 540), "Apache-2.0 · raphaelmansuy.github.io/opengenie", tiny, "#6b6760")
     img.save(path, "PNG", optimize=True)
 
@@ -576,6 +662,7 @@ def build(*, stamp: bool = True) -> dict:
     commit = git_commit() if stamp else "0000000"
     built = datetime.now(timezone.utc).strftime("%-d %B %Y") if stamp else "1 January 2026"
 
+    FACTS = facts()
     claim_list, excluded = claims_mod.compute()
     missing = [(c.id, m) for c in claim_list for m in claims_mod.missing(c)]
     if missing:
@@ -592,6 +679,8 @@ def build(*, stamp: bool = True) -> dict:
         "claim_cards": claim_cards(claim_list),
         "author_html": "",
         "repo": REPO,
+        "facts": FACTS,
+        "fill": fill_facts,
     }
 
     def doc_rewrite(source_rel: str):
@@ -711,11 +800,12 @@ def build(*, stamp: bool = True) -> dict:
 NOT_FOUND = """<section class="wide">
   <h1>404</h1>
   <p class="lede">That page is not here. Nothing was lost; the link was wrong.</p>
+  <div class="cta-row"><a class="btn primary" href="./">Back to the home page</a></div>
   <div class="grid-3">
-    <a class="card" href="tour/"><p class="card-title">Tour</p><p>What the app looks like, at four widths.</p></a>
+    <a class="card" href="tour/"><p class="card-title">Tour</p><p>Real screenshots of every screen.</p></a>
     <a class="card" href="tutorial/"><p class="card-title">Tutorial</p><p>The 30-minute setup.</p></a>
     <a class="card" href="evidence/"><p class="card-title">Evidence</p><p>Every score, with its denominator.</p></a>
-    <a class="card" href="install/"><p class="card-title">Install</p><p>Three ways to run it.</p></a>
+    <a class="card" href="install/"><p class="card-title">Install</p><p>Deploy it to your workspace.</p></a>
     <a class="card" href="reference/"><p class="card-title">Reference</p><p>The docs and the specifications.</p></a>
     <a class="card" href="about/"><p class="card-title">About</p><p>Who built it, and why.</p></a>
   </div>

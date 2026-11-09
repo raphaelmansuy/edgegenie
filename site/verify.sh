@@ -74,6 +74,9 @@ else
 fi
 STATUS=$?
 
+echo "==> end-to-end: every page, four widths, both themes, served at /opengenie/ like Pages"
+node tests/sites/e2e/site.e2e.mjs | tail -4 || STATUS=1
+
 echo "==> shrink the screenshots that will be committed"
 # A regenerated capture is a 24-bit PNG; the committed set is 8-bit with dithering, chosen by measuring
 # its own error (site/optimize_shots.py). Running it here keeps the two in step: the pictures on disk are

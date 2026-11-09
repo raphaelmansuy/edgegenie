@@ -90,13 +90,15 @@ def section(prefix: str, *, commit: str, built: str) -> str:
         writes about AI and data strategy.
       </p>
       <p>
-        <strong>Why OpenGenie exists.</strong> Databricks Genie Code is good, and it is metered and
-        pinned to whatever model the workspace is allowed to use. The question here was narrow and
-        testable: if the model is the largest lever on whether an agent finishes the work, who should
-        choose it? He measured that question on eleven graded tasks in a live workspace, published
-        every run, and then built the application the measurements implied &mdash; a Databricks App
-        where the model is a control, the writes are fenced to a folder you name, and a claim of
-        &ldquo;done&rdquo; is checked against the workspace rather than believed.
+        <strong>Why OpenGenie exists.</strong> Databricks Genie Code is the best coding experience for
+        data engineering on the market, and the reason is context: the agent sees Unity Catalog, the
+        warehouses, the notebooks and the jobs, so it works from your data rather than from a guess.
+        What it does not let you do is bring your own model, and its cost is metered by a product you
+        do not configure. Raphael first measured whether that matters &mdash; eleven graded tasks in a
+        live workspace, every run published &mdash; and found the model was the largest lever. Then he
+        built the application the measurements implied: a Databricks App with the same kind of
+        context, where the model is a setting, writes are fenced to a folder you name, and a claim of
+        &ldquo;done&rdquo; is checked against what the agent actually ran.
       </p>
       <p class="author-links">
         <a class="btn primary" href="{LINKEDIN}" target="_blank" rel="noopener noreferrer">Connect on LinkedIn</a>
@@ -147,7 +149,7 @@ def section(prefix: str, *, commit: str, built: str) -> str:
   <div class="cta-band">
     <p><strong>Running a Databricks estate?</strong> Tell him what Genie Code costs you, and what you
     would want a coding agent to prove before you trusted it.</p>
-    <a class="btn primary" href="{LINKEDIN}" target="_blank" rel="noopener noreferrer">Connect on LinkedIn</a>
+    <a class="btn primary" href="{LINKEDIN}" target="_blank" rel="noopener noreferrer">Message Raphael on LinkedIn</a>
   </div>
 
   <p class="foot-note">This page was built from commit <code>{esc(commit)}</code> on {esc(built)}.
