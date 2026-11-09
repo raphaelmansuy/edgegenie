@@ -221,6 +221,10 @@ function Start({ focus, onSuggestion, hasSession }: {
   focus: Focus; onSuggestion: (s: Suggestion) => void; hasSession: boolean;
 }) {
   const suggestions = suggestionsFor(focus);
+  if (!hasSession && !focus.doc) return <div className="dock-start">
+    <p className="dock-start-lead">Your assistant</p>
+    <p className="dock-start-note">Ask a question below. Open a document to bring it into context.</p>
+  </div>;
   return (
     <div className="dock-start">
       <p className="dock-start-lead">

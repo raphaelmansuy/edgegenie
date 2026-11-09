@@ -10,9 +10,13 @@
  *
  * The fence stays in the bar, because WR-5 requires it to be visible **before** the first keystroke.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ACTIONS, ACTIONS_FOR, type Action, type Doc } from "../domain/docs";
-import { Check, ChevronDown, Clock, Close, Lock, LinkIcon, Refresh, Save as SaveIcon, Warning } from "./Icons";
+import { Check, ChevronDown, Clock, Close, Lock, More, Save as SaveIcon, Warning } from "./Icons";
+
+import { copyText } from "../domain/clipboard";
+import { ActionMenu } from "./ActionMenu";
+import { display } from "../domain/keys";
 
 export interface BarFence {
   label: string;
@@ -49,25 +53,14 @@ export function DocumentBar({
   doc, crumbs, language, fence, readOnly, dirty, saving, busy, notice, path,
   onReload, onSave, onAsk, onAttach, onOpenInDatabricks, onCopyLink, preview,
 }: Props) {
-  const [menu, setMenu] = useState(false);
   const [copied, setCopied] = useState(false);
-  const wrap = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!menu) return;
-    const down = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement)?.closest(".ask-wrap")) setMenu(false);
-    };
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(false); };
-    window.addEventListener("mousedown", down);
-    window.addEventListener("keydown", key);
-    return () => { window.removeEventListener("mousedown", down); window.removeEventListener("keydown", key); };
-  }, [menu]);
-
+  useEffect(() => { if (!copied) return; const timer = setTimeout(() => setCopied(false), 1500); return () => clearTimeout(timer); }, [copied]);
+  const copyPath = () => { void copyText(path).then(setCopied); };
   const Icon = readOnly ? Lock : fence.tone === "ok" ? Check : fence.tone === "warn" ? Warning : Lock;
   const actions = ACTIONS_FOR[doc.kind];
 
   return (
+    <>
     <header className="doc-bar">
       {/* Identity: name, language, breadcrumb — the things you need to know where you are. */}
       <div className="doc-id">
@@ -75,12 +68,8 @@ export function DocumentBar({
         {language && <span className="doc-lang">{language}</span>}
         <button className="doc-crumbs" title={`${path} — click to copy`}
           aria-label={`Copy the path ${path}`}
-          onClick={() => {
-            void navigator.clipboard?.writeText(path);
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 1200);
-          }}>
-          {copied ? "copied" : crumbs.map((c, i) => (
+          onClick={copyPath}>
+          {copied ? "copied" : crumbs.slice(0, -1).map((c, i) => (
             <span key={`${c}-${i}`} className="crumb">
               {i > 0 && <span className="crumb-sep" aria-hidden>/</span>}
               {c}
@@ -91,7 +80,7 @@ export function DocumentBar({
 
       <span className="doc-bar-spacer" />
 
-      {notice && <span className={`doc-notice is-${notice.tone}`} role="status">{notice.text}</span>}
+
 
       {/* Fence: present before the first keystroke (WR-5), and never colour-only (UX-5). */}
       <span className={`fence-chip fence-${fence.tone}`} title={readOnly ? "this document is too large to save back safely" : fence.reason || "you can save here"}>
@@ -109,48 +98,26 @@ export function DocumentBar({
         </button>
       )}
 
-      <button className="icon-btn" aria-label="Reload this document" title="Reload from the server"
-        onClick={onReload} disabled={busy}>
-        <Refresh size={15} className={busy ? "spin" : ""} />
-      </button>
+      <ActionMenu label="Ask the agent" className="btn sm ask-btn" title="Ask the agent about this document"
+        actions={[{ label: "Add to chat", onSelect: onAttach }, ...actions.map((action) => ({ label: ACTIONS[action].label, onSelect: () => onAsk(action) }))]}>
+        Ask <ChevronDown size={12} />
+      </ActionMenu>
+      <ActionMenu label="Document actions" className="icon-btn doc-more" description={readOnly ? "This document is read-only." : fence.reason || fence.label} actions={[
+        { label: "Reload this document", onSelect: onReload, disabled: busy },
+        ...(onCopyLink ? [{ label: "Copy document link", onSelect: onCopyLink }] : []),
+        { label: "Copy document path", onSelect: copyPath },
+        { label: "Open in Databricks", onSelect: onOpenInDatabricks },
+      ]}><More size={16} /></ActionMenu>
 
-      {onCopyLink && (
-        <button className="icon-btn" aria-label={`Copy a link to ${doc.name}`}
-          title="Copy a link that opens this document in this app" onClick={onCopyLink}>
-          <LinkIcon size={15} />
-        </button>
-      )}
-
-      <button className="icon-btn" aria-label="Open in Databricks" title="Open in Databricks"
-        onClick={onOpenInDatabricks}><span aria-hidden>↗</span></button>
-
-      {/* Four prompts, one control. Each is "ask the agent about this file". */}
-      <div className="ask-wrap" ref={wrap}>
-        <button className="btn sm ask-btn" aria-haspopup="menu" aria-expanded={menu}
-          onClick={() => setMenu((m) => !m)} title="Ask the agent to do something to this file">
-          Ask <ChevronDown size={12} />
-        </button>
-        {menu && (
-          <div className="menu ask-menu" role="menu" aria-label="Ask the agent">
-            <button role="menuitem" onClick={() => { setMenu(false); onAttach(); }}>
-              <span aria-hidden>＠</span> Add to chat
-            </button>
-            {actions.map((action) => (
-              <button key={action} role="menuitem" onClick={() => { setMenu(false); onAsk(action); }}>
-                <span aria-hidden />
-                {ACTIONS[action].label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <button className="btn primary sm" onClick={onSave} disabled={readOnly || saving || !dirty}
-        title={readOnly ? "this document cannot be saved" : "Save (⌘S)"}>
+      <button className="btn primary sm doc-save" onClick={onSave} disabled={readOnly || saving || !dirty}
+        title={readOnly ? "This document cannot be saved" : `Save (${display("mod+s")})`}>
         {saving ? <Clock size={14} className="icon-spin" /> : <SaveIcon size={14} />}
         <span>Save</span>
       </button>
     </header>
+    <span className="sr-only" role="status">{copied ? "Document path copied" : ""}</span>
+    {notice && <div className={`doc-feedback is-${notice.tone}`} role={notice.tone === "error" ? "alert" : "status"}>{notice.text}</div>}
+    </>
   );
 }
 

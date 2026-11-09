@@ -174,10 +174,10 @@ const CARDS = [
   { icon: Clock, fg: "var(--green-700)", bg: "var(--green-100)", t: "Create a job", d: "Daily recompute at 06:00, with a dependency",
     scenario: "slow",
     prompt: "Create a job that recomputes daily revenue at 06:00 after a dependency task, run it once, and prove the run succeeded." },
-  { icon: Database, fg: "var(--teal-300)", bg: "var(--teal-100)", t: "Lakebase and an app", d: "Postgres, then a small web page",
+  { icon: Database, fg: "var(--teal-700)", bg: "var(--teal-100)", t: "Lakebase and an app", d: "Postgres, then a small web page",
     scenario: "notebook",
     prompt: "Create a Lakebase database with one table and a small app that reads it. Show me the connection details." },
-  { icon: ListIcon, fg: "var(--purple-300)", bg: "var(--purple-100)", t: "Document tables", d: "Comments grounded in real values",
+  { icon: ListIcon, fg: "var(--purple-700)", bg: "var(--purple-100)", t: "Document tables", d: "Comments grounded in real values",
     scenario: "injection",
     prompt: "Document the tables in my schema: add a comment to each table and column based on the real values you observe." },
   { icon: Bug, fg: "var(--pink-700)", bg: "var(--pink-100)", t: "Debug a failing job", d: "Find the cause and prove the fix",
@@ -221,7 +221,7 @@ export function SessionHome({ title, folder, artifacts, busy, turns, onOpen }: {
 }
 
 export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddKey, onStart, demo, notice,
-  user, recent, onOpenRecent, onOpenSearch, onOpenCatalog }: {
+  user, recent, onOpenRecent, onOpenSearch, onOpenCatalog, onAskAssistant }: {
   catalogue: CatalogueResponse | null;
   folder: string; onFolder: (v: string) => void;
   model: string; onModel: (v: string) => void;
@@ -237,6 +237,7 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
   onOpenRecent?: (path: string, kind: "notebook" | "file" | "table") => void;
   onOpenSearch?: () => void;
   onOpenCatalog?: () => void;
+  onAskAssistant?: () => void;
 }) {
   const [starting, setStarting] = useState(false);
   const start = async (prompt: string) => {
@@ -249,10 +250,9 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
         <header className="home-hero">
           <span className="home-glow" aria-hidden />
           <LogoMark size={40} className="home-mark" />
-          <h2 className="home-title">What should we build today?</h2>
+          <h2 className="home-title">Your workspace, ready for what’s next.</h2>
           <p className="home-sub">
-            A coding agent that works in your workspace. It reads, writes, runs, and proves — and it can
-            change <strong>only the folder you name below</strong>.
+            Open existing work, build a notebook, or work through a question with your assistant.
           </p>
         </header>
 
@@ -268,31 +268,32 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
           </p>
         </section>
 
-        <section className="home-models" aria-label="Model">
-          <ModelPicker
-            catalogue={catalogue}
-            current={model}
-            variant="button"
-            label={`Model for the new session: ${model || "none chosen"}`}
-            onChoose={async (id) => onModel(id)}
-            onAddKey={onAddKey}
-          />
-        </section>
-
         {notice && <p className="home-notice" role="status">{notice}</p>}
-
-        <div className="home-cards">
-          {CARDS.map((c) => (
-            <button key={c.t} className="home-card" disabled={starting}
-              onClick={() => void start(demo ? `${c.prompt} [[scenario:${c.scenario}]]` : c.prompt)}>
-              <span className="home-card-ico" style={{ background: c.bg, color: c.fg }} aria-hidden>
-                <c.icon size={15} />
-              </span>
-              <span className="home-card-t">{c.t}</span>
-              <span className="home-card-d">{c.d}</span>
-            </button>
-          ))}
+        <div className="home-starts" aria-label="Start working">
+          <button className="home-start is-primary" onClick={onOpenSearch}>
+            <Search size={20} /><strong>Open a document</strong><span>Find a notebook, file or table</span>
+          </button>
+          <button className="home-start" disabled={starting} onClick={() => void start(demo ? `${CARDS[0].prompt} [[scenario:notebook]]` : CARDS[0].prompt)}>
+            <Notebook size={20} /><strong>Create a notebook</strong><span>Build with your assistant</span>
+          </button>
+          <button className="home-start" onClick={onAskAssistant}>
+            <Sparkle size={20} /><strong>Ask the assistant</strong><span>Explore an idea or solve a problem</span>
+          </button>
         </div>
+        <details className="home-options">
+          <summary>More workflows and session settings</summary>
+          <div className="home-cards">
+            {CARDS.slice(1).map((c) => <button key={c.t} className="home-card" disabled={starting}
+              onClick={() => void start(demo ? `${c.prompt} [[scenario:${c.scenario}]]` : c.prompt)}>
+              <span className="home-card-ico" style={{ background: c.bg, color: c.fg }} aria-hidden><c.icon size={15} /></span>
+              <span className="home-card-t">{c.t}</span><span className="home-card-d">{c.d}</span>
+            </button>)}
+          </div>
+          <section className="home-models" aria-label="Model">
+            <ModelPicker catalogue={catalogue} current={model} variant="button" label={`Model for the new session: ${model || "none chosen"}`}
+              onChoose={async (id) => onModel(id)} onAddKey={onAddKey} />
+          </section>
+        </details>
 
         <div className="home-panels">
           <section className="home-panel" aria-label="Open something">

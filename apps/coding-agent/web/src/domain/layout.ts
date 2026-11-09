@@ -90,7 +90,7 @@ export const DEFAULTS: Layout = {
   inspectorWidth: INSPECTOR_DEFAULT,
   assistantWidth: ASSISTANT_DEFAULT,
   railVisible: true,
-  inspectorVisible: true,
+  inspectorVisible: false,
   assistantVisible: true,
   railTab: "sessions",
 };

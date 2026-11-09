@@ -57,6 +57,6 @@ export function describeFence(d: FenceDecision, readOnly: boolean): { label: str
   /* With no session there IS no folder, so "outside your folder" would name something that does not
      exist. The chip has to describe the actual situation, because it is the first and often only
      thing a user reads before typing. */
-  if (!d.reason || /no session/i.test(d.reason)) return { label: "no session — will ask", tone: "warn" };
+  if (!d.reason || /no session|open a session/i.test(d.reason)) return { label: "Review on save", tone: "off" };
   return { label: "outside your folder — will ask", tone: "warn" };
 }

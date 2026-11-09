@@ -48,6 +48,7 @@ function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
 }
 
 export interface ViewerActions {
+  onDirtyChange?: (doc: Doc, dirty: boolean) => void;
   onAsk: (a: Action, doc: Doc) => void;
   onAttach: (doc: Doc) => void;
   /**
@@ -217,6 +218,7 @@ export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActi
             source={source}
             theme={actions.editing.theme}
             onSaved={onSaved}
+            onDirtyChange={(dirty) => actions.onDirtyChange?.(doc, dirty)}
             onCells={(next) => setCells(next)}
             onAskAction={(a) => actions.onAsk(a, doc)}
             onAskCell={(_cell, index) => actions.onAskCell(doc, index + 1)}

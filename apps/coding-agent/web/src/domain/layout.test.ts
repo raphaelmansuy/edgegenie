@@ -6,9 +6,10 @@ import {
   serialize, takesColumn, type Layout, bounds, maxWidth, reclamp, withWidth,
 } from "./layout";
 
-const at = (_w: number, extra: Partial<Layout> = {}): Layout => ({ ...DEFAULTS, ...extra });
+const at = (_w: number, extra: Partial<Layout> = {}): Layout => ({ ...DEFAULTS, inspectorVisible: true, ...extra });
 
 describe("mode", () => {
+  it("opens Context on demand so the first editor has room", () => { expect(DEFAULTS.inspectorVisible).toBe(false); });
   it("switches at 1180 and 820", () => {
     expect(modeFor(1600)).toBe("wide");
     expect(modeFor(1180)).toBe("mid");
@@ -321,7 +322,7 @@ describe("withWidth — every zone writes its own field", () => {
     expect(withWidth("assistant", two, 9999, wide).assistantWidth).toBe(560);
     expect(withWidth("assistant", two, 10, wide).assistantWidth).toBe(320);
     // with the inspector also a column the arithmetic is tighter: 1600 - 276 - 340 - 480
-    expect(withWidth("assistant", reset(), 9999, wide).assistantWidth).toBe(504);
+    expect(withWidth("assistant", { ...reset(), inspectorVisible: true }, 9999, wide).assistantWidth).toBe(504);
   });
 
   it("the centre keeps its minimum when the dock is dragged wide in a small window", () => {
@@ -338,6 +339,6 @@ describe("withWidth — every zone writes its own field", () => {
 
   it("bounds reports the limit that applies in this window", () => {
     expect(bounds("assistant", { ...reset(), inspectorVisible: false }, wide)).toEqual({ min: 320, max: 560 });
-    expect(bounds("assistant", reset(), wide)).toEqual({ min: 320, max: 504 });
+    expect(bounds("assistant", { ...reset(), inspectorVisible: true }, wide)).toEqual({ min: 320, max: 504 });
   });
 });

@@ -39,8 +39,13 @@ export function comboOf(e: {
   const parts: string[] = [];
   // A shortcut that means ⌘ on a Mac must mean Ctrl elsewhere, and never both.
   const mac = platform() === "mac";
-  if (mac ? e.metaKey : e.ctrlKey) parts.push("mod");
-  if (mac ? e.ctrlKey : e.metaKey) parts.push("ctrl");
+  // Editor tab cycling uses the physical Control key on every platform, including Windows/Linux
+  // where other Control chords are represented as `mod` in the registry.
+  if (key === "tab" && e.ctrlKey && !e.metaKey) parts.push("ctrl");
+  else {
+    if (mac ? e.metaKey : e.ctrlKey) parts.push("mod");
+    if (mac ? e.ctrlKey : e.metaKey) parts.push("ctrl");
+  }
   if (e.altKey) parts.push("alt");
   if (e.shiftKey) parts.push("shift");
   parts.push(key);
@@ -114,6 +119,7 @@ export const SHORTCUTS: Shortcut[] = [
   { id: "nextTab", combo: "ctrl+tab", label: "Next open tab", group: "Navigate", owner: "shell" },
   { id: "prevTab", combo: "ctrl+shift+tab", label: "Previous open tab", group: "Navigate", owner: "shell" },
   { id: "closeTab", combo: "mod+w", label: "Close the current tab", group: "Navigate", owner: "shell", when: "no-dialog" },
+  { id: "reopenTab", combo: "mod+shift+t", label: "Reopen the last closed tab", group: "Navigate", owner: "shell", when: "no-dialog" },
   // Panes
   { id: "railSessions", combo: "mod+1", label: "Sessions panel", group: "Panes", owner: "shell" },
   { id: "railFiles", combo: "mod+2", label: "Files panel", group: "Panes", owner: "shell" },

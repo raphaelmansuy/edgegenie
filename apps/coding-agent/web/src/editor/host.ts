@@ -27,7 +27,7 @@ export interface EditorHost {
   /** Called when the caret moves into a different cell (notebook mode only; null elsewhere). */
   onCellFocus(cb: (cellId: string | null) => void): void;
   /** Re-render with a different language or theme without losing the document or the cursor. */
-  reconfigure(language: string): void;
+  reconfigure(language: string, options?: { theme?: "light" | "dark"; readOnly?: boolean }): void;
   /** Focus the editor, optionally at a position (character offset). */
   focus(at?: number): void;
   /** Where the caret is now (character offset). Read-only geometry, never content. */
