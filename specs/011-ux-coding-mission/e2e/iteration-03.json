@@ -1,0 +1,262 @@
+{
+  "iteration": "iteration-03",
+  "mode": "Real local HTTP + SSE + ACP subprocess + SQLite, plus labelled presentation fixtures",
+  "results": [
+    {
+      "name": "M-01/07/11 real accepted instruction, streamed plan and copyable return link",
+      "ok": true
+    },
+    {
+      "name": "M-04/08 viewer close, offline/reconnect and honest completed-without-proof state",
+      "ok": true
+    },
+    {
+      "name": "M-02/08 queued follow-up never displaces foreground; stop cancels accepted queue",
+      "ok": true
+    },
+    {
+      "name": "M-04/06/09 actual local tool evidence, exact source inspection, output navigation, workspace-unavailable boundary and return",
+      "ok": true
+    },
+    {
+      "name": "M-08 approval survives return and requires an explicit working decision",
+      "ok": true
+    },
+    {
+      "name": "M-08 restart/reload shows saved progress; explicit restore does not resubmit work",
+      "ok": true
+    },
+    {
+      "name": "M-07/10 keyboard tabs, 320/375/390/1024/1920 layouts, light/dark contrast and reduced motion",
+      "ok": true
+    },
+    {
+      "name": "M-03 last achieved, current return, native mission picker and selected activity",
+      "ok": true
+    },
+    {
+      "name": "M-04/05/08/10 failure, archive, starting, audit, unknown plan, long unicode/path and missing-source states",
+      "ok": true
+    },
+    {
+      "name": "M-10 WebKit mobile layout, dark theme, live SSE and keyboard tab behavior",
+      "ok": true
+    },
+    {
+      "name": "M-12 no browser runtime errors; every retained screenshot passes geometry/contrast checks",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "iteration-03/01-running-desktop.png",
+    "iteration-03/02-offline.png",
+    "iteration-03/03-return-completed.png",
+    "iteration-03/04-stopped-queue.png",
+    "iteration-03/05-achieved-desktop.png",
+    "iteration-03/06-evidence-source.png",
+    "iteration-03/07-approval.png",
+    "iteration-03/08-recovery.png",
+    "iteration-03/09-wide-dark.png",
+    "iteration-03/10-tablet-light.png",
+    "iteration-03/11-mobile-light.png",
+    "iteration-03/12-mobile-dark.png",
+    "iteration-03/13-mobile-320.png",
+    "iteration-03/14-last-achieved.png",
+    "iteration-03/15-history-activity.png",
+    "iteration-03/16-blocked.png",
+    "iteration-03/17-failed.png",
+    "iteration-03/18-archived.png",
+    "iteration-03/19-empty.png",
+    "iteration-03/20-checking.png",
+    "iteration-03/21-long-request-dark.png",
+    "iteration-03/22-invalid-source-dark.png",
+    "iteration-03/23-webkit-mobile.png"
+  ],
+  "errors": [],
+  "audits": [
+    {
+      "name": "01-running-desktop",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "02-offline",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "03-return-completed",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "04-stopped-queue",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "05-achieved-desktop",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "06-evidence-source",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "07-approval",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "08-recovery",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "09-wide-dark",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "10-tablet-light",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "11-mobile-light",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "12-mobile-dark",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "13-mobile-320",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "14-last-achieved",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "15-history-activity",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "16-blocked",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "17-failed",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "18-archived",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "19-empty",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "20-checking",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "21-long-request-dark",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "22-invalid-source-dark",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "23-webkit-mobile",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    }
+  ]
+}

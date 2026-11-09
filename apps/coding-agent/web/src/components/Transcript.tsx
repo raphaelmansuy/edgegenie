@@ -11,6 +11,7 @@ import { ExtLink } from "./ExtLink";
 import { Chip } from "./Composer";
 import { CopyButton } from "./CopyButton";
 import { Markdown } from "./Markdown";
+import { missionProof } from "../domain/mission";
 
 const label = toolLabel;
 
@@ -143,7 +144,8 @@ function TurnActions({ turn, onRetry }: { turn: Turn; onRetry?: () => void }) {
 }
 
 function Evidence({ turn }: { turn: Turn }) {
-  const ok = turn.evidence.filter((r) => r.verified).length;
+  const proof = missionProof(turn);
+  const ok = proof.filter((r) => r.verified).length;
   const [open, setOpen] = useState(false);
   if (!turn.evidence.length) return null;
   const allProven = ok === turn.evidence.length;
@@ -155,9 +157,9 @@ function Evidence({ turn }: { turn: Turn }) {
         <span className="count">{allProven ? `all ${turn.evidence.length} proven` : `${ok} of ${turn.evidence.length} proven`}</span>
         <span className="chev" aria-hidden>{shown ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
       </button>
-      {shown && turn.evidence.map((r, i) => (
-        <div key={i} className={`evidence-row${r.verified ? "" : " unverified"}`}>
-          <span className="tick" aria-hidden>{r.verified ? <Check size={13} /> : <Alert size={13} />}</span>
+      {shown && proof.map(({ row: r, verified }, i) => (
+        <div key={i} className={`evidence-row${verified ? "" : " unverified"}`}>
+          <span className="tick" aria-hidden>{verified ? <Check size={13} /> : <Alert size={13} />}</span>
           <span className="req">{r.requirement || "(unnamed requirement)"}</span>
           <span className="ev-tool" title={r.tool || "no tool"}>{r.tool || "no tool"}</span>
         </div>

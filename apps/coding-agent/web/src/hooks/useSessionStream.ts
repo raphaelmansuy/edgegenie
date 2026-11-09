@@ -57,6 +57,11 @@ function mergeTurns(streamed: Turn[], server: Turn[]): Turn[] {
       thought: live.thought,
       tools: live.tools.length ? live.tools : t.tools,
       evidence: live.evidence.length ? live.evidence : t.evidence,
+      plan: live.plan ?? t.plan,
+      seconds: live.seconds ?? t.seconds,
+      blocked: live.blocked ?? t.blocked,
+      auditPasses: live.auditPasses,
+      usage: live.usage ?? t.usage,
       status: painted ? live.status : t.status,
     };
   });

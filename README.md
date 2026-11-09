@@ -95,6 +95,8 @@ templates/               the original shell-only kit (setup, fence, supervisor, 
 
 [Specification and implementation](specs/010-long-running/README.md): server-owned work, Lakebase/Postgres or SQLite journals, explicit recovery, and a return-oriented UI. [Browser evidence](specs/010-long-running/e2e/README.md) includes disconnect, page close, restart, permissions and responsive screenshots.
 
+The [mission workspace](specs/011-ux-coding-mission/README.md) shows the active instruction, live plan, outputs and source-backed evidence, with a history picker for completed work. [Browser validation and screenshots](specs/011-ux-coding-mission/e2e/README.md) cover both themes, mobile, queues, approvals and recovery.
+
 ## The study behind the app
 
 The application is the second half of this repository. The first half is the measurement that justified

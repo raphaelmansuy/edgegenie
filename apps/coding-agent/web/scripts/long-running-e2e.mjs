@@ -12,7 +12,7 @@ import net from 'node:net';
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const app = resolve(web, '..');
-const out = resolve(web, '../../../specs/010-long-running/e2e');
+const out = process.env.E2E_OUTPUT || resolve(web, '../../../specs/010-long-running/e2e');
 const shots = resolve(out, 'screenshots');
 mkdirSync(shots, { recursive: true });
 const scratch = mkdtempSync(resolve(tmpdir(), 'opengenie-lr-e2e-'));
@@ -62,7 +62,7 @@ async function pageFor(id = '', width = 1440, theme = 'light') {
   const page = await context.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(`${url}/${id ? `#/session/${id}` : ''}`);
-  if (id) await expect(page.locator('.run-status')).toBeVisible();
+  if (id) await expect(page.locator('.mission-screen')).toBeVisible();
   return { page, context };
 }
 async function submit(page, text) {
@@ -75,7 +75,7 @@ async function submit(page, text) {
   return /\/sessions\/([^/]+)\/messages/.exec(r.url())[1];
 }
 async function shot(page, name) {
-  await page.screenshot({ path: resolve(shots, `${name}.png`), fullPage: true });
+  await page.screenshot({ path: resolve(shots, `${name}.png`), fullPage: false });
   screenshots.push(`${name}.png`);
   // Check every captured state for viewport overflow and clipped run controls.
   const layout = await page.evaluate(() => {
@@ -157,7 +157,7 @@ try {
   await json(`/api/sessions/${id}/resume`, { method: 'POST' });
   for (const [width, theme, name] of [[1440, 'dark', '11-wide-dark'], [760, 'light', '12-narrow-light'], [390, 'dark', '13-mobile-dark']]) {
     ({ page, context } = await pageFor(id, width, theme));
-    await expect(page.getByText('Ready for your review', { exact: true })).toBeVisible();
+    await expect(page.locator('.mission-state')).toHaveText('Ready for review');
     await expect(page.locator('.answer').first()).toContainText('No Databricks operation was executed.');
     await shot(page, name); await context.close();
   }

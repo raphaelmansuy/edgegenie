@@ -1,0 +1,44 @@
+{
+  "iteration": "iteration-02",
+  "mode": "Real local HTTP + SSE + ACP subprocess + SQLite, plus labelled presentation fixtures",
+  "results": [
+    {
+      "name": "M-01/07/11 real accepted instruction, streamed plan and copyable return link",
+      "ok": true
+    },
+    {
+      "name": "failure",
+      "ok": false,
+      "detail": "Error: 02-offline\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 7\n\n  Object {\n    \"bodyScroll\": 0,\n    \"clipped\": Array [],\n-   \"contrast\": Array [],\n+   \"contrast\": Array [\n+     Object {\n+       \"ratio\": 1,\n+       \"required\": 4.5,\n+       \"text\": \" CopiedCopied to the clipboard\",\n+     },\n+   ],\n    \"missionOverflow\": false,\n    \"overflow\": false,\n  }\n    at captureRawStack (/Users/raphaelmansuy/Github/03-working/edgegenie/apps/coding-agent/web/node_modules/playwright-core/lib/coreBundle.js:9551:17)\n    at callMatcherAsStep (/Users/raphaelmansuy/Github/03-working/edgegenie/apps/coding-agent/web/node_modules/playwright/lib/matchers/expect.js:13342:57)\n    at Object.toEqual (/Users/raphaelmansuy/Github/03-working/edgegenie/apps/coding-agent/web/node_modules/playwright/lib/matchers/expect.js:13334:23)\n    at capture (/Users/raphaelmansuy/Github/03-working/edgegenie/apps/coding-agent/web/scripts/mission-e2e.mjs:63:23)\n    at async file:///Users/raphaelmansuy/Github/03-working/edgegenie/apps/coding-agent/web/scripts/mission-e2e.mjs:82:96"
+    }
+  ],
+  "screenshots": [
+    "iteration-02/01-running-desktop.png",
+    "iteration-02/02-offline.png"
+  ],
+  "errors": [],
+  "audits": [
+    {
+      "name": "01-running-desktop",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "02-offline",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": [
+        {
+          "text": " CopiedCopied to the clipboard",
+          "ratio": 1,
+          "required": 4.5
+        }
+      ]
+    }
+  ]
+}

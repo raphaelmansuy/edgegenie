@@ -87,6 +87,7 @@ export function AssistantDock(p: DockProps) {
   });
   const scroller = useRef<HTMLElement>(null);
   const last = turns.at(-1);
+  const canSend = p.session.status !== "archived" && !p.session.requiresResume && (!p.hasSession || p.conn === "live");
   /* Follow the stream while the reader is pinned to the bottom, and stop the moment they scroll up.
      "Pinned" is remembered from the last scroll event, not measured after an update: by the time an
      effect runs the content has already grown, so measuring then says "far from the bottom" for any
@@ -120,9 +121,9 @@ export function AssistantDock(p: DockProps) {
           one string that must be readable (AD-6), so the state is a glyph plus a word only when it
           needs action. */}
       <header className="dock-head">
-        <span className={`dock-state tone-${tone}`} title={dockTitle(state, p.hasSession, turns.length > 0)}>
+        <span className={`dock-state tone-${p.session.status === "archived" ? "archived" : tone}`} title={p.session.status === "archived" ? "Archived conversation — saved work is available for review." : dockTitle(state, p.hasSession, turns.length > 0)}>
           {state === "streaming" ? <span className="spin" aria-hidden /> : <span className="dock-state-dot" aria-hidden />}
-          <span className="dock-state-word">{dockStateWord(state, p.hasSession, turns.length > 0, last?.status)}</span>
+          <span className="dock-state-word">{p.session.status === "archived" ? "archived" : dockStateWord(state, p.hasSession, turns.length > 0, last?.status)}</span>
         </span>
         <span className="dock-context" title={p.focus.doc?.ref ?? "nothing is open"}>
           <LogoMark size={12} />
@@ -157,20 +158,20 @@ export function AssistantDock(p: DockProps) {
 
         {turns.map((t) => (
           // Retry is offered on the last turn only, and only when it is not the thing already running.
-          <TurnView key={t.id} turn={t} onRetry={t === last && state !== "streaming" && !p.session.requiresResume && t.status !== "interrupted" ? p.onRetry : undefined} />
+          <TurnView key={t.id} turn={t} onRetry={canSend && t === last && state !== "streaming" && state !== "asking" && t.status !== "interrupted" ? p.onRetry : undefined} />
         ))}
 
         {/* The next step, derived from what this turn actually did. Only on the last turn, and only when
             nothing is running or waiting: a chip beside a pending approval is a second place to look. */}
-        {last && state === "empty" && (
+        {last && canSend && state === "empty" && (
           <FollowUps items={followUps(last)} onPick={p.onSuggestion} />
         )}
 
         {state === "asking" && pending.map((a) => (
-          <InlineApproval key={a.approvalId} approval={a} disabled={p.conn !== "live"} onDecide={p.onApprove} />
+          <InlineApproval key={a.approvalId} approval={a} disabled={!canSend} onDecide={p.onApprove} />
         ))}
 
-        {state === "failed" && (
+        {state === "failed" && canSend && (
           <FailedTurn error={p.error} turn={last} onRetry={p.onRetry} />
         )}
 
@@ -190,7 +191,7 @@ export function AssistantDock(p: DockProps) {
       )}
       <Composer
         variant="dock"
-        disabled={p.session.status === "archived" || p.session.requiresResume || p.conn !== "live" && p.hasSession}
+        disabled={!canSend}
         busy={state === "streaming"}
         onSend={(text, mine = []) => p.onSend(text, [...p.attachments, ...mine])}
         onStop={p.onStop}

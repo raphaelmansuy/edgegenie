@@ -1,0 +1,67 @@
+{
+  "at": "2026-11-09T09:53:13.277Z",
+  "mode": "local deterministic ACP subprocess + SQLite",
+  "results": [
+    {
+      "name": "Server-owned work and a usable return link",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Offline is observation loss; mutation controls disabled",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Reconnect catches up without replacing the task",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Work finishes after every browser closes; a fresh page restores the answer",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Stop work cancels active and queued turns",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Permission survives viewer departure and the offered session option works",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Server restart preserves progress; restore loads context without replaying the prompt",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Status and actions fit wide, tablet and mobile layouts in both themes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "No browser runtime errors",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "screenshots": [
+    "01-server-running-light.png",
+    "02-offline.png",
+    "03-reconnected.png",
+    "04-return-after-page-close.png",
+    "05-queued-work.png",
+    "06-stopped-queue.png",
+    "07-waiting-for-approval.png",
+    "08-return-and-approve.png",
+    "09-server-restarted.png",
+    "10-agent-restored.png",
+    "11-wide-dark.png",
+    "12-narrow-light.png",
+    "13-mobile-dark.png"
+  ],
+  "browserErrors": []
+}
