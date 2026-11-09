@@ -159,6 +159,10 @@ export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, o
       { key: "Shift-Enter", preventDefault: true, run: () => onChord?.("run-next") ?? false },
       { key: "Mod-Enter", preventDefault: true, run: () => onChord?.("run-stay") ?? false },
       { key: "Alt-Enter", preventDefault: true, run: () => onChord?.("run-insert") ?? false },
+      { key: "Alt-Shift-Enter", preventDefault: true, run: () => onChord?.("run-all") ?? false },
+      { key: "Alt-Shift-ArrowUp", preventDefault: true, run: () => onChord?.("run-above") ?? false },
+      { key: "Alt-Shift-ArrowDown", preventDefault: true, run: () => onChord?.("run-below") ?? false },
+      { key: "Mod-Alt--", preventDefault: true, run: () => onChord?.("split") ?? false },
       ...completionKeymap,
       // After completionKeymap on purpose: Esc closes an open completion list first.
       { key: "Escape", run: () => onChord?.("escape") ?? false },

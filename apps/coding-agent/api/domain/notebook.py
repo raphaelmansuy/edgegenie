@@ -105,6 +105,9 @@ def _cell(index: int, block: list[str], lang: str, pre: str) -> Cell:
         first = body[0].strip() if body else ""
         if first.startswith("%"):
             word = first[1:].split()[0].lower() if first[1:].split() else ""
+            # %skip is a run directive, not a language. Keep the line and the notebook's language.
+            if word == "skip":
+                return _make(index, "code", lang, "\n".join(body))
             # Everything after the magic token is content, and its leading whitespace is content
             # too: a markdown cell whose first line is "\tindented" is a different cell from one
             # whose first line is "indented". Drop the magic, the one separator space the writer is

@@ -54,6 +54,15 @@ def test_running_one_cell_also_runs_the_python_above_it_but_shows_only_that_one(
     assert p.show == frozenset({2})
 
 
+def test_a_skip_cell_is_left_out_of_a_batch_and_run_when_asked_for():
+    nb = cells(("python", "a = 1"), ("python", "%skip\nb = 2"), ("python", "c = 3"))
+    batch = pyrun.plan(nb, upto=2, show=None)
+    assert [i for i, _ in batch.steps] == [0, 2]
+    alone = pyrun.plan(nb, upto=1, show={1})
+    assert [i for i, _ in alone.steps] == [0, 1]
+    assert alone.steps[1][1].strip() == "b = 2"
+
+
 def test_a_requested_cell_that_cannot_run_is_refused_with_its_reason():
     nb = cells(("python", "a = 1"), ("python", "%pip install x"))
     p = pyrun.plan(nb, upto=1, show={1})

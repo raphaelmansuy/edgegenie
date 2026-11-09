@@ -43,6 +43,29 @@ function adoptTurn(t: Record<string, unknown>): Turn {
   };
 }
 
+/** The detail route and the stream both deliver the same turn. The stream has the answer. */
+function mergeTurns(streamed: Turn[], server: Turn[]): Turn[] {
+  const byId = new Map(streamed.map((t) => [t.id, t]));
+  const ids = new Set(server.map((t) => t.id));
+  const merged = server.map((t) => {
+    const live = byId.get(t.id);
+    if (!live) return t;
+    const painted = live.answer || live.thought || live.tools.length > 0;
+    return {
+      ...t,
+      answer: live.answer,
+      thought: live.thought,
+      tools: live.tools.length ? live.tools : t.tools,
+      evidence: live.evidence.length ? live.evidence : t.evidence,
+      status: painted ? live.status : t.status,
+    };
+  });
+  for (const t of streamed) {
+    if (!ids.has(t.id) && !t.id.startsWith(PENDING)) merged.push(t);
+  }
+  return merged;
+}
+
 function hydrate(id: string, d: Partial<SessionView> | undefined): SessionView {
   const base = emptySession(id);
   return {
@@ -79,7 +102,20 @@ export function useSessionStream(sessionId: string | null) {
     setSession(hydrate(sessionId, undefined));
     let live = true;
     api.session(sessionId)
-      .then((d) => { if (live) setSession((prev) => hydrate(sessionId, { ...prev, ...(d as Partial<SessionView>) })); })
+      .then((d) => {
+        if (!live) return;
+        setSession((prev) => {
+          const detail = d as Partial<SessionView>;
+          const rawTurns = (d as { turns?: unknown }).turns;
+          // `hydrate` reads `turns` and would replace the streamed answer with the detail's copy,
+          // which has the prompt and not the answer. Keep what the stream already painted.
+          const next = hydrate(sessionId, { ...prev, ...detail, turns: undefined });
+          const server = Array.isArray(rawTurns)
+            ? (rawTurns as Record<string, unknown>[]).map(adoptTurn) : [];
+          if (prev.id !== sessionId || prev.turns.length === 0) return { ...next, turns: server };
+          return { ...next, turns: mergeTurns(prev.turns, server) };
+        });
+      })
       .catch((e: ApiError) => { if (live) setError(e.message); });
     return () => { live = false; };
   }, [sessionId]);

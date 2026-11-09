@@ -463,21 +463,31 @@ export function EditorSurface({
     }
   }, [target.language, python, runPython]);
 
-  /* Run all: the runnable cells, in order, one at a time, stopping at the first failure. Sequential on
-     purpose: a later cell may read what an earlier one made, and a failure that is not the first one
-     is noise. `stopAll` is a ref so Stop takes effect between cells without re-rendering the loop. */
+  /* Run a list of cells, in order, stopping at the first failure. Sequential on purpose: a later cell
+     may read what an earlier one made, and a failure that is not the first one is noise. `stopAll`
+     is a ref so Stop takes effect between cells without re-rendering the loop. Run all clears every
+     output first; a span clears only the cells it is about to run. */
   const [runningAll, setRunningAll] = useState(false);
+  const [batch, setBatch] = useState<string[] | null>(null);
   const plan = useMemo(() => runPlan(liveCells, python), [liveCells, python]);
-  const runAll = useCallback(async () => {
-    if (runningAll) return;
+  const runIds = useCallback(async (ids: string[], clearAllOutputs = false) => {
+    if (runningAll || ids.length === 0) return;
     const snapshot = liveCells;
-    const { runnable: ids, python: pyIds } = runPlan(snapshot, python);
-    if (ids.length === 0) return;
     stopAll.current = false;
     setRunningAll(true);
-    // A fresh run starts from a clean slate, so a stale result from last time cannot pass for this one.
-    setRuns({});
+    setBatch(ids);
+    if (clearAllOutputs) setRuns({});
+    else setRuns((r) => {
+      const next = { ...r };
+      ids.forEach((id) => { delete next[id]; });
+      return next;
+    });
     try {
+      const pyIds = ids.filter((id) => {
+        const cell = snapshot.find((c) => c.id === id);
+        if (!cell) return false;
+        return runAffordance(cell.kind === "markdown" ? "markdown" : cell.language || target.language, cell.source, python).engine === "python";
+      });
       // The Python cells are one job, started now and read at the end, while the SQL cells run in
       // order on the warehouse. They are different engines, so neither waits for the other; SQL still
       // stops at its first failure, and a Python failure is reported on its own cell.
@@ -493,8 +503,13 @@ export function EditorSurface({
       await pythonRun;
     } finally {
       setRunningAll(false);
+      setBatch(null);
     }
-  }, [liveCells, runCell, runPython, runningAll, python]);
+  }, [liveCells, runCell, runPython, runningAll, python, target.language]);
+  const runAll = useCallback(async () => {
+    const ids = runPlan(liveCells, python).runnable;
+    await runIds(ids, true);
+  }, [liveCells, python, runIds]);
 
   const clearAllRuns = useCallback(() => setRuns({}), []);
   const clearRun = useCallback((cell: Cell) => {
@@ -649,7 +664,7 @@ export function EditorSurface({
           notebook deserves (NB-1..NB-5), and it is the same document the save writes — the cells
           are serialized once, on save, by the same pure module the tests cover. */}
       {target.kind === "notebook" && !readOnly && liveCells.length > 0 && (
-        <NotebookBar plan={plan} runs={runs} runningAll={runningAll}
+        <NotebookBar plan={plan} runs={runs} runningAll={runningAll} batch={batch}
           onRunAll={() => void runAll()} onStop={() => { stopAll.current = true; }} onClear={clearAllRuns} />
       )}
 
@@ -691,6 +706,10 @@ export function EditorSurface({
           onSave={() => void save()}
           runs={runs}
           onRunCell={(cell) => void runCell(cell)}
+          onRunCells={(ids) => void runIds(ids)}
+          onClearOutputs={clearAllRuns}
+          onStopRun={() => { stopAll.current = true; }}
+          batch={batch}
           onClearRun={clearRun}
         />
       ) : isMarkdown && preview ? (

@@ -50,7 +50,9 @@ export type EditorHostFactory = (opts: {
   onChord?: (chord: EditorChord) => boolean;
 }) => EditorHost;
 
-export type EditorChord = "run-stay" | "run-next" | "run-insert" | "escape";
+export type EditorChord =
+  | "run-stay" | "run-next" | "run-insert" | "escape"
+  | "run-all" | "run-above" | "run-below" | "split";
 
 /** Load the real editor lazily.
  *

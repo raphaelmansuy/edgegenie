@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptySession, reduce, EVENT_TYPES, type AgentEvent } from "./events";
+import { emptySession, newTurn, reduce, EVENT_TYPES, type AgentEvent, type SessionView } from "./events";
 
 const ev = (e: Partial<AgentEvent> & { type: string }): AgentEvent =>
   ({ seq: 1, sessionId: "s", ...e }) as AgentEvent;
@@ -13,6 +13,18 @@ describe("reducer", () => {
     expect(s.turns).toHaveLength(1);
     expect(s.turns[0].answer).toBe("Hello world");
     expect(s.turns[0].prompt).toBe("Build it");
+  });
+
+  it("replaying turn.started onto a turn the detail route already inserted keeps one turn", () => {
+    // Measured on the live app: one "Hello" produced one server turn and two message deltas,
+    // and the dock drew two conversations because hydration and the stream each inserted the turn.
+    let s: SessionView = { ...emptySession("s"), turns: [{ ...newTurn("t1", 1, "Hello", "m"), status: "completed" }] };
+    s = reduce(s, ev({ type: "turn.started", turnId: "t1", text: "Hello", model: "m" }));
+    s = reduce(s, ev({ seq: 2, type: "message.delta", turnId: "t1", text: "Hello! " }));
+    s = reduce(s, ev({ seq: 3, type: "message.delta", turnId: "t1", text: "How can I help?" }));
+    expect(s.turns).toHaveLength(1);
+    expect(s.turns[0].prompt).toBe("Hello");
+    expect(s.turns[0].answer).toBe("Hello! How can I help?");
   });
 
   it("keeps tool cards in order and updates in place", () => {

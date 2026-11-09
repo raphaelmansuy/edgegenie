@@ -61,7 +61,6 @@ models:
     # prompt tokens for a 1×1 PNG. The image was consumed, so this model can see. Recorded here because
     # capability must be a declared fact with provenance — the whole point of `sees_images`.
     sees_images: true
-    default: true
 
   - id: databricks/databricks-gpt-oss-120b
     display_name: gpt-oss-120b
@@ -142,6 +141,10 @@ models:
     evidence: documented
     source: templates/opencode.gemini.json
     wire: vertex_native
+    # DOCUMENTED: Gemini generateContent accepts image parts (Google's Vertex image-understanding docs).
+    # Not measured in this workspace; the flag is a statement about the model, same as the other Gemini rows.
+    sees_images: true
+    default: true
 
   - id: google_vertex/google/gemini-3.8-pro
     display_name: gemini-3.8-pro
@@ -152,6 +155,7 @@ models:
     evidence: documented
     source: templates/opencode.gemini.json
     wire: vertex_native
+    sees_images: true
 
   - id: google_vertex/google/gemini-3.5-flash
     display_name: gemini-3.5-flash
@@ -162,6 +166,7 @@ models:
     evidence: documented
     source: templates/opencode.gemini.json
     wire: vertex_native
+    sees_images: true
 
   # ---- OpenAI. Caps are documented by the vendor; evidence stays `documented`, never `measured` ----
   - id: openai/gpt-4.1

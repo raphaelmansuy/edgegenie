@@ -77,6 +77,20 @@ class RunResult:
 RUNNABLE_LANGUAGES = frozenset({"sql"})
 
 _LEADING_MAGIC = re.compile(r"^\s*%(\w+)\s*", re.MULTILINE)
+_SKIP = re.compile(r"^\s*%skip\b[^\n]*\n?", re.IGNORECASE)
+
+
+def without_skip(source: str) -> tuple[bool, str]:
+    """Drop a leading `%skip` line. The flag is true when the directive was there.
+
+    `%skip` leaves a cell out of Run all, Run above and Run below. Running the cell on its own
+    executes what follows the directive, so the line must not be sent to the warehouse.
+    """
+    text = source or ""
+    match = _SKIP.match(text)
+    if not match:
+        return False, text
+    return True, text[match.end():]
 
 
 def is_runnable(language: str, source: str) -> tuple[bool, str]:
@@ -84,9 +98,10 @@ def is_runnable(language: str, source: str) -> tuple[bool, str]:
 
     The reason is written to be shown to a user: it names what would work instead.
     """
-    text = (source or "").strip()
+    skipped, body = without_skip(source or "")
+    text = body.strip()
     if not text:
-        return False, "this cell is empty"
+        return False, "this cell is only a %skip" if skipped else "this cell is empty"
     # A magic is the author's explicit statement of what the cell is, so it is read FIRST: `%sql` in a
     # Python notebook is the common Databricks spelling of a SQL cell, and answering "python needs a
     # cluster" to it would be both wrong and unhelpful.

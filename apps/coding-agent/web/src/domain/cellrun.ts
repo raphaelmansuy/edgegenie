@@ -28,6 +28,19 @@ export interface CellRun {
 export interface PythonPolicy { enabled: boolean; reason: string }
 export type Engine = "sql" | "python";
 
+/** `%skip` is a directive, not a language. It drops the cell from Run all / above / below.
+ *  A run of that cell alone executes whatever follows the directive (Databricks, run-notebook). */
+const SKIP_LINE = /^\s*%skip\b[^\n]*\n?/i;
+
+export function withoutSkip(source: string): { skipped: boolean; source: string } {
+  const text = source ?? "";
+  const m = SKIP_LINE.exec(text);
+  if (!m) return { skipped: false, source: text };
+  return { skipped: true, source: text.slice(m[0].length) };
+}
+
+export const SKIP_REASON = "Marked %skip — left out of Run all, Run above and Run below. Run the cell on its own to execute it.";
+
 export interface RunBadge { word: string; tone: "ok" | "warn" | "error" | "muted" }
 
 export function badge(run: CellRun | undefined): RunBadge {
@@ -77,8 +90,9 @@ export function showsMessage(run: CellRun | undefined): boolean {
 export function runAffordance(
   language: string, source: string, python?: PythonPolicy,
 ): { enabled: boolean; title: string; engine?: Engine } {
-  const text = (source ?? "").trim();
-  if (!text) return { enabled: false, title: "This cell is empty" };
+  const stripped = withoutSkip(source ?? "");
+  const text = stripped.source.trim();
+  if (!text) return { enabled: false, title: stripped.skipped ? "This cell is only %skip" : "This cell is empty" };
   const magic = /^\s*%(\w+)/.exec(text);
   const name = magic?.[1].toLowerCase();
   const lang = (language ?? "").toLowerCase();
@@ -124,6 +138,10 @@ export function runPlan(
   const plan: RunPlan = { runnable: [], skipped: [], python: [] };
   cells.forEach((c, index) => {
     if (c.kind === "markdown") return; // prose is not skipped, it is not code
+    if (withoutSkip(c.source).skipped) {
+      plan.skipped.push({ id: c.id, index, reason: SKIP_REASON });
+      return;
+    }
     const a = runAffordance(c.language || "python", c.source, python);
     if (a.enabled) { plan.runnable.push(c.id); if (a.engine === "python") plan.python.push(c.id); }
     else plan.skipped.push({ id: c.id, index, reason: a.title });
@@ -131,11 +149,78 @@ export function runPlan(
   return plan;
 }
 
-/** The sentence beside the Run all button, from the plan and the results so far. */
-export function runAllLabel(plan: RunPlan, runs: Record<string, CellRun>, running: boolean): string {
-  const done = plan.runnable.filter((id) => runs[id] && runs[id].state !== "running").length;
-  const failed = plan.runnable.filter((id) => runs[id]?.state === "failed").length;
-  if (running) return `running ${Math.min(done + 1, plan.runnable.length)} of ${plan.runnable.length}`;
+/** Which runnable cells a span covers. Above excludes the anchor; below includes it. */
+export function spanIds(
+  cells: { id: string; kind: string; language: string; source: string }[],
+  python: PythonPolicy | undefined,
+  anchor: number,
+  span: "all" | "above" | "below" | "these",
+  these: readonly string[] = [],
+): string[] {
+  const ids = runPlan(cells, python).runnable;
+  if (span === "all") return ids;
+  return ids.filter((id) => {
+    if (span === "these") return these.includes(id);
+    const i = cells.findIndex((c) => c.id === id);
+    return span === "above" ? i < anchor : i >= anchor;
+  });
+}
+
+export interface TableQuery {
+  text: string;
+  sortCol: number | null;
+  sortDir: "asc" | "desc";
+}
+
+function asNumber(v: string): number | null {
+  const t = v.trim();
+  if (!/^-?[\d,]+\.?\d*$/.test(t) && !/^-?\d*\.\d+$/.test(t)) return null;
+  const n = Number(t.replace(/,/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Filter then sort a result. Numbers sort as numbers; empty cells stay last either way. */
+export function presentRows(rows: readonly (string | null)[][], q: TableQuery): (string | null)[][] {
+  const needle = q.text.trim().toLowerCase();
+  const matched = needle
+    ? rows.filter((r) => r.some((c) => (c ?? "").toLowerCase().includes(needle)))
+    : rows.slice();
+  if (q.sortCol === null) return matched;
+  const col = q.sortCol;
+  const dir = q.sortDir === "desc" ? -1 : 1;
+  return matched.slice().sort((a, b) => {
+    const av = a[col] ?? null;
+    const bv = b[col] ?? null;
+    const aEmpty = av === null || av === "";
+    const bEmpty = bv === null || bv === "";
+    if (aEmpty && bEmpty) return 0;
+    if (aEmpty) return 1;
+    if (bEmpty) return -1;
+    const an = asNumber(av);
+    const bn = asNumber(bv);
+    const cmp = an !== null && bn !== null
+      ? an - bn
+      : av.localeCompare(bv, undefined, { numeric: true, sensitivity: "base" });
+    return cmp * dir;
+  });
+}
+
+/** A copy of the visible table. Tabs and newlines in a cell would break the paste, so they become spaces. */
+export function toTsv(columns: readonly string[], rows: readonly (string | null)[][]): string {
+  const cell = (v: string | null) => (v ?? "").replace(/\t/g, " ").replace(/\r?\n/g, " ");
+  const line = (r: readonly (string | null)[]) => columns.map((_, i) => cell(r[i] ?? null)).join("\t");
+  return [columns.map(cell).join("\t"), ...rows.map(line)].join("\n");
+}
+
+/** The sentence beside the Run all button, from the plan and the results so far.
+ *  While a span is running, the count is that span, not the whole notebook. */
+export function runAllLabel(
+  plan: RunPlan, runs: Record<string, CellRun>, running: boolean, batch?: readonly string[] | null,
+): string {
+  const ids = running && batch && batch.length ? batch : plan.runnable;
+  const done = ids.filter((id) => runs[id] && runs[id].state !== "running").length;
+  const failed = ids.filter((id) => runs[id]?.state === "failed").length;
+  if (running) return `running ${Math.min(done + 1, ids.length)} of ${ids.length}`;
   if (plan.runnable.length === 0) return plan.skipped.length ? "no cell here can run in the app" : "nothing to run";
   const skipped = plan.skipped.length ? ` · ${plan.skipped.length} skipped` : "";
   if (done === 0) return `${plan.runnable.length} ${plan.runnable.length === 1 ? "cell" : "cells"} can run${skipped}`;

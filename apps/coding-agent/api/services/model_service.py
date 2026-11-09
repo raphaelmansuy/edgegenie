@@ -153,6 +153,10 @@ class ModelService:
 
     def set_default(self, model_id: str) -> None:
         self._default = model_id
+        # A session reads `last()`, not the store. Invalidating alone leaves that snapshot on the
+        # previous default, so the session opened immediately after this call still used the old model.
+        if self._last is not None:
+            self._last = replace(self._last, default_model=model_id)
         self.invalidate()
 
     # -- assembly -------------------------------------------------------------

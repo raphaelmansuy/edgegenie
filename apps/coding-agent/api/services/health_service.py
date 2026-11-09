@@ -66,6 +66,7 @@ class HealthService:
 
         adapter = adapter_for(spec.id.provider)
         secret = None
+        ref = None
         if spec.credential_kind is not CredentialKind.NONE:
             ref = await self._credentials.find(spec.id.provider, user_id=user_id)
             if ref is None:
@@ -84,8 +85,16 @@ class HealthService:
                 return await self._record(spec, "unknown",
                                           "no workspace token to probe with", source="probe")
 
-        desc = adapter.descriptor(spec, host=self._host,
-                                  project=getattr(secret, "project_hint", "") or "")
+        # The credential handle already knows the project (it is how the settings screen names it).
+        # The opened secret often does not: `Secret` has no project field, and parsing the JSON again
+        # fails closed. Leaving the project blank makes Vertex answer "permission denied on project
+        # {project}" — the placeholder, not a real denial.
+        project = (getattr(ref, "project_hint", "") or "") if ref is not None else ""
+        if not project:
+            project = getattr(secret, "project_hint", "") or ""
+        if not project and secret is not None and hasattr(adapter, "project_of"):
+            project = adapter.project_of(secret)
+        desc = adapter.descriptor(spec, host=self._host, project=project)
         try:
             state, detail = await adapter.probe(desc, secret)  # type: ignore[attr-defined]
         except Exception as exc:  # noqa: BLE001 - a probe must never raise into a request

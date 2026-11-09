@@ -11,17 +11,19 @@
 import { runAllLabel, type CellRun, type RunPlan } from "../domain/cellrun";
 import { Close, PlayAll, Stop } from "./Icons";
 
-export function NotebookBar({ plan, runs, runningAll, onRunAll, onStop, onClear }: {
+export function NotebookBar({ plan, runs, runningAll, batch, onRunAll, onStop, onClear }: {
   plan: RunPlan;
   runs: Record<string, CellRun>;
   runningAll: boolean;
+  /** The cells this run is walking, when it is a span rather than the whole notebook. */
+  batch?: readonly string[] | null;
   onRunAll: () => void;
   onStop: () => void;
   onClear: () => void;
 }) {
   const hasOutputs = Object.keys(runs).length > 0;
   const warehouse = Object.values(runs).map((r) => r.warehouse).filter(Boolean).at(-1);
-  const label = runAllLabel(plan, runs, runningAll);
+  const label = runAllLabel(plan, runs, runningAll, batch);
   const skipped = plan.skipped.map((s) => `cell ${s.index + 1}: ${s.reason}`).join("\n");
   return (
     <div className="nb-bar" role="toolbar" aria-label="Notebook">
@@ -38,23 +40,24 @@ export function NotebookBar({ plan, runs, runningAll, onRunAll, onStop, onClear 
         </button>
       )}
       <span className="nb-bar-status" role="status" title={skipped || undefined}>{label}</span>
-      <span className="nb-bar-spacer" />
-      <span className="nb-bar-compute" title="SQL cells run on a serverless SQL warehouse, as you">
-        <span className="nb-bar-dot" aria-hidden />
-        {warehouse && !plan.python.length ? warehouse : "Serverless SQL"}
-      </span>
-      {plan.python.length > 0 && (
-        <span className="nb-bar-compute is-app"
-          title="Python cells run on serverless compute as the app's service principal, not as you. They run together as one job, so cells share variables.">
+      <span className="nb-bar-end">
+        <span className="nb-bar-compute" title="SQL cells run on a serverless SQL warehouse, as you">
           <span className="nb-bar-dot" aria-hidden />
-          Python · as the app
+          {warehouse && !plan.python.length ? warehouse : "Serverless SQL"}
         </span>
-      )}
-      {hasOutputs && !runningAll && (
-        <button type="button" className="btn sm ghost" onClick={onClear} title="Clear every output">
-          <Close size={11} /> Clear outputs
-        </button>
-      )}
+        {plan.python.length > 0 && (
+          <span className="nb-bar-compute is-app"
+            title="Python cells run on serverless compute as the app's service principal, not as you. They run together as one job, so cells share variables.">
+            <span className="nb-bar-dot" aria-hidden />
+            Python · as the app
+          </span>
+        )}
+        {hasOutputs && !runningAll && (
+          <button type="button" className="btn sm ghost" onClick={onClear} title="Clear every output">
+            <Close size={11} /> Clear outputs
+          </button>
+        )}
+      </span>
     </div>
   );
 }

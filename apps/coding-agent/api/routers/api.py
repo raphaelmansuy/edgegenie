@@ -916,11 +916,12 @@ async def notebook_run_cell(request: Request, body: RunCell) -> dict:
     ok, why = cellrun.is_runnable(body.language, body.source)
     if not ok:
         return cellrun.refused(why).to_dict()
+    _, statement = cellrun.without_skip(body.source)
     clock = cellrun.Clock()
     started = clock.start()
     try:
         payload, warehouse = await request.app.state.catalog.run_sql(
-            body.source, _user_token(request), limit=cellrun.MAX_ROWS,
+            statement, _user_token(request), limit=cellrun.MAX_ROWS,
             wait_seconds=cellrun.MAX_WAIT_SECONDS)
     except PermissionError as exc:
         return cellrun.refused(str(exc)).to_dict()

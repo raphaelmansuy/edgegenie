@@ -51,10 +51,15 @@ fi
 body=$(curl -s --max-time 30 -X POST "$URL/api/blobs" "${H[@]}" -H 'content-type: application/json' -d '{}')
 if printf '%s' "$body" | grep -q '<!doctype html'; then
   bad 'POST /api/blobs fell through to the front end — the backend is OLDER than this checkout'
+elif printf '%s' "$body" | grep -q 'sessionId'; then
+  # An empty body is invalid either way. The OLD handler lists sessionId as required; the current one
+  # does not, because the home screen has no session until the first message. Presence of that field
+  # name in the error is how a previous deploy (which already had /api/blobs) was told apart from this one.
+  bad 'POST /api/blobs still requires a session — attaching before the first message is not deployed'
 elif printf '%s' "$body" | grep -qE '"(detail|type)"|blobId'; then
-  ok 'POST /api/blobs is served by the backend (the attach feature is deployed)'
+  ok 'POST /api/blobs is served, and a session is not required (home-screen attach)'
 else
-  bad "POST /api/blobs gave an unexpected answer: ${body:0:100}"
+  bad "POST /api/blobs gave an unexpected answer: ${body:0:160}"
 fi
 
 # The finite event read, added with the vision work.

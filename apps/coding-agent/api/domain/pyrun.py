@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from .cellrun import RunResult, RunState
+from .cellrun import RunResult, RunState, without_skip
 
 #: Shown on every Python result. It is the whole point of the labelling: this did not run as you.
 WHERE = "Serverless · as the app"
@@ -66,9 +66,10 @@ def python_source(language: str, source: str) -> tuple[str | None, str]:
     author saying what the cell is, so it is respected: `%sql` is a SQL cell (it runs on a warehouse,
     not here) and `%pip`/`%sh` cannot be run by `exec`.
     """
-    text = (source or "").strip("\n")
+    skipped, rest = without_skip(source or "")
+    text = (rest if skipped else (source or "")).strip("\n")
     if not text.strip():
-        return None, "this cell is empty"
+        return None, "this cell is only a %skip" if skipped else "this cell is empty"
     first = text.lstrip().splitlines()[0]
     magic = _MAGIC.match(first)
     if magic:
@@ -100,6 +101,11 @@ def plan(cells: list[PyCell], *, upto: int | None, show: set[int] | None = None)
     for cell in cells:
         if cell.index > last:
             break
+        skipped, _rest = without_skip(cell.source)
+        # A %skip cell runs only when this request asked for it. In a batch it is omitted, and it
+        # does not leave variables behind — that is what "skip" means.
+        if skipped and not (show is not None and cell.index in show):
+            continue
         body, why = python_source(cell.language, cell.source)
         if body is None:
             if show is not None and cell.index in show:

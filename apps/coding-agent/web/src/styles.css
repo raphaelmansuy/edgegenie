@@ -1803,7 +1803,8 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
 /* ---- notebook cells ---- */
 /* The ONE scroller of the notebook (007 SC-2). `contain` because at the end of a 41-cell notebook a
    trackpad flick must not become a browser navigation. */
-.cells { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain;
+.nb-stage { flex: 1; min-height: 0; min-width: 0; display: flex; container-type: inline-size; }
+.cells { flex: 1; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain;
   padding: 10px 12px 24px; display: flex; flex-direction: column; gap: 8px; }
 
 .cell-block {
@@ -1811,6 +1812,8 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
   background: var(--surface); transition: border-color var(--dur), box-shadow var(--dur);
 }
 .cell-block.is-focused { border-color: var(--blue-300); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue-600) 10%, transparent); }
+.cell-block.is-selected { box-shadow: inset 3px 0 0 var(--blue-600); }
+.cell-block.is-menu { position: relative; z-index: 4; }
 .cell-block:focus { outline: none; }
 /* COMMAND mode: the cell itself is selected (single keys act on it). A solid bar on the left edge says
    so, distinct from the soft ring of EDIT mode, as in Databricks and Jupyter. */
@@ -2360,7 +2363,7 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
 
 .cell-output-bar {
   display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 9px;
-  background: var(--surface-2); border-bottom: 1px solid var(--line); font-size: 11px;
+  background: var(--surface-2); border-bottom: 1px solid var(--line); font-size: 12px;
   color: var(--ink-3); min-width: 0;
 }
 .cell-state { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; flex: none; }
@@ -2369,7 +2372,7 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
 .cell-state.tone-error { color: var(--pink-700); }
 .cell-state.tone-muted { color: var(--ink-3); }
 .cell-output-when { font-variant-numeric: tabular-nums; flex: none; }
-.cell-output-where { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.8; min-width: 0; }
+.cell-output-where { flex: 0 1 auto; min-width: 4em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.85; }
 .cell-output-spacer { flex: 1; min-width: 4px; }
 .cell-output-act {
   width: 20px; height: 20px; display: grid; place-items: center; border: 0; border-radius: 4px;
@@ -2548,13 +2551,13 @@ h2.rail-group { margin: 0; text-transform: none; }
 .cell-fix:hover { background: var(--blue-100); }
 
 /* Notebook toolbar. */
-.nb-bar { display: flex; align-items: center; gap: 10px; padding: 6px 14px; border-bottom: 1px solid var(--line); background: var(--surface); flex: none; min-width: 0; }
+.nb-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 6px 14px; border-bottom: 1px solid var(--line); background: var(--surface); flex: none; min-width: 0; }
 .nb-bar .btn { flex: none; }
-.nb-bar-status { font-size: 12px; color: var(--ink-3); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nb-bar-spacer { flex: 1; }
-.nb-bar-compute { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-2); padding: 3px 9px;
-  border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface-2); flex: none; max-width: 40%;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The status is one sentence. It keeps that sentence on one line; the chip wraps before the words do. */
+.nb-bar-status { flex: 0 0 auto; font-size: 12.5px; line-height: 1.35; color: var(--ink-2); white-space: nowrap; }
+.nb-bar-end { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex: none; }
+.nb-bar-compute { display: inline-flex; align-items: center; gap: 6px; height: 26px; font-size: 12px; color: var(--ink-2); padding: 0 10px;
+  border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-sm); flex: none; white-space: nowrap; }
 .nb-bar-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green-700); flex: none; }
 .btn.stop { color: var(--pink-700); border-color: var(--pink-300); }
 
@@ -2699,6 +2702,125 @@ h2.rail-group { margin: 0; text-transform: none; }
 /* A chip that says the work runs as the app, not as you: warm, so it is never read as "your" compute. */
 .nb-bar-compute.is-app { border-color: var(--yellow-300); background: var(--yellow-100); color: var(--yellow-800); }
 .nb-bar-compute.is-app .nb-bar-dot { background: var(--yellow-800); }
+
+.cell-run-group { position: relative; display: inline-flex; align-items: center; }
+.cell-run-more { padding: 0 4px; font-size: 9px; line-height: 1; }
+/* Menus follow the same popover as gr8r-studio: 10px radius, the shared pop shadow, 30px rows. */
+.cell-run-menu {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 5;
+  display: flex; flex-direction: column; min-width: 188px;
+  padding: 4px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow-pop);
+  animation: rise 0.14s var(--ease);
+}
+.cell-run-menu button {
+  text-align: left; font-size: 13.5px; min-height: 30px; padding: 0 8px; border-radius: var(--radius-sm);
+  color: var(--ink); background: transparent;
+}
+.cell-run-menu button:hover:not(:disabled) { background: var(--surface-2); }
+.cell-run-menu button:disabled { color: var(--ink-3); }
+
+.cell-output-grid { max-height: none; overflow: visible; display: flex; flex-direction: column; }
+.cell-output-grid .grid-wrap { max-height: 260px; overflow: auto; }
+.cell-output-tools {
+  display: flex; align-items: center; gap: 8px; padding: 8px; border-bottom: 1px solid var(--line); flex: none;
+}
+.cell-filter {
+  flex: 1; min-width: 0; height: 26px; padding: 0 8px; font-size: 12.5px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink);
+}
+.cell-filter:focus { outline: none; border-color: color-mix(in srgb, var(--blue-600) 55%, var(--line-strong)); }
+.cell-filter-n, .cell-copied { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; flex: none; }
+.cell-sort {
+  font: inherit; font-weight: 500; color: inherit; background: transparent; border: 0; padding: 0;
+  text-align: left; cursor: pointer;
+}
+.cell-sort:hover { color: var(--ink); }
+/* A result reads as a quiet table: hairline dividers, a 500-weight header, a surface hover. */
+.cell-output-grid table.grid { border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+.cell-output-grid table.grid th {
+  height: 32px; font-weight: 500; font-size: 12px; color: var(--ink-2);
+  background: var(--surface); border-bottom: 1px solid var(--line); border-right: 1px solid var(--line);
+}
+.cell-output-grid table.grid td {
+  height: 34px; background: var(--surface); border-bottom: 1px solid var(--line); border-right: 1px solid var(--line);
+}
+.cell-output-grid table.grid th:last-child, .cell-output-grid table.grid td:last-child { border-right: 0; }
+.cell-output-grid table.grid tbody tr:hover,
+.cell-output-grid table.grid tbody tr:hover td { background: var(--surface-2); }
+
+.nb-map {
+  flex: none; align-self: stretch; min-height: 0; display: flex; flex-direction: row; align-items: stretch;
+  border-left: 1px solid var(--line); background: var(--surface); position: relative;
+}
+.nb-map-rail {
+  width: 36px; flex: none; min-height: 0; display: flex; flex-direction: column; align-items: center;
+  gap: 6px; padding: 8px 0;
+}
+.nb-map-bars { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.nb-map-bar {
+  width: 14px; flex: 1 1 0; min-height: 10px; max-height: 28px; border: 0; border-radius: 4px; padding: 0; cursor: pointer;
+}
+.nb-map-bar[data-tone="idle"] { background: color-mix(in srgb, var(--ink-3) 42%, var(--surface)); }
+.nb-map-bar[data-tone="skip"], .nb-map-bar[data-tone="queued"] { background: var(--ink-3); }
+.nb-map-bar[data-tone="skip"] { opacity: 0.45; }
+.nb-map-bar[data-tone="running"] { background: var(--yellow-800); }
+.nb-map-bar[data-tone="ok"] { background: var(--green-700); }
+.nb-map-bar[data-tone="failed"] { background: var(--pink-700); }
+.nb-map-pin {
+  width: 22px; height: 22px; border-radius: var(--radius-sm); border: 1px solid transparent; background: transparent;
+  display: grid; place-items: center; flex: none; color: var(--ink-2);
+}
+.nb-map-pin:hover { background: var(--surface-2); color: var(--ink); }
+.nb-map-pin span { width: 8px; height: 2px; background: currentColor; box-shadow: 0 -3px 0 currentColor, 0 3px 0 currentColor; }
+.nb-map.is-open .nb-map-pin { background: var(--surface-3); color: var(--ink); }
+.nb-map-pop {
+  display: none; flex-direction: column; width: 248px; min-height: 0; overflow: auto;
+  background: var(--surface);
+}
+/* The list opens when the pin is on, or when a row inside it has focus. Hover alone used to cover
+   the cell the user was reading every time the pointer crossed the rail. */
+.nb-map.is-open .nb-map-pop,
+.nb-map:focus-within .nb-map-pop {
+  display: flex; position: static; right: auto; top: auto; z-index: auto;
+  width: 260px; max-height: none; height: auto; align-self: stretch;
+  border: 0; border-right: 1px solid var(--line); border-radius: 0; box-shadow: none;
+}
+/* A narrow notebook cannot spare a column. The list floats over the right edge so a title stays a title. */
+@container (max-width: 760px) {
+  .nb-map.is-open .nb-map-pop,
+  .nb-map:focus-within .nb-map-pop {
+    position: absolute; right: 42px; top: 8px; z-index: 8;
+    width: min(280px, 68cqw); height: auto; max-height: min(420px, 70vh); align-self: auto;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow-pop);
+  }
+}
+.nb-map-head, .nb-map-foot { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.nb-map-head { border-bottom: 1px solid var(--line); }
+.nb-map-head strong {
+  flex: 1; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3);
+}
+.nb-map-head span, .nb-map-state { color: var(--ink-3); font-variant-numeric: tabular-nums; font-size: 12px; }
+.nb-map-pop ul { list-style: none; margin: 0; padding: 4px; }
+.nb-map-row {
+  width: 100%; display: flex; align-items: flex-start; gap: 8px; min-height: 30px; padding: 5px 8px;
+  border-radius: var(--radius-sm); background: transparent; text-align: left; color: var(--ink); font-size: 13.5px; line-height: 1.35;
+}
+.nb-map-row:hover { background: var(--surface-2); }
+.nb-map-dot { width: 7px; height: 7px; margin-top: 4px; border-radius: 50%; flex: none; background: var(--surface-3); }
+.nb-map-dot[data-tone="ok"] { background: var(--green-700); }
+.nb-map-dot[data-tone="failed"] { background: var(--pink-700); }
+.nb-map-dot[data-tone="running"] { background: var(--yellow-800); }
+.nb-map-dot[data-tone="skip"], .nb-map-dot[data-tone="queued"] { background: var(--ink-3); }
+.nb-map-no { width: 18px; flex: none; font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+.nb-map-label { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.nb-map-foot { border-top: 1px solid var(--line); position: sticky; bottom: 0; background: var(--surface); }
+.keys-note { margin: 0 0 8px; font-size: 12px; color: var(--ink-3); }
+@media (prefers-reduced-motion: reduce) {
+  .nb-map-bar[data-tone="running"] { background: var(--yellow-800); }
+  .cell-run-menu { animation: none; }
+}
 
 /* Why a message did not go. It sits on the composer, where the eyes already are, and the text stays. */
 .composer-error { margin: 0 0 6px; padding: 7px 10px; font-size: 12.5px; line-height: 1.45; color: var(--pink-700);

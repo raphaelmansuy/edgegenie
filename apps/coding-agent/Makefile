@@ -125,9 +125,20 @@ sync: ## Copy the TRACKED files into the workspace folder the app deploys from
 	@printf '\033[1msync\033[0m    git ls-files -> $(WS_SRC)\n'
 	@cd $(APP_DIR) && ./scripts/sync-app-source.sh "$(WS_SRC)"
 
-deploy-only: ## Deploy and wait for a terminal state (does not verify)
+deploy-only: ## Deploy and wait until SUCCEEDED (does not verify the live URL)
 	@printf '\033[1mdeploy\033[0m  $(APP)\n'
-	@cd $(APP_DIR) && databricks apps deploy $(APP) --wait 2>&1 | tail -5
+	@# The CLI waits by default. `--wait` is not a flag: it prints help and exits non-zero, and piping
+	@# that help through `tail` used to hide the failure (tail exits 0), so make reported success for a
+	@# deploy that never started. pipefail keeps the CLI's exit code, and SUCCEEDED must appear.
+	@log=$$(mktemp); \
+	  set -o pipefail; \
+	  cd $(APP_DIR) && databricks apps deploy $(APP) 2>&1 | tee "$$log" | tail -30; \
+	  code=$$?; \
+	  if [ $$code -ne 0 ] || ! grep -q SUCCEEDED "$$log"; then \
+	    printf '\033[31mdeploy failed\033[0m (exit %s). The lines above are the reason.\n' "$$code"; \
+	    rm -f "$$log"; exit 1; \
+	  fi; \
+	  rm -f "$$log"
 
 deploy: sync deploy-only verify ## sync -> deploy -> verify the LIVE url. The only target that fully deploys
 

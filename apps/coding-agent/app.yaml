@@ -40,8 +40,14 @@ env:
   - name: APP_LLM_KEK
     valueFrom: llm-kek
   # The Vertex service-account key arrives as an app RESOURCE (a Databricks secret), never as text
-  # in this file. `LLM_VERTEX_PROJECT` names the project a key bills to when the key omits it.
+  # in this file. The project is named twice because two readers use two prefixes:
+  # `LLM_VERTEX_PROJECT` fills a key that omitted project_id (the vault reads it raw);
+  # `APP_LLM_VERTEX_PROJECT` is what Settings reads (env prefix APP_) and what the probe URL
+  # falls back to. Without the APP_ one, the URL keeps the literal "{project}" and Vertex
+  # answers "permission denied on resource project {project}".
   - name: LLM_VERTEX_KEY
     valueFrom: vertex-sa
   - name: LLM_VERTEX_PROJECT
+    value: mobioos-506015
+  - name: APP_LLM_VERTEX_PROJECT
     value: mobioos-506015

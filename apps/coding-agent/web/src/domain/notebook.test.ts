@@ -8,8 +8,8 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  checkCells, insertCell, MAX_CELLS, moveCell, newCell, parseCells, removeCell,
-  serializeCells, setCellKind, type Cell,
+  checkCells, insertCell, MAX_CELLS, mergeWithNext, moveCell, newCell, parseCells, removeCell,
+  serializeCells, setCellKind, splitCell, type Cell,
 } from "./notebook";
 
 const PREFIX: Record<string, string> = { PYTHON: "#", SQL: "--", SCALA: "//", R: "#" };
@@ -157,5 +157,30 @@ describe("a block that is only the notebook header is not a cell", () => {
     const cells = parseCells(src, "SQL");
     expect(cells).toHaveLength(1);
     expect(cells[0].source).toContain("select 2");
+  });
+  it("keeps %skip as a directive in the notebook's language, not as a language of its own", () => {
+    const src = ["# Databricks notebook source", "# MAGIC %skip", "# MAGIC select 1"].join("\n");
+    const cells = parseCells(src, "PYTHON");
+    expect(cells).toHaveLength(1);
+    expect(cells[0].language).toBe("python");
+    expect(cells[0].source).toBe("%skip\nselect 1");
+  });
+});
+
+describe("merge and split", () => {
+  const a = newCell("code", "sql", "select 1");
+  const b = newCell("code", "sql", "select 2");
+  it("joins a cell with the next and leaves the rest", () => {
+    const merged = mergeWithNext([a, b], 0);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].source).toBe("select 1\nselect 2");
+    expect(merged[0].id).toBe(a.id);
+  });
+  it("splits at the caret and does nothing when nothing follows it", () => {
+    const split = splitCell([a], 0, "select ".length);
+    expect(split).toHaveLength(2);
+    expect(split[0].source).toBe("select ");
+    expect(split[1].source).toBe("1");
+    expect(splitCell([a], 0, a.source.length)).toHaveLength(1);
   });
 });

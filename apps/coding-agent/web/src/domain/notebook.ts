@@ -101,6 +101,9 @@ function cellOf(index: number, block: string[], lang: string, pre: string): Cell
     const first = (body[0] ?? "").trim();
     if (first.startsWith("%")) {
       const word = (first.slice(1).split(/\s/)[0] ?? "").toLowerCase();
+      // %skip is a run directive, not a language. Keep the line (so Run all can see it) and the
+      // notebook's language (so the rest of the cell can still be run on its own).
+      if (word === "skip") return make(index, "code", lang, body.join("\n"));
       const rest = [afterMagic(body[0]), ...body.slice(1)].filter((r, i) => i > 0 || r);
       const kind: CellKind = word === "md" ? "markdown" : "code";
       return make(index, kind, MAGICS[word] ?? (word || lang), rest.join("\n"));
@@ -209,4 +212,29 @@ export function setCellKind(cells: readonly Cell[], id: string, kind: CellKind, 
 
 export function updateCellSource(cells: readonly Cell[], id: string, source: string): Cell[] {
   return cells.map((c) => (c.id === id ? { ...c, source } : c));
+}
+
+/** Join this cell with the next. The first cell's kind and language win; the text is both, in order. */
+export function mergeWithNext(cells: readonly Cell[], index: number): Cell[] {
+  const a = cells[index];
+  const b = cells[index + 1];
+  if (!a || !b) return cells.slice();
+  const source = `${a.source.replace(/\s+$/, "")}\n${b.source.replace(/^\s+/, "")}`;
+  const out = cells.slice();
+  out.splice(index, 2, { ...a, source });
+  return out;
+}
+
+/** Split a cell at a character offset. Nothing after the caret means there is nothing to split. */
+export function splitCell(cells: readonly Cell[], index: number, at: number): Cell[] {
+  const a = cells[index];
+  if (!a) return cells.slice();
+  const pos = Math.max(0, Math.min(at, a.source.length));
+  const left = a.source.slice(0, pos).replace(/\n$/, "");
+  const right = a.source.slice(pos).replace(/^\n/, "");
+  if (!right) return cells.slice();
+  const neu = newCell(a.kind, a.kind === "markdown" ? "markdown" : a.language, right);
+  const out = cells.slice();
+  out.splice(index, 1, { ...a, source: left }, neu);
+  return out;
 }

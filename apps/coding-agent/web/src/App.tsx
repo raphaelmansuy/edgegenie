@@ -102,6 +102,11 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState<"layout" | null>(null);
   const [keysOpen, setKeysOpen] = useState(false);
+  useEffect(() => {
+    const open = () => setKeysOpen(true);
+    window.addEventListener("opengenie:shortcuts", open); // OPEN_SHORTCUTS in domain/cellkeys.ts
+    return () => window.removeEventListener("opengenie:shortcuts", open);
+  }, []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"providers" | "models">("providers");
   const [modelOpen, setModelOpen] = useState(0);

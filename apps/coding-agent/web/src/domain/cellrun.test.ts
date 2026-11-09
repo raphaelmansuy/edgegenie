@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  badge, clearAll, runAffordance, runKey, showsMessage, showsOutput, showsTable, summary, type CellRun,
+  badge, clearAll, presentRows, runAffordance, runKey, showsMessage, showsOutput, showsTable, spanIds, summary, toTsv, type CellRun,
 } from "./cellrun";
 
 const ok = (extra: Partial<CellRun> = {}): CellRun => ({
@@ -131,6 +131,35 @@ describe("Python cells: offered only when the server says the user may run them"
   it("still refuses what is neither", () => {
     expect(runAffordance("python", "%pip install x", allowed).enabled).toBe(false);
     expect(runAffordance("scala", "val x = 1", allowed).enabled).toBe(false);
+  });
+  it("leaves a %skip cell out of a batch but still lets it run on its own", () => {
+    const skip = { id: "s", kind: "code", language: "sql", source: "%skip\nselect 1" };
+    const plan = runPlan([
+      { id: "a", kind: "code", language: "sql", source: "select 1" },
+      skip,
+      { id: "b", kind: "code", language: "sql", source: "select 2" },
+    ]);
+    expect(plan.runnable).toEqual(["a", "b"]);
+    expect(plan.skipped[0].reason).toMatch(/%skip/);
+    expect(runAffordance("sql", skip.source).enabled).toBe(true);
+    expect(runAffordance("sql", "%skip").enabled).toBe(false);
+    expect(spanIds([
+      { id: "a", kind: "code", language: "sql", source: "select 1" },
+      skip,
+      { id: "b", kind: "code", language: "sql", source: "select 2" },
+    ], undefined, 2, "above")).toEqual(["a"]);
+    expect(spanIds([
+      { id: "a", kind: "code", language: "sql", source: "select 1" },
+      skip,
+      { id: "b", kind: "code", language: "sql", source: "select 2" },
+    ], undefined, 0, "below")).toEqual(["a", "b"]);
+  });
+  it("filters and sorts a result, with numbers as numbers and blanks last", () => {
+    const rows = [["10", "b"], ["2", "a"], ["1", null]] as (string | null)[][];
+    expect(presentRows(rows, { text: "b", sortCol: null, sortDir: "asc" })).toEqual([["10", "b"]]);
+    expect(presentRows(rows, { text: "", sortCol: 0, sortDir: "asc" }).map((r) => r[0])).toEqual(["1", "2", "10"]);
+    expect(presentRows(rows, { text: "", sortCol: 1, sortDir: "asc" }).map((r) => r[1])).toEqual(["a", "b", null]);
+    expect(toTsv(["h"], [["a\nb"]])).toBe("h\na b");
   });
   it("plans Python cells as their own group, in notebook order", () => {
     const plan = runPlan([

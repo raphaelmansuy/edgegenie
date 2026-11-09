@@ -138,7 +138,13 @@ const findTurn = (s: SessionView, turnId?: string | null): Turn | undefined =>
 const patchTurn = (s: SessionView, turnId: string | null | undefined, fn: (t: Turn) => Turn): SessionView => {
   const target = findTurn(s, turnId);
   if (!target) return s;
-  return { ...s, turns: s.turns.map((t) => (t.id === target.id ? fn(t) : t)) };
+  // One id, one update. Mapping every copy used to paint the answer onto a duplicate turn as well.
+  let done = false;
+  return { ...s, turns: s.turns.map((t) => {
+    if (done || t !== target) return t;
+    done = true;
+    return fn(t);
+  }) };
 };
 
 /** Pure reducer. Unknown events are ignored (a newer server must not break an older tab). */
@@ -171,12 +177,25 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
       return { ...s, status: "archived" };
     case "turn.started": {
       const id = String(e.turnId);
-      // the optimistic copy the composer showed at once is replaced by the server's turn
-      const settled = s.turns.filter((t) => !t.id.startsWith(PENDING));
-      const next = newTurn(id, settled.length + 1, String(e.text ?? ""), String(e.model ?? s.model));
-      return { ...s, status: "streaming",
-        turns: [...settled, { ...next, attachments: (e.attachments as Attachment[] | undefined) ?? [],
-          status: "queued" === e.status ? "queued" : "running" }] };
+      // The detail route inserts this turn before the stream replays it. Appending again made one
+      // "Hello" draw as two turns, and both copies then received the same answer.
+      const previous = s.turns.find((t) => t.id === id);
+      const kept = s.turns.filter((t) => !t.id.startsWith(PENDING) && t.id !== id);
+      const next = newTurn(id, previous?.index || kept.length + 1,
+        String(e.text ?? previous?.prompt ?? ""), String(e.model ?? previous?.model ?? s.model));
+      const turn: Turn = {
+        ...(previous ?? next),
+        ...next,
+        answer: previous?.answer ?? "",
+        thought: previous?.thought ?? "",
+        tools: previous?.tools ?? [],
+        evidence: previous?.evidence ?? [],
+        attachments: (e.attachments as Attachment[] | undefined) ?? previous?.attachments ?? [],
+        status: e.status === "queued" ? "queued" : (previous?.status === "completed" ? "completed" : "running"),
+      };
+      const alreadyDone = previous?.status === "completed" || previous?.status === "failed"
+        || previous?.status === "cancelled" || previous?.status === "blocked";
+      return { ...s, status: alreadyDone ? s.status : "streaming", turns: [...kept, turn] };
     }
     case "turn.queued":
       return patchTurn(s, e.turnId, (t) => ({ ...t, status: "queued" }));

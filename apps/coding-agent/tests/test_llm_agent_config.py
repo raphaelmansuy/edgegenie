@@ -152,7 +152,7 @@ def test_the_seed_file_parses_into_valid_value_objects():
     seed = load()
     assert len(seed.providers) == 4, "the four provider kinds FR-3 names"
     assert len(seed.models) >= 10
-    assert seed.default_model == "databricks/databricks-llama-4-maverick"
+    assert seed.default_model == "google_vertex/google/gemini-3.8-flash"
 
 
 def test_the_five_measured_caps_are_the_numbers_this_repository_earned():

@@ -9,12 +9,13 @@
  */
 import { useEffect, useRef } from "react";
 import { byScope, caps } from "../domain/keys";
+import { COMMAND_HELP } from "../domain/cellkeys";
 import { useReturnFocus } from "../hooks/useReturnFocus";
 
 export function ShortcutSheet({ onClose }: { onClose: () => void }) {
   const close = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    close.current?.focus();
+    close.current?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -45,6 +46,18 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }) {
               </dl>
             </section>
           ))}
+          <section className="keys-group" aria-label="Command mode">
+            <h3>Command mode</h3>
+            <p className="keys-note">Press Esc so the cell itself is selected. Letters then act on the cell, not the text.</p>
+            <dl>
+              {COMMAND_HELP.map((k) => (
+                <div key={k.keys} className="keys-row">
+                  <dt>{k.label}</dt>
+                  <dd><kbd>{k.keys}</kbd></dd>
+                </div>
+              ))}
+            </dl>
+          </section>
         </div>
         <div className="actions">
           <button className="btn primary" ref={close} onClick={onClose}>Close</button>

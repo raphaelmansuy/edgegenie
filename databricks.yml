@@ -32,6 +32,20 @@ resources:
         - catalog.catalogs:read
         - catalog.schemas:read
         - catalog.tables:read
+      # Secret RESOURCES, never secret values. The JSON key lives in the Databricks secret scope
+      # `coding-agent-llm` and is injected at runtime via app.yaml `valueFrom`. `apps update` is a
+      # full replacement: sending this list without `user_api_scopes` drops every scope.
+      resources:
+        - name: vertex-sa
+          secret:
+            scope: coding-agent-llm
+            key: vertex-sa
+            permission: READ
+        - name: llm-kek
+          secret:
+            scope: coding-agent-llm
+            key: llm-kek
+            permission: READ
 
 targets:
   dev:

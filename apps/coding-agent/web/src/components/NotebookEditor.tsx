@@ -10,17 +10,19 @@
  */
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
-  insertCell, moveCell, newCell, removeCell, setCellKind, updateCellSource, type Cell,
+  insertCell, mergeWithNext, moveCell, newCell, removeCell, setCellKind, splitCell, updateCellSource, type Cell,
 } from "../domain/notebook";
 import { ChevronDown, ChevronRight, Close, LinkIcon, Play, Plus, Sparkle } from "./Icons";
 import { CellInsert } from "./CellInsert";
 import { CellPrompt } from "./CellPrompt";
 import { editPrompt, fixPrompt, insertPrompt } from "../domain/cellprompt";
-import { runAffordance, type CellRun, type PythonPolicy } from "../domain/cellrun";
+import { runAffordance, spanIds, type CellRun, type PythonPolicy } from "../domain/cellrun";
 import { CellOutput } from "./CellOutput";
 import { Editor } from "../editor/Editor";
 import { Markdown } from "./Markdown";
-import { commandKey, type Advance, type CellCommand } from "../domain/cellkeys";
+import { commandKey, OPEN_SHORTCUTS, type Advance, type CellCommand, type RunSpan } from "../domain/cellkeys";
+import { executionMap } from "../domain/minimap";
+import { Minimap } from "./Minimap";
 import { clampTo, recall, remember, type ViewState } from "../domain/viewstate";
 import type { EditorChord } from "../editor/host";
 import { display } from "../domain/keys";
@@ -62,6 +64,12 @@ interface Props {
   changedCells?: number[];
   /** Whether Python cells may run (the server's answer), so the Run control says what it will do. */
   python?: PythonPolicy;
+  /** Run these cells, in order, stopping at the first failure. Run all, above, below, and a multi-selection. */
+  onRunCells?: (ids: string[]) => void;
+  onClearOutputs?: () => void;
+  onStopRun?: () => void;
+  /** Cells a batch run is walking right now, so the map can mark the ones still queued. */
+  batch?: string[] | null;
   /** Copy a link to one cell (1-based). */
   onCopyCellLink?: (cell: number) => void;
   /** Identifies the document, so the user's place (cell, caret, scroll) is remembered per document
@@ -75,6 +83,7 @@ interface Props {
 export function NotebookEditor({
   cells, language, theme, readOnly = false, onChange, onAskCell, onPrompt, onSave, runs, onRunCell, onClearRun,
   linkedCell = null, changedCells, onCopyCellLink, python, viewKey, reveal,
+  onRunCells, onClearOutputs, onStopRun, batch = null,
 }: Props) {
   const root = useRef<HTMLDivElement>(null);
   /* A link to a cell must land ON the cell: scroll it to the middle and mark it. Runs when the link
@@ -125,7 +134,13 @@ export function NotebookEditor({
   };
   const done = useCallback((n: number) => setReq((r) => (r?.n === n ? null : r)), []);
   const carets = useRef(new Map<string, number>());
-  const armed = useRef(false);
+  const armed = useRef("");
+  const [selected, setSelected] = useState<string[]>([]);
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const anchor = useRef(0);
+  const clip = useRef<Cell[]>([]);
+  const [hiddenOut, setHiddenOut] = useState<Set<string>>(new Set());
   /** Snapshots before each structural change, for `z`. Text typing is CodeMirror's own undo. */
   const undo = useRef<Cell[][]>([]);
 
@@ -199,10 +214,72 @@ export function NotebookEditor({
     if (keep) request(keep, "command");
   };
 
+  const selectTo = (index: number, extend: boolean) => {
+    const list = cellsRef.current;
+    const t = list[Math.max(0, Math.min(list.length - 1, index))];
+    if (!t) return;
+    if (!extend) {
+      anchor.current = list.indexOf(t);
+      setSelected([t.id]);
+    } else {
+      const a = Math.max(0, Math.min(anchor.current, list.length - 1));
+      const b = list.indexOf(t);
+      const [lo, hi] = a < b ? [a, b] : [b, a];
+      setSelected(list.slice(lo, hi + 1).map((c) => c.id));
+    }
+    request(t.id, "command");
+  };
+
+  const runSpan = (span: "all" | "above" | "below" | "these", index: number, these: string[] = []) => {
+    const ids = spanIds(cellsRef.current, python, index, span, these);
+    if (ids.length) onRunCells?.(ids);
+  };
+
+  const toggleOutput = (id: string) => {
+    setHiddenOut((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const dropCells = (ids: string[], fromIndex: number) => {
+    const next = cellsRef.current.filter((c) => !ids.includes(c.id));
+    commit(next);
+    const t = next[Math.min(fromIndex, next.length - 1)];
+    setSelected(t ? [t.id] : []);
+    if (t) request(t.id, "command"); else setFocused(null);
+  };
+
+  const onClipboard = (op: "copy" | "cut" | "paste", i: number) => {
+    const list = cellsRef.current;
+    const ids = selectedRef.current.length ? selectedRef.current : [list[i]?.id].filter(Boolean) as string[];
+    const picked = list.filter((c) => ids.includes(c.id));
+    if (op === "copy" || op === "cut") {
+      if (!picked.length) return;
+      clip.current = picked.map((c) => ({ ...c }));
+      if (op === "cut" && !readOnly) dropCells(picked.map((c) => c.id), i);
+      return;
+    }
+    if (readOnly || !clip.current.length) return;
+    let next = list;
+    let at = i + 1;
+    const clones = clip.current.map((c) => newCell(c.kind, c.kind === "markdown" ? "markdown" : c.language, c.source));
+    for (const c of clones) {
+      next = insertCell(next, at, c);
+      at += 1;
+    }
+    commit(next);
+    setSelected(clones.map((c) => c.id));
+    request(clones[0].id, "command");
+  };
+
   const runCell = (i: number, advance: Advance, from: "edit" | "command") => {
     const cell = cells[i];
     if (!cell) return;
-    if (cell.kind === "code" && !readOnly && onRunCell
+    const many = selectedRef.current.length > 1 && selectedRef.current.includes(cell.id);
+    if (many && advance === "stay" && onRunCells) runSpan("these", i, selectedRef.current);
+    else if (cell.kind === "code" && !readOnly && onRunCell
       && runAffordance(cell.language || "python", cell.source, python).enabled) onRunCell(cell, i);
     if (advance === "stay") {
       if (cell.kind === "markdown" || from === "command") request(cell.id, "command");
@@ -219,18 +296,17 @@ export function NotebookEditor({
     switch (cmd.type) {
       case "select": {
         const to = cmd.to === "prev" ? i - 1 : cmd.to === "next" ? i + 1 : cmd.to === "first" ? 0 : cells.length - 1;
-        const t = cells[Math.max(0, Math.min(cells.length - 1, to))];
-        if (t) request(t.id, "command");
+        selectTo(to, Boolean(cmd.extend));
         break;
       }
+      case "selectAll": setSelected(cells.map((c) => c.id)); anchor.current = 0; break;
       case "edit": request(cell.id, "edit", carets.current.get(cell.id) ?? Infinity); break;
       case "insert": if (!readOnly) addAt(cmd.where === "above" ? i : i + 1, "code"); break;
       case "delete": {
         if (readOnly) break;
-        const next = removeCell(cells, cell.id);
-        commit(next);
-        const t = next[Math.min(i, next.length - 1)];
-        if (t) request(t.id, "command"); else setFocused(null);
+        const ids = selectedRef.current.includes(cell.id) && selectedRef.current.length > 1
+          ? selectedRef.current : [cell.id];
+        dropCells(ids, i);
         break;
       }
       case "convert":
@@ -243,12 +319,40 @@ export function NotebookEditor({
       }
       case "undo": if (!readOnly) undoStructure(); break;
       case "run": runCell(i, cmd.advance, "command"); break;
+      case "runSpan": runSpan(cmd.span, i); break;
       case "ask": if (onPrompt) setPrompt({ mode: "edit", id: cell.id }); break;
+      case "output": toggleOutput(cell.id); break;
+      case "merge": if (!readOnly) { commit(mergeWithNext(cells, i)); request(cell.id, "command"); } break;
+      case "split": {
+        if (readOnly) break;
+        const next = splitCell(cells, i, carets.current.get(cell.id) ?? cell.source.length);
+        if (next !== cells && next.length !== cells.length) {
+          commit(next);
+          const born = next[i + 1];
+          if (born) request(born.id, "edit", 0);
+        }
+        break;
+      }
+      case "clipboard": onClipboard(cmd.op, i); break;
+      case "clearOutputs": onClearOutputs?.(); break;
+      case "stop": onStopRun?.(); break;
+      case "shortcuts": window.dispatchEvent(new Event(OPEN_SHORTCUTS)); break;
+      case "scroll": {
+        const sp = scrollParent(root.current);
+        if (sp) sp.scrollBy({ top: cmd.by * Math.max(120, sp.clientHeight * 0.8) });
+        break;
+      }
     }
   };
 
   const onChord = (i: number, chord: EditorChord): boolean => {
     if (chord === "escape") { request(cells[i].id, "command"); return true; }
+    if (chord === "run-all" || chord === "run-above" || chord === "run-below") {
+      const span: RunSpan = chord === "run-all" ? "all" : chord === "run-above" ? "above" : "below";
+      runSpan(span, i);
+      return true;
+    }
+    if (chord === "split") { runCommand({ type: "split" }, i); return true; }
     runCell(i, chord === "run-next" ? "next" : chord === "run-insert" ? "insert" : "stay", "edit");
     return true;
   };
@@ -286,7 +390,10 @@ export function NotebookEditor({
     )
   );
 
+  const map = executionMap(cells, runs ?? {}, spanIds(cells, python, 0, "all"), batch);
+
   return (
+    <div className="nb-stage">
     <div className="cells" ref={root} onKeyDown={onKey}>
       {cells.length === 0 && !readOnly && seam(0)}
       {cells.map((cell, i) => (
@@ -299,7 +406,11 @@ export function NotebookEditor({
           theme={theme}
           readOnly={readOnly}
           focused={focused === cell.id}
+          selected={selected.length > 1 && selected.includes(cell.id)}
           collapsed={collapsed.has(cell.id)}
+          outputHidden={hiddenOut.has(cell.id)}
+          onToggleOutput={() => toggleOutput(cell.id)}
+          onRunSpan={(span) => runSpan(span, i)}
           onFocus={(mode) => {
             setFocused(cell.id);
             note({ cell: i + 1, mode, caret: mode === "edit" ? carets.current.get(cell.id) ?? 0 : 0 });
@@ -339,6 +450,15 @@ export function NotebookEditor({
           run={runs?.[cell.id]}
           canRun={Boolean(onRunCell)}
           onRun={() => onRunCell?.(cell, i)}
+          aboveEnabled={spanIds(cells, python, i, "above").length > 0}
+          belowEnabled={spanIds(cells, python, i, "below").length > 0}
+          onSelectClick={(e) => {
+            if (e.shiftKey) selectTo(i, true);
+            else if (e.metaKey || e.ctrlKey) {
+              anchor.current = i;
+              setSelected((cur) => (cur.includes(cell.id) ? cur.filter((id) => id !== cell.id) : [...cur, cell.id]));
+            }
+          }}
           onClearRun={() => onClearRun?.(cell)}
           onCopyLink={onCopyCellLink ? () => onCopyCellLink(i + 1) : undefined}
           python={python}
@@ -347,6 +467,8 @@ export function NotebookEditor({
         </Fragment>
       ))}
       {!readOnly && cells.length > 0 && seam(cells.length)}
+    </div>
+    <Minimap map={map} onJump={(n) => { const c = cellsRef.current[n - 1]; if (c) request(c.id, "command"); }} />
     </div>
   );
 }
@@ -359,7 +481,11 @@ interface CellProps {
   theme: "light" | "dark";
   readOnly: boolean;
   focused: boolean;
+  selected: boolean;
   collapsed: boolean;
+  outputHidden: boolean;
+  onToggleOutput: () => void;
+  onRunSpan: (span: "above" | "below") => void;
   onFocus: (mode: "edit" | "command") => void;
   onBlur: () => void;
   request: Req | null;
@@ -383,14 +509,18 @@ interface CellProps {
   run?: CellRun;
   canRun: boolean;
   onRun: () => void;
+  aboveEnabled: boolean;
+  belowEnabled: boolean;
+  onSelectClick: (e: React.MouseEvent) => void;
   onClearRun: () => void;
   onCopyLink?: () => void;
   python?: PythonPolicy;
 }
 
 function CellBlock(p: CellProps) {
-  const { cell, index, theme, readOnly, focused, collapsed } = p;
+  const { cell, index, theme, readOnly, focused, collapsed, selected } = p;
   const isMd = cell.kind === "markdown";
+  const [runMenu, setRunMenu] = useState(false);
   /** A markdown cell shows prose until you enter it. Entering is a click or Enter on the block. */
   const [editing, setEditing] = useState(isMd ? false : true);
   // A fresh cell (empty source) should be editable immediately; that is what you meant by adding it.
@@ -400,6 +530,22 @@ function CellBlock(p: CellProps) {
   const affordance = runAffordance(isMd ? "markdown" : cell.language || "python", cell.source, p.python);
 
   const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!runMenu) return;
+    const close = (e: MouseEvent) => {
+      if (!section.current?.contains(e.target as Node)) setRunMenu(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || document.querySelector(".scrim")) return;
+      setRunMenu(false);
+    };
+    document.addEventListener("mousedown", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [runMenu]);
   // Honour a request to move the user's place. "edit" is consumed by the cell's Editor (it waits
   // for the editor to load); "command" puts the focus on the cell itself, rendering markdown.
   const reqN = p.request?.n;
@@ -422,7 +568,11 @@ function CellBlock(p: CellProps) {
       /* The cell itself is focusable (not tabbable except the current one): focused = COMMAND mode,
          where single keys act on the cell. A click on the cell's chrome lands here too. */
       tabIndex={focused || index === 0 ? 0 : -1}
-      className={`cell-block${focused ? " is-focused" : ""}${isMd ? " is-md" : ""}`}
+      className={`cell-block${focused ? " is-focused" : ""}${selected ? " is-selected" : ""}${isMd ? " is-md" : ""}${runMenu ? " is-menu" : ""}`}
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest("button, a, input, textarea, .cm-editor")) return;
+        p.onSelectClick(e);
+      }}
       aria-label={`Cell ${index + 1}${isMd ? ", markdown" : ", code"}`}
       aria-keyshortcuts="Enter Shift+Enter Control+Enter Alt+Enter Escape"
       data-cell={index + 1}
@@ -438,7 +588,11 @@ function CellBlock(p: CellProps) {
         if (isMd && editing && cell.source.trim() && document.hasFocus()) setEditing(false);
       }}
     >
-      <div className="cell-gutter">
+      <div className="cell-gutter" onMouseDown={(e) => {
+        if ((e.target as HTMLElement).closest("button")) return;
+        e.preventDefault();
+        section.current?.focus();
+      }}>
         <span className="cell-no" aria-hidden>{index + 1}</span>
         {/* No run button: there is no executor here, and a control that cannot act must not be shown
             (spec 006 00 P4, NB-2, 11 D3). Asking ABOUT the cell is offered instead, below. */}
@@ -489,12 +643,27 @@ function CellBlock(p: CellProps) {
               </button>
             )}
             {!readOnly && !isMd && (
-              <button className="cell-act cell-run-act" tabIndex={-1}
-                aria-label={`Run cell ${index + 1}`} title={affordance.title}
-                disabled={!affordance.enabled}
-                onClick={p.onRun}>
-                <Play size={10} /> Run
-              </button>
+              <span className="cell-run-group">
+                <button className="cell-act cell-run-act" tabIndex={-1}
+                  aria-label={`Run cell ${index + 1}`} title={affordance.title}
+                  disabled={!affordance.enabled}
+                  onClick={p.onRun}>
+                  <Play size={10} /> Run
+                </button>
+                <button className="cell-act cell-run-more" tabIndex={-1} aria-expanded={runMenu}
+                  aria-label={`More ways to run cell ${index + 1}`}
+                  onClick={() => setRunMenu((v) => !v)}>▾</button>
+                {runMenu && (
+                  <span className="cell-run-menu" role="menu">
+                    <button type="button" role="menuitem" disabled={!p.aboveEnabled}
+                      title={p.aboveEnabled ? "Run every cell above this one, and stop at the first failure" : "Nothing above this cell can run"}
+                      onClick={() => { setRunMenu(false); p.onRunSpan("above"); }}>Run all above</button>
+                    <button type="button" role="menuitem" disabled={!p.belowEnabled}
+                      title={p.belowEnabled ? "Run this cell and every cell below it, and stop at the first failure" : "Nothing here or below can run"}
+                      onClick={() => { setRunMenu(false); p.onRunSpan("below"); }}>Run all below</button>
+                  </span>
+                )}
+              </span>
             )}
             {!readOnly && (
               <>
@@ -543,7 +712,7 @@ function CellBlock(p: CellProps) {
         )}
         {p.run && !collapsed && (
           <div className="cell-output-wrap">
-            <CellOutput run={p.run} onClear={p.onClearRun}
+            <CellOutput run={p.run} onClear={p.onClearRun} folded={p.outputHidden} onToggleFold={p.onToggleOutput}
               onFix={p.onFix && p.run.error ? () => p.onFix?.(p.run?.error ?? "") : undefined} />
           </div>
         )}

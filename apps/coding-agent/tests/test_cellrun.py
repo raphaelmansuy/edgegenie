@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from api.domain.cellrun import (
-    Clock, RunResult, RunState, is_runnable, refused, result_from_statement,
+    Clock, RunResult, RunState, is_runnable, refused, result_from_statement, without_skip,
 )
 
 
@@ -39,6 +39,13 @@ def test_sql_magic_runs_and_other_magics_do_not():
     assert is_runnable("python", "%sql select 1")[0]
     ok, why = is_runnable("python", "%scala sc.parallelize(1)")
     assert not ok and "%scala" in why
+
+
+def test_skip_is_a_directive_and_the_statement_that_follows_can_still_run():
+    assert without_skip("%skip\nselect 1") == (True, "select 1")
+    assert is_runnable("sql", "%skip\nselect 1")[0]
+    ok, why = is_runnable("sql", "%skip")
+    assert not ok and "%skip" in why
 
 
 def test_an_empty_cell_is_refused_rather_than_sent():

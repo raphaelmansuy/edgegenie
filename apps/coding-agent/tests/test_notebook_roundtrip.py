@@ -207,3 +207,11 @@ def test_magic_word_survives_an_unknown_language():
     back = parse_source(out, "PYTHON")
     assert back[0].source == "+++"
     assert "MAGIC" not in out
+
+
+def test_skip_is_kept_as_a_directive_in_the_notebook_language():
+    text = "# Databricks notebook source\n# MAGIC %skip\n# MAGIC select 1\n"
+    cells = parse_source(text, "PYTHON")
+    assert len(cells) == 1
+    assert cells[0].language == "python"
+    assert cells[0].source == "%skip\nselect 1"
