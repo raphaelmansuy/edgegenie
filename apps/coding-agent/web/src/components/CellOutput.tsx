@@ -7,8 +7,18 @@
  * Every state is drawn from `domain/cellrun`, so the words and the tone are testable without a DOM.
  */
 import { useState } from "react";
-import { badge, presentRows, showsMessage, showsOutput, showsTable, summary, toTsv, type CellRun } from "../domain/cellrun";
+import { badge, presentRows, showsImages, showsMessage, showsOutput, showsTable, summary, toTsv, type CellRun } from "../domain/cellrun";
 import { Alert, Check, ChevronDown, ChevronRight, Close, Sparkle } from "./Icons";
+
+function downloadPng(b64: string, name: string) {
+  const a = document.createElement("a");
+  a.href = `data:image/png;base64,${b64}`;
+  a.download = name;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 
 export function CellOutput({ run, onClear, onFix, folded: foldedProp, onToggleFold }: {
   run: CellRun; onClear: () => void; onFix?: () => void;
@@ -22,6 +32,7 @@ export function CellOutput({ run, onClear, onFix, folded: foldedProp, onToggleFo
   const toggleFold = () => (onToggleFold ? onToggleFold() : setLocalFold((f) => !f));
   const rows = run.rows ?? [];
   const cols = run.columns ?? [];
+  const images = run.images ?? [];
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ col: number; dir: "asc" | "desc" } | null>(null);
   const [copied, setCopied] = useState("");
@@ -73,6 +84,24 @@ export function CellOutput({ run, onClear, onFix, folded: foldedProp, onToggleFo
       )}
 
       {!folded && showsOutput(run) && <pre className="cell-output-text" aria-label="Printed output">{run.output}</pre>}
+
+      {/* Databricks and Jupyter both put the figure under the cell, with the printed text above it.
+          A hover download matches Databricks' plot control (notebook-outputs / visualizations). */}
+      {!folded && showsImages(run) && (
+        <div className="cell-output-images" aria-label={images.length === 1 ? "Plot" : "Plots"}>
+          {images.map((b64, i) => (
+            <figure key={i} className="cell-output-figure">
+              <img className="cell-output-plot" src={`data:image/png;base64,${b64}`}
+                alt={images.length === 1 ? "Plot" : `Plot ${i + 1}`} />
+              <button type="button" className="cell-output-dl"
+                title="Download this plot as PNG" aria-label={`Download plot ${i + 1} as PNG`}
+                onClick={() => downloadPng(b64, images.length === 1 ? "plot.png" : `plot-${i + 1}.png`)}>
+                Download PNG
+              </button>
+            </figure>
+          ))}
+        </div>
+      )}
 
       {!folded && showsTable(run) && (
         <div className="cell-output-grid">

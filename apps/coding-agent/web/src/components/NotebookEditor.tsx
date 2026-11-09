@@ -622,7 +622,7 @@ function CellBlock(p: CellProps) {
             onClick={p.onToggleCollapse}>
             {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
           </button>
-          <span className={`cell-kind is-${cell.kind}`}>{isMd ? "md" : (cell.language || "code").slice(0, 4)}</span>
+          <span className={`cell-kind is-${cell.kind}`}>{isMd ? "md" : ({ python: "py", sql: "sql", scala: "scala", r: "r" }[(cell.language || "").toLowerCase()] || (cell.language || "code").slice(0, 4))}</span>
 
           <span className="cell-actions">
             {!readOnly && (

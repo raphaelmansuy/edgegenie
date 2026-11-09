@@ -154,6 +154,23 @@ def test_every_python_result_says_where_it_ran():
     assert out[0].warehouse == "Serverless · as the app" and out[0].output == "1\n"
 
 
+def test_a_matplotlib_png_travels_on_the_result():
+    """The wrapper puts base64 PNGs on the cell; the reader keeps them for the UI to draw."""
+    p = pyrun.plan(cells(("python", "plt.show()")), upto=0, show=None)
+    png = "iVBORw0KGgo="  # not a full image; the reader only checks shape and length
+    doc = {"v": 1, "cells": [{"i": 0, "ok": True, "stdout": "KPI Summary\n", "images": [png, 12, ""]}]}
+    _, out = read(p, json.dumps(doc))
+    assert out[0].images == [png]
+    assert out[0].to_dict()["images"] == [png]
+    assert "KPI Summary" in out[0].output
+
+
+def test_the_wrapper_mentions_matplotlib_and_image_caps():
+    src = pyrun.wrapper_notebook(pyrun.plan(cells(("python", "1")), upto=0, show=None))
+    assert "matplotlib" in src and "_capture_figs" in src
+    assert str(pyrun.MAX_IMAGES) in src and str(pyrun.MAX_IMAGE_B64) in src
+
+
 # -- the service ---------------------------------------------------------------------------------
 class FakeRunner:
     def __init__(self, states, output=None):

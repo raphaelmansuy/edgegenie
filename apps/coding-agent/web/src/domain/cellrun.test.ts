@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  badge, clearAll, presentRows, runAffordance, runKey, showsMessage, showsOutput, showsTable, spanIds, summary, toTsv, type CellRun,
+  badge, clearAll, presentRows, runAffordance, runKey, showsImages, showsMessage, showsOutput, showsTable, spanIds, summary, toTsv, type CellRun,
 } from "./cellrun";
 
 const ok = (extra: Partial<CellRun> = {}): CellRun => ({
@@ -175,5 +175,14 @@ describe("Python cells: offered only when the server says the user may run them"
     expect(showsOutput({ state: "succeeded", seconds: 1, output: "  \n" })).toBe(false);
     expect(showsOutput({ state: "running", seconds: 1, output: "hi" })).toBe(false);
     expect(showsOutput({ state: "failed", seconds: 1, output: "partial\n", error: "boom" })).toBe(true);
+  });
+  it("shows plots when the run carries PNG images", () => {
+    expect(showsImages({ state: "succeeded", seconds: 1, images: ["aaa"] })).toBe(true);
+    expect(showsImages({ state: "succeeded", seconds: 1, images: [] })).toBe(false);
+    expect(showsImages({ state: "running", seconds: 1, images: ["aaa"] })).toBe(false);
+  });
+  it("names a plot in the summary so a figure-only cell is not just a duration", () => {
+    expect(summary({ state: "succeeded", seconds: 25.5, images: ["aaa"] })).toBe("1 plot · 25.5s");
+    expect(summary({ state: "succeeded", seconds: 1.2, images: ["a", "b"] })).toBe("2 plots · 1.2s");
   });
 });

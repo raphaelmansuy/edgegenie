@@ -36,6 +36,13 @@ header and hairline dividers. OpenGenie's own tokens stay the palette.
 - **07 dark.** The same map, table, and failure on the dark theme.
 - **08 at 860.** The status is still one line. The failed statement and Fix with agent are on screen. No horizontal overflow.
 
+## Plots
+
+Matplotlib figures the cell leaves open are captured as PNG (144 dpi) and drawn under the cell, with
+printed text above them and a hover **Download PNG** control — the same shape as Databricks and
+Jupyter inline output. Scenes and pictures: `specs/007-ux-ui-improve/e2e/screenshot/70`–`74`,
+driven by `apps/coding-agent/web/scripts/plot-e2e.mjs`.
+
 ## What is still not true
 
 These were refused in [01](01-five-whys.md) and [06](06-lenses.md), and the pictures do not pretend otherwise.
@@ -45,3 +52,4 @@ These were refused in [01](01-five-whys.md) and [06](06-lenses.md), and the pict
 - No notebook-wide find and replace.
 - Cell titles are derived. SOURCE has no title field, so the map does not invent one that would vanish on save.
 - `%skip` is a batch directive. Running that cell on its own still runs the statement under it.
+- Interactive plot widgets (`%matplotlib widget`) are not supported; the figure is a static PNG.

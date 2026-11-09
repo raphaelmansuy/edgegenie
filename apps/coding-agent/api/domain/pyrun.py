@@ -11,9 +11,10 @@ different permissions, and it is the one fact this module is built around:
 
 How a cell runs: a notebook cannot be handed source and return stdout, so one wrapper notebook is
 generated. It executes the cells in order in one namespace (so a variable made by cell 2 exists in
-cell 5), captures each cell's stdout, its last expression and any `display(df)` table, and returns one
-JSON document through `dbutils.notebook.exit`. This module builds that notebook and reads that
-document back; it never touches the network.
+cell 5), captures each cell's stdout, its last expression, any `display(df)` table, and any
+matplotlib figures left open (PNG, base64), and returns one JSON document through
+`dbutils.notebook.exit`. This module builds that notebook and reads that document back; it never
+touches the network.
 """
 
 from __future__ import annotations
@@ -33,6 +34,10 @@ MAX_CELLS = 200
 MAX_ROWS = 200
 #: Per cell. A cell that prints a million lines gets its first and last lines, not a frozen page.
 MAX_OUTPUT_CHARS = 20_000
+#: Per cell. A KPI grid is one figure; a cell that opens dozens still returns a readable page.
+MAX_IMAGES = 8
+#: Base64 length. ~1 MB of PNG is plenty for a notebook plot; the exit payload has to stay small.
+MAX_IMAGE_B64 = 1_500_000
 
 _MAGIC = re.compile(r"^\s*%(\w+)[ \t]*(.*)$")
 _PYTHON_MAGICS = frozenset({"python", "py"})
@@ -125,7 +130,17 @@ _STEPS = json.loads(base64.b64decode("__STEPS__").decode("utf-8"))
 _SHOW = set(json.loads(base64.b64decode("__SHOW__").decode("utf-8")))
 _MAX_ROWS = __MAX_ROWS__
 _MAX_CHARS = __MAX_CHARS__
+_MAX_IMAGES = __MAX_IMAGES__
+_MAX_IMAGE_B64 = __MAX_IMAGE_B64__
 _tables = []
+_images = []
+
+# A headless backend: serverless has no display, and Agg is what turns a figure into PNG bytes.
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+except Exception:
+    pass
 
 
 def _clip(text):
@@ -151,10 +166,56 @@ def _as_table(value):
     return None
 
 
+def _is_figure(value):
+    return (value is not None
+            and type(value).__name__ == "Figure"
+            and "matplotlib" in getattr(type(value), "__module__", ""))
+
+
+def _fig_png(fig):
+    """PNG bytes as base64. 144 dpi is the Jupyter retina compromise: sharp on a 2x screen, still small."""
+    buf = io.BytesIO()
+    try:
+        fig.savefig(buf, format="png", bbox_inches="tight", facecolor=fig.get_facecolor(), dpi=144)
+    except Exception:
+        return None
+    data = base64.b64encode(buf.getvalue()).decode("ascii")
+    return data if len(data) <= _MAX_IMAGE_B64 else None
+
+
+def _capture_figs():
+    """Every figure the cell left open, as PNG. Closed afterwards so the next cell starts clean."""
+    try:
+        import matplotlib.pyplot as plt
+    except Exception:
+        return
+    for num in list(plt.get_fignums()):
+        if len(_images) >= _MAX_IMAGES:
+            break
+        fig = plt.figure(num)
+        png = _fig_png(fig)
+        if png:
+            _images.append(png)
+        try:
+            plt.close(fig)
+        except Exception:
+            pass
+    # Anything past the cap is still closed: a leak into the next cell is worse than a missing plot.
+    try:
+        import matplotlib.pyplot as plt
+        for num in list(plt.get_fignums()):
+            plt.close(plt.figure(num))
+    except Exception:
+        pass
+
+
 def display(value=None, *args, **kwargs):
     table = _as_table(value)
     if table is not None:
         _tables.append(table)
+    elif _is_figure(value):
+        # Left open on purpose: _capture_figs at the end of the cell turns it into a PNG.
+        pass
     elif value is not None:
         print(value if isinstance(value, str) else repr(value))
 
@@ -178,6 +239,7 @@ _g = globals()
 for _step in _STEPS:
     _i, _src = _step["i"], _step["src"]
     _tables.clear()
+    _images.clear()
     _out = io.StringIO()
     _value = None
     _error = ""
@@ -192,10 +254,13 @@ for _step in _STEPS:
                 _t = _as_table(_v)
                 if _t is not None:
                     _tables.append(_t)
+                elif _is_figure(_v):
+                    pass
                 elif _v is not None:
                     _value = repr(_v)
     except BaseException as _exc:  # a cell may raise anything, including SystemExit
         _error = _frames(_exc)
+    _capture_figs()
     _entry = {"i": _i, "ok": not _error}
     if _error:
         _entry["error"] = _clip(_error)
@@ -206,6 +271,8 @@ for _step in _STEPS:
         if _tables:
             _entry["table"] = _tables[0]
             _entry["tables"] = len(_tables)
+        if _images:
+            _entry["images"] = list(_images)
     _results.append(_entry)
     if _error:
         break
@@ -220,7 +287,8 @@ def wrapper_notebook(p: Plan) -> str:
     steps = [{"i": i, "src": src} for i, src in p.steps]
     b64 = lambda obj: base64.b64encode(json.dumps(obj).encode("utf-8")).decode("ascii")  # noqa: E731
     return (_WRAPPER.replace("__STEPS__", b64(steps)).replace("__SHOW__", b64(sorted(p.show)))
-            .replace("__MAX_ROWS__", str(MAX_ROWS)).replace("__MAX_CHARS__", str(MAX_OUTPUT_CHARS)))
+            .replace("__MAX_ROWS__", str(MAX_ROWS)).replace("__MAX_CHARS__", str(MAX_OUTPUT_CHARS))
+            .replace("__MAX_IMAGES__", str(MAX_IMAGES)).replace("__MAX_IMAGE_B64__", str(MAX_IMAGE_B64)))
 
 
 # -- reading a run back -------------------------------------------------------------------------
@@ -280,16 +348,31 @@ def results_from_run(p: Plan, *, life_cycle: str, result_state: str, message: st
     return True, out
 
 
+def _cell_images(cell: dict[str, Any]) -> list[str]:
+    """PNG base64 strings the wrapper put on the cell. Anything that is not a string is dropped."""
+    raw = cell.get("images") or []
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        if isinstance(item, str) and item and len(item) <= MAX_IMAGE_B64:
+            out.append(item)
+        if len(out) >= MAX_IMAGES:
+            break
+    return out
+
+
 def _cell_result(cell: dict[str, Any], seconds: float) -> RunResult:
     table = cell.get("table") or {}
     text = cell.get("stdout", "") or ""
     value = cell.get("value", "") or ""
     shown = text + (("" if not text or text.endswith("\n") else "\n") + value if value else "")
+    images = _cell_images(cell)
     if not cell.get("ok", True):
         return RunResult(state=RunState.FAILED, seconds=seconds, warehouse=WHERE, output=shown,
-                         error=str(cell.get("error", "the cell failed"))[:2000])
+                         images=images, error=str(cell.get("error", "the cell failed"))[:2000])
     return RunResult(
-        state=RunState.SUCCEEDED, seconds=seconds, warehouse=WHERE, output=shown,
+        state=RunState.SUCCEEDED, seconds=seconds, warehouse=WHERE, output=shown, images=images,
         columns=list(table.get("columns", [])), rows=list(table.get("rows", [])),
         truncated=bool(table.get("truncated", False)),
         total_rows=len(table.get("rows", [])) if table else None,

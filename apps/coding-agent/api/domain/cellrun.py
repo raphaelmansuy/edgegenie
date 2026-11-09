@@ -50,6 +50,8 @@ class RunResult:
     warehouse: str = ""
     #: Text a Python cell printed, plus its last expression's value. SQL has none.
     output: str = ""
+    #: PNG plots as base64 (no `data:` prefix). Matplotlib figures the cell left open.
+    images: list[str] = field(default_factory=list)
     #: Rows the engine reports having produced, when it says so and we only show the first page.
     total_rows: int | None = None
 
@@ -69,6 +71,8 @@ class RunResult:
             out["warehouse"] = self.warehouse
         if self.output:
             out["output"] = self.output
+        if self.images:
+            out["images"] = self.images
         return out
 
 

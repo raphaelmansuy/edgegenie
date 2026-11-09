@@ -2699,6 +2699,32 @@ h2.rail-group { margin: 0; text-transform: none; }
 .cell-output-text { margin: 0; padding: 8px 12px; font: 12.5px/1.5 var(--mono);
   white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; color: var(--ink);
   border-top: 1px solid var(--line); }
+/* Matplotlib (and friends) under the cell — Databricks/Jupyter inline figure: full width, natural
+   height, download on hover in the corner. */
+.cell-output-images {
+  display: flex; flex-direction: column; gap: 10px; padding: 12px;
+  border-top: 1px solid var(--line); background: color-mix(in srgb, var(--surface-2) 65%, var(--surface));
+}
+.cell-output-figure {
+  position: relative; margin: 0; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow-sm); overflow: hidden;
+}
+.cell-output-plot {
+  display: block; max-width: 100%; width: auto; height: auto; margin: 0 auto;
+  vertical-align: top; background: var(--surface);
+}
+.cell-output-dl {
+  position: absolute; top: 8px; right: 8px; z-index: 1;
+  height: 28px; padding: 0 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong); background: color-mix(in srgb, var(--surface) 94%, transparent);
+  color: var(--ink); font-size: 12px; font-weight: 550; box-shadow: var(--shadow-pop);
+  opacity: 0; transition: opacity var(--dur), background var(--dur), color var(--dur);
+}
+.cell-output-figure:hover .cell-output-dl,
+.cell-output-figure:focus-within .cell-output-dl,
+.cell-output-dl:focus-visible { opacity: 1; }
+.cell-output-dl:hover { background: var(--surface); color: var(--ink); }
+@media (hover: none) { .cell-output-dl { opacity: 1; } }
 /* A chip that says the work runs as the app, not as you: warm, so it is never read as "your" compute. */
 .nb-bar-compute.is-app { border-color: var(--yellow-300); background: var(--yellow-100); color: var(--yellow-800); }
 .nb-bar-compute.is-app .nb-bar-dot { background: var(--yellow-800); }

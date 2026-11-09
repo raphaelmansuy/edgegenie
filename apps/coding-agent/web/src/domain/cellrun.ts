@@ -22,6 +22,8 @@ export interface CellRun {
   warehouse?: string;
   /** What a Python cell printed, plus the value of its last expression. */
   output?: string;
+  /** PNG plots as base64 (no `data:` prefix). Matplotlib figures the cell left open. */
+  images?: string[];
 }
 
 /** May the signed-in user run Python cells? Decided by the server (`/api/me`), shown here. */
@@ -59,11 +61,16 @@ export function summary(run: CellRun | undefined): string {
   if (!run) return "";
   const secs = run.seconds >= 1 ? `${run.seconds.toFixed(1)}s` : `${Math.round(run.seconds * 1000)}ms`;
   if (run.state === "succeeded") {
-    // Python that only printed has no rows to count; "0 rows" would read as an empty result.
-    if (!run.columns || run.columns.length === 0) return secs;
-    const n = run.totalRows ?? run.rows?.length ?? 0;
-    const rows = `${n} ${n === 1 ? "row" : "rows"}`;
-    return run.truncated ? `${rows} (first ${run.rows?.length ?? 0} shown) · ${secs}` : `${rows} · ${secs}`;
+    const bits: string[] = [];
+    if (run.columns && run.columns.length > 0) {
+      const n = run.totalRows ?? run.rows?.length ?? 0;
+      const rows = `${n} ${n === 1 ? "row" : "rows"}`;
+      bits.push(run.truncated ? `${rows} (first ${run.rows?.length ?? 0} shown)` : rows);
+    }
+    const plots = run.images?.length ?? 0;
+    if (plots > 0) bits.push(plots === 1 ? "1 plot" : `${plots} plots`);
+    // Python that only printed has no rows or plots to count; the duration alone is enough.
+    return bits.length ? `${bits.join(" · ")} · ${secs}` : secs;
   }
   return secs;
 }
@@ -76,6 +83,11 @@ export function showsTable(run: CellRun | undefined): boolean {
 /** Should this run show what the cell printed? A run in flight has nothing yet. */
 export function showsOutput(run: CellRun | undefined): boolean {
   return Boolean(run && run.state !== "running" && run.output && run.output.trim());
+}
+
+/** Should this run show matplotlib (or other) PNG plots under the cell? */
+export function showsImages(run: CellRun | undefined): boolean {
+  return Boolean(run && run.state !== "running" && run.images && run.images.length > 0);
 }
 
 /** Should this run show an explanation box? Every non-success that has words does. */
