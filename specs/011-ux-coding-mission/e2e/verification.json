@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-09",
+  "frontend": {
+    "command": "npm test -- --reporter=dot",
+    "filesPassed": 56,
+    "testsPassed": 599,
+    "status": "passed"
+  },
+  "build": {
+    "command": "npm run build",
+    "status": "passed",
+    "warning": "Existing minified chunks over 500 kB"
+  },
+  "missionBrowser": {
+    "groupsPassed": 11,
+    "screenshots": 23,
+    "runtimeErrors": 0,
+    "engines": [
+      "Chromium",
+      "WebKit"
+    ],
+    "report": "iteration-03.json"
+  },
+  "durabilityRegression": {
+    "groupsPassed": 9,
+    "screenshots": 13,
+    "runtimeErrors": 0,
+    "report": "regression/report.json"
+  },
+  "diagrams": {
+    "mermaidParsed": 4,
+    "asciiGridsAligned": 3
+  },
+  "visualReview": {
+    "retainedImages": 42,
+    "manifest": "visual-inspection.json"
+  },
+  "liveDatabricks": "Unavailable; no live workspace result claimed",
+  "crossReferences": {
+    "rootDocuments": 8,
+    "rootLinksChecked": 84,
+    "evidenceDocuments": 2,
+    "evidenceLinksChecked": 58,
+    "problems": 0
+  },
+  "diffCheck": "passed"
+}

@@ -1,21 +1,15 @@
-/** App shell: a rail (sessions, files, catalog), a centre (chat and documents), and the assistant dock.
- *
- * Spec 006 changed the composition, not the parts. Before: the document and the conversation shared
- * one slot, so opening a file unmounted the transcript. Now they are two surfaces of one binding:
- *  - the **centre** holds the open document (and the Chat tab, the general conversation);
- *  - the **dock** holds the conversation *about* what is open, and never replaces it;
- *  - **one** `Focus` says what that is, and both surfaces read it.
- *
- * The three things that make this a Genie-Code-class assistant rather than a chat box, unchanged:
- *  1. you browse the real workspace and catalog and OPEN what you find;
- *  2. what you are looking at, and what you @-mention, goes to the agent as context;
- *  3. when the agent writes something, the tree refreshes and the result opens in one click.
+/** App shell: navigator, mission/document work area and assistant dock.
+ * Spec 011 projects the active session into a mission overview when no document is selected.
+ * The existing stream owns state; the dock and selected-turn Activity reuse the conversation.
+ * One Focus binds open documents and attached context. Generated results refresh open documents
+ * and remain one explicit click away without replacing the mission the reader is reviewing.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type CatalogueResponse, type SessionSummary } from "./api/client";
 import { prettyId } from "./domain/models";
-import { EmptyState, Inspector, SessionHome } from "./components/Chrome";
-import { artifactsOf, wroteElsewhere } from "./domain/artifacts";
+import { EmptyState, Inspector } from "./components/Chrome";
+import { wroteElsewhere } from "./domain/artifacts";
+import { MissionScreen } from "./components/MissionScreen";
 import { nameOf, recentDocs, rememberDoc } from "./domain/recent";
 import { WroteElsewhere } from "./components/WroteElsewhere";
 import { SkipLinks } from "./components/SkipLinks";
@@ -24,7 +18,6 @@ import { LogoBadge, Wordmark } from "./components/Logo";
 import { parentOf } from "./domain/docs";
 import { peekOf } from "./domain/peek";
 import { SessionPeek } from "./components/SessionPeek";
-import { RunStatus } from "./components/RunStatus";
 import { AssistantDock, InlineApproval } from "./components/AssistantDock";
 import { ModelControl } from "./components/ModelControl";
 import { ProviderSettings } from "./components/ProviderSettings";
@@ -39,9 +32,7 @@ import { CatalogTree } from "./components/CatalogTree";
 import { FilesPane } from "./components/FilesPane";
 import { Composer } from "./components/Composer";
 import { OpenDoc, WorkspaceLinks } from "./components/DocContext";
-import { ExtLink } from "./components/ExtLink";
 import type { Workspace } from "./domain/links";
-import { TurnView } from "./components/Transcript";
 import { NotebookViewer, TableViewer } from "./components/Viewer";
 import type { WsNode } from "./components/WorkspaceTree";
 import type { Candidate } from "./domain/fuzzy";
@@ -377,17 +368,9 @@ export function App() {
   const addContext = useCallback((a: Attachment) => setAttachments((cur) => dedupe([...cur, a])), []);
 
   const seen = useRef(new Set<string>());
-  /** The document the user is looking at, readable inside the effect without re-subscribing to it. */
-  const viewDocId = useRef<string | null>(null);
-  viewDocId.current = docs.some((d) => d.id === view) ? view : null;
   useEffect(() => {
     const written: Doc[] = [];
-    const readNames = new Set<string>();
     for (const t of session.turns) for (const c of t.tools) {
-      if (c.status === "completed" && /(read_notebook|read_file|write_notebook|write_file)/.test(c.name)) {
-        const hit = touched(c.name, c.args, c.summary);
-        if (hit) readNames.add(hit.doc.ref);
-      }
       if (c.status !== "completed" || seen.current.has(c.callId)) continue;
       seen.current.add(c.callId);
       const wroteTables = tablesWritten(c.name, c.args);
@@ -402,20 +385,7 @@ export function App() {
     if (!written.length) return;
     setTreeRev((n) => n + 1);
     setDocs((cur) => cur.map((d) => (written.some((w) => w.id === d.id) ? { ...d, rev: d.rev + 1 } : d)));
-    /* Show what the agent produced, once per turn, and only when the reader has nothing open. This is
-       the loop the product is for — read, ask, see the result, read again — and it is the reason the
-       centre can stay empty while a conversation happens in the dock. A document the user opened
-       themselves is never replaced. */
-    /* Only show it if the same turn also READ it back: a written path that cannot be exported is a
-       demo artifact or a race, and opening a document that renders an error banner is worse than
-       leaving the home screen up. The dock already reports the write; this is the bonus, not the news. */
-    const verified = written.find((d) => readNames.has(d.ref));
-    const first = verified ?? null;
-    if (first && !viewDocId.current) {
-      setView((v) => (v === CHAT ? first.id : v));
-      setDocs((cur) => (cur.some((d) => d.id === first.id) ? cur : [...cur, first]));
-      setFocus((f) => (f.docId ? f : focusFor(first)));
-    }
+    // Spec 011: refresh open results, but keep the reader on their mission until they choose Open.
   }, [session.turns]);
   useEffect(() => { seen.current = new Set(); }, [active]);
 
@@ -709,8 +679,6 @@ export function App() {
     running: () => Boolean(session.status === "streaming"),
   }), [settingsOpen, paletteOpen, keysOpen, session.status]);
   useHotkeys(handlers, hotkeyContext);
-  const toolCalls = session.turns.reduce((n, t) => n + t.tools.length, 0);
-  const artifacts = useMemo(() => artifactsOf(session.turns), [session.turns]);
   /* A write that did not land in the document on screen. The centre must say so: a screen that does
      not change while the dock reports a write reads as "the refresh is broken" (it happened on the
      deployed app, with the agent correctly writing a copy outside the repo). */
@@ -950,6 +918,8 @@ export function App() {
             )}
 
             <main className="pane main">
+              {active && docs.length > 0 && <button type="button" className="mission-return" aria-current={view === CHAT ? "page" : undefined}
+                onClick={() => selectTab(CHAT)}>Mission overview <span>{session.title || "Current session"}</span></button>}
               {docs.length > 0 && (
                 <DocTabs docs={docs} active={view} dirtyIds={dirtyIds} onSelect={selectTab} onClose={closeDoc}
                   onMove={moveDocument} onCloseMany={closeDocuments} onReopen={reopenDocument} canReopen={closedCount > 0} />
@@ -966,12 +936,10 @@ export function App() {
                 onRail: () => openRail(true),
               })} />
               <div id="doc-panel" tabIndex={-1} role={viewDoc ? "tabpanel" : "region"}
-                aria-labelledby={viewDoc ? docTabId(view) : undefined} aria-label={viewDoc ? undefined : "Home"}
+                aria-labelledby={viewDoc ? docTabId(view) : undefined} aria-label={viewDoc ? undefined : active ? "Mission workspace" : "Home"}
                 className="doc-panel">
-              {/* One surface per thing (006 D1): the centre is the WORK — an open document, or the
-                  home screen. The conversation is the dock. The one exception is when the assistant
-                  is hidden: then the centre carries the transcript, so hiding a panel never hides a
-                  conversation. */}
+              {/* Spec 011: the centre is an open document, the active mission or the start screen.
+                  A hidden dock leaves the mission and its selected-turn Activity available. */}
               {viewDoc && showElsewhere && elsewhereDoc && (
                 <WroteElsewhere
                   name={elsewhereDoc.name}
@@ -984,33 +952,10 @@ export function App() {
                 viewDoc.kind === "table"
                   ? <TableViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
                   : <NotebookViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
-              ) : active && !dockOnScreen ? (
-                /* A live session with the assistant hidden: the centre carries the transcript, so
-                   hiding a panel never hides a conversation. */
-                <>
-                  <div className="strip">
-                    {conn !== "live" && <span className={`pill ${conn}`}>{conn === "reconnecting" ? "reconnecting…" : conn}</span>}
-                    <span className="strip-path" title="The agent can write only here">
-                      {session.folder}
-                      <ExtLink target={{ kind: "directory", ref: session.folder }} label="Open the working folder in Databricks" />
-                    </span>
-                    <span className="strip-counts">
-                      {turns.length} {turns.length === 1 ? "turn" : "turns"} · {toolCalls} tool {toolCalls === 1 ? "call" : "calls"}
-                    </span>
-                    {error && <span className="strip-error">{error}</span>}
-                  </div>
-                  <RunStatus key={session.id} session={session} conn={conn} onRestore={restore} onStop={stop} />
-                  <section className="transcript" role="region" aria-label="Conversation"
-                    aria-live="polite" aria-busy={busy}>
-                    {turns.length === 0 && <p style={{ color: "var(--ink-3)" }}>Starting the agent… (usually 3–8 s)</p>}
-                    {turns.map((t) => <TurnView key={t.id} turn={t} />)}
-                  </section>
-                </>
               ) : active ? (
-                /* A conversation is running in the dock and nothing is open: say what exists so far,
-                   not "What should we build today?" as if nothing had started. */
-                <SessionHome title={session.title} folder={session.folder} artifacts={artifacts}
-                  busy={busy} turns={turns.length} onOpen={openDoc} />
+                <MissionScreen key={active} session={session} conn={conn} dockVisible={dockOnScreen} error={error}
+                  onOpen={openDoc} onConversation={() => { reveal(); requestAnimationFrame(() => dockComposer.current?.focus()); }}
+                  onStop={stop} onRestore={restore} />
               ) : (
                 /* Everything else — no document open — shows the start screen. It used to be the
                    `else` of `!dockOnScreen`, so a window where the dock was on screen but nothing was
@@ -1047,7 +992,7 @@ export function App() {
               )}
               {pending && <InlineApproval approval={pending} disabled={conn !== "live"}
                 onDecide={(a, outcome) => decide(a.approvalId, outcome)} />}
-              <Composer compact={!active || Boolean(viewDoc)}
+              <Composer compact
                 inputRef={composerBox}
                 disabled={session.status === "archived" || session.requiresResume || conn !== "live" && Boolean(active)} busy={busy} onSend={message} onStop={stop}
                 attachments={attachments} auto={viewDoc ? asAttachment(viewDoc) : null}

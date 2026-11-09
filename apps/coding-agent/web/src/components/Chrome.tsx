@@ -8,8 +8,6 @@ import { FolderPicker } from "./FolderPicker";
 import { LogoMark } from "./Logo";
 import { ModelFacts } from "./ModelFacts";
 import { ArrowUpRight, Bug, ChevronRight, Clock, Database, FileIcon, ListIcon, Notebook, Search, Sparkle, Table } from "./Icons";
-import type { Artifact } from "../domain/artifacts";
-import type { Doc } from "../domain/docs";
 
 export function ApprovalSheet({ approval, sessionId, onDecided }: {
   approval: Approval; sessionId: string; onDecided: () => void;
@@ -187,38 +185,6 @@ const CARDS = [
 
 /** The default working folder: a real workspace path under the user's home. */
 export const USER_SCRATCH = "/Users/me/agent_scratch";
-
-/** The centre while a conversation runs in the dock and nothing is open: what exists so far, and where
- *  to look. Replaces the first-run screen, which said nothing had started. */
-export function SessionHome({ title, folder, artifacts, busy, turns, onOpen }: {
-  title: string; folder: string; artifacts: Artifact[]; busy: boolean; turns: number;
-  onOpen: (doc: Doc) => void;
-}) {
-  return (
-    <div className="session-home" aria-label="This conversation's work">
-      <p className="session-home-kicker">{busy ? "Working…" : turns > 0 ? "This conversation" : "Starting…"}</p>
-      <h2 className="session-home-title">{title || "New session"}</h2>
-      <p className="sub">The conversation is on the right. What it makes appears here; the agent can write only in{" "}
-        <code>{folder}</code>.</p>
-      {artifacts.length > 0 ? (
-        <ul className="session-home-list">
-          {artifacts.map((a) => (
-            <li key={a.doc.id}>
-              <button className="session-home-item" onClick={() => onOpen(a.doc)}>
-                <span className="session-home-ico" aria-hidden>{a.doc.kind === "notebook" ? <Notebook size={16} /> : <FileIcon size={16} />}</span>
-                <span className="session-home-name">{a.doc.name}</span>
-                <span className="session-home-tag">{a.wrote ? "written" : "read"}</span>
-                <span className="session-home-open">Open</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="session-home-none">{busy ? "Nothing has been written yet." : "Nothing was written or opened in this conversation."}</p>
-      )}
-    </div>
-  );
-}
 
 export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddKey, onStart, demo, notice,
   user, recent, onOpenRecent, onOpenSearch, onOpenCatalog, onAskAssistant }: {

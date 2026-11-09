@@ -1,0 +1,385 @@
+{
+  "date": "2026-11-09",
+  "method": "Each retained PNG opened with view_image and inspected for hierarchy, readability, wrapping, states and reachable controls. Geometry/contrast audits are separate evidence.",
+  "images": [
+    {
+      "file": "iteration-01/01-running-desktop.png",
+      "sha256": "f135608a0d5619726b48c1ba312193548d0f284ef23aa80b9d882d5ac9fbe2f7",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "baseline",
+      "observation": "Objective, current state, plan and source-backed results are legible; desktop hierarchy retained."
+    },
+    {
+      "file": "iteration-01/02-achieved-dark.png",
+      "sha256": "7f4391adb1a786aa98bbd5c941a87cfef487e04233165518ff5f5412e527e91e",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "improved",
+      "observation": "Dark palette is legible; results were too far below the plan. Completed missions now lead with outcome and outputs."
+    },
+    {
+      "file": "iteration-01/03-mobile-light.png",
+      "sha256": "9a3f1f47c90374f98cb03a60f40e755b1f2de0c785f30ad47bd721ddb742c4c4",
+      "width": 390,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "improved",
+      "observation": "Repeated status card and full composer consumed too much phone height. Removed completed-state duplication and compacted the centre composer."
+    },
+    {
+      "file": "iteration-01/04-long-mobile-dark.png",
+      "sha256": "07d7645e4a34ba3b27ae4f1ff5a9cc3a874efe6df768494de47b89995055db97",
+      "width": 320,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "improved",
+      "observation": "Long objective occupied seven lines. Phone titles now clamp at three lines and retain a complete request disclosure."
+    },
+    {
+      "file": "iteration-02/01-running-desktop.png",
+      "sha256": "700f9c47f7dfda4f6554c62cb93f3a5151e75b2f6c6efddd7f63519e82303437",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "baseline",
+      "observation": "Real stream renders an honest incomplete plan and empty result placeholders; no clipped controls."
+    },
+    {
+      "file": "iteration-02/02-offline.png",
+      "sha256": "98862b67c46164da823d8ca990d9a0b11e2b1fe2510269c64a22be51e1694f59",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "improved",
+      "observation": "Hover made copied text disappear on a light background; changed mission copy controls to the existing quiet variant and verified hover contrast in the final run."
+    },
+    {
+      "file": "iteration-03/01-running-desktop.png",
+      "sha256": "1f5dcd5d68868172e8e6e5e17403b4fee41f6f924e4abe360e387ff3b3a5b6b1",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Running objective and reported plan have a clear hierarchy; empty outputs/evidence remain explicit."
+    },
+    {
+      "file": "iteration-03/02-offline.png",
+      "sha256": "3f97692b5eb5e912426be343be4db173815274398e3963e85c6a030ce61f5e1c",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Offline wording preserves last-known execution; copied feedback is readable after the hover fix; remote controls are disabled."
+    },
+    {
+      "file": "iteration-03/03-return-completed.png",
+      "sha256": "a2337538362a88394f51f57dedab36246672b657dfe8020ffcb431db9b382e4d",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Completed explanation is presented as ready for review, with outcome first and no invented proof."
+    },
+    {
+      "file": "iteration-03/04-stopped-queue.png",
+      "sha256": "e14da0248505343bad15b7426f7e99bd62fe9f7c338c1308add83ab319aa105b",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Stopped queue is explicit; accepted follow-up remains selectable; no active-work claim is displayed."
+    },
+    {
+      "file": "iteration-03/05-achieved-desktop.png",
+      "sha256": "1b5bf7f10244fcb3babbd643edd856883f085f1600c3ab31040376c1b4e4de68",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Achieved outcome, generated notebook and three verified requirements fit the desktop work area; plan follows results."
+    },
+    {
+      "file": "iteration-03/06-evidence-source.png",
+      "sha256": "fff531a55be70cd214b576c5cb9b84ac1d555e40fab91f3a6e8297cdb0909e43",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Expanded evidence shows its exact input and result; screenshot scroll was adjusted so the complete source body can be inspected."
+    },
+    {
+      "file": "iteration-03/07-approval.png",
+      "sha256": "a3554f881ba7e7a3b320dadb7e750f6014e7204643ce9e6223c7b06515d469a7",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Approval state is clear; the offered decision controls, target and reason are visible in the dock."
+    },
+    {
+      "file": "iteration-03/08-recovery.png",
+      "sha256": "814f3baa360e96e7f93d14c619928c20ca03e053bb9a36974e3275dbca3178dc",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Restore is explicit, saved progress is visible and input is disabled; prior plan is retained as reported."
+    },
+    {
+      "file": "iteration-03/09-wide-dark.png",
+      "sha256": "1ecf0281e4528b91b115c7490a02d64ed49b2eff0cd01b269007b59ca6c2f8e7",
+      "width": 1920,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "1920px dark view keeps a readable content measure with legible output and evidence sections."
+    },
+    {
+      "file": "iteration-03/10-tablet-light.png",
+      "sha256": "0b58d0f8366eb1d320ec07bdc36b0d55a5902f47125d0d011aa33ef0b56b3f7a",
+      "width": 1024,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "1024px view retains the mission, outcome and output with the assistant hidden and compact centre composition."
+    },
+    {
+      "file": "iteration-03/11-mobile-light.png",
+      "sha256": "093b3326f30401a2a3e3649b9e5862b14f8637f7ef1941b9fdd2307df9da8385",
+      "width": 390,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "390px light view places achieved outcome and notebook output ahead of the completed plan; controls fit."
+    },
+    {
+      "file": "iteration-03/12-mobile-dark.png",
+      "sha256": "e2759ec8bcbef4525ac7193cfdd3427ac7558080952f790a630211e35fe8f82f",
+      "width": 375,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "375px dark view preserves a three-line title, readable summary and independent scrolling above the compact composer."
+    },
+    {
+      "file": "iteration-03/13-mobile-320.png",
+      "sha256": "4f874b28bbc030996dc178ce8c2768af458b592c8e74bf5dd58fb77a08a8ad60",
+      "width": 320,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "320px light view wraps metadata and body text without horizontal overflow; title remains bounded with full request available."
+    },
+    {
+      "file": "iteration-03/14-last-achieved.png",
+      "sha256": "86cca83fe4305e542c0ffe9fd5aea8becc453542cc3d725570c8a4a8c543cc2d",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Historical achieved mission is explicitly labelled Mission history; current work stays visible in the dock and return action is clear."
+    },
+    {
+      "file": "iteration-03/15-history-activity.png",
+      "sha256": "806b5c136bdda14f46eb6c656bcf097167c7d38b70e495da1e7e9f204938f50b",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Activity tab shows only the selected historical turn, with its prompt, reported plan and actual tool cards."
+    },
+    {
+      "file": "iteration-03/16-blocked.png",
+      "sha256": "b5db87b2af938ff398c1b62024847101b10bff097b31b80563ea8e6ba80f547e",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Blocked state exposes missing permission and failed-call count; both overview and dock agree that only one of two requirements is proven."
+    },
+    {
+      "file": "iteration-03/17-failed.png",
+      "sha256": "137d758d13039b2ed148d30a4dc77f21bea1898d4a7825bb0520009813637bd6",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Failed state reports the reason and retains saved work; dock now says Work failed rather than claiming ongoing execution."
+    },
+    {
+      "file": "iteration-03/18-archived.png",
+      "sha256": "7f43f05dd64a05f1f39ccf1825a4e61a6eeb6bc19ff28eda01e4556045893885",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Archived state is consistent in overview and dock; read-only composition has no Retry, restore or suggested-send actions."
+    },
+    {
+      "file": "iteration-03/19-empty.png",
+      "sha256": "eb537273d802dbab1f9ed7cf4a56e0dcd92dc61f85de04ab997a02f0f53a968a",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Empty ready session says No mission yet and invites an instruction; disabled picker never invents an accepted mission."
+    },
+    {
+      "file": "iteration-03/20-checking.png",
+      "sha256": "1e5a5b3e7b915c0850353c9c8f9e5f932073d152865818bdfdab451f15b3a57b",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Auditing state says Checking work and preserves the incomplete reported plan; proof is independent of execution completion."
+    },
+    {
+      "file": "iteration-03/21-long-request-dark.png",
+      "sha256": "2437bb4b17f4d0af9741a4ed7521cf98d134ecabb1690474980969c05231a569",
+      "width": 375,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Long unicode request is fully available in a wrapped disclosure while the phone heading stays within three visible lines."
+    },
+    {
+      "file": "iteration-03/22-invalid-source-dark.png",
+      "sha256": "915203ca15bde2ed9db7a5d4320a8702042d636d28a61acc754340ffb95414dc",
+      "width": 375,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Long output name wraps; written/read references stay distinct; unresolved proof has an explicit source warning and unknown plan text remains visible."
+    },
+    {
+      "file": "iteration-03/23-webkit-mobile.png",
+      "sha256": "769c44f2a72b6d41a642cab8455ca1c39f34c2731f8b6a4dae78b88dec7dfa5a",
+      "width": 390,
+      "height": 844,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "WebKit dark phone view now uses a consistent 44px mission picker; outcome, text contrast and composer fit the viewport."
+    },
+    {
+      "file": "regression/screenshots/01-server-running-light.png",
+      "sha256": "804c98973eec115a331fba3b004db2687573f9af147a9c7812cc101028d20f1f",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Return-link success feedback is visible; a plan not yet streamed is explicitly unavailable."
+    },
+    {
+      "file": "regression/screenshots/02-offline.png",
+      "sha256": "4cd5103964304bd8e4a8e4da4a8bb07dd2c359a7617b87261456430e7c0ecfbc",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Offline observation state is distinct from running work; disabled stop remains visible."
+    },
+    {
+      "file": "regression/screenshots/03-reconnected.png",
+      "sha256": "ce78bb61ba2c41b94d83fc6c4c8b9a698bacace7875efe297e3e9ed048f2d7bc",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Reconnection restores live wording and enabled actions without changing the accepted objective."
+    },
+    {
+      "file": "regression/screenshots/04-return-after-page-close.png",
+      "sha256": "1658cd433c03d9e7a2ac6e4d7aba05258b16eafc5baa31b0e21e3208206e54c4",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Fresh browser return restores the completed response and recorded duration; no fabricated achievement."
+    },
+    {
+      "file": "regression/screenshots/05-queued-work.png",
+      "sha256": "672a3f93c448459683c01a86803475278485e7173d49b8d1183ae54291298eb1",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Queued message stays in the conversation while Mission 1 remains foreground; queue count and composer focus are visible."
+    },
+    {
+      "file": "regression/screenshots/06-stopped-queue.png",
+      "sha256": "3a6d7b9ebd2b9618155435ce8f09c2fc0aadc9a38da8c0a4ec2d9abaf6ebb875",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Stopped state retains both cancelled instructions with honest empty results for the selected follow-up."
+    },
+    {
+      "file": "regression/screenshots/07-waiting-for-approval.png",
+      "sha256": "bbb22aca345b810b71a90dadfcc4e36c00890d18c44ab9f0e03f92ad57c8376f",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Pending permission target and all offered decisions are legible; mission overview does not authorize it automatically."
+    },
+    {
+      "file": "regression/screenshots/08-return-and-approve.png",
+      "sha256": "37c25534bbc19b801a49954c57d66d41a4fe07af25cbcf7996761409b65519d0",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Explicit session permission decision completes the demonstration; response remains ready for review without tool proof."
+    },
+    {
+      "file": "regression/screenshots/09-server-restarted.png",
+      "sha256": "3d6f29495ddcb0c7874d29be4a056b4b967eeb050875be4bad59621b2d4a9484",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Server restart preserves mission and plan and presents a prominent restore action."
+    },
+    {
+      "file": "regression/screenshots/10-agent-restored.png",
+      "sha256": "960ea759891db12736c9e742b0d392260345ea3cef8baee5c6e1d76f72bb8242",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Restored session retains Interrupted status and incomplete-plan note while composition becomes available again."
+    },
+    {
+      "file": "regression/screenshots/11-wide-dark.png",
+      "sha256": "a7a280fc20fb969da3912ea69be0007843c2c58760094975f42ba83fe5fd19fd",
+      "width": 1440,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "Dark desktop completed response and empty evidence placeholders are readable and separated by quiet borders."
+    },
+    {
+      "file": "regression/screenshots/12-narrow-light.png",
+      "sha256": "e7ecafb146bd29028843b98f2c7adf2c07e4c7b5e1b680bc79c9731263517ee3",
+      "width": 760,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "760px view shows the completed response with accessible conversation navigation and compact centre composer."
+    },
+    {
+      "file": "regression/screenshots/13-mobile-dark.png",
+      "sha256": "65557865b2f8c60c3e6df04914e71562ac4905f68e669751eddd392d2d9512f4",
+      "width": 390,
+      "height": 960,
+      "visuallyInspected": true,
+      "outcome": "accepted",
+      "observation": "390px dark view wraps the completed explanation and preserves a usable composer below the independently scrolling result."
+    }
+  ],
+  "count": 42
+}

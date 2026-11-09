@@ -1,0 +1,55 @@
+{
+  "iteration": "iteration-01",
+  "mode": "Local presentation fixtures, persistent native SSE",
+  "results": [
+    {
+      "name": "First visual iteration: desktop, achieved, mobile and long-content states",
+      "ok": true
+    },
+    {
+      "name": "M-12 no browser runtime errors; every retained screenshot passes geometry/contrast checks",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "iteration-01/01-running-desktop.png",
+    "iteration-01/02-achieved-dark.png",
+    "iteration-01/03-mobile-light.png",
+    "iteration-01/04-long-mobile-dark.png"
+  ],
+  "errors": [],
+  "audits": [
+    {
+      "name": "01-running-desktop",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "02-achieved-dark",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "03-mobile-light",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    },
+    {
+      "name": "04-long-mobile-dark",
+      "overflow": false,
+      "bodyScroll": 0,
+      "missionOverflow": false,
+      "clipped": [],
+      "contrast": []
+    }
+  ]
+}
