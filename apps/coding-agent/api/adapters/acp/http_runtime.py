@@ -1,7 +1,7 @@
 """HTTP client for ACP agents that expose a streamable-HTTP endpoint (instead of stdio).
 
-OpenCode also runs `opencode serve`, which speaks MCP-style HTTP: one POST per JSON-RPC
-message, responses delivered as an SSE body. This adapter lets the app host such an agent
+This adapter requires a separate ACP-over-HTTP service. `opencode serve` is a REST/OpenAPI
+server, not this transport. This adapter lets the app host a compatible agent
 without a child process, which matters when the app runtime forbids spawning (RB-03/RB-04).
 
 It implements the same AgentRuntime port as AcpAgentRuntime, so nothing else changes.
@@ -106,6 +106,8 @@ class HttpAcpAgentRuntime:
         self._turn_ids: dict[str, str] = {}
 
     async def start(self, spec: SessionSpec) -> RuntimeHandle:
+        if spec.agent_session_id:
+            raise AgentCrashed("session recovery is supported by the stdio ACP adapter; select APP_AGENT_MODE=stdio")
         url = self._base or spec.mcp_url.replace("/mcp", "")
         ch = HttpChannel(url)
         self._channels[spec.session_id] = ch

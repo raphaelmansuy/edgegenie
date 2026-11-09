@@ -1,0 +1,83 @@
+{
+  "reviewedAt": "2026-11-09T06:33:59.837033+00:00",
+  "screenshots": [
+    {
+      "file": "01-server-running-light.png",
+      "sha256": "afc96fcf616eacd07c353035aa26b9a39e2044809b9842e7c0b099f984e81d6e",
+      "visuallyInspected": true,
+      "finding": "Server execution, copied return link, readable persistent status and matching running history."
+    },
+    {
+      "file": "02-offline.png",
+      "sha256": "237b8b2cda1b59e56f45fddf640798261d7747d55a87179963f3c0bca2ee8655",
+      "visuallyInspected": true,
+      "finding": "Offline observation copy and disabled mutation controls; saved context stays readable."
+    },
+    {
+      "file": "03-reconnected.png",
+      "sha256": "e7ff8b6fdc75d1fd1ab2a592e85df8ff73b4edb570b277d1297d3755504b79d1",
+      "visuallyInspected": true,
+      "finding": "Same turn resumes observation with its plan and no duplicate message."
+    },
+    {
+      "file": "04-return-after-page-close.png",
+      "sha256": "959a416ae1bf7729272063d68d6e560abaf874adc43e10ebe8c56f4ac01fea5e",
+      "visuallyInspected": true,
+      "finding": "Fresh viewer shows completed plan, full answer and ready-for-review status."
+    },
+    {
+      "file": "05-queued-work.png",
+      "sha256": "c15e1be4d48a41e0d1aa8e0431413993e2321a4d86c66ee20d4c9373a36d1a3e",
+      "visuallyInspected": true,
+      "finding": "Two distinct prompts and explicit queue count; no interleaving."
+    },
+    {
+      "file": "06-stopped-queue.png",
+      "sha256": "e4f276b968deda060085b32c3a738144859d644393aae9451c1f6821e3e617a4",
+      "visuallyInspected": true,
+      "finding": "Both prompts stopped; history immediately agrees with the status card."
+    },
+    {
+      "file": "07-waiting-for-approval.png",
+      "sha256": "eb3682969feaedf00c437d389675302352252c60ceb76397e15fff85ce935ff1",
+      "visuallyInspected": true,
+      "finding": "One inline decision card, offered scope and waiting status; no modal overlay."
+    },
+    {
+      "file": "08-return-and-approve.png",
+      "sha256": "4d509913e55c1cf7593b367673b1f8cf3ecf1961a2fc1d6edf3aeb58756bda0c",
+      "visuallyInspected": true,
+      "finding": "Recorded decision resolves the waiting state; full answer visible."
+    },
+    {
+      "file": "09-server-restarted.png",
+      "sha256": "93a44828863709027fe5c0d51a3b8586fd3d33294052b3b72e27ae3a1a3d322b",
+      "visuallyInspected": true,
+      "finding": "Restore action and disabled composer; partial plan preserved and uncertainty explained."
+    },
+    {
+      "file": "10-agent-restored.png",
+      "sha256": "0fb32e01e01a70ff61213e13d5852a65ce8446945435cc40d0439d59f98cd1d3",
+      "visuallyInspected": true,
+      "finding": "Restore action clears; composer enabled; interrupted prompt is not replayed and has no blind Retry action."
+    },
+    {
+      "file": "11-wide-dark.png",
+      "sha256": "0ff174dda76d0d90b4764fb3291d6904458d541b61b76564a9da4716318c9dba",
+      "visuallyInspected": true,
+      "finding": "Full replayed answer and semantic dark-theme status; no clipped controls."
+    },
+    {
+      "file": "12-narrow-light.png",
+      "sha256": "579a624585cd496b5cbee4e3eca1c8752a78d570d2ce7e598bc07312a8e98ac8",
+      "visuallyInspected": true,
+      "finding": "Conversation uses the available width; inspector yields and return link stays visible."
+    },
+    {
+      "file": "13-mobile-dark.png",
+      "sha256": "2e0e74ce1400be902d7dbc52b388b4d6281afebf9b6702f2d6550331f7090c3e",
+      "visuallyInspected": true,
+      "finding": "390px conversation, compact two-row toolbar, readable status and return link; inspector stays closed."
+    }
+  ]
+}

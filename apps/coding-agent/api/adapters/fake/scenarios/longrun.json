@@ -1,0 +1,160 @@
+{
+  "turn": {
+    "updates": [
+      {
+        "sessionUpdate": "plan",
+        "entries": [
+          {
+            "content": "Review the request",
+            "status": "in_progress",
+            "priority": "medium"
+          },
+          {
+            "content": "Explain execution and recovery",
+            "status": "pending",
+            "priority": "medium"
+          },
+          {
+            "content": "Summarize the handoff",
+            "status": "pending",
+            "priority": "medium"
+          }
+        ]
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 1. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 2. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 3. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 4. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 5. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 6. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 7. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 8. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 9. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 10. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 11. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 12. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 13. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 14. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 15. "
+        }
+      },
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": "Checking server session behavior, step 16. "
+        }
+      },
+      {
+        "sessionUpdate": "plan",
+        "entries": [
+          {
+            "content": "Review the request",
+            "status": "completed",
+            "priority": "medium"
+          },
+          {
+            "content": "Explain execution and recovery",
+            "status": "completed",
+            "priority": "medium"
+          },
+          {
+            "content": "Summarize the handoff",
+            "status": "completed",
+            "priority": "medium"
+          }
+        ]
+      }
+    ],
+    "answer": "## Your session stays with the server\n\nClosing the page disconnects the viewer. The accepted task continues on the server, and returning to the conversation replays its saved progress.\n\n### What to review\n\n- The answer and activity remain in this conversation.\n- Permission requests wait for your decision.\n- A server restart preserves the journal and asks you to restore the agent before continuing.\n\nThis is a deterministic lifecycle demonstration. No Databricks operation was executed.",
+    "stopReason": "end_turn"
+  }
+}

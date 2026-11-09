@@ -120,7 +120,7 @@ class ScenarioAgent:
                 },
                 [],
             )
-        if method == "session/new":
+        if method in ("session/new", "session/load"):
             opts = ["fake/model-a", "fake/model-b"]
             return (
                 {
@@ -265,31 +265,67 @@ async def serve_stdio(scenario: dict | str, delay: float = 0.0) -> None:
         out.write(json.dumps(obj) + "\n")
         out.flush()
 
-    while True:
-        line = await reader.readline()
-        if not line:
-            return
+    permissions: dict[str, asyncio.Future] = {}
+    active: dict[str, asyncio.Task] = {}
+
+    async def respond(msg: dict) -> None:
+        method, params = msg["method"], msg.get("params") or {}
+        sid = params.get("sessionId", "")
         try:
-            msg = json.loads(line.decode())
-        except json.JSONDecodeError:
-            continue
-        method = msg.get("method")
-        if not method:
-            continue
-        try:
-            result, notes = agent.handle(method, msg.get("params") or {})
+            result, notes = agent.handle(method, params)
+            if method == "session/prompt":
+                permission = agent.scenario_for(sid).get("turn", {}).get("permission")
+                if permission:
+                    rid = f"permission_{msg['id']}"
+                    future = asyncio.get_running_loop().create_future()
+                    permissions[rid] = future
+                    send({"jsonrpc": "2.0", "id": rid, "method": "session/request_permission",
+                          "params": {"sessionId": sid, **permission}})
+                    try:
+                        decision = await future
+                    finally:
+                        permissions.pop(rid, None)
+                    if decision.get("outcome", {}).get("outcome") != "selected":
+                        notes, result = [], {"stopReason": "cancelled"}
+            for n in notes:
+                if delay:
+                    await asyncio.sleep(delay)
+                send({"jsonrpc": "2.0", **n})
+            if "id" in msg:
+                send({"jsonrpc": "2.0", "id": msg["id"], "result": result or {}})
+        except asyncio.CancelledError:
+            if "id" in msg:
+                send({"jsonrpc": "2.0", "id": msg["id"], "result": {"stopReason": "cancelled"}})
         except KeyError:
             send({"jsonrpc": "2.0", "id": msg["id"], "error": {"code": -32601, "message": "no method"}})
-            continue
         except ValueError as exc:
             send({"jsonrpc": "2.0", "id": msg["id"], "error": {"code": -32602, "message": str(exc)}})
-            continue
-        if "id" in msg:
-            send({"jsonrpc": "2.0", "id": msg["id"], "result": result or {}})
-        for n in notes:
-            if delay:
-                await asyncio.sleep(delay)
-            send({"jsonrpc": "2.0", **n})
+
+    try:
+        while True:
+            line = await reader.readline()
+            if not line:
+                return
+            try:
+                msg = json.loads(line.decode())
+            except json.JSONDecodeError:
+                continue
+            if "method" not in msg:
+                future = permissions.get(msg.get("id"))
+                if future is not None and not future.done():
+                    future.set_result(msg.get("result", {}))
+                continue
+            method, sid = msg["method"], (msg.get("params") or {}).get("sessionId", "")
+            if method == "session/cancel":
+                task = active.get(sid)
+                if task and not task.done():
+                    task.cancel()
+            task = asyncio.create_task(respond(msg))
+            if method == "session/prompt":
+                active[sid] = task
+    finally:
+        for task in active.values():
+            task.cancel()
 
 
 if __name__ == "__main__":

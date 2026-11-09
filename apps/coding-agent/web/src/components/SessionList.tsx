@@ -7,6 +7,7 @@
 import { useMemo, useState } from "react";
 import { exactTime, relativeTime } from "../domain/time";
 import { groupSessions, sessionLabel, type SessionLike } from "../domain/sessions";
+import { missionLabel } from "../domain/mission";
 import { Close, Search } from "./Icons";
 
 export function SessionList<T extends SessionLike>({ sessions, loaded = true, activeId, onOpen, onDelete }: {
@@ -14,9 +15,10 @@ export function SessionList<T extends SessionLike>({ sessions, loaded = true, ac
   loaded?: boolean; activeId: string | null; onOpen: (s: T) => void; onDelete: (s: T) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("All");
   const [asking, setAsking] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
-  const groups = useMemo(() => groupSessions(sessions, query), [sessions, query]);
+  const groups = useMemo(() => groupSessions(sessions.filter((s) => filter === "All" || (filter === "Running" ? missionLabel(s) === "Running" : missionLabel(s).startsWith("Needs"))), query), [sessions, query, filter]);
 
   const confirm = async (s: T) => {
     try { await onDelete(s); setFailed(null); } catch { setFailed(s.id); }
@@ -25,6 +27,10 @@ export function SessionList<T extends SessionLike>({ sessions, loaded = true, ac
 
   return (
     <>
+      {sessions.length > 0 && <div className="mission-filters" role="group" aria-label="Filter sessions">
+        {["All", "Running", "Needs attention"].map((label) => <button type="button" key={label}
+          aria-pressed={filter === label} onClick={() => setFilter(label)}>{label}</button>)}
+      </div>}
       {/* The search box appears once there are more than four conversations. It is 30 px + 4 px of
           padding, and rendering it late pushed the whole list down by exactly that much — measured
           CLS 0.0064 at 82 ms, with `rail-list` moving y 152 → 186. Its space is reserved from the
@@ -58,7 +64,7 @@ export function SessionList<T extends SessionLike>({ sessions, loaded = true, ac
           <p className="rail-empty">No conversations yet. Start with what you want to build.</p>
         )}
         {loaded && sessions.length > 0 && groups.length === 0 && (
-          <p className="rail-empty" role="status">Nothing matches “{query}”.</p>
+          <p className="rail-empty" role="status">No conversations match {query ? `“${query}”` : "this filter"}.</p>
         )}
         {groups.map((g) => (
           <section key={g.label} aria-label={g.label}>
@@ -78,7 +84,8 @@ export function SessionList<T extends SessionLike>({ sessions, loaded = true, ac
                   <button className="rail-item" aria-current={s.id === activeId}
                     title={exactTime(s.createdAt) || undefined} onClick={() => onOpen(s)}>
                     <span className={`dot${s.status === "streaming" ? " busy" : ""}`} aria-hidden />
-                    <span className="rail-item-label">{sessionLabel(s)}</span>
+                    <span className="rail-item-info"><span className="rail-item-label">{sessionLabel(s)}</span>
+                      <span className={`rail-mission-state${missionLabel(s).startsWith("Needs") ? " is-attention" : ""}`}>{missionLabel(s)}</span></span>
                     {when && <span className="rail-item-when" aria-label={exactTime(s.createdAt)}>{when}</span>}
                   </button>
                   <button type="button" className="rail-del" aria-label={`Delete ${sessionLabel(s)}`} title="Delete this conversation"

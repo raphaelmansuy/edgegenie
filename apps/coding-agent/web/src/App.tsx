@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type CatalogueResponse, type SessionSummary } from "./api/client";
 import { prettyId } from "./domain/models";
-import { ApprovalSheet, EmptyState, Inspector, SessionHome } from "./components/Chrome";
+import { EmptyState, Inspector, SessionHome } from "./components/Chrome";
 import { artifactsOf, wroteElsewhere } from "./domain/artifacts";
 import { nameOf, recentDocs, rememberDoc } from "./domain/recent";
 import { WroteElsewhere } from "./components/WroteElsewhere";
@@ -24,7 +24,8 @@ import { LogoBadge, Wordmark } from "./components/Logo";
 import { parentOf } from "./domain/docs";
 import { peekOf } from "./domain/peek";
 import { SessionPeek } from "./components/SessionPeek";
-import { AssistantDock } from "./components/AssistantDock";
+import { RunStatus } from "./components/RunStatus";
+import { AssistantDock, InlineApproval } from "./components/AssistantDock";
 import { ModelControl } from "./components/ModelControl";
 import { ProviderSettings } from "./components/ProviderSettings";
 import { LayoutMenu } from "./components/LayoutMenu";
@@ -75,7 +76,7 @@ const dedupe = (items: Attachment[]) => {
 };
 
 export function App() {
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [savedSessions, setSessions] = useState<SessionSummary[]>([]);
   /** True until the first `/api/sessions` answers. Until then the list knows nothing, and saying
    *  "No conversations yet" would be a statement it cannot support — it flashed for 90 ms on every
    *  load and shifted everything below it by 34 px (measured CLS 0.0064). */
@@ -185,11 +186,25 @@ export function App() {
     window.addEventListener("resize", onResize, { passive: true });
     return () => window.removeEventListener("resize", onResize);
   }, []);
-  useEffect(() => { setDrawer(null); setDockDrawer(false); }, [mode]);
+  useEffect(() => {
+    setDrawer(null); setDockDrawer(false);
+    // A return link on a phone must open the conversation, not an inspector over its controls.
+    if (mode === "narrow") toggle("inspector", false);
+  }, [mode, toggle]);
   const composerBox = useRef<HTMLTextAreaElement | null>(null);
   const dockComposer = useRef<HTMLTextAreaElement | null>(null);
 
-  const { session, conn, error, send, stop, setSession } = useSessionStream(active);
+  const { session, conn, error, send, stop, restore, setSession } = useSessionStream(active);
+  // The active stream is fresher than the visibility-aware history poll.
+  const sessions = savedSessions.map((s) => s.id !== session.id || session.status === "provisioning" ? s : {
+    ...s, status: session.status, requiresResume: session.requiresResume,
+    execution: { persistence: s.execution?.persistence ?? "memory" as const,
+      maxRunSeconds: s.execution?.maxRunSeconds ?? 21600,
+      state: session.status === "streaming" ? "running" : session.turns.at(-1)?.status ?? "ready",
+      queued: session.turns.filter((t) => t.status === "queued").length,
+      pendingApprovals: session.approvals.filter((a) => !a.outcome).length },
+  });
+
 
   const refresh = useCallback(async () => {
     const [s, m, me] = await Promise.all([
@@ -205,6 +220,19 @@ export function App() {
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  // Inactive sessions still run. Refresh history without refetching the model catalogue.
+  useEffect(() => {
+    let alive = true;
+    const poll = () => {
+      if (document.visibilityState !== "visible") return;
+      void api.sessions().then((r) => { if (alive) setSessions(r.sessions); }).catch(() => {});
+    };
+    const timer = window.setInterval(poll, 5000);
+    document.addEventListener("visibilitychange", poll);
+    window.addEventListener("online", poll);
+    return () => { alive = false; window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", poll); window.removeEventListener("online", poll); };
+  }, []);
   useEffect(() => { if (!folder && scratch) setFolder(scratch); }, [scratch, folder]);
   /* The assistant's visibility at first paint.
      Wide: it is a column and it is shown — that is the whole point of this shell.
@@ -415,7 +443,7 @@ export function App() {
   const decide = async (approvalId: string, outcome: "allow_once" | "allow_session" | "deny") => {
     if (!active) return;
     const a = session.approvals.find((x) => x.approvalId === approvalId);
-    const pick = a?.options.find((o) => o.kind === (outcome === "deny" ? "reject_once" : "allow_once")) ?? a?.options[0];
+    const pick = a?.options.find((o) => o.kind === (outcome === "deny" ? "reject_once" : outcome === "allow_session" ? "allow_always" : "allow_once"));
     await api.decide(active, approvalId, outcome, pick?.optionId);
     void refresh();
   };
@@ -768,8 +796,9 @@ export function App() {
       error={error}
       onSend={(text, mine) => message(text, mine)}
       onStop={stop}
+      onRestore={restore}
       onSuggestion={fromSuggestion}
-      onApprove={(a, outcome) => void decide(a.approvalId, outcome)}
+      onApprove={(a, outcome) => decide(a.approvalId, outcome)}
       onRetry={() => void message(lastPrompt(turns))}
       onNewSession={newSession}
       onHide={() => openDock(false)}
@@ -938,6 +967,7 @@ export function App() {
                     </span>
                     {error && <span className="strip-error">{error}</span>}
                   </div>
+                  <RunStatus key={session.id} session={session} conn={conn} onRestore={restore} onStop={stop} />
                   <section className="transcript" role="region" aria-label="Conversation"
                     aria-live="polite" aria-busy={busy}>
                     {turns.length === 0 && <p style={{ color: "var(--ink-3)" }}>Starting the agent… (usually 3–8 s)</p>}
@@ -982,9 +1012,11 @@ export function App() {
                   )}
                 </p>
               )}
+              {pending && <InlineApproval approval={pending} disabled={conn !== "live"}
+                onDecide={(a, outcome) => decide(a.approvalId, outcome)} />}
               <Composer
                 inputRef={composerBox}
-                disabled={session.status === "archived"} busy={busy} onSend={message} onStop={stop}
+                disabled={session.status === "archived" || session.requiresResume || conn !== "live" && Boolean(active)} busy={busy} onSend={message} onStop={stop}
                 attachments={attachments} auto={viewDoc ? asAttachment(viewDoc) : null}
                 onAdd={addContext} onRemove={(a) => setAttachments((cur) => cur.filter((x) => x !== a))}
                 openDocs={docs}
@@ -1063,9 +1095,7 @@ export function App() {
           {paletteOpen && <Palette items={paletteItems} onClose={() => setPaletteOpen(false)} />}
           {keysOpen && <ShortcutSheet onClose={() => setKeysOpen(false)} />}
 
-          {pending && active && (
-            <ApprovalSheet approval={pending} sessionId={active} onDecided={() => void refresh()} />
-          )}
+
         </div>
       </OpenDoc.Provider>
     </WorkspaceLinks.Provider>

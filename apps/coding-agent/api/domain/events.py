@@ -12,6 +12,8 @@ from typing import Any, Literal
 
 EventType = Literal[
     "session.created",
+    "session.recovery_required",
+    "session.checkpoint",
     "session.ready",
     "session.degraded",
     "session.archived",

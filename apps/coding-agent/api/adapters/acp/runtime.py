@@ -7,6 +7,7 @@ import collections
 import os
 import re
 import shlex
+from uuid import uuid4
 from collections.abc import AsyncIterator
 
 from ...domain.events import Event
@@ -22,7 +23,7 @@ IDLE_TURN_TIMEOUT = float(os.environ.get("APP_TURN_IDLE_TIMEOUT", "180"))
 
 
 class AcpAgentRuntime:
-    """Spawns `opencode acp` (or any ACP v1/v2 agent) and speaks the protocol."""
+    """Spawns an ACP v1 agent. v2 is a different lifecycle and is not negotiated here."""
 
     def __init__(self, command: str = "opencode acp", extra_env: dict[str, str] | None = None) -> None:
         self._command = shlex.split(command)
@@ -83,7 +84,7 @@ class AcpAgentRuntime:
                 {
                     "protocolVersion": 1,
                     "clientCapabilities": {
-                        "fs": {"readTextFile": True, "writeTextFile": True},
+                        "fs": {"readTextFile": False, "writeTextFile": False},
                         "terminal": False,
                     },
                     "clientInfo": CLIENT_INFO,
@@ -106,14 +107,23 @@ class AcpAgentRuntime:
                                   .get("embeddedContext")),
             raw=init.get("agentCapabilities") or {},
         )
+        if caps.protocol_version != 1:
+            await self.close_silently(spec.session_id)
+            raise AgentCrashed("unsupported ACP version: this runtime requires ACP v1")
+        if spec.agent_session_id and not caps.load_session:
+            await self.close_silently(spec.session_id)
+            raise AgentCrashed("this agent cannot restore sessions; loadSession was not advertised")
         self._capabilities[spec.session_id] = caps
 
+        ch.discard_session_history(bool(spec.agent_session_id))
         try:
             new = await ch.request(
-                "session/new",
+                "session/load" if spec.agent_session_id else "session/new",
                 {
+                    **({"sessionId": spec.agent_session_id} if spec.agent_session_id else {}),
                     "cwd": spec.cwd,
-                    "mcpServers": [{"type": "http", "name": "db", "url": spec.mcp_url, "headers": []}],
+                    "mcpServers": ([{"type": "http", "name": "db", "url": spec.mcp_url, "headers": []}]
+                                   if spec.mcp_url else []),
                 },
                 timeout=90,
             )
@@ -124,8 +134,20 @@ class AcpAgentRuntime:
                 raise AgentAuthError(msg) from exc
             raise AgentCrashed(msg) from exc
 
+        ch.discard_session_history(False)
         models, current = model_options(new)
-        agent_sid = str(new.get("sessionId", ""))
+        # session/load replays history. It is already in our journal: consume it before the next
+        # prompt, or yesterday's tool results would be attributed to today's turn.
+        if spec.agent_session_id:
+            while True:
+                try:
+                    ch.next_notification_nowait()
+                except LookupError:
+                    break
+        agent_sid = spec.agent_session_id or str(new.get("sessionId", ""))
+        if not agent_sid:
+            await self.close_silently(spec.session_id)
+            raise AgentCrashed("the agent returned no session id")
         self._by_agent[agent_sid] = spec.session_id
         return RuntimeHandle(session_id=agent_sid, ours=spec.session_id, capabilities=caps,
                              models=models, current_model=current)
@@ -173,6 +195,10 @@ class AcpAgentRuntime:
 
     async def close(self, h: RuntimeHandle) -> None:
         ours = self._ours(h)
+        self._cancel_permissions(ours)
+        task = self._prompt_tasks.pop(ours, None)
+        if task and not task.done():
+            task.cancel()
         t = self._stderr_tasks.pop(ours, None)
         if t:
             t.cancel()
@@ -185,13 +211,19 @@ class AcpAgentRuntime:
                 await asyncio.wait_for(proc.wait(), 5)
             except TimeoutError:
                 proc.kill()
+                await proc.wait()
 
     async def close_silently(self, session_id: str) -> None:
+        self._cancel_permissions(session_id)
+        task = self._stderr_tasks.pop(session_id, None)
+        if task:
+            task.cancel()
         proc, ch = self._procs.pop(session_id, (None, None))
         if ch:
             await ch.close()
         if proc and proc.returncode is None:
             proc.kill()
+            await proc.wait()
 
     # -- turns ----------------------------------------------------------------
     def _blocks(self, h: RuntimeHandle, text: str, images: list[dict] | None) -> list[dict]:
@@ -266,6 +298,7 @@ class AcpAgentRuntime:
 
     async def cancel(self, h: RuntimeHandle) -> None:
         ch = self._channel(h)
+        self._cancel_permissions(self._ours(h))
         ch.notify("session/cancel", {"sessionId": h.session_id})
         task = self._prompt_tasks.get(self._ours(h))
         if task and not task.done():
@@ -298,7 +331,13 @@ class AcpAgentRuntime:
                 raise AgentError(str(first)) from first
 
     async def respond_permission(self, h: RuntimeHandle, request_id: str, option_id: str | None) -> None:
-        fut = self._permission_waiters.pop(request_id, None)
+        pending = self._pending_permissions.get(request_id)
+        if not pending or pending[0] != self._ours(h):
+            raise AgentError("permission is no longer pending for this session")
+        if option_id is not None and not any(o.get("optionId") == option_id
+                                            for o in pending[1].get("options", [])):
+            raise AgentError("permission option was not offered")
+        fut = self._permission_waiters.get(request_id)
         if fut and not fut.done():
             fut.set_result(option_id)
 
@@ -329,6 +368,8 @@ class AcpAgentRuntime:
                 except asyncio.CancelledError:
                     raise
                 if not done:
+                    if any(sid == ours for sid, _ in self._pending_permissions.values()):
+                        continue  # waiting for a person is not an unresponsive model
                     tail = self.stderr_tail(ours, 4)
                     yield (("error", f"the model or agent failed: {tail}") if tail
                            else ("error", f"the agent sent nothing for {IDLE_TURN_TIMEOUT:.0f}s"))
@@ -346,6 +387,9 @@ class AcpAgentRuntime:
                         else:
                             yield ("error", "the agent process ended")
                         return
+                    if item.get("method") == "opengenie/permission":
+                        params = item["params"]
+                        yield from_permission(ours, self._turn_ids.get(ours), params["request"], params["approvalId"])
                     if item.get("method") == "session/update":
                         update = (item.get("params") or {}).get("update") or {}
                         for ev in from_update(ours, self._turn_ids.get(ours), update):
@@ -437,12 +481,25 @@ class AcpAgentRuntime:
         return ch
 
     async def _on_permission(self, session_id: str, params: dict) -> dict:
-        self._approval_seq += 1
-        approval_id = f"ap_{self._approval_seq}"
+        approval_id = f"ap_{uuid4().hex}"
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
         self._permission_waiters[approval_id] = fut
         self._pending_permissions[approval_id] = (session_id, params)
-        option_id = await fut
-        if option_id is None:
-            return {"outcome": {"outcome": "cancelled"}}
-        return {"outcome": {"outcome": "selected", "optionId": option_id}}
+        ch = self._procs[session_id][1]
+        await ch.enqueue_notification({"method": "opengenie/permission", "params": {
+            "approvalId": approval_id, "request": params}})
+        try:
+            option_id = await fut
+            if option_id is None:
+                return {"outcome": {"outcome": "cancelled"}}
+            return {"outcome": {"outcome": "selected", "optionId": option_id}}
+        finally:
+            self._permission_waiters.pop(approval_id, None)
+            self._pending_permissions.pop(approval_id, None)
+
+    def _cancel_permissions(self, session_id: str) -> None:
+        for aid, (sid, _) in list(self._pending_permissions.items()):
+            if sid == session_id:
+                fut = self._permission_waiters.get(aid)
+                if fut and not fut.done():
+                    fut.set_result(None)

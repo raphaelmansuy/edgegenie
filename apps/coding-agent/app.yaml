@@ -33,6 +33,9 @@ env:
   # principal. `APP_LLM_ADMINS` are the people who may change the catalogue for everyone.
   - name: APP_LLM_PG_ENDPOINT
     value: projects/coding-agent-llm/branches/production/endpoints/primary
+  # Durable session history shares Lakebase; never falls back to container memory.
+  - name: APP_SESSION_USE_LAKEBASE
+    value: "true"
   - name: APP_LLM_ADMINS
     value: raphael.mansuy@gmail.com
   # The key-encryption key for stored provider keys. It is an app RESOURCE (a Databricks secret), so a

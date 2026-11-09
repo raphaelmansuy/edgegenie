@@ -11,6 +11,8 @@ export interface SessionLike {
   status?: string;
   /** Epoch seconds. Absent for a session created before the field existed. */
   createdAt?: number;
+  requiresResume?: boolean;
+  execution?: import("./mission").Execution;
 }
 
 export interface SessionGroup<T extends SessionLike = SessionLike> { label: string; items: T[] }
