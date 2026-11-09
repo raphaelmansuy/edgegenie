@@ -91,3 +91,79 @@ async def test_the_vision_column_exists_and_defaults_to_false():
         assert data_type == "boolean"
         assert nullable == "NO"
         assert "false" in (default or "")
+
+
+@pytest.mark.asyncio
+async def test_a_corrected_capability_reaches_a_row_that_already_existed():
+    """The bug: a row seeded before `sees_images` existed kept `false` forever.
+
+    Two independent reasons, both measured on the deployment:
+      - the seed's INSERT did not include the column at all, and
+      - `ON CONFLICT DO NOTHING` means even a correct seed value never reaches an existing row.
+
+    So `gemma-3-12b` served `seesImages: false` on production while the model read three random codes
+    correctly. Capability is a fact about the model, not an operator preference, so the seed must be able
+    to CORRECT it — while still leaving every operator-editable column alone.
+    """
+    try:
+        conn = await psycopg.AsyncConnection.connect(DSN, autocommit=True)
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"no Postgres at {DSN}: {exc}")
+
+    async with conn:
+        async with conn.cursor() as cur:
+            await cur.execute("DROP SCHEMA IF EXISTS llm CASCADE")
+        await migrate.apply(conn)
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "INSERT INTO llm.llm_provider (id, display_name, kind, wire_default, npm_package)"
+                " VALUES ('dbx','DBX','databricks','serving','p') ON CONFLICT DO NOTHING")
+            # A row as an old deployment left it: capability unknown, so false.
+            await cur.execute("""
+                INSERT INTO llm.llm_model
+                  (id, provider_id, endpoint, display_name, capability, wire,
+                   context_window, max_output, sees_images)
+                VALUES ('dbx/vision','dbx','vision','vision','tools','serving',128000,8000,false)""")
+            # The corrected seed upsert — the exact statement `_seed_if_empty` now runs.
+            await cur.execute("""
+                INSERT INTO llm.llm_model
+                  (id, provider_id, endpoint, display_name, capability, wire,
+                   context_window, max_output, sees_images)
+                VALUES ('dbx/vision','dbx','vision','vision','tools','serving',128000,8000,true)
+                ON CONFLICT (id) DO UPDATE SET
+                  sees_images = llm.llm_model.sees_images OR EXCLUDED.sees_images""")
+            await cur.execute("SELECT sees_images FROM llm.llm_model WHERE id = 'dbx/vision'")
+            assert (await cur.fetchone())[0] is True, "a corrected capability must reach an existing row"
+
+
+@pytest.mark.asyncio
+async def test_the_seed_upsert_never_clears_a_capability():
+    """`OR`, not assignment: a model measured to see must not be made blind by a stale seed that says
+    nothing. The only safe direction is "learning it can", because the opposite breaks a working feature."""
+    try:
+        conn = await psycopg.AsyncConnection.connect(DSN, autocommit=True)
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"no Postgres at {DSN}: {exc}")
+
+    async with conn:
+        async with conn.cursor() as cur:
+            await cur.execute("DROP SCHEMA IF EXISTS llm CASCADE")
+        await migrate.apply(conn)
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "INSERT INTO llm.llm_provider (id, display_name, kind, wire_default, npm_package)"
+                " VALUES ('dbx','DBX','databricks','serving','p') ON CONFLICT DO NOTHING")
+            await cur.execute("""
+                INSERT INTO llm.llm_model
+                  (id, provider_id, endpoint, display_name, capability, wire,
+                   context_window, max_output, sees_images)
+                VALUES ('dbx/seen','dbx','seen','seen','tools','serving',128000,8000,true)""")
+            await cur.execute("""
+                INSERT INTO llm.llm_model
+                  (id, provider_id, endpoint, display_name, capability, wire,
+                   context_window, max_output, sees_images)
+                VALUES ('dbx/seen','dbx','seen','seen','tools','serving',128000,8000,false)
+                ON CONFLICT (id) DO UPDATE SET
+                  sees_images = llm.llm_model.sees_images OR EXCLUDED.sees_images""")
+            await cur.execute("SELECT sees_images FROM llm.llm_model WHERE id = 'dbx/seen'")
+            assert (await cur.fetchone())[0] is True

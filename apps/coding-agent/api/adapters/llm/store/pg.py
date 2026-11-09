@@ -99,13 +99,21 @@ class PgRegistryStore:
                     """INSERT INTO llm.llm_model
                        (id, provider_id, endpoint, display_name, group_name, capability, wire,
                         context_window, max_output, limit_evidence, limit_source, credential_kind,
-                        state)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                       ON CONFLICT (id) DO NOTHING""",
+                        state, sees_images)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                       ON CONFLICT (id) DO UPDATE SET
+                         -- CAPABILITY is corrected, the rest is not. A model's ability to accept an image
+                         -- is a fact about the model, not an operator preference: when the seed learns it
+                         -- (by measurement), a row that was seeded before must learn it too. Every other
+                         -- column keeps `DO NOTHING` semantics so an operator's edit is never overwritten.
+                         -- Measured: gemma-3-12b was seeded with sees_images=false, the migration's UPDATE
+                         -- ran BEFORE the row existed, and the deployed catalogue kept serving it as blind
+                         -- while the model read three random codes correctly.
+                         sees_images = llm.llm_model.sees_images OR EXCLUDED.sees_images""",
                     (spec.id.value, spec.id.provider.value, spec.endpoint, spec.display_name,
                      spec.group, spec.capability.value, spec.wire.value, spec.limits.context,
                      spec.limits.output, spec.limits.evidence.value, spec.limits.source,
-                     spec.credential_kind.value, spec.state.value))
+                     spec.credential_kind.value, spec.state.value, spec.sees_images))
 
     async def close(self) -> None:
         await self._conn.close()
