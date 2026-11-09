@@ -66,6 +66,17 @@ def slugify(text: str) -> str:
     return plain.strip().lower().replace(" ", "-") or "section"
 
 
+def _unfenced(markdown: str):
+    """The lines of a document outside fenced code."""
+    fenced = False
+    for line in markdown.splitlines():
+        if _FENCE.match(line.strip()):
+            fenced = not fenced
+            continue
+        if not fenced:
+            yield line
+
+
 def headings(markdown: str, *, normalise: bool = False) -> list[tuple[int, str, str]]:
     """(level, id, text) for the table of contents, skipping fenced code."""
     out: list[tuple[int, str, str]] = []
@@ -90,7 +101,9 @@ def headings(markdown: str, *, normalise: bool = False) -> list[tuple[int, str, 
         if ceiling:
             level = max(2, min(level, ceiling + 1))
             ceiling = level
-        out.append((level, base if n == 0 else f"{base}-{n}", text))
+        # the rail is plain text: `code`, **bold** and [links](…) are written as what they say
+        label = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text).replace("`", "").replace("**", "")
+        out.append((level, base if n == 0 else f"{base}-{n}", label))
     return out
 
 
@@ -102,18 +115,32 @@ def code_css() -> str:
 
 
 # ----------------------------------------------------------------------------------------- inline pass
+#: Set by `render(trusted_html=True)` for the duration of one render. The site's own prose writes
+#: `&mdash;`, `<strong>` and `<a>` inside paragraphs and table cells; escaping them printed the markup
+#: as text on the published pages. A repository document is never trusted, so it is still escaped.
+_TRUSTED = False
+
+#: Tags that open an HTML *block* in trusted content. Anything else at the start of a line (`<a>`,
+#: `<strong>`, `<code>`) is inline and continues the paragraph it belongs to.
+_BLOCK_TAGS = {"div", "section", "figure", "p", "ul", "ol", "table", "details", "aside", "nav",
+               "blockquote", "pre", "header", "footer", "article", "img", "hr", "br", "h1", "h2",
+               "h3", "h4", "h5", "h6", "dl", "form", "picture", "video"}
+
+
 def _inline(text: str, *, rewrite=None, rewrite_image=None) -> str:
     """Escape, then apply the inline constructs. Escaping first is what makes `<` in prose safe."""
     # Protect inline code spans before escaping, so their content is not touched.
     spans: list[str] = []
     _dims = DIMS
 
-    def keep(m):
-        spans.append(html.escape(m.group(1), quote=False))
+    def keep_text(code: str) -> str:
+        spans.append(html.escape(code, quote=False))
         return f"\x00{len(spans) - 1}\x00"
 
-    text = re.sub(r"`([^`]+)`", keep, text)
-    text = html.escape(text, quote=False)
+    # ``a `b` c`` is one span (CommonMark), so the double form is matched before the single one
+    text = re.sub(r"``\s?(.+?)\s?``|`([^`]+)`", lambda m: keep_text(m.group(1) or m.group(2)), text)
+    if not _TRUSTED:
+        text = html.escape(text, quote=False)
 
     # images before links: `![a](b)` also matches the link pattern
     def image(m):
@@ -141,7 +168,9 @@ def _inline(text: str, *, rewrite=None, rewrite_image=None) -> str:
     text = re.sub(r"(?<!\*)\*([^*\n]+)\*(?!\*)", r"<em>\1</em>", text)
 
     def restore(m):
-        return f"<code>{spans[int(m.group(1))]}</code>"
+        code = spans[int(m.group(1))]
+        # A short command split at its hyphen ("make dev-" / "real") reads as two commands.
+        return f'<code class="nw">{code}</code>' if len(code) <= 28 else f"<code>{code}</code>"
 
     return re.sub(r"\x00(\d+)\x00", restore, text)
 
@@ -156,6 +185,19 @@ class Rendered:
 def render(markdown: str, *, rewrite=None, rewrite_image=None, drop_first_h1: bool = True,
            trusted_html: bool = False, strip_lead_nav: bool = False,
            normalise_headings: bool = False) -> Rendered:
+    global _TRUSTED
+    _TRUSTED = trusted_html
+    try:
+        return _render(markdown, rewrite=rewrite, rewrite_image=rewrite_image,
+                       drop_first_h1=drop_first_h1, trusted_html=trusted_html,
+                       strip_lead_nav=strip_lead_nav, normalise_headings=normalise_headings)
+    finally:
+        _TRUSTED = False
+
+
+def _render(markdown: str, *, rewrite=None, rewrite_image=None, drop_first_h1: bool = True,
+            trusted_html: bool = False, strip_lead_nav: bool = False,
+            normalise_headings: bool = False) -> Rendered:
     """Render a document.
 
     `drop_first_h1` removes the source's own title, which the page supplies.
@@ -169,6 +211,11 @@ def render(markdown: str, *, rewrite=None, rewrite_image=None, drop_first_h1: bo
     using a screen reader's heading list would hear a level that does not exist (`[AX-2]`).
     """
     toc = headings(markdown, normalise=normalise_headings)
+    # The body drops a document's own title when it is the first heading (the page supplies the h1), so
+    # the rail must not list it: an entry that points at nothing is a dead link at the top of the rail.
+    first = next((m for m in map(_HEADING.match, _unfenced(markdown)) if m), None)
+    if drop_first_h1 and first and len(first.group(1)) == 1 and toc:
+        toc = toc[1:]
     # The page supplies the h1. Every heading after it may be at most one level deeper than the previous
     # one, which is what makes the output's outline valid whatever the source's shape was.
     ceiling = 1 if normalise_headings else 0
@@ -231,7 +278,8 @@ def render(markdown: str, *, rewrite=None, rewrite_image=None, drop_first_h1: bo
             continue
 
         # -- raw html block --------------------------------------------------------------------
-        if trusted_html and re.match(r"^\s*<[a-zA-Z]", line):
+        if trusted_html and (bm := re.match(r"^\s*<([a-zA-Z][\w-]*)", line)) \
+                and bm.group(1).lower() in _BLOCK_TAGS:
             flush_paragraph(para)
             block: list[str] = []
             tag = re.match(r"^\s*<([a-zA-Z][\w-]*)", line).group(1).lower()
@@ -311,11 +359,14 @@ def render(markdown: str, *, rewrite=None, rewrite_image=None, drop_first_h1: bo
                 else:
                     quoted.append(inner)
                 i += 1
-            body_text = _inline(" ".join(quoted), rewrite=rewrite)
+            # A quote is markdown in its own right: paragraphs, lists, a fenced block. Rendering it as one
+            # inline run printed a ```sql fence as literal backticks inside the tutorial's callout.
+            inner_html = _render("\n".join(quoted), rewrite=rewrite, rewrite_image=rewrite_image,
+                                 drop_first_h1=False, trusted_html=trusted_html).html
             if kind:
-                out.append(f'<div class="callout callout-{kind}"><p>{body_text}</p></div>')
+                out.append(f'<div class="callout callout-{kind}">{inner_html}</div>')
             else:
-                out.append(f"<blockquote><p>{body_text}</p></blockquote>")
+                out.append(f"<blockquote>{inner_html}</blockquote>")
             seen_content = True
             continue
 
@@ -374,8 +425,14 @@ def _split_row(line: str) -> list[str]:
 
 def _table(header: list[str], rows: list[list[str]], rewrite, rewrite_image=None) -> str:
     head = "".join(f"<th>{_inline(c, rewrite=rewrite, rewrite_image=rewrite_image)}</th>" for c in header)
+    # Each cell carries its column's name, so a phone can show a row as a card ("Why: …") instead of
+    # hiding the third column off the edge of the screen.
+    labels = [html.escape(re.sub(r"<[^>]+>|[*`]", "", c).strip(), quote=True) for c in header]
     body = "".join(
-        "<tr>" + "".join(f"<td>{_inline(c, rewrite=rewrite, rewrite_image=rewrite_image)}</td>" for c in r) + "</tr>"
+        "<tr>" + "".join(
+            f'<td data-label="{labels[i] if i < len(labels) else ""}">'
+            f"{_inline(c, rewrite=rewrite, rewrite_image=rewrite_image)}</td>"
+            for i, c in enumerate(r)) + "</tr>"
         for r in rows
     )
     # A wide table scrolls inside its own wrapper; the page never scrolls sideways ([E-19]).
@@ -384,6 +441,9 @@ def _table(header: list[str], rows: list[list[str]], rewrite, rewrite_image=None
 
 
 def _code_block(code: str, lang: str) -> str:
+    # Box-drawing lines only join when the lines touch, so a drawing gets a tighter line height.
+    if re.search(r"[\u2500-\u257f]", code):
+        return f'<div class="code is-drawing"><pre><code>{html.escape(code)}</code></pre></div>'
     if highlight is None or not lang:
         return f'<div class="code"><pre><code>{html.escape(code)}</code></pre></div>'
     try:

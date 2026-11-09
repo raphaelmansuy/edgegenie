@@ -127,6 +127,10 @@
       labelBoxBkgColor: "#232642", labelBoxBorderColor: "#3d4485", labelTextColor: "#f2f0ec",
       loopTextColor: "#f2f0ec", activationBkgColor: "#2a2825", activationBorderColor: "#45423c",
       sequenceNumberColor: "#14131a",
+      xyChart: { plotColorPalette: "#8e9bf5, #e8955a, #6cc28e", backgroundColor: "#1a1917",
+                 titleColor: "#f2f0ec", xAxisLabelColor: "#c3bfb7", yAxisLabelColor: "#c3bfb7",
+                 xAxisTitleColor: "#c3bfb7", yAxisTitleColor: "#c3bfb7", xAxisLineColor: "#45423c",
+                 yAxisLineColor: "#45423c", xAxisTickColor: "#45423c", yAxisTickColor: "#45423c" },
     },
     light: {
       background: "#ffffff", primaryColor: "#e9ebfb", primaryTextColor: "#1c1b19",
@@ -137,8 +141,12 @@
       labelBoxBkgColor: "#f6f5f2", labelBoxBorderColor: "#e9e7e2", labelTextColor: "#1c1b19",
       loopTextColor: "#1c1b19", activationBkgColor: "#f6f5f2", activationBorderColor: "#d9d6cf",
       sequenceNumberColor: "#ffffff",
+      // a chart's series must be told apart at a glance: the site's blue, an orange, a green
+      xyChart: { plotColorPalette: "#4b5bd6, #e07a3f, #2f9e62", backgroundColor: "#ffffff" },
     },
   };
+
+  var MIN_SCALE = 0.75;  // Mermaid draws 16 px text; below this it is smaller than 12 px
 
   /* Mermaid renders to static SVG with the colours baked in, so a theme change has to re-render. The
      source is kept in a data attribute the first time, so re-rendering is not destructive. */
@@ -156,8 +164,16 @@
     script.src = (document.documentElement.getAttribute("data-root") || "") + "assets/mermaid.min.js";
     script.onload = function () {
       if (!window.mermaid) return;
-      window.__renderDiagrams = function () { render(blocks); };
+      window.__renderDiagrams = function () { return render(blocks); };
       render(blocks);
+      // the right direction depends on the column's width, so a real resize draws them again
+      var lastWidth = window.innerWidth, timer = 0;
+      window.addEventListener("resize", function () {
+        if (Math.abs(window.innerWidth - lastWidth) < 80) return;
+        lastWidth = window.innerWidth;
+        clearTimeout(timer);
+        timer = setTimeout(window.__renderDiagrams, 200);
+      });
     };
     script.onerror = function () {
       // Offline or blocked: the source stays in the <pre>, which is readable.
@@ -177,15 +193,95 @@
       flowchart: { useMaxWidth: true, htmlLabels: true },
       sequence: { useMaxWidth: true },
     });
-    blocks.forEach(function (block) {
-      // restore the source, then let Mermaid replace it again
-      block.removeAttribute("data-processed");
-      block.innerHTML = block.getAttribute("data-src");
-      try {
-        window.mermaid.run({ nodes: [block] });
-      } catch (e) {
-        block.classList.add("diagram-failed");
-      }
+    /* One diagram at a time, each with a unique id. `mermaid.run` is asynchronous, and starting it for
+       every block at once let two renders share Mermaid's scratch element: one diagram drew into
+       another and a third came out empty (seen in tests/sites/e2e screenshots of /reference/doc-safety/). */
+    var round = (window.__diagramRound = (window.__diagramRound || 0) + 1);
+    var chain = Promise.resolve();
+    blocks.forEach(function (block, i) {
+      chain = chain.then(function () {
+        var src = block.getAttribute("data-src");
+        var id = "og-diagram-" + round + "-" + i;
+        // A wide left-to-right flowchart fitted into a column is a strip of unreadable text. Draw it as
+        // written; if it would land below a readable scale, draw the same graph top-to-bottom; and if
+        // even that does not fit, keep the readable scale and let the frame scroll sideways.
+        function scaleOf(svgText) {
+          var m = /viewBox="[\d.\-]+ [\d.\-]+ ([\d.]+)/.exec(svgText);
+          return m ? block.clientWidth / parseFloat(m[1]) : 1;
+        }
+        return window.mermaid.render(id, src).then(function (out) {
+          var vertical = src.replace(/^(\s*(?:flowchart|graph))\s+(LR|RL)\b/m, "$1 TD");
+          if (scaleOf(out.svg) >= MIN_SCALE || vertical === src) return out;
+          return window.mermaid.render(id + "-td", vertical).then(function (td) {
+            return scaleOf(td.svg) > scaleOf(out.svg) ? td : out;
+          });
+        }).then(function (out) {
+          block.innerHTML = out.svg;
+          block.setAttribute("data-processed", "true");
+          var svg = block.querySelector("svg");
+          var vb = svg && svg.viewBox && svg.viewBox.baseVal;
+          var figure = block.closest("figure.diagram");
+          block.style.textAlign = "";
+          if (figure) {
+            figure.classList.remove("is-zoomable");
+            var old = figure.querySelector(".diagram-open");
+            if (old) old.remove();
+          }
+          if (dark && svg) readableLabels(svg);
+          if (vb && vb.width && block.clientWidth / vb.width < MIN_SCALE) {
+            if (window.innerWidth > 860) {
+              // Room to scroll: keep the text readable and let the frame scroll sideways. A centred
+              // child wider than its box overflows to the LEFT too, where no scroll can reach it.
+              svg.style.maxWidth = "none";
+              svg.style.width = Math.round(vb.width * MIN_SCALE) + "px";
+              block.style.textAlign = "left";
+            } else if (figure) {
+              // On a phone a scroller shows a corner of the picture. Show all of it, and offer it
+              // at full size on its own, the way the screenshots are offered.
+              figure.classList.add("is-zoomable");
+              var btn = document.createElement("button");
+              btn.type = "button";
+              btn.className = "diagram-open";
+              btn.textContent = "Open full size \u2197";
+              btn.addEventListener("click", function () {
+                var url = URL.createObjectURL(new Blob([svg.outerHTML], { type: "image/svg+xml" }));
+                window.open(url, "_blank", "noopener");
+              });
+              figure.appendChild(btn);
+            }
+          }
+          block.classList.remove("diagram-failed");
+        }).catch(function () {
+          block.textContent = src;
+          block.classList.add("diagram-failed");
+        });
+      });
+    });
+    return chain.then(markScrollable);
+  }
+
+  /* A document's own classDef paints a node pastel; the dark theme paints its label near-white. Where
+     the two meet, the label vanishes. Give any label on a light fill dark ink. */
+  function readableLabels(svg) {
+    svg.querySelectorAll("g.node, g.cluster").forEach(function (node) {
+      var shape = node.querySelector("rect, polygon, circle, ellipse, path");
+      if (!shape) return;
+      var m = getComputedStyle(shape).fill.match(/[\d.]+/g);
+      if (!m || m.length < 3) return;
+      var lum = (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255;
+      if (lum < 0.6) return;
+      node.querySelectorAll(".nodeLabel, .cluster-label, text, span, p, div").forEach(function (el) {
+        el.style.color = "#1c1b19";
+        el.style.fill = "#1c1b19";
+      });
+    });
+  }
+
+  /* ---------------------------------------------------------------- overflow hints */
+  // A shadow at the edge of a table or code block says "there is more"; it must only say so when true.
+  function markScrollable() {
+    document.querySelectorAll(".table-wrap, .code pre, figure.diagram").forEach(function (el) {
+      el.classList.toggle("is-scrollable", el.scrollWidth > el.clientWidth + 1);
     });
   }
 
@@ -206,6 +302,9 @@
     initMenu();
     initToc();
     initMermaid();
+    markScrollable();
+    var t = 0;
+    window.addEventListener("resize", function () { clearTimeout(t); t = setTimeout(markScrollable, 120); });
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);

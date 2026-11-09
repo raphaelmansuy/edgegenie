@@ -46,6 +46,8 @@ def _content(name: str):
         text = path.read_text(encoding="utf-8")
         if "{{claims}}" in text:
             text = text.replace("{{claims}}", ctx["claim_cards"])
+        if "fill" in ctx:
+            text = ctx["fill"](text, ctx["facts"], f"site/content/{name}")
         # This site's own prose, so its HTML is trusted: the pages use cards and figures on purpose.
         r = render(text, rewrite=ctx["rewrite"], drop_first_h1=True, trusted_html=True)
         return "", "", r.html, r.toc
@@ -115,6 +117,10 @@ def _reference(ctx: dict):
         ("specs/006-databricks/README.md", "006 · On par with Genie Code", "spec-006", "the assistant dock"),
         ("specs/007-ux-ui-improve/README.md", "007 · The shell and the keys", "spec-007", "zones, focus, scrolling"),
         ("specs/008-github-page/README.md", "008 · This site", "spec-008", "the page you are reading"),
+        ("specs/009-attach-file-clipboard-support/README.md", "009 · Files and screenshots", "spec-009", "attach, drop, paste, and who can see"),
+        ("specs/010-long-running/README.md", "010-long-running · Durable sessions", "spec-010-long", "work that survives a closed tab and a restart"),
+        ("specs/010-notebook/README.md", "010-notebook · The notebook", "spec-010-notebook", "run ranges, skip, the run map"),
+        ("specs/011-ux-coding-mission/README.md", "011 · The mission view", "spec-011", "objective, plan, outputs, proof"),
     ]
     for rel, label, slug, blurb in listing:
         items.append((rel, label, f"/reference/{slug}/", blurb))
@@ -133,6 +139,8 @@ def _reference(ctx: dict):
     body = (
         '<p class="lede">Every document below is rendered from the repository itself, so what you read '
         'here is what the repository says. Each one links to its source file.</p>'
+        '<p>Specifications are numbered by their folder in <code>specs/</code>. Only the ones that describe '
+        'what ships are listed; the other folders record earlier iterations.</p>'
         f'<ul class="ref-list">{rows}</ul>'
     )
     return "", "", body, []
@@ -141,10 +149,10 @@ def _reference(ctx: dict):
 ROUTES: list[Route] = [
     Route(
         path="", nav="home", label="Home", h1="OpenGenie",
-        title="OpenGenie — a Databricks coding agent with the model you choose",
+        title="OpenGenie — the Databricks coding agent that runs on the model you choose",
         description=(
-            "Genie Code gives you one model and a metered bill. OpenGenie is an Apache-2.0 Databricks "
-            "App that does the same work with 16 models, a write fence, and proof before it says done."
+            "An open-source Databricks App: a coding agent with Unity Catalog, warehouse, notebook and "
+            "job context, on the model you choose, fenced writes, and proof before it says done."
         ),
         body=_content("home.md"),
         hero=True,
@@ -153,8 +161,8 @@ ROUTES: list[Route] = [
         path="tour/", nav="tour", label="Tour", h1="Tour",
         title="Tour — what OpenGenie looks like",
         description=(
-            "The app at four widths and in both themes: the notebook, the assistant dock bound to it, "
-            "the model picker, and the fence."
+            "Real screenshots of the app: the notebook, the assistant bound to it, the mission view "
+            "with its evidence, approvals, recovery after a restart, and the model picker."
         ),
         body=_content("tour.md"),
     ),
@@ -179,10 +187,10 @@ ROUTES: list[Route] = [
     ),
     Route(
         path="install/", nav="install", label="Install", h1="Install",
-        title="Install — three ways to run OpenGenie",
+        title="Install — deploy OpenGenie to your workspace",
         description=(
-            "A Databricks App with the asset bundle, a local run against your workspace, or the "
-            "original shell-only setup. What each one needs, and what each one cannot do."
+            "Deploy it as a Databricks App, run it locally against your workspace, or try the "
+            "shell-only setup from a notebook. What each path needs, and what to change first."
         ),
         body=_content("install.md"),
     ),
@@ -190,8 +198,8 @@ ROUTES: list[Route] = [
         path="reference/", nav="reference", label="Reference", h1="Reference",
         title="Reference — the docs and the specifications",
         description=(
-            "The nine documents and five specifications, rendered from the repository. Every number "
-            "traces to a file you can open."
+            "The documents and specifications, rendered from the repository. Every number traces to a "
+            "file you can open."
         ),
         body=_reference,
     ),
@@ -246,6 +254,10 @@ REFERENCE_PAGES: list[tuple[str, str, str, str]] = [
     ("spec-006", "specs/006-databricks/README.md", "006 · On par with Genie Code", "The assistant dock"),
     ("spec-007", "specs/007-ux-ui-improve/README.md", "007 · The shell and the keys", "Zones, focus, scrolling"),
     ("spec-008", "specs/008-github-page/README.md", "008 · This site", "The page you are reading"),
+    ("spec-009", "specs/009-attach-file-clipboard-support/README.md", "009 · Files and screenshots", "Attach, drop, paste"),
+    ("spec-010-long", "specs/010-long-running/README.md", "010-long-running · Durable sessions", "Work that survives a restart"),
+    ("spec-010-notebook", "specs/010-notebook/README.md", "010-notebook · The notebook", "Run ranges, skip, the run map"),
+    ("spec-011", "specs/011-ux-coding-mission/README.md", "011 · The mission view", "Objective, plan, outputs, proof"),
 ]
 
 

@@ -133,16 +133,17 @@ weak one (2 to 3 million), because it checks its work more. We have not turned t
 ## Model versus tooling
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#E8F0FE','primaryTextColor':'#1F2937','primaryBorderColor':'#A8C0E8','lineColor':'#94A3B8','xyChart':{'plotColorPalette':'#F5C29C, #A8D5B5'}}}}%%
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#E8F0FE','primaryTextColor':'#1F2937','primaryBorderColor':'#A8C0E8','lineColor':'#94A3B8','xyChart':{'plotColorPalette':'#A8C0E8, #F5C29C'}}}}%%
 xychart-beta
     title "Development set: the same three setups with two models"
     x-axis ["V4 custom MCP", "V5 stock CLI + skills", "V6 hybrid"]
     y-axis "Total score (%)" 0 --> 100
-    bar [94, 39, 88]
     bar [100, 86, 99]
+    bar [94, 39, 88]
 ```
 
-(first bar: gpt-oss-120b, second bar: Gemini 3.8 Flash)
+(Mermaid draws the two series over each other: the taller bar behind is Gemini 3.8 Flash, the shorter
+bar in front is gpt-oss-120b. On this site Gemini is blue and gpt-oss orange.)
 
 | Observation | Evidence |
 |---|---|

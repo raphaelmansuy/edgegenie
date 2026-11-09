@@ -37,3 +37,8 @@ specs/001-databricks-coding-agents/e2e/screenshots/*.png
 
 # the site build output: CI rebuilds it, and a committed copy is a second thing to drift
 site/dist/
+
+# Site e2e output: regenerated on every run (about 350 PNGs, ~200 MB). CI keeps them as the
+# `site-e2e-screenshots` artifact; the reviewed findings live in tests/sites/e2e/visual-inspection.md.
+tests/sites/e2e/screenshots/
+tests/sites/e2e/report.json

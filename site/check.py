@@ -208,7 +208,8 @@ def check_absolute_paths(parsed: dict[Path, Page]) -> None:
     for path, p in parsed.items():
         where = route_of(path)
         raw = path.read_text(encoding="utf-8")
-        for m in re.finditer(r'(?:href|src)="/(?!/)', raw):
+        # `<base href="/opengenie/">` on the 404 page is the one deliberate absolute path (build.py).
+        for m in re.finditer(r'(?<!<base )(?:href|src)="/(?!/)', raw):
             snippet = raw[m.start():m.start() + 70].split('"')[1]
             fail("links", where, f"site-absolute path {snippet!r} breaks at a project subpath")
 
