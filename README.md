@@ -28,21 +28,23 @@ chosen for you, and the bill is metered by a product you do not configure.
 
 [Raphael Mansuy](https://www.linkedin.com/in/raphaelmansuy/) built OpenGenie to keep the context and
 return those decisions to the team. Before building it, he measured whether the model matters. Same
-agent, same tools, same rules, eight graded tasks in a live workspace:
+agent, same tools, same rules, on eight development tasks scored in a live workspace. The score is
+the scoring points earned out of the points available across those tasks:
 
-| Model | Score |
+| Model | Points earned |
 |---|---|
-| gpt-oss-120b | **39%** (60/152) |
-| Gemini 3.8 Flash | **86%** (130/152) |
+| gpt-oss-120b | **39%** (60 of 152) |
+| Gemini 3.8 Flash | **86%** (130 of 152) |
 
-One run each; caveats and the regeneration command are on the
+One run each. The caveats and the command that regenerates these numbers are on the
 [evidence page](https://raphaelmansuy.github.io/opengenie/evidence/). The model was the largest lever
 we could measure, and it is the one a Genie Code user cannot pull.
 
 ## What the agent can reach
 
-Each conversation gets its own [MCP](https://modelcontextprotocol.io) tool server, calling Databricks
-**as the signed-in user**, so Unity Catalog permissions still decide what the agent sees.
+Each conversation gets its own [MCP](https://modelcontextprotocol.io) tool server. In a deployment it calls
+Databricks **as the signed-in user**, so Unity Catalog permissions still decide what the agent sees. Run
+locally, it acts as the owner of the token you give it.
 
 | Area | What it does | Tools |
 |---|---|---|
@@ -108,8 +110,17 @@ agent ran; or you want to read, change and self-host the code.
 | Check the numbers | [**The evidence**](https://raphaelmansuy.github.io/opengenie/evidence/): every score with its fraction and caveat |
 | Read the design | [001](specs/001-databricks-coding-agents/README.md) app · [005](specs/005-llm-models/README.md) models · [006](specs/006-databricks/README.md) Genie Code parity · [010](specs/010-long-running/README.md) durable sessions · [011](specs/011-ux-coding-mission/README.md) missions |
 
-Deploying, in short (the [install page](https://raphaelmansuy.github.io/opengenie/install/) lists the
-values in `app.yaml` and the `Makefile` that name the author's workspace and must be changed first):
+### Prerequisites
+
+- A Databricks workspace, and the [Databricks CLI](https://docs.databricks.com/dev-tools/cli/index.html)
+  signed in with `databricks auth login`.
+- Python 3.12 and Node.js 20 or later, to run or build the app locally.
+- For a deployment: app compute, a Lakebase project, and a Databricks secret scope for the encryption key.
+
+### Deploy
+
+The [install page](https://raphaelmansuy.github.io/opengenie/install/) lists the values in `app.yaml` and
+the `Makefile` that name the author's workspace; change those first. Then:
 
 ```bash
 git clone https://github.com/raphaelmansuy/opengenie.git && cd opengenie
@@ -117,14 +128,18 @@ databricks bundle deploy -t dev            # the app, its user scopes and secret
 make -C apps/coding-agent deploy           # sync -> deploy -> verify the live URL serves this checkout
 ```
 
-Running locally:
+### Run locally
 
 ```bash
 cd apps/coding-agent
-make setup && make dev                     # scripted agent on :8062 (needs `databricks auth login`)
-make dev-real                              # the real opencode agent and model on :8071
-make check                                 # TypeScript types + 622 Python and 599 front-end tests, no network
+make setup && make dev                     # scripted agent on http://127.0.0.1:8062
+make dev-real                              # the real opencode agent and model on http://127.0.0.1:8071
+make check                                 # TypeScript types, 622 Python tests and 599 front-end tests; no network
 ```
+
+`make dev` replaces the model with a deterministic agent that plays scripted scenarios, which is how the
+interface is developed and tested. Both use your `databricks auth login` session, so the workspace browser
+shows your real files.
 
 The site has its own gate. `python3 site/build.py && python3 site/check.py` builds and verifies every
 link, claim and image; `node tests/sites/e2e/site.e2e.mjs` drives every published page at six viewports
@@ -144,9 +159,9 @@ reference solution scores 100% and a do-nothing agent fails.
 1. **The model matters more than the tooling.** The same tools and rules scored 39% with one model and
    86% with another. → [Results](docs/06-results-and-lessons.md)
 2. **Engineering rescues a weak model.** Scoped tools, a supervisor loop and written rules took that
-   model from 19% to 94% (29/152 to 143/152) on the development tasks.
+   model from 19% to 94% of the points on the development tasks (29 of 152 to 143 of 152).
 3. **A strong model needs far less machinery.** On the three held-out tasks, the very first setup scored
-   100% with Gemini (37/37 over three runs). Choose how much to build from the model you can afford.
+   every point with Gemini (37 of 37, over three runs). Choose how much to build from the model you can afford.
    → [Decision guide](docs/07-decision-guide.md)
 4. **The official Databricks skills are not neutral.** One routes data questions to Genie, and the plain
    CLI path has no write fence. → [Toolbox](docs/03-toolbox-cli-skills-mcp.md#the-genie-trap)
@@ -183,6 +198,8 @@ templates/           the original shell-only kit
 - **Not a hosted demo.** The app needs your workspace.
 - **Not a guarantee.** One run per setup on most configurations, small clean data, well-specified tasks.
   Only one configuration was repeated (spread about 2.6 points), so a gap of a point or two is noise.
+- **Not a verified deployment.** This README describes the code. To check that a live app serves this
+  checkout, run `make -C apps/coding-agent verify`.
 
 ## Safety
 
