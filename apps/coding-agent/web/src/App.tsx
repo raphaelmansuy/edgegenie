@@ -51,7 +51,7 @@ import { useLayout } from "./hooks/useLayout";
 import { useTheme } from "./hooks/useTheme";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 import {
-  ChevronLeft, CommandKey, PanelLeft, PanelRight, Refresh, Search,
+  ChevronLeft, PanelLeft, PanelRight, Search,
 } from "./components/Icons";
 import { ALL_FOUR_MIN, bounds, columns, DOCK_FOCUS_MIN, drawerWidth, modeFor, takesColumn, type RailTab } from "./domain/layout";
 import {
@@ -66,6 +66,8 @@ import { useSessionStream } from "./hooks/useSessionStream";
 import { useRoute } from "./hooks/useRoute";
 import { EMPTY_ROUTE, linkTo, type Route } from "./domain/route";
 import { copyText } from "./domain/clipboard";
+import { readWorkingSet, saveWorkingSet } from "./domain/workingset";
+import { afterClose, docTabId, moveTab } from "./domain/tabs";
 
 type Rail = "sessions" | "files" | "catalog";
 const CHAT = "chat";
@@ -96,12 +98,22 @@ export function App() {
   useEffect(() => { if (toast) { const id = window.setTimeout(() => setToast(""), 2600); return () => window.clearTimeout(id); } }, [toast]);
 
   const [docs, setDocs] = useState<Doc[]>([]);
+  const closedDocs = useRef<{ doc: Doc; index: number }[]>([]);
+  const [closedCount, setClosedCount] = useState(0);
+  const [dirtyIds, setDirtyIds] = useState<ReadonlySet<string>>(() => new Set());
+  const documentDirty = useCallback((doc: Doc, dirty: boolean) => {
+    setDirtyIds((cur) => {
+      if (cur.has(doc.id) === dirty) return cur;
+      const next = new Set(cur);
+      if (dirty) next.add(doc.id); else next.delete(doc.id);
+      return next;
+    });
+  }, []);
   const [view, setView] = useState<string>(CHAT);
   const [focus, setFocus] = useState<Focus>(NO_FOCUS);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [treeRev, setTreeRev] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState<"layout" | null>(null);
   const [keysOpen, setKeysOpen] = useState(false);
   useEffect(() => {
     const open = () => setKeysOpen(true);
@@ -265,20 +277,37 @@ export function App() {
     setFocus(focusFor(doc));
     dismissRailDrawer();
   }, [dismissRailDrawer]);
-  const closeDoc = (id: string) => {
-    setDocs((cur) => cur.filter((d) => d.id !== id));
-    setView((v) => {
-      if (v !== id) return v;
-      // Closing the focused document clears the focus, so no prompt can attach a closed file.
-      setFocus((f) => (f.docId === id ? withoutDoc() : f));
-      return CHAT;
-    });
-  };
   const selectTab = (id: string) => {
     setView(id);
     if (id === CHAT) { setFocus(withoutDoc()); return; }
     const d = docs.find((x) => x.id === id);
     setFocus((f) => (d ? (sameFocus(f, focusFor(d)) ? f : focusFor(d)) : withoutDoc()));
+  };
+  const closeDocuments = (ids: string[]) => {
+    const removed = new Set(ids.filter((id) => docs.some((d) => d.id === id)));
+    if (!removed.size) return;
+    const nextView = afterClose(docs, view, removed);
+    const focusedTab = document.activeElement?.closest<HTMLElement>("[data-tab-id]")?.dataset.tabId;
+    const restoreFocus = removed.has(view) || (focusedTab && removed.has(focusedTab));
+    const entries = docs.flatMap((doc, index) => removed.has(doc.id) ? [{ doc, index }] : []);
+    closedDocs.current = [...closedDocs.current.filter((entry) => !removed.has(entry.doc.id)), ...entries].slice(-20);
+    setClosedCount(closedDocs.current.length);
+    setDocs((cur) => cur.filter((d) => !removed.has(d.id)));
+    setDirtyIds((cur) => new Set([...cur].filter((id) => !removed.has(id))));
+    if (view !== nextView) selectTab(nextView);
+    if (restoreFocus) requestAnimationFrame(() => {
+      (document.getElementById(docTabId(nextView)) ?? document.getElementById("doc-panel"))?.focus({ preventScroll: true });
+    });
+  };
+  const closeDoc = (id: string) => closeDocuments([id]);
+  const moveDocument = (id: string, index: number) => setDocs((cur) => moveTab(cur, id, index));
+  const reopenDocument = () => {
+    const entry = closedDocs.current.pop();
+    setClosedCount(closedDocs.current.length);
+    if (!entry) return;
+    openDoc(entry.doc);
+    setDocs((cur) => moveTab(cur, entry.doc.id, entry.index));
+    requestAnimationFrame(() => document.getElementById(docTabId(entry.doc.id))?.focus({ preventScroll: true }));
   };
   /** A cell in the open document: the `ask` button on a cell, or a click in the gutter. */
   const focusCell = useCallback((doc: Doc, cell: number) => {
@@ -290,6 +319,27 @@ export function App() {
   }, [dockShown, overlay, toggle]);
 
   const viewDoc = docs.find((d) => d.id === view) ?? null;
+
+  const workspaceScope = user ? `${window.location.origin}|${workspace?.host ?? ""}|${user}` : null;
+  const [restoredScope, setRestoredScope] = useState<string | null>(null);
+  useEffect(() => {
+    if (!workspaceScope || restoredScope === workspaceScope) return;
+    const saved = readWorkingSet(workspaceScope);
+    const changingAccount = Boolean(restoredScope && restoredScope !== workspaceScope);
+    setDocs((current) => [...saved.docs, ...(changingAccount ? [] : current.filter((d) => !saved.docs.some((s) => s.id === d.id)))]);
+    if (changingAccount) { setActive(null); setView(CHAT); setFocus(withoutDoc()); }
+    closedDocs.current = saved.closed;
+    setClosedCount(saved.closed.length);
+    // A pasted document/session/settings route outranks the previous selection.
+    if ((!window.location.hash || changingAccount) && saved.active !== CHAT) {
+      const doc = saved.docs.find((d) => d.id === saved.active);
+      if (doc) { setView(doc.id); setFocus(focusFor(doc)); }
+    }
+    setRestoredScope(workspaceScope);
+  }, [workspaceScope, restoredScope]);
+  useEffect(() => {
+    if (workspaceScope && restoredScope === workspaceScope) saveWorkingSet(workspaceScope, docs, view, closedDocs.current);
+  }, [workspaceScope, restoredScope, docs, view, closedCount]);
 
   // -- deep links: the address bar says what is on screen, and what it says can be opened (domain/route.ts)
   const route = useMemo<Route>(() => {
@@ -470,17 +520,19 @@ export function App() {
   }, [dockOnScreen]);
 
   const openRail = useCallback((on: boolean) => {
+    if (on && inspectorOnScreen && dockColumn && viewport - layout.railWidth - layout.inspectorWidth - layout.assistantWidth - 3 < 640) toggle("inspector", false);
     toggle("rail", on);
     setDrawer(on && (narrow || focusDock) ? "rail" : null);
-  }, [toggle, narrow, focusDock]);
+  }, [toggle, narrow, focusDock, inspectorOnScreen, dockColumn, viewport, layout]);
   const openInspector = useCallback((on: boolean) => {
+    if (on && railShown && dockColumn && viewport - layout.railWidth - layout.inspectorWidth - layout.assistantWidth - 3 < 640) toggle("rail", false);
     toggle("inspector", on);
     /* Focus mode draws the work and the conversation and nothing else, so asking for the inspector
        there would set a flag that cannot be honoured — a press with no visible effect, which is the
        control lying in the other direction. Opening the inspector closes the focused dock instead:
        one deliberate choice replaces another, and the panel that was asked for actually appears. */
     if (on && focusDock) { setDockDrawer(false); toggle("assistant", false); }
-  }, [toggle, focusDock]);
+  }, [toggle, focusDock, railShown, dockColumn, viewport, layout]);
   const openDock = useCallback((on: boolean) => {
     toggle("assistant", on);
     setDockDrawer(on && mode !== "wide");
@@ -547,6 +599,7 @@ export function App() {
       () => openInspector(!inspectorOnScreen), display("mod+i"));
 
     add("tab:chat", "Chat", "Open", () => selectTab(CHAT), undefined, 1);
+    if (closedCount) add("tab:reopen", "Reopen closed tab", "Actions", reopenDocument, display("mod+shift+t"));
 
     // Actions on what is in context. A palette that only navigates is a menu; this is the useful part.
     const bound = focus.doc;
@@ -572,7 +625,7 @@ export function App() {
     }
     return items;
   }, [docs, sessions, railShown, inspShown, newSession, refresh, focus, addContext, ask, openRail,
-      openInspector, resetAll, toggleDock, dockShown]);
+      openInspector, resetAll, toggleDock, dockShown, closedCount, reopenDocument]);
 
   const busy = session.status === "streaming";
   /** Drawn as a column, or as the right-hand drawer. Never "on" and invisible.
@@ -617,13 +670,14 @@ export function App() {
       railFiles: go("files"),
       railCatalog: go("catalog"),
       cycleTheme: theme.cycle,
-      toggleRail: () => { setDrawer(!layout.railVisible && (narrow || focusDock) ? "rail" : null); toggle("rail"); },
+      toggleRail: () => openRail(!railDrawn),
       /* ONE implementation, shared with the toolbar button and the palette: a chord that sets the
          intent without drawing the panel is the bug this line replaces. */
       toggleInspector: () => openInspector(!inspectorOnScreen),
       searchFiles: () => { setRailAndOpen("files"); focusComposer(); },
       nextTab: cycle(1),
       prevTab: cycle(-1),
+      reopenTab: reopenDocument,
       closeTab: () => {
         if (view === CHAT) return false;      // never close someone's only view by accident
         closeDoc(view);
@@ -646,19 +700,7 @@ export function App() {
     };
   }, [docs, view, paletteOpen, keysOpen, settingsOpen, newSession, focusComposer, drawer, dockDrawer,
       narrow, mode, layout, toggle, theme.cycle, toggleDock, selectTab, setRailAndOpen, closeDoc,
-      openInspector, inspectorOnScreen]);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (!t?.closest(".menu-wrap")) setMenuOpen(null);
-    };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(null); };
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => { window.removeEventListener("mousedown", onDown); window.removeEventListener("keydown", onKey); };
-  }, [menuOpen]);
+      openInspector, inspectorOnScreen, reopenDocument, openRail, railDrawn]);
 
   /* The context the arbiter needs, read live so the listener is registered once (007 KB-2). */
   const hotkeyContext = useMemo(() => ({
@@ -699,6 +741,7 @@ export function App() {
   const turns = session.turns;
   const selectedRef = viewDoc?.ref ?? null;
   const viewerActions = useMemo(() => ({
+    onDirtyChange: documentDirty,
     onAsk: ask,
     onAttach: (d: Doc) => addContext(asAttachment(d)),
     onAskCell: (d: Doc, cell: number) => focusCell(d, cell),
@@ -712,7 +755,7 @@ export function App() {
       sessionId: active,
       theme: theme.effective,
     },
-  }), [ask, addContext, focusCell, promptCell, copyLink, viewDoc, focus.docId, focus.cell, busy, session.folder, folder, active, theme.effective]);
+  }), [ask, addContext, focusCell, promptCell, copyLink, viewDoc, focus.docId, focus.cell, busy, session.folder, folder, active, theme.effective, documentDirty]);
 
   const modelControl = (variant: "chip" | "inline") => (
     <ModelControl
@@ -888,23 +931,10 @@ export function App() {
                 <ChevronLeft size={16} className="flip" />
               </button>
               <ThemeSwitch pref={theme.pref} onChoose={theme.choose} title={theme.title} />
-              <LayoutMenu
-                open={menuOpen === "layout"}
-                onOpen={() => setMenuOpen((m) => (m === "layout" ? null : "layout"))}
-                railVisible={railDrawn}
-                dockVisible={dockOnScreen}
-                onToggleDock={() => { toggleDock(); setMenuOpen(null); }}
-                inspectorVisible={inspectorOnScreen}
-                inspectorAvailable
-                onToggleRail={() => { openRail(!railShown); setMenuOpen(null); }}
-                onToggleInspector={() => { openInspector(!inspectorOnScreen); setMenuOpen(null); }}
-                onReset={() => { resetAll(); setMenuOpen(null); }}
-                onKeys={() => { setMenuOpen(null); setKeysOpen(true); }}
-              />
-              <button className="btn ghost shell-toggle" onClick={() => setKeysOpen(true)}
-                aria-label="Keyboard shortcuts" title="Keyboard shortcuts (⌘/)"><CommandKey size={16} /></button>
-              <button className="btn ghost shell-toggle" onClick={() => void refresh()}
-                aria-label="Refresh sessions" title="Refresh the session list"><Refresh size={16} /></button>
+              <LayoutMenu railVisible={railDrawn} dockVisible={dockOnScreen} inspectorVisible={inspectorOnScreen}
+                onToggleDock={toggleDock} onToggleRail={() => openRail(!railDrawn)} onToggleInspector={() => openInspector(!inspectorOnScreen)}
+                onReset={resetAll} onKeys={() => setKeysOpen(true)} onRefresh={() => void refresh()}
+                onFocus={() => { toggle("rail", false); toggle("assistant", false); toggle("inspector", false); setDrawer(null); setDockDrawer(false); }} />
             </span>
             {/* Outside `.meta`: that cluster clips its overflow so it can shrink, and a popover inside it is cut off. */}
             <AccountMenu user={user} host={workspace?.host ?? null} folder={folder || scratch} demo={demo}
@@ -921,7 +951,8 @@ export function App() {
 
             <main className="pane main">
               {docs.length > 0 && (
-                <DocTabs docs={docs} active={view} onSelect={selectTab} onClose={closeDoc} />
+                <DocTabs docs={docs} active={view} dirtyIds={dirtyIds} onSelect={selectTab} onClose={closeDoc}
+                  onMove={moveDocument} onCloseMany={closeDocuments} onReopen={reopenDocument} canReopen={closedCount > 0} />
               )}
 
               {/* Where a hidden panel WOULD be (007 ZN-7). The top-bar toggles always worked; this is
@@ -934,7 +965,8 @@ export function App() {
                 onInspector: () => openInspector(true),
                 onRail: () => openRail(true),
               })} />
-              <div id="doc-panel" tabIndex={-1} role="tabpanel" aria-labelledby={`tab-${(view === CHAT ? CHAT : view.replace(/[^\w-]/g, "_"))}`}
+              <div id="doc-panel" tabIndex={-1} role={viewDoc ? "tabpanel" : "region"}
+                aria-labelledby={viewDoc ? docTabId(view) : undefined} aria-label={viewDoc ? undefined : "Home"}
                 className="doc-panel">
               {/* One surface per thing (006 D1): the centre is the WORK — an open document, or the
                   home screen. The conversation is the dock. The one exception is when the assistant
@@ -989,7 +1021,8 @@ export function App() {
                   demo={demo} notice={notice} user={user}
                   onStart={(p) => start(p, attachments).then(() => setAttachments([]))}
                   onOpenSearch={() => setPaletteOpen(true)}
-                  onOpenCatalog={() => setLayoutTab("catalog")}
+                  onOpenCatalog={() => setRailAndOpen("catalog")}
+                  onAskAssistant={focusComposer}
                   recent={recent}
                   onOpenRecent={(path, kind) => openDoc(makeDoc(kind, path))} />
               )}
@@ -1014,7 +1047,7 @@ export function App() {
               )}
               {pending && <InlineApproval approval={pending} disabled={conn !== "live"}
                 onDecide={(a, outcome) => decide(a.approvalId, outcome)} />}
-              <Composer
+              <Composer compact={!active || Boolean(viewDoc)}
                 inputRef={composerBox}
                 disabled={session.status === "archived" || session.requiresResume || conn !== "live" && Boolean(active)} busy={busy} onSend={message} onStop={stop}
                 attachments={attachments} auto={viewDoc ? asAttachment(viewDoc) : null}

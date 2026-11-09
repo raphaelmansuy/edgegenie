@@ -52,6 +52,7 @@ interface Props {
   source: string;
   theme: "light" | "dark";
   onSaved: (version: string | null) => void;
+  onDirtyChange?: (dirty: boolean) => void;
   /** Called with the derived cells on every change, so the parent can render notebook chrome. */
   onCells: (cells: Cell[]) => void;
   /** Ask the agent about one cell: the reason owning the editor is worth building (lens 7).
@@ -74,7 +75,7 @@ const SAVE_DEBOUNCE = 150;
 
 export function EditorSurface({
   target, folder, sessionId, source, theme, onSaved, onCells, onAskCell, onPromptCell,
-  onAskAction, onAttach, onOpenInDatabricks, onReload, onCopyLink, linkedCell,
+  onAskAction, onAttach, onOpenInDatabricks, onReload, onCopyLink, linkedCell, onDirtyChange,
 }: Props) {
   useEffect(() => {
     const w = window as unknown as { __m?: string[] };
@@ -91,6 +92,7 @@ export function EditorSurface({
   const [asking, setAsking] = useState<{ reason: string; token: string | null; noFolder: boolean } | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "warn" | "error"; text: string } | null>(null);
   const [restored, setRestored] = useState(false);
+  useEffect(() => { onDirtyChange?.(dirty || restored); }, [dirty, restored, onDirtyChange]);
   /* Cell outputs, keyed by cell id, owned here rather than inside NotebookEditor: a reorder or a
      re-render must not lose a result, and the Save path and the Run path must see the same cells.
      Cleared when the document changes, because another notebook's results are not this one's. */
@@ -268,6 +270,12 @@ export function EditorSurface({
    */
   const version = useRef<string | null>(target.version);
   useEffect(() => { version.current = target.version; }, [target.version, target.path]);
+  // Leaving a tab before the plain-file debounce fires must still preserve the latest bytes.
+  // Reordering does not unmount this surface, so it never flushes or reloads the editor.
+  useEffect(() => () => {
+    window.clearTimeout(saveTimer.current);
+    if (dirtyRef.current) writeDraft({ docId: target.path, text: text.current, basedOn: version.current ?? "", at: Date.now() });
+  }, [target.path]);
 
   const readOnly = target.truncated;
 
@@ -301,6 +309,7 @@ export function EditorSurface({
 
   const onChange = useCallback((next: string) => {
     text.current = next;
+    dirtyRef.current = true;
     setDirty(true);
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
@@ -567,7 +576,7 @@ export function EditorSurface({
         doc={{ id: target.path, kind: target.kind, ref: target.path, name: target.name, rev: 0 }}
         crumbs={crumbsOf(target.path)}
         language={target.language}
-        fence={{ label: chip.label, tone: chip.tone, reason: fence.reason }}
+        fence={{ label: chip.label, tone: chip.tone, reason: effective.reason || "Saving in this folder is allowed" }}
         readOnly={readOnly}
         dirty={dirty}
         saving={saving}

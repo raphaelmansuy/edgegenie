@@ -63,7 +63,7 @@
 
   /* layering: one scale, no bare integers anywhere in the sheet */
   --z-base: 0; --z-sticky: 10; --z-dropdown: 20; --z-scrim: 39; --z-drawer: 40;
-  --z-drawer-content: 41; --z-modal: 50; --z-toast: 60;
+  --z-drawer-content: 41; --z-popover: 45; --z-modal: 50; --z-toast: 60;
 
   /* geometry */
   --sep-hit: 9px; --sep-line: 1px; --sep-accent: 2px;
@@ -264,12 +264,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
   transition: transform var(--dur) var(--ease), opacity var(--dur);
   background: var(--blue-600); color: var(--on-accent); font-size: 12.5px; font-weight: 600;
   padding: 7px 12px; border-radius: var(--radius-sm); text-decoration: none; white-space: nowrap;
-  box-shadow: var(--shadow-lg); pointer-events: auto;
+  box-shadow: var(--shadow-lg); pointer-events: none;
 }
 /* On `:focus`, not `:focus-visible`: a skip link is only ever reached by the keyboard, and Safari's
    focus-visible heuristic (which depends on how the previous focus moved) would leave it invisible
    there. It is the first Tab stop; there is no pointer case to protect. */
-.skip-link:focus { transform: translateY(0); opacity: 1; outline: 2px solid var(--on-accent); outline-offset: 2px; }
+.skip-link:focus { transform: translateY(0); opacity: 1; outline: 2px solid var(--on-accent); outline-offset: 2px; pointer-events: auto; }
 @media (prefers-reduced-motion: reduce) { .skip-link { transition: none; } }
 
 /* ---- OpenGenie identity --------------------------------------------------- */
@@ -1044,40 +1044,58 @@ kbd { font-family: var(--mono); font-size: 11px; color: var(--ink-2); background
 .tree-icon.kind-catalog, .tree-icon.kind-schema { color: var(--blue-600); }
 .tree-icon.kind-table { color: var(--green-700); }
 
-/* document tabs */
-.doc-tabs { display: flex; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid var(--line); background: var(--surface-2);
-  overflow-x: auto; flex: none; }
-/* A tab is one rounded shape holding its label and its close control: the × must never hang off
-   the edge of the tab it belongs to. */
-.doc-tab {
-  display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; border-bottom: 0;
-  background: transparent; padding: 2px 4px 2px 9px; font-size: 12.5px; font-weight: 560; color: var(--ink-3);
-  border-radius: 7px 7px 0 0; max-width: 240px; min-width: 0; cursor: pointer; user-select: none;
-}
+/* Document tabs: one scroll viewport and independent controls. */
+.doc-tabs-wrap { position: relative; display: flex; align-items: stretch; min-width: 0; flex: none; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.doc-tabs { display: flex; align-items: stretch; gap: 2px; flex: 1; min-width: 0; height: 44px; padding: 4px 6px 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.doc-tabs::-webkit-scrollbar { height: 6px; }
+.doc-tabs::-webkit-scrollbar-thumb { border: 1px solid transparent; }
+.doc-tab { position: relative; display: flex; align-items: center; gap: 6px; flex: 0 0 auto; min-width: 128px; max-width: 260px; min-height: 34px; padding: 2px 4px 2px 10px; border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; color: var(--ink-2); background: transparent; font-size: 12.5px; font-weight: 500; cursor: pointer; user-select: none; touch-action: pan-y; }
 .doc-tab:hover { color: var(--ink); background: var(--blue-50); }
-.doc-tab[aria-selected="true"] { background: var(--surface); color: var(--ink); border-color: var(--line); margin-bottom: -1px; padding-bottom: 3px; }
-/* The close control keeps its own 4 px inset from the tab's border, so the rounded corner never
-   reaches it: a hit target that touches an edge reads as spilling out of the shape. */
-
-.doc-tab:focus-visible { outline: 2px solid var(--blue-600); outline-offset: -2px; }
-.doc-tab-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 16px hit target, 4px from the tab's edge: the gap is equal on all sides inside the shape, so the
-   mark reads as part of the tab rather than as something sitting on it. */
-.doc-close {
-  flex: none; border: 0; background: transparent; color: var(--ink-3); width: 24px; height: 24px;
-  border-radius: 4px; display: grid; place-items: center; padding: 0;
-  opacity: 0; transition: opacity 0.1s, background 0.1s, color 0.1s;
-}
-/* No surface at rest. A tinted square this close to a 7px rounded corner reads as a second box
-   overlapping the tab — which is exactly why the × looked like it sat outside it. The mark is a
-   glyph inside the tab's padding; a tint appears only under the pointer, where it means "click". */
+.doc-tab[aria-selected="true"] { color: var(--ink); background: var(--surface); border-color: var(--line-strong); box-shadow: inset 0 2px 0 var(--blue-600); }
+.doc-tab:focus-visible { outline: 2px solid var(--blue-600); outline-offset: -3px; }
+.doc-tab-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.doc-tab-parent { color: var(--ink-3); font-size: 10px; max-width: 64px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; }
+.doc-tab-dirty { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--blue-600); }
+.doc-close { flex: none; border: 0; background: transparent; color: var(--ink-3); width: 24px; height: 26px; margin-left: auto; border-radius: 4px; display: grid; place-items: center; padding: 0; opacity: 0; transition: opacity var(--dur), background var(--dur); }
 .doc-tab[aria-selected="true"] .doc-close, .doc-tab:hover .doc-close, .doc-tab:focus-within .doc-close { opacity: 1; }
-/* The tint appears only under the pointer and is inset from the tab's edge, so it can never be
-   mistaken for a second box poking out of the tab's rounded corner. */
-.doc-tab .doc-close:hover { background: var(--pink-100); color: var(--pink-700); box-shadow: inset 0 0 0 1px var(--pink-300); }
 .doc-close:hover { background: var(--pink-100); color: var(--pink-700); }
-.doc-close:focus-visible { opacity: 1; outline: 2px solid var(--blue-600); outline-offset: 1px; }
+.doc-close:focus-visible { opacity: 1; outline: 2px solid var(--blue-600); outline-offset: -2px; }
+.doc-tabs-controls { display: flex; align-items: center; flex: none; gap: 1px; padding: 4px; border-left: 1px solid var(--line); background: var(--surface-2); }
+.tab-control { display: inline-flex; align-items: center; justify-content: center; gap: 3px; height: 30px; min-width: 28px; padding: 0 4px; border: 0; border-radius: 4px; background: transparent; color: var(--ink-2); }
+.tab-control:hover:not(:disabled), .tab-control[aria-expanded="true"] { color: var(--ink); background: var(--surface-3); }
+.tab-control:focus-visible { outline: 2px solid var(--blue-600); outline-offset: -2px; }
+.tab-control:disabled { opacity: 0.35; cursor: default; }
+.tab-count { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 18px; }
+.doc-tabs-wrap.is-dragging, .doc-tabs-wrap.is-dragging * { cursor: grabbing; }
+.doc-tab.is-drag-source { opacity: 0.45; }
+.tab-drop-marker { position: absolute; top: 4px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--blue-600); pointer-events: none; z-index: var(--z-sticky); }
+.tab-popover { position: fixed; z-index: var(--z-popover); border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-pop); max-height: calc(100dvh - 16px); overflow: auto; }
+.tab-picker { width: min(380px, calc(100vw - 16px)); padding: 10px; }
+.tab-picker-heading { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 10px; font-size: 12px; }
+.tab-picker-heading > span { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.tab-picker-search { width: 100%; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); color: var(--ink); padding: 8px 10px; font: inherit; font-size: 12px; }
+.tab-picker-search:focus { outline: 2px solid var(--blue-600); outline-offset: 1px; }
+.tab-picker-results { max-height: min(320px, 45dvh); overflow-y: auto; margin-top: 8px; }
+.tab-picker-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 7px 8px; text-align: left; border: 0; border-radius: 5px; color: var(--ink-2); background: transparent; }
+.tab-picker-row:hover, .tab-picker-row:focus-visible { background: var(--blue-50); outline: 2px solid var(--blue-600); outline-offset: -2px; }
+.tab-picker-row[aria-current] { background: var(--blue-50); }
+.tab-picker-identity { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 2px; }
+.tab-picker-identity strong { font-size: 12px; font-weight: 550; color: var(--ink); }
+.tab-picker-identity small { font-size: 11px; color: var(--ink-3); }
+.tab-picker-identity > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-picker-current { font-size: 10px; color: var(--blue-600); }
+.tab-picker-empty { font-size: 12px; padding: 14px 8px; overflow-wrap: anywhere; }
+.tab-picker-hint { padding: 10px 2px 0; margin-top: 6px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 10.5px; }
+.tab-menu { width: min(240px, calc(100vw - 16px)); padding: 4px; }
+.tab-menu-title { font-size: 11px; padding: 7px 8px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-menu > button { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; min-height: 30px; padding: 6px 8px; border: 0; border-radius: 4px; color: var(--ink); background: transparent; font-size: 12px; text-align: left; }
+.tab-menu > button:hover:not(:disabled), .tab-menu > button:focus-visible { background: var(--blue-50); outline: 2px solid var(--blue-600); outline-offset: -2px; }
+.tab-menu > button:disabled { color: var(--ink-3); opacity: 0.5; }
+.tab-menu kbd { font-size: 10px; color: var(--ink-3); border: 0; background: transparent; white-space: nowrap; padding: 0; }
+.tab-menu [role="separator"] { border-top: 1px solid var(--line); margin: 4px; }
+@media (pointer: coarse) { .doc-close { opacity: 1; } .doc-tab { min-height: 38px; } .doc-tabs { height: 48px; } .tab-control { height: 36px; min-width: 32px; } .tab-menu > button { min-height: 36px; } }
+@media (max-width: 480px) { .doc-tab { max-width: 220px; min-width: 112px; } .doc-tabs-controls { gap: 0; padding: 3px; } }
+@media (prefers-reduced-motion: reduce) { .doc-close { transition: none; } }
 
 /* viewer */
 .viewer { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -1482,20 +1500,6 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
 @keyframes dockIn { from { transform: translateX(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .pane.assistant.is-drawer { animation: none; } }
 
-/* ---------- tab strip: it owns its overflow ---------- */
-.doc-tabs-wrap { position: relative; display: flex; align-items: flex-end; background: var(--surface-2);
-  border-bottom: 1px solid var(--line); flex: none; }
-/* The overflow badge floats over the strip instead of taking a flex column. As a sibling it
-   shrank the strip by ~41px AFTER the active tab had been scrolled into view, which re-clipped
-   that tab and left it off screen — the effect had already run and its deps had not changed, so
-   nothing corrected it. Out of flow, the strip's width is final before the scroll is measured. */
-.doc-tabs-wrap > .tabs-hidden {
-  position: absolute; right: 6px; bottom: 6px; z-index: var(--z-sticky);
-  pointer-events: none;
-}
-.doc-tabs-wrap .doc-tabs { flex: 1; min-width: 0; border-bottom: 0; }
-/* Tabs may shrink to a readable minimum, then the strip scrolls. Scrollbar hidden: the count and the
-   active-tab scroll carry the affordance, and a visible bar under tabs looks like a defect. */
 /* ---------- scrollbars: thin, ghosted, and only visible while scrolling ----------
    A 15px OS scrollbar on a 276px rail steals 5% of the panel and reads as chrome. `thin` plus a
    transparent track keeps the rail looking like paper, and the thumb still appears on hover so
@@ -1508,17 +1512,6 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
 }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--ink-3); }
 ::-webkit-scrollbar-track { background: transparent; }
-.doc-tabs { scrollbar-width: none; }
-.doc-tabs::-webkit-scrollbar { display: none; }
-.doc-tab { min-width: 96px; flex: 0 1 auto; }
-.tabs-hidden {
-  font-size: 11px; font-weight: 650;
-  color: var(--ink-2); background: var(--line); border-radius: 999px; padding: 1px 7px;
-  font-variant-numeric: tabular-nums;
-  /* A shadow in the strip's own colour so the count reads on top of a half-scrolled tab edge. */
-  box-shadow: 0 0 0 3px var(--surface-2);
-}
-
 .tree-slow { display: block; margin-top: 4px; color: var(--ink-3); font-size: 11px; }
 
 /* ---------- topbar menu: the discoverable way to hide, show and reset ---------- */
@@ -1676,10 +1669,10 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
    set `min-width: 0`, so the second silently undid the first and the identity block collapsed to 3 px
    in a 433 px bar — the file name rendered as nothing while a fence chip kept 155 px. Declaring the
    same selector twice is the mechanism; merging them is the only reliable fix. */
-.doc-id { display: flex; align-items: center; gap: 7px; min-width: 84px; flex: 0 1 auto; overflow: hidden; }
+.doc-id { display: flex; align-items: center; gap: 7px; min-width: 72px; flex: 1; overflow: hidden; }
 .doc-name {
   font-size: 13px; font-weight: 620; letter-spacing: -0.01em; color: var(--ink);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px;
   /* The name is the identity of the surface. It may ellipsise, but it must never be squeezed to
      nothing by the controls beside it — `flex: 1 1 auto` with a real `min-width` keeps at least a
      recognisable stub, and the crumb and fence give way first. */
@@ -1718,14 +1711,12 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
   .fence-chip .fence-text { display: none; }
   .fence-chip { padding: 0 7px; }
 }
-.doc-bar-spacer { flex: 1; min-width: 4px; }
-.doc-notice { font-size: 11.5px; color: var(--ink-3); flex: none; }
+.doc-bar-spacer { display: none; }
+.doc-notice { font-size: 11.5px; color: var(--ink-3); flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .doc-notice.is-ok { color: var(--green-700); }
 .doc-notice.is-warn { color: var(--yellow-800); }
 .doc-notice.is-error { color: var(--pink-700); font-weight: 550; }
-.ask-wrap { position: relative; flex: none; }
 .ask-btn { display: inline-flex; align-items: center; gap: 3px; padding: 0 8px; height: 26px; }
-.ask-menu { right: 0; top: calc(100% + 5px); min-width: 190px; }
 
 /* ---- the bar: fence, dirty, save ---- */
 .editor-bar {
@@ -2558,7 +2549,8 @@ h2.rail-group { margin: 0; text-transform: none; }
 .nb-bar-end { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex: none; }
 .nb-bar-compute { display: inline-flex; align-items: center; gap: 6px; height: 26px; font-size: 12px; color: var(--ink-2); padding: 0 10px;
   border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-sm); flex: none; white-space: nowrap; }
-.nb-bar-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green-700); flex: none; }
+.nb-bar-dot { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--ink-3); background: transparent; flex: none; }
+.nb-bar-compute.is-connected .nb-bar-dot { background: var(--green-700); border-color: var(--green-700); }
 .btn.stop { color: var(--pink-700); border-color: var(--pink-300); }
 
 /* Dock header popovers. */
@@ -3043,4 +3035,73 @@ h2.rail-group { margin: 0; text-transform: none; }
   .pane.rail.is-drawer, .pane.inspector.is-drawer, .pane.assistant.is-drawer { top: 88px; }
   .drawer-scrim { top: 88px; }
   .skip-links { top: 92px; }
+}
+
+/* Shared compact menus sit above panel handles and never clip inside toolbars. */
+.action-menu { position: fixed; z-index: var(--z-popover); width: min(260px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow-y: auto; padding: 5px; border: 1px solid var(--line-strong); border-radius: 9px; color: var(--ink); background: var(--surface); box-shadow: var(--shadow-pop); }
+.action-menu > button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 34px; text-align: left; padding: 7px 9px; border: 0; border-radius: 5px; color: var(--ink); background: transparent; font-size: 12px; }
+.action-menu > button:hover:not(:disabled) { background: var(--surface-2); }
+.action-menu > button:focus-visible { background: var(--blue-50); outline: 2px solid var(--blue-600); outline-offset: -2px; }
+.action-menu > button:disabled { color: var(--ink-3); opacity: .6; }
+.action-menu [role=separator] { margin: 4px; border-top: 1px solid var(--line); }
+.action-menu-check { display: inline-block; width: 20px; color: var(--blue-600); }
+.action-menu kbd { font-size: 10px; border: 0; background: transparent; }
+.doc-more, .doc-save, .ask-btn { flex: none; }
+.doc-more { display: inline-grid; place-items: center; height: 30px; width: 30px; border: 1px solid transparent; border-radius: 5px; color: var(--ink-2); background: transparent; }
+.doc-more:hover { background: var(--surface-2); }
+.doc-more:focus-visible { outline: 2px solid var(--blue-600); outline-offset: -2px; }
+.home-starts { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.home-start { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-height: 124px; padding: 16px; border: 1px solid var(--line-strong); border-radius: 10px; text-align: left; color: var(--ink); background: var(--surface); }
+.home-start > .icon { color: var(--blue-600); }
+.home-start strong { font-size: 13px; font-weight: 620; }
+.home-start span { font-size: 12px; line-height: 1.5; color: var(--ink-3); }
+.home-start.is-primary { background: var(--blue-50); border-color: var(--blue-300); }
+.home-start:hover { border-color: var(--blue-600); }
+.home-start:focus-visible, .home-options > summary:focus-visible { outline: 2px solid var(--blue-600); outline-offset: 2px; }
+.home-options > summary { cursor: pointer; font-size: 12px; color: var(--ink-2); padding: 8px 0; }
+.home-options .home-cards { margin-top: 8px; }
+.home-options .home-models { margin-top: 12px; justify-content: flex-start; }
+@container docbar (max-width: 560px) { .doc-notice { display: none; } }
+@container docbar (max-width: 300px) { .doc-bar > .fence-chip { display: none; } }
+@media (max-width: 820px) {
+  /* Panel access lives in the top bar; floating handles must never cover editor actions. */
+  .edge-handles { display: none; }
+  .composer.is-compact { padding: 6px 12px 8px; }
+  .composer.is-compact textarea { min-height: 38px; max-height: 120px; padding: 8px 10px; }
+  .composer.is-compact:not(:focus-within):not([data-has-text=true]) textarea { max-height: 40px; }
+  .composer.is-compact .ctx-row.is-auto-only { display: none; }
+  .composer.is-compact .composer-actions { padding: 0 6px 6px; gap: 3px; }
+  .composer.is-compact .composer-actions .hint, .composer.is-compact .composer-actions > .primary kbd { display: none; }
+  .composer.is-compact .composer-actions > .primary { margin-left: auto; flex: none; min-height: 34px; }
+  .main:has(.editor-surface) > .composer-note { margin: 0; padding: 4px 12px; font-size: 10.5px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .home-starts { grid-template-columns: 1fr; }
+  .home-start { min-height: 0; display: grid; grid-template-columns: 24px 1fr; gap: 4px 10px; padding: 12px; }
+  .home-start > .icon { grid-row: span 2; align-self: center; }
+}
+@media (pointer: coarse) { .action-menu > button { min-height: 42px; } .doc-more, .doc-save, .ask-btn { min-height: 36px; } }
+
+.doc-feedback { flex: none; padding: 5px 10px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; background: var(--surface-2); color: var(--ink-2); border-bottom: 1px solid var(--line); }
+.doc-feedback.is-ok { color: var(--green-700); }
+.doc-feedback.is-error { color: var(--pink-700); background: var(--pink-100); }
+.doc-feedback.is-warn { color: var(--yellow-800); background: var(--yellow-100); }
+
+/* Visual iteration 2: keep primary starting actions in view on phones and short landscape screens. */
+.action-menu-description { margin: 2px 4px 5px; padding: 7px 5px 9px; border-bottom: 1px solid var(--line); color: var(--ink-3); font-size: 11.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.home-options .home-card-d { white-space: normal; }
+@media (max-width: 820px) {
+  .home-inner { padding: 16px 16px 20px; gap: 12px; }
+  .home-hero { padding: 0; }
+  .home-mark { width: 28px; height: 28px; margin-bottom: 6px; }
+  .home-title { font-size: 23px; margin-bottom: 6px; }
+  .home-sub { font-size: 12px; line-height: 1.5; }
+  .home-fence { padding: 8px 10px; }
+  .home-fence-note { font-size: 11px; }
+  .home-starts { gap: 7px; }
+  .home-start { padding: 10px 12px; }
+  .home-start span { font-size: 11.5px; }
+  .main:has(.home) > .composer-note { display: none; }
+}
+@media (min-width: 600px) and (max-width: 820px) {
+  .home-starts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .home-start { display: flex; min-height: 106px; padding: 12px; }
 }

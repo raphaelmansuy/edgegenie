@@ -24,7 +24,10 @@
     "audit:dock": "node scripts/dock-audit.mjs",
     "verify:spec-mermaid": "node scripts/verify-spec-mermaid.mjs ../../../specs/006-databricks",
     "e2e:long-running": "node scripts/long-running-e2e.mjs",
-    "verify:spec-010": "node scripts/verify-spec-links.mjs ../../../specs/010-long-running && node scripts/verify-spec-ascii.mjs ../../../specs/010-long-running"
+    "verify:spec-010": "node scripts/verify-spec-links.mjs ../../../specs/010-long-running && node scripts/verify-spec-ascii.mjs ../../../specs/010-long-running",
+    "e2e:tabs": "node scripts/tabs-e2e.mjs",
+    "verify:spec-tabs": "node scripts/verify-spec-links.mjs ../../../specs/010-tab-management && node scripts/verify-tab-wireframes.mjs",
+    "e2e:ux": "node scripts/ui-refinement-e2e.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",

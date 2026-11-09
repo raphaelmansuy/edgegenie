@@ -73,7 +73,8 @@ export function Editor({
         applied.current = value;
         editor.current = local;
         setStatus("ready");
-        if (focusOnMount.current) local.focus();
+        // A lazily loaded file must not steal focus from keyboard tab navigation or its picker.
+        if (focusOnMount.current && !document.activeElement?.closest('.doc-tabs, .tab-popover')) local.focus();
       } catch {
         if (live) setStatus("error");
       }
@@ -114,8 +115,8 @@ export function Editor({
   }, [reqN, reqAt, status]);
 
   useEffect(() => {
-    editor.current?.reconfigure(language);
-  }, [language]);
+    if (status === "ready") editor.current?.reconfigure(language, { theme, readOnly });
+  }, [language, theme, readOnly, status]);
 
   return (
     <div className="editor-host" data-status={status}>

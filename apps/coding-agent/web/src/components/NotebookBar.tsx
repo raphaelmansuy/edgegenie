@@ -41,7 +41,7 @@ export function NotebookBar({ plan, runs, runningAll, batch, onRunAll, onStop, o
       )}
       <span className="nb-bar-status" role="status" title={skipped || undefined}>{label}</span>
       <span className="nb-bar-end">
-        <span className="nb-bar-compute" title="SQL cells run on a serverless SQL warehouse, as you">
+        <span className={`nb-bar-compute${warehouse ? " is-connected" : ""}`} title={warehouse ? "Warehouse used by the last run" : "SQL execution target; availability is checked when you run a cell"}>
           <span className="nb-bar-dot" aria-hidden />
           {warehouse && !plan.python.length ? warehouse : "Serverless SQL"}
         </span>

@@ -1,0 +1,111 @@
+{
+  "suite": "tab-management",
+  "mode": "real App + mocked HTTP boundary",
+  "results": [
+    {
+      "name": "Empty workspace has no dead tab strip",
+      "ok": true
+    },
+    {
+      "name": "Drag retains active identity, mounted editor and unsaved notebook text",
+      "ok": true
+    },
+    {
+      "name": "Threshold, Escape, outside release and pointer cancellation preserve order",
+      "ok": true
+    },
+    {
+      "name": "Keyboard and menu reorder retain focus",
+      "ok": true
+    },
+    {
+      "name": "Home/End/wrapping arrows, portable Control+Tab, disabled edge move and asynchronous editor focus",
+      "ok": true
+    },
+    {
+      "name": "Removed drag source cleans up; pen threshold and cancellation use the same lifecycle",
+      "ok": true
+    },
+    {
+      "name": "Overflow wheel/trackpad/zoom/buttons, picker path search, empty results and resize",
+      "ok": true
+    },
+    {
+      "name": "Stationary edge drag keeps scrolling",
+      "ok": true
+    },
+    {
+      "name": "Active/inactive/middle close and reopen at prior position",
+      "ok": true
+    },
+    {
+      "name": "Tap/click actions, invoking-control focus return, close-to-right, close shortcut and canonical deduplication",
+      "ok": true
+    },
+    {
+      "name": "Immediate file close flushes draft; explicit recovery restores latest text",
+      "ok": true
+    },
+    {
+      "name": "Bulk/last close focus and reopen after strip unmount",
+      "ok": true
+    },
+    {
+      "name": "Denied read stays movable/closable; table shares navigation",
+      "ok": true
+    },
+    {
+      "name": "Light/dark wide/tablet/mobile layouts and pickers under reduced motion",
+      "ok": true
+    },
+    {
+      "name": "Emulated native touch hold reorders; swipe preserves order",
+      "ok": true
+    },
+    {
+      "name": "Touch users can reorder with taps alone through visible tab actions",
+      "ok": true
+    },
+    {
+      "name": "18-webkit: drag, keyboard reveal and picker selection",
+      "ok": true
+    },
+    {
+      "name": "No runtime errors, unhandled fixtures or workspace mutations",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "01-readable-tabs-light.png",
+    "02-drag-insertion.png",
+    "03-reordered-dirty-editor.png",
+    "04-accessible-tab-actions.png",
+    "05-overflow-last-tab.png",
+    "06-open-document-picker.png",
+    "07-picker-filtered-path.png",
+    "08-picker-no-results.png",
+    "09-edge-autoscroll.png",
+    "10-adjacent-close-and-recovery.png",
+    "11-restored-plain-file-draft.png",
+    "12-wide-dark.png",
+    "12-wide-dark-picker.png",
+    "13-tablet-landscape.png",
+    "13-tablet-landscape-picker.png",
+    "14-mobile-light.png",
+    "14-mobile-light-picker.png",
+    "15-mobile-dark.png",
+    "15-mobile-dark-picker.png",
+    "16-touch-reorder.png",
+    "16-touch-actions.png",
+    "18-webkit.png"
+  ],
+  "browserErrors": [],
+  "workspaceMutations": [],
+  "unhandledFixtures": [],
+  "unavailable": [
+    {
+      "engine": "firefox",
+      "reason": "Installed matching Firefox 159 cannot launch: Could not find profile folder. Two launch attempts ended; no further workaround attempted."
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 /** Shared tree row and keyboard model for the Files and Catalog trees (WAI-ARIA tree pattern). */
-import type { KeyboardEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { KeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { ChevronRight, Icon } from "./Icons";
 
 export interface RowAction { label: string; glyph: string; run?: (e: ReactMouseEvent) => void; href?: string | null }
@@ -80,25 +80,4 @@ export function focusFirstChild(row: HTMLElement): void {
   if (!tree) return;
   const rows = Array.from(tree.querySelectorAll<HTMLElement>('[role="treeitem"]'));
   rows[rows.indexOf(row) + 1]?.focus();
-}
-
-/** WAI-ARIA tabs: Left/Right move and select, Home/End jump. One tab stop for the whole strip. */
-export function tabKeys(ids: string[], current: string, select: (id: string) => void) {
-  return (e: ReactKeyboardEvent<HTMLElement>) => {
-    const at = ids.indexOf(current);
-    if (at < 0) return;
-    const go = (to: number) => {
-      e.preventDefault();
-      const id = ids[Math.max(0, Math.min(ids.length - 1, to))];
-      select(id);
-      // Focus follows selection: the tab that is shown is the tab that has focus.
-      requestAnimationFrame(() => {
-        document.getElementById(`tab-${id.replace(/[^\w-]/g, "_")}`)?.focus();
-      });
-    };
-    if (e.key === "ArrowRight") go(at + 1);
-    else if (e.key === "ArrowLeft") go(at - 1);
-    else if (e.key === "Home") go(0);
-    else if (e.key === "End") go(ids.length - 1);
-  };
 }

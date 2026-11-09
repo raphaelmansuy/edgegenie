@@ -17,6 +17,10 @@ describe("keyboard combos", () => {
     expect(comboOf({ key: " ", ctrlKey: true })).toContain("space");
     expect(comboOf({ key: "ArrowDown", altKey: true })).toContain("arrowdown");
   });
+  it("keeps physical Control+Tab cycling portable on every platform", () => {
+    expect(comboOf({ key: "Tab", ctrlKey: true })).toBe("ctrl+tab");
+    expect(comboOf({ key: "Tab", ctrlKey: true, shiftKey: true })).toBe("ctrl+shift+tab");
+  });
   it("names punctuation the same way the registry does", () => {
     // The registry writes "mod+slash"; a real key press is "/". If these drift, ⌘/ silently dies.
     const mac = /mac/i.test(String(mac_()));

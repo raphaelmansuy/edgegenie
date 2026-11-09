@@ -1,0 +1,68 @@
+{
+  "iteration": "iteration-02",
+  "results": [
+    {
+      "name": "UX-07 Three real starting actions, preserved advanced workflows, and assistant focus",
+      "ok": true
+    },
+    {
+      "name": "UX-02 Default editor width and explicit panel choices preserve useful editing space",
+      "ok": true
+    },
+    {
+      "name": "UX-03 Shared menus support initial focus, arrows, Home/End, Escape, Tab, theme and layout actions",
+      "ok": true
+    },
+    {
+      "name": "UX-04 Ordered working set, reopen history and active route survive reload; pasted URLs override saved selection",
+      "ok": true
+    },
+    {
+      "name": "UX-01/05/06 Save receives taps at 320/375/390/760px; compact composition, visible errors and readable menus",
+      "ok": true
+    },
+    {
+      "name": "WebKit mobile toolbar hit testing, menu focus, dark theme and popup geometry",
+      "ok": true
+    },
+    {
+      "name": "No browser runtime errors or unexpected API calls; saves only hit local fixtures",
+      "ok": true
+    }
+  ],
+  "screenshots": [
+    "01-home-desktop.png",
+    "02-home-workflows.png",
+    "03-desktop-editor.png",
+    "04-context-on-demand.png",
+    "05-ask-keyboard.png",
+    "06-document-actions.png",
+    "07-layout-menu.png",
+    "08-focus-editor.png",
+    "09-theme-menu.png",
+    "10-desktop-dark.png",
+    "11-working-set-restored.png",
+    "12-mobile-390-home.png",
+    "12-mobile-390-editor.png",
+    "12-mobile-390-actions.png",
+    "13-mobile-375-dark-home.png",
+    "13-mobile-375-dark-editor.png",
+    "13-mobile-375-dark-actions.png",
+    "16-mobile-error-feedback.png",
+    "14-mobile-320-home.png",
+    "14-mobile-320-editor.png",
+    "14-mobile-320-actions.png",
+    "15-tablet-landscape-home.png",
+    "15-tablet-landscape-editor.png",
+    "15-tablet-landscape-actions.png",
+    "17-webkit-mobile-menu.png"
+  ],
+  "errors": [],
+  "unknown": [],
+  "mutations": [
+    "POST /api/workspace/save",
+    "POST /api/workspace/save",
+    "POST /api/workspace/save",
+    "POST /api/workspace/save"
+  ]
+}

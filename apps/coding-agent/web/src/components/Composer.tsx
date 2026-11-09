@@ -29,7 +29,7 @@ export { Chip } from "./Chip";
 interface Option { a: Attachment; hint: string }
 
 export function Composer({ disabled, busy, onSend, onStop, attachments, auto, onAdd, onRemove, openDocs, placeholder, inputRef,
-  variant = "main", modelSlot, searchRoot, sessionId = null, modelSeesImages = true, modelName }: {
+  variant = "main", compact = false, modelSlot, searchRoot, sessionId = null, modelSeesImages = true, modelName }: {
   /** `mine` is what THIS composer holds: ready blobs, which the parent's `attachments` cannot know about. */
   disabled?: boolean; busy: boolean;
   onSend: (text: string, mine?: Attachment[]) => Promise<void>; onStop: () => void;
@@ -40,6 +40,7 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
   openDocs: Doc[]; placeholder?: string;
   /** `dock` narrows the padding and drops the max-width; it changes no behaviour (spec 006 D6). */
   variant?: "main" | "dock";
+  compact?: boolean;
   /** The model control, placed in the action row so choosing a model never leaves the message (MC-3). */
   modelSlot?: React.ReactNode;
   /**
@@ -220,11 +221,11 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
   };
 
   return (
-    <section className={`composer${variant === "dock" ? " is-dock" : ""}`} role="region"
+    <section className={`composer${variant === "dock" ? " is-dock" : ""}${compact ? " is-compact" : ""}`} data-has-text={!!text.trim()} role="region"
       aria-label={variant === "dock" ? "Message the assistant" : "Message composer"}>
       <div className="composer-box">
         {(attachments.length > 0 || auto || blobs.chips.length > 0) && (
-          <div className="ctx-row" aria-label="Context for this message">
+          <div className={`ctx-row${auto && !attachments.length && !blobs.chips.length ? " is-auto-only" : ""}`} aria-label="Context for this message">
             {auto && !attachments.some((x) => x.ref === auto.ref) && <Chip a={auto} auto />}
             {attachments.filter((a) => a.kind !== "blob").map((a) => (
               <Chip key={`${a.kind}:${a.ref}`} a={a} onRemove={() => onRemove(a)} />
@@ -285,6 +286,7 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
             value={text}
             placeholder={placeholder ?? "Ask for a notebook, a job, a fix, an investigation…   @ adds a notebook, file or table"}
             aria-label="Message the agent"
+            aria-description="Enter sends your message. Shift+Enter adds a new line."
             aria-autocomplete="list"
             aria-expanded={open}
             onPaste={(e) => {

@@ -213,8 +213,12 @@ export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, o
     },
     onChange(cb) { changeCbs.push(cb); },
     onCellFocus(cb) { cellCbs.push(cb); },
-    reconfigure(language) {
-      view?.dispatch({ effects: languageConf.reconfigure(parserFor(language)) });
+    reconfigure(language, options) {
+      view?.dispatch({ effects: [
+        languageConf.reconfigure(parserFor(language)),
+        ...(options?.theme ? [themeConf.reconfigure(highlight(options.theme))] : []),
+        ...(options?.readOnly !== undefined ? [readOnlyConf.reconfigure(EditorState.readOnly.of(options.readOnly))] : []),
+      ] });
     },
     focus(at) {
       if (!view) return;
