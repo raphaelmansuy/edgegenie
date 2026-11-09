@@ -133,7 +133,7 @@ class PgRegistryStore:
                       m.context_window, m.max_output, m.limit_evidence, m.limit_source,
                       m.credential_kind, m.state, m.enabled, m.selectable,
                       p.display_name, p.kind,
-                      h.state, h.detail, extract(epoch FROM h.at)
+                      h.state, h.detail, extract(epoch FROM h.at), m.sees_images
                FROM llm.llm_model m
                JOIN llm.llm_provider p ON p.id = m.provider_id
                LEFT JOIN LATERAL (
@@ -148,7 +148,8 @@ class PgRegistryStore:
             """SELECT m.id, m.endpoint, m.display_name, m.group_name, m.capability, m.wire,
                       m.context_window, m.max_output, m.limit_evidence, m.limit_source,
                       m.credential_kind, m.state, m.enabled, m.selectable,
-                      p.display_name, p.kind, h.state, h.detail, extract(epoch FROM h.at)
+                      p.display_name, p.kind, h.state, h.detail, extract(epoch FROM h.at),
+                      m.sees_images
                FROM llm.llm_model m
                JOIN llm.llm_provider p ON p.id = m.provider_id
                LEFT JOIN LATERAL (
@@ -205,18 +206,20 @@ class PgRegistryStore:
         await self._run(
             """INSERT INTO llm.llm_model
                (id, provider_id, endpoint, display_name, group_name, capability, wire, context_window,
-                max_output, limit_evidence, limit_source, credential_kind, state, enabled, selectable)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                max_output, limit_evidence, limit_source, credential_kind, state, enabled, selectable,
+                sees_images)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                ON CONFLICT (id) DO UPDATE SET
                  display_name = EXCLUDED.display_name, group_name = EXCLUDED.group_name,
                  capability = EXCLUDED.capability, context_window = EXCLUDED.context_window,
                  max_output = EXCLUDED.max_output, limit_evidence = EXCLUDED.limit_evidence,
                  limit_source = EXCLUDED.limit_source, state = EXCLUDED.state,
-                 selectable = EXCLUDED.selectable, updated_at = now()""",
+                 selectable = EXCLUDED.selectable, sees_images = EXCLUDED.sees_images,
+                 updated_at = now()""",
             (spec.id.value, spec.id.provider.value, spec.endpoint, spec.display_name, spec.group,
              spec.capability.value, spec.wire.value, spec.limits.context, spec.limits.output,
              spec.limits.evidence.value, spec.limits.source, spec.credential_kind.value,
-             spec.state.value, spec.enabled, spec.selectable))
+             spec.state.value, spec.enabled, spec.selectable, spec.sees_images))
 
     async def get_setting(self, key: str) -> str:
         rows = await self._fetch("SELECT value FROM llm.llm_setting WHERE key = %s", (key,))
@@ -379,6 +382,9 @@ def _spec_from_row(r: tuple) -> ModelSpec:
         checked_at=float(r[18] or 0),
         group=r[3] or "",
         enabled=bool(r[12]),
+        # The declared vision capability, appended last so no existing index moves. A row written before
+        # migration 003 has no value; `False` is the safe reading (an image is labelled, not sent blind).
+        sees_images=bool(r[19]) if len(r) > 19 else False,
         origin="database",
     )
 

@@ -195,8 +195,25 @@ class AcpAgentRuntime:
 
     # -- turns ----------------------------------------------------------------
     def _blocks(self, h: RuntimeHandle, text: str, images: list[dict] | None) -> list[dict]:
-        """The prompt array, built by the one function that knows ACP's capability rule."""
-        return prompt_blocks(text, images, self._capabilities.get(h.session_id))
+        """The prompt array, built by the one function that knows ACP's capability rule.
+
+        The capability is looked up by `_ours(h)` — the id WE started the process with — not by
+        `h.session_id`, which is the AGENT's own id. `_capabilities` is keyed by ours, so the wrong key
+        returned None and every image was silently replaced by the "omitted" text: the model was told it
+        could not see a picture that was never sent, and answered exactly that. Measured: the image
+        reduced the prompt by 1,990 tokens instead of adding any, because only a sentence travelled.
+        """
+        return prompt_blocks(text, images, self._capabilities.get(self._key(h)))
+
+    def _key(self, h: RuntimeHandle) -> str:
+        """The key this session's facts are stored under.
+
+        `h.ours` is OUR id — the one `_capabilities` and `_procs` are keyed by — and it is authoritative
+        when present. `_ours()` adds a fallback that consults `_procs`, which is right for process
+        bookkeeping and wrong for a pure capability lookup: a handle with no live process yet would miss.
+        So the capability path asks the handle directly.
+        """
+        return h.ours or self._by_agent.get(h.session_id, h.session_id)
 
     async def prompt(self, h: RuntimeHandle, text: str, images: list[dict] | None = None) -> dict:
         ch = self._channel(h)

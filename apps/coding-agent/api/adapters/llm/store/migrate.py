@@ -19,7 +19,10 @@ log = logging.getLogger("app.llm.migrations")
 MIGRATIONS = Path(__file__).resolve().parent / "migrations"
 
 #: The version this build understands. A database stamped higher refuses to start (E-17).
-EXPECTED_VERSION = 2
+#: The highest migration this build understands. A database ABOVE this is refused (`SchemaAhead`) rather
+#: than run against a schema the code does not know — the guard that makes a rollback safe.
+#:   1 llm schema · 2 llm setting · 3 llm_model.sees_images (spec 009 [D7])
+EXPECTED_VERSION = 3
 
 
 class SchemaAhead(RuntimeError):
@@ -60,6 +63,15 @@ async def apply(conn, directory: Path | None = None) -> int:
                 continue
             log.info("applying %s", path.name)
             await cur.execute(path.read_text("utf-8"))
+            # RECORD the version. Without this the table stays at 0 forever, so every boot re-runs every
+            # migration and `EXPECTED_VERSION` guards nothing. Measured against a real Postgres: applying
+            # three files left `schema_version` at 2 (two of them wrote their own row), and a fourth would
+            # have re-run each time. It is also what makes `SchemaAhead` a real check: a version is only
+            # comparable if it is actually written.
+            await cur.execute(
+                "INSERT INTO llm.schema_version (version) VALUES (%s) ON CONFLICT (version) DO NOTHING",
+                (_version_of(path),),
+            )
         await conn.commit()
         await cur.execute("SELECT coalesce(max(version), 0) FROM llm.schema_version")
         row = await cur.fetchone()

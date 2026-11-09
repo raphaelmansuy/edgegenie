@@ -88,3 +88,45 @@ def test_unknown_capabilities_are_treated_as_no_images():
 def test_a_missing_mime_type_falls_back_to_png():
     blocks = prompt_blocks("x", [{"data": "abc"}], Caps(images=True))
     assert blocks[1]["mimeType"] == "image/png"
+
+
+# -- the capability LOOKUP, which was the bug ------------------------------------------------
+
+def test_the_capability_is_found_under_the_id_we_started_the_process_with():
+    """The bug that made vision appear broken while every part was individually correct.
+
+    `_capabilities` is keyed by `spec.session_id` — OUR id. A `RuntimeHandle.session_id` is the AGENT's
+    own id, which is a different string. Looking the capability up by the handle's id returned None, so
+    `prompt_blocks` took the "omitted" branch and replaced every image with a sentence saying it could
+    not be sent. Measured: adding an image REDUCED the prompt by 1,990 tokens instead of increasing it,
+    and the model answered "I cannot see the image" — truthfully, because there was no image.
+
+    This is a pure test of the lookup, which is why it needs no agent: the map is the contract.
+    """
+    from api.adapters.acp.runtime import AcpAgentRuntime
+    from api.ports import Capabilities, RuntimeHandle
+
+    rt = AcpAgentRuntime("unused")
+    ours = "our-session-id"
+    agent_sid = "ses_agent_1"
+    rt._capabilities[ours] = Capabilities(images=True)
+
+    handle = RuntimeHandle(session_id=agent_sid, ours=ours, capabilities=Capabilities(),
+                           models=[], current_model="m")
+
+    blocks = rt._blocks(handle, "what is this", [IMG])
+    assert [b["type"] for b in blocks] == ["text", "image"], (
+        "the capability was looked up by the agent's session id, so the image was dropped")
+
+
+def test_a_blind_agent_still_gets_the_omission_when_looked_up_correctly():
+    from api.adapters.acp.runtime import AcpAgentRuntime
+    from api.ports import Capabilities, RuntimeHandle
+
+    rt = AcpAgentRuntime("unused")
+    rt._capabilities["ours"] = Capabilities(images=False)
+    handle = RuntimeHandle(session_id="ses_x", ours="ours", capabilities=Capabilities(),
+                           models=[], current_model="m")
+    blocks = rt._blocks(handle, "what", [IMG])
+    assert [b["type"] for b in blocks] == ["text", "text"]
+    assert "image omitted" in blocks[1]["text"]

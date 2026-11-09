@@ -1,0 +1,26 @@
+{
+ "model": "databricks/databricks-gemma-3-12b",
+ "rounds": [
+  {
+   "round": 1,
+   "want": "176",
+   "got": "176",
+   "status": "completed",
+   "answer": "176"
+  },
+  {
+   "round": 2,
+   "want": "846",
+   "got": "846",
+   "status": "completed",
+   "answer": "846"
+  },
+  {
+   "round": 3,
+   "want": "230",
+   "got": "230",
+   "status": "completed",
+   "answer": "230"
+  }
+ ]
+}

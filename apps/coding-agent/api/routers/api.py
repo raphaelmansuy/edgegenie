@@ -74,6 +74,20 @@ def _session_json(s: Session) -> dict[str, Any]:
     }
 
 
+def _cause(orch, sid: str, turns) -> dict:
+    """The agent's own explanation for the last failed turn, or `{}` when there is nothing to explain."""
+    if not turns:
+        return {}
+    last = turns[-1]
+    if last.status.value not in ("failed", "blocked"):
+        return {}
+    try:
+        tail = orch.agent_stderr(sid)
+    except Exception:  # noqa: BLE001 - a diagnostic must never fail a session read
+        return {}
+    return {"cause": tail} if tail else {"cause": last.error or ""}
+
+
 def _orch(request: Request) -> Orchestrator:
     return request.app.state.orchestrator
 
@@ -212,6 +226,10 @@ async def get_session(request: Request, sid: str) -> dict:
         ],
         "running": turn.index if turn else None,
         "scope": _orch(request).scope_description(sid),
+        # When a turn ends without an answer, the agent's own stderr is the only place the reason exists.
+        # It was captured all along and never read, so a blocked turn looked causeless — measured on a
+        # real agent: status=blocked, 0 tokens, no message. Empty for a healthy session.
+        **_cause(_orch(request), sid, live.state.turns),
     }
 
 
@@ -306,6 +324,23 @@ async def decide(request: Request, sid: str, approval_id: str, body: Approval) -
 # -- stream ------------------------------------------------------------------
 def _sse(event: dict) -> str:
     return f"id: {event['seq']}\ndata: {json.dumps(event, separators=(',', ':'))}\n\n"
+
+
+@router.get("/sessions/{sid}/events")
+async def session_events(request: Request, sid: str, after: int = 0, limit: int = 2000) -> dict:
+    """The stored events, as a plain JSON list. A FINITE read of the same log `/stream` follows.
+
+    `/stream` is an open connection that never ends by design — it is how a live turn arrives. That makes
+    it useless for "show me what happened", which is what a test, a bug report, or any client that was not
+    watching needs. Measured: reading a finished turn meant holding an SSE stream open and timing out.
+    """
+    orch = _orch(request)
+    try:
+        orch.get(sid)
+    except KeyError:
+        raise HTTPException(404, "no such session") from None
+    rows = await request.app.state.store.since(sid, after)
+    return {"events": rows[:limit], "after": after, "count": min(len(rows), limit)}
 
 
 @router.get("/sessions/{sid}/stream")

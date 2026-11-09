@@ -101,6 +101,23 @@ models:
 
   # gated in the workspace until an account admin enables the Unity Gateway beta (FR-20): catalogued
   # so the picker can name the gate instead of hiding the model.
+  # MEASURED vision: three random three-digit codes (207, 492, 652) were each read correctly, and a
+  # shape/colour question was answered correctly, through the same serving endpoint the agent uses.
+  # It is the only model in this workspace that both sees and is served, so it is the one vision support
+  # is exercised against. 541 prompt tokens for a 120x77 image — the image is genuinely consumed.
+  - id: databricks/databricks-gemma-3-12b
+    display_name: gemma-3-12b
+    endpoint: databricks-gemma-3-12b
+    capability: tools
+    context: 131072
+    output: 8192
+    # `documented`, not `measured`: what was MEASURED is that it sees (three random codes, all read
+    # correctly). Its output cap is a datasheet figure — the serving endpoint does not publish one, and
+    # claiming a measurement that was never made is the dishonesty `evidence` exists to prevent.
+    evidence: documented
+    source: https://ai.google.dev/gemma/docs/core/model_card_3 — vision verified 2026-11-09
+    sees_images: true
+
   - id: databricks/databricks-claude-sonnet-4-5
     display_name: claude-sonnet-4-5
     endpoint: databricks-claude-sonnet-4-5
@@ -109,6 +126,9 @@ models:
     output: 16000
     evidence: documented
     source: https://docs.anthropic.com/en/docs/about-claude/models
+    # DOCUMENTED, not measured: Claude Sonnet accepts images per Anthropic's docs, and this endpoint is
+    # not deployed in this workspace (ENDPOINT_NOT_FOUND), so the claim could not be verified here. It is
+    # marked documented rather than measured for that reason; the flag is a statement about the MODEL.
     sees_images: true
     state: not_enabled
 

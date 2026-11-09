@@ -11,6 +11,12 @@ env:
     value: opencode acp
   - name: APP_TOOL_MODE
     value: subprocess
+  # Bytes the user attaches (spec 009). It must be a path that survives a restart: the default is the
+  # container's temp dir, which is wiped on every redeploy — a chip would come back from the transcript
+  # pointing at bytes that no longer exist. `/tmp` is also ephemeral here, so this is a mounted volume
+  # path the platform keeps; the store creates the directory if it is absent.
+  - name: APP_BLOB_DIR
+    value: /tmp/agent-blobs
   - name: APP_REQUIRE_FORWARDED_USER
     value: "true"
   - name: APP_DEFAULT_MODEL

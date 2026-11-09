@@ -125,6 +125,18 @@ class Orchestrator:
         self._blobs = None
         self._live: dict[str, Live] = {}
 
+    def agent_stderr(self, session_id: str) -> str:
+        """The agent's own last words, for a turn that ended without an answer.
+
+        `blocked` with no cause is the worst failure this app can show: the user sees a stopped turn and
+        nothing else. The runtime captures stderr and ranks the most useful line; nothing read it.
+        """
+        live = self._live.get(session_id)
+        if live is None or live.handle is None:
+            return ""
+        tail = getattr(self._rt, "stderr_tail", None)
+        return tail(session_id, 3) if callable(tail) else ""
+
     def attach_blobs(self, blobs) -> None:
         """Wire the blob stage after construction, the same way the registry is wired.
 
