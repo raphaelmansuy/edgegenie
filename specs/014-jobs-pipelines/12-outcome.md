@@ -9,12 +9,47 @@ Counts are read from the last run on this machine, not remembered:
 
 | Suite | Result |
 |---|---|
-| Python | **1 055 passed, 7 skipped** (was 797 before this spec: +258) |
+| Python | **1 056 passed, 7 skipped** (was 797 before this spec: +259) |
 | Front end | **951 passed in 68 files** (was 749 in 64: +202) |
 | E2E | **9/9 scenes**, every screenshot inspected |
 | Spec ASCII | 9 blocks, 13 boxes, **0 problems** |
 | Spec Mermaid | **10 diagrams, 0 failing to parse** |
-| Spec links | 5+ documents, every internal link resolving |
+| Spec links | 14 documents, 90 internal links, **0 problems** |
+| **Deployed** | **18/18 checks against the live dev app**, 0 skipped |
+
+## Deployed and verified
+
+The dev workspace (`dbc-cb61f1e1-bd8e`) builds from **git**, so the deployment is the commit, not the
+working tree: `4c50ede` on `main`, resolved by the platform and read back from the deployment record.
+
+The first deploy was verified by a check that ran nothing — `verify-deployed.sh` skipped every HTTP probe,
+because a personal access token cannot pass the app's OAuth proxy, and the platform API cannot read the
+app's logs with a PAT either. "Deployment SUCCEEDED" is precisely the answer that was true three times
+while the app served none of the work.
+
+So the check was made real rather than accepted. An OAuth token for the workspace was minted through the
+account's SSO, and `verify-deployed.sh` gained spec 014's fingerprints:
+
+| Check | Result |
+|---|---|
+| `/api/jobs` and `/api/pipelines` are served | `{"items":[],"identity":"the app's service principal"}` |
+| the state vocabulary is live, not just the routing | a `RUNNING` run reads `running`, `cancel: true`, `repair: false` |
+| …and the other half of the matrix | a `TERMINATED`+`FAILED` run reads `failed`, `repair: true`, `cancel: false` |
+| the browser has no write path | `POST /api/jobs/1` → **405**, `POST /api/pipelines/abc` → **405** |
+| the served front end is this commit | the bundle is **byte-identical** to a local build from `4c50ede` |
+| a real session starts | the default model works |
+
+**18 passed, 0 failed, 0 skipped.** The third and fourth rows are the ones worth having: they are computed
+server-side by `api.domain.jobs`, so they cannot be true of a tree that predates this spec — which is what
+makes them proof rather than a health check.
+
+One defect was found *by doing this*. The workspace probe's first version accepted any non-404 as
+"served", so four routes reported `PASS` with `HTTP 401` from the proxy while no handler had run — a loose
+assertion proving a looser thing. A `401`/`403` is now a **skip that says so**, never a pass. Deploying is
+the only way to find that class of mistake: locally every one of those routes answers 200.
+
+Not deployed, and said so: the app's own **logs** need an OAuth login that a PAT cannot provide, so no log
+line was read from this session. The verification above does not depend on one.
 
 ---
 
