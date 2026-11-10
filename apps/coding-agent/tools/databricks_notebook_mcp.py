@@ -1271,10 +1271,37 @@ def _pg_identifier(value: str, what: str) -> str:
 
 
 def _lakebase_token(endpoint: str) -> str:
-    """Mint a credential for one endpoint. Never cached: a cached token is a credential on disk."""
+    """Mint a credential for one endpoint. Never cached: a cached credential is a credential on disk."""
     import uuid
     return _post("/api/2.0/postgres/credentials",
                  {"endpoint": endpoint, "request_id": str(uuid.uuid4())}).get("token", "")
+
+
+def _lakebase_connect_user(project: str, branch: str, wanted: str) -> str:
+    """The Postgres username to connect as, taken from the branch's ROLES.
+
+    The `postgres_role` field is on a role's `status`, not on the endpoint: an earlier version read it
+    from the endpoint, got `""`, and every connection failed. The tool acts as the signed-in user, so
+    it looks for that identity first and falls back to the only role when a branch has one
+    (spec 013 [RB-11]).
+    """
+    p = _lakebase_project(project)
+    data = _get(f"/api/2.0/postgres/{p}/branches/{branch or 'production'}/roles")
+    identities = [((r.get("status") or {}).get("postgres_role")
+                   or (r.get("spec") or {}).get("postgres_role") or "")
+                  for r in data.get("roles", [])]
+    identities = [i for i in identities if i]
+    if wanted and wanted in identities:
+        return wanted
+    if len(identities) == 1:
+        return identities[0]
+    if not identities:
+        raise RuntimeError(
+            f"no Postgres role on branch {branch or 'production'}; attach a database resource to the "
+            "app (the platform creates the role) or create one with dbx_lakebase_role")
+    raise RuntimeError(
+        f"this branch has {len(identities)} roles and none matches {wanted!r} "
+        f"({', '.join(identities)}); connect as one of those")
 
 
 def _lakebase_connect(endpoint: str, database: str, user: str):
@@ -1312,7 +1339,10 @@ def dbx_lakebase_sql(project: str, sql: str, branch: str = "production",
     _need_writes()
     _check_prefix("instance", project, INSTANCE_PREFIX)
     endpoint = _lakebase_endpoint(project, branch)
-    me = _get("/api/2.0/preview/scim/v2/Me").get("userName")
+    # Connect as a role that EXISTS on this branch. The Postgres username is on a role object,
+    # not on the endpoint, and the signed-in identity matches a role only when it was granted
+    # (spec 013 [RB-11]).
+    me = _lakebase_connect_user(project, branch, _get("/api/2.0/preview/scim/v2/Me").get("userName"))
     conn = None
     try:
         conn = _lakebase_connect(endpoint, database, me)
@@ -1351,7 +1381,7 @@ def dbx_lakebase_tables(project: str, branch: str = "production", schema: str = 
     """
     _need_writes()
     endpoint = _lakebase_endpoint(project, branch)
-    me = _get("/api/2.0/preview/scim/v2/Me").get("userName")
+    me = _lakebase_connect_user(project, branch, _get("/api/2.0/preview/scim/v2/Me").get("userName"))
     _pg_identifier(schema, "schema")
     _pg_identifier(database, "database")
     conn = None

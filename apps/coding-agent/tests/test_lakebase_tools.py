@@ -296,3 +296,84 @@ def test_a_postgres_resource_points_at_a_branch():
             "branch": "projects/pg/branches/gone", "permission": "CAN_CONNECT_AND_CREATE"}}]}})
     row = run(AppsBrowser("h", None, http=http).app("tickets", "tok"))
     assert row["resources"][0]["branch"].endswith("/branches/gone")
+
+
+# -- the Postgres username comes from a ROLE, not the endpoint ([RB-11]) ------------------------
+def test_the_connect_username_is_read_from_a_role_not_the_endpoint():
+    """The deployed defect: `status.postgres_role` on an ENDPOINT does not exist, so the username was
+    empty and every table read failed to authenticate. Measured on a live project: the endpoint's
+    status has no such key, and the role objects do."""
+    roles = {"roles": [
+        {"name": "projects/p/branches/b/roles/app-sp",
+         "status": {"postgres_role": "ad7545de-066b-4768-971e-93a305e02608"}},
+        {"name": "projects/p/branches/b/roles/me",
+         "status": {"postgres_role": "raphael.mansuy@gmail.com"}},
+    ]}
+    http = FakeHttp({"/api/2.0/postgres/projects/p/branches/b/roles": roles})
+    b = LakebaseBrowser("h", None, http=http)
+    rows = run(b.roles("p", "b", "tok"))
+    assert [r["identity"] for r in rows] == [
+        "ad7545de-066b-4768-971e-93a305e02608", "raphael.mansuy@gmail.com"]
+
+
+def test_the_app_connects_as_its_own_service_principal(monkeypatch):
+    """One branch, two roles: the app must pick its SP, not whichever came first."""
+    roles = {"roles": [
+        {"name": "projects/p/branches/b/roles/me", "status": {"postgres_role": "a-human@example.com"}},
+        {"name": "projects/p/branches/b/roles/sp", "status": {"postgres_role": "sp-client-id"}},
+    ]}
+    http = FakeHttp({"/api/2.0/postgres/projects/p/branches/b/roles": roles})
+    b = LakebaseBrowser("h", None, http=http)
+    monkeypatch.setenv("DATABRICKS_CLIENT_ID", "sp-client-id")
+    assert run(b._connect_role("p", "b", "tok")) == "sp-client-id"
+
+
+def test_a_single_role_branch_is_unambiguous(monkeypatch):
+    roles = {"roles": [{"name": "x", "status": {"postgres_role": "only@example.com"}}]}
+    http = FakeHttp({"/api/2.0/postgres/projects/p/branches/b/roles": roles})
+    b = LakebaseBrowser("h", None, http=http)
+    monkeypatch.delenv("DATABRICKS_CLIENT_ID", raising=False)
+    assert run(b._connect_role("p", "b", "tok")) == "only@example.com"
+
+
+def test_reading_tables_asks_the_roles_endpoint_for_the_username(monkeypatch):
+    """The behavioural version of the same rule: `tables()` must consult /roles.
+
+    It needs a credential and a connection, so the two are stubbed and only the REQUESTS are
+    asserted — which is where the defect lived. An endpoint with no host is a hard stop, so the host
+    is provided and the connection is faked."""
+    seen: list[str] = []
+
+    class Http:
+        async def get(self, path, token, params=None):
+            seen.append(path)
+            if path.endswith("/roles"):
+                return {"roles": [{"name": "r", "status": {"postgres_role": "sp-id"}}]}
+            return {"status": {"hosts": {"host": "ep.example"}}}
+
+        async def post(self, path, token, body=None, timeout=0):
+            seen.append(f"POST {path}")
+            return {"token": "pg-token"}
+
+    b = LakebaseBrowser("h", None, http=Http())
+    monkeypatch.setenv("DATABRICKS_CLIENT_ID", "sp-id")
+    monkeypatch.setattr(b, "_connect_role", b._connect_role)   # unchanged; the request is the proof
+
+    class FakeCursor:
+        description = None
+        def execute(self, *a, **k): pass
+        def fetchall(self): return []
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    class FakeConn:
+        autocommit = False
+        def cursor(self): return FakeCursor()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    import psycopg
+    monkeypatch.setattr(psycopg, "connect", lambda *a, **k: FakeConn())
+    run(b.tables("p", "b", "databricks_postgres", "public", "tok"))
+    assert any("/roles" in p for p in seen), "tables() never asked which role to connect as"
+    assert any(p.startswith("POST") and "credentials" in p for p in seen)

@@ -12,6 +12,7 @@ of their own (spec 013 [UI-6], [RB-2]).
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from typing import Any
 
@@ -124,9 +125,32 @@ class LakebaseBrowser:
         return [{
             "ref": r.get("name") or "",
             "name": (r.get("name") or "").rsplit("/", 1)[-1],
-            "identity": (r.get("spec") or {}).get("postgres_role") or "",
+            # The Postgres username lives HERE, on status.postgres_role — not on the endpoint. An
+            # earlier version read it from the endpoint, got an empty string, and every table read
+            # failed to authenticate (spec 013 [RB-11]).
+            "identity": ((r.get("status") or {}).get("postgres_role")
+                         or (r.get("spec") or {}).get("postgres_role") or ""),
             "type": (r.get("spec") or {}).get("identity_type") or "",
         } for r in data.get("roles", [])]
+
+    async def _connect_role(self, ref: str, branch: str, token: str | None,
+                            client_id: str = "") -> str:
+        """The Postgres role to connect as: the app's own service principal when it has one.
+
+        A branch carries one role per identity. Connecting as the wrong one either fails or, worse,
+        reads a different set of objects. The app connects as ITS service principal
+        (`DATABRICKS_CLIENT_ID`), which is the identity the platform grants when a `postgres` resource
+        is attached; a laptop has no client id and falls back to the only role available.
+        """
+        wanted = client_id or os.environ.get("DATABRICKS_CLIENT_ID", "")
+        rows = await self.roles(ref, branch, token)
+        if wanted:
+            for row in rows:
+                if row["identity"] == wanted:
+                    return row["identity"]
+        # No client id (a laptop, or a hand-provisioned branch): a single-role branch is unambiguous.
+        identities = [r["identity"] for r in rows if r["identity"]]
+        return identities[0] if len(identities) == 1 else (identities[0] if not wanted else "")
 
     async def credential(self, endpoint: str, token: str | None) -> dict[str, Any]:
         """A token for one endpoint. Never cached: a cached credential is a credential at rest."""
@@ -158,7 +182,12 @@ class LakebaseBrowser:
         password = credential.get("token") or ""
         if not password:
             raise RuntimeError("the workspace returned no Lakebase credential for this endpoint")
-        user = status.get("postgres_role") or ""
+        user = await self._connect_role(ref, branch, token)
+        if not user:
+            raise RuntimeError(
+                f"no Postgres role on {lakebase.branch_ref(ref, branch)} matches this app's identity, "
+                "so there is no user to connect as. Attach a database resource to the app (which makes "
+                "the platform create the role), or grant the role by hand.")
 
         def run() -> list[tuple]:
             import psycopg
