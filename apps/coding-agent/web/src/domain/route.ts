@@ -8,6 +8,9 @@
  *   #/lakebase/projects/pg_tickets                         a Lakebase project
  *   #/lakebase/projects/pg_tickets/branches/agent-4ff      one of its branches
  *   #/app/tickets_app                                      a Databricks App
+ *   #/job/812345678901                                     a Lakeflow job
+ *   #/run/812345679                                        one of its runs
+ *   #/pipeline/f0e1c4a2-…-9a2b                             a Lakeflow pipeline
  *   #/session/<id>                                         a conversation
  *   #/settings/models   #/settings/providers               the settings screen, on a tab
  *   (empty)                                                 the start page
@@ -17,7 +20,11 @@
  * route (the tests hold that), and anything unrecognised parses to the empty route rather than
  * throwing: a stale link must open the app, not a blank page.
  */
-export type DocRouteKind = "notebook" | "file" | "table" | "lakebase" | "app";
+export type DocRouteKind = "notebook" | "file" | "table" | "lakebase" | "app" | "job" | "pipeline" | "run";
+
+// A numeric id and a pipeline UUID are told apart by the same two predicates the pages use, so a link is
+// parsed by the rule the page applies rather than by a second grammar (spec 014 [UI-7]).
+import { asId, isPipelineId } from "./jobs";
 
 export interface Route {
   doc: { kind: DocRouteKind; ref: string; name?: string } | null;
@@ -76,6 +83,18 @@ export function parseRoute(hash: string): Route {
   }
   if (head === "app" && rest.length === 1 && rest[0]) {
     return { ...EMPTY_ROUTE, doc: { kind: "app", ref: decodeSegment(rest[0]) } };
+  }
+  // A job and a run are numeric ids. A malformed one parses to the EMPTY route so a stale link opens the
+  // app rather than a page that asks the server for `/api/jobs/abc` (spec 014 [UI-7], [E-20]).
+  if ((head === "job" || head === "run") && rest.length === 1 && rest[0]) {
+    const id = asId(decodeSegment(rest[0]));
+    return id === null ? EMPTY_ROUTE : { ...EMPTY_ROUTE, doc: { kind: head, ref: String(id) } };
+  }
+  // A pipeline is a UUID. Anything else is a name, and a name is not an id ([E-17]) — so it parses to the
+  // empty route rather than a page that reads a 404 as a permission problem.
+  if (head === "pipeline" && rest.length === 1 && rest[0]) {
+    const id = decodeSegment(rest[0]);
+    return isPipelineId(id) ? { ...EMPTY_ROUTE, doc: { kind: "pipeline", ref: id } } : EMPTY_ROUTE;
   }
   return EMPTY_ROUTE;
 }

@@ -30,6 +30,7 @@ from .config import Settings
 from .config import settings as load_settings
 from .routers.api import router
 from .routers.infra import router as infra_router
+from .routers.jobs import router as jobs_router
 from .routers.llm import router as llm_router
 from .routers.llm_admin import router as llm_admin_router
 from .routers.internal import router as internal_router
@@ -165,13 +166,20 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
     # Unity Catalog is still the boundary for what the *agent* may touch; this is the app reading the
     # infrastructure it is allowed to manage.
     from .adapters.databricks.apps import AppsBrowser
+    from .adapters.databricks.jobs import JobsBrowser
     from .adapters.databricks.lakebase import LakebaseBrowser
+    from .adapters.databricks.pipelines import PipelinesBrowser
     from .adapters.databricks.sp_token import ServicePrincipalToken, provider
 
     sp = ServicePrincipalToken()
     app.state.sp_token = sp
     app.state.lakebase = LakebaseBrowser(os.environ.get("DATABRICKS_HOST", ""), provider(sp))
     app.state.apps = AppsBrowser(os.environ.get("DATABRICKS_HOST", ""), provider(sp))
+    # Spec 014: jobs and pipelines are behind the same wall as `postgres` — neither `jobs` nor `pipelines`
+    # is a grantable `user_api_scopes` value, so the forwarded user token cannot call either API and every
+    # read here is the app reading what it is allowed to see ([RB-1]).
+    app.state.jobs = JobsBrowser(os.environ.get("DATABRICKS_HOST", ""), provider(sp))
+    app.state.pipelines = PipelinesBrowser(os.environ.get("DATABRICKS_HOST", ""), provider(sp))
     app.state.dev_token = os.environ.get("APP_DEV_TOKEN") or os.environ.get("DATABRICKS_TOKEN")
 
     # Bytes the user hands us (spec 009). A directory in dev, memory in tests; the port makes a third
@@ -229,6 +237,7 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
     app.include_router(llm_admin_router)
     app.include_router(internal_router)
     app.include_router(infra_router)
+    app.include_router(jobs_router)
 
     if WEB_DIST.exists():
         app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")

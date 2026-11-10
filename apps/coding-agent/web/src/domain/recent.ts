@@ -10,8 +10,9 @@
 export interface RecentDoc {
   path: string;
   name: string;
-  /** The five document kinds. A project and an app are "recently looked at" too (spec 013 [UI-1]). */
-  kind: "notebook" | "file" | "table" | "lakebase" | "app";
+  /** The eight document kinds. A project, an app, a job, a pipeline and a run are "recently looked at"
+   *  too (spec 013 [UI-1], spec 014 [UI-1]). */
+  kind: "notebook" | "file" | "table" | "lakebase" | "app" | "job" | "pipeline" | "run";
 }
 
 const KEY = "coding-agent:recent-docs:v1";
@@ -31,7 +32,7 @@ function load(): void {
 
 function valid(v: unknown): v is RecentDoc {
   const d = v as RecentDoc;
-  const kinds = ["notebook", "file", "table", "lakebase", "app"];
+  const kinds = ["notebook", "file", "table", "lakebase", "app", "job", "pipeline", "run"];
   return !!d && typeof d.path === "string" && d.path.length > 0
     && typeof d.name === "string" && kinds.includes(d.kind);
 }
@@ -61,10 +62,15 @@ export function forgetDocs(): void {
   save();
 }
 
-/** Tables are named `catalog.schema.table`, so a "name" is the last part, not the last path segment. */
+/** Tables are named `catalog.schema.table`, so a "name" is the last part, not the last path segment.
+ *  A job and a run are named by their id (a job's *name* is not unique in a workspace, so it is not an
+ *  identity); a pipeline is its UUID's first segment. */
 export function nameOf(kind: RecentDoc["kind"], path: string): string {
   if (kind === "table") return path.split(".").pop() ?? path;
   if (kind === "lakebase") return path.split("/").pop() ?? path;
+  if (kind === "job") return `job ${path}`;
+  if (kind === "run") return `run ${path}`;
+  if (kind === "pipeline") return path.slice(0, 8);
   if (kind === "app") return path;
   return path.split("/").pop() ?? path;
 }

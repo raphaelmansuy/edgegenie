@@ -132,11 +132,11 @@ if [ -n "$TOKEN" ]; then
     ok '/api/sessions/{id}/events exists'
   fi
 
-  # -- 2b. the two object types spec 013 added (a fingerprint, not a health check) -----------------
-  # The routes exist ONLY in this work, so a 404 or the SPA's HTML means the backend is older than the
+  # -- 2b. the object types spec 013 and spec 014 added (a fingerprint, not a health check) -------
+  # These routes exist ONLY in this work, so a 404 or the SPA's HTML means the backend is older than the
   # checkout. A 200 with `items`, or a 403/502 carrying a sentence, both mean the route is registered:
-  # a denial is a real answer and the pages render it (spec 013 [E-1], [RB-2]).
-  for route in /api/lakebase/projects /api/apps; do
+  # a denial is a real answer and the pages render it (spec 013 [E-1], spec 014 [UI-3]).
+  for route in /api/lakebase/projects /api/apps /api/jobs /api/pipelines; do
     body=$(curl -s --max-time 30 "$URL$route" "${H[@]}")
     if printf '%s' "$body" | grep -q '<!doctype html'; then
       bad "$route fell through to the front end — the backend is OLDER than this checkout"
@@ -147,6 +147,46 @@ if [ -n "$TOKEN" ]; then
     else
       bad "$route gave an unexpected answer: ${body:0:120}"
     fi
+  done
+
+  # -- 2c. the rules route proves spec 014's vocabulary is deployed, not only its routing ----------
+  # `/api/infra/run-actions` is answered by `api.domain.jobs`, so the values below prove the state tables
+  # shipped. A running run must offer Cancel and must NOT offer a Repair; a failed terminal run is the
+  # reverse. Those two facts are the whole of [RUN-2] and [RUN-3], computed server-side.
+  actions=$(curl -s --max-time 30 "$URL/api/infra/run-actions?life_cycle=RUNNING" "${H[@]}")
+  if printf '%s' "$actions" | grep -q '<!doctype html'; then
+    bad "/api/infra/run-actions fell through to the front end — spec 014 is not deployed"
+  else
+    printf '%s' "$actions" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("  \033[31mFAIL\033[0m run-actions did not parse"); sys.exit(1)
+problems = []
+if d.get("word") != "running":
+    problems.append("a RUNNING run reads %r, expected running" % (d.get("word"),))
+if d.get("cancel") is not True:
+    problems.append("a RUNNING run does not offer Cancel")
+if d.get("repair") is not False:
+    problems.append("a RUNNING run offers a Repair, which the platform refuses")
+if problems:
+    print("  \033[31mFAIL\033[0m " + "; ".join(problems)); sys.exit(1)
+print("  \033[32mPASS\033[0m the state vocabulary is live: a running run reads running, offers Cancel, no Repair")' \
+      && pass=$((pass+1)) || fail=$((fail+1))
+  fi
+
+  # -- 2d. there is NO write route for a job or a pipeline, by design -----------------------------
+  # Every action goes through the agent so the write fence has one home (spec 014 [07 §5]). A POST here
+  # answering anything but 404/405 means a second, un-fenced write path shipped.
+  for route in /api/jobs/1 /api/pipelines/x; do
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -X POST "$URL$route" "${H[@]}" \
+             -H 'content-type: application/json' -d '{}')
+    case "$code" in
+      404|405) ok "POST $route is refused ($code) — the browser has no write path, as designed" ;;
+      401|403) ok "POST $route is refused ($code) before reaching a handler" ;;
+      *) bad "POST $route answered $code — a write route exists for an object that must only be written by the agent" ;;
+    esac
   done
 
   # -- 3. the catalogue carries the vision fact ---------------------------------------------------

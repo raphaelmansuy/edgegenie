@@ -32,6 +32,9 @@ import { CatalogTree } from "./components/CatalogTree";
 import { DataTree } from "./components/DataTree";
 import { AppPage } from "./components/AppPage";
 import { LakebasePage } from "./components/LakebasePage";
+import { JobsPage } from "./components/JobsPage";
+import { RunsPage } from "./components/RunsPage";
+import { PipelinePage } from "./components/PipelinePage";
 import { FilesPane } from "./components/FilesPane";
 import { Composer } from "./components/Composer";
 import { OpenDoc, WorkspaceLinks } from "./components/DocContext";
@@ -49,7 +52,8 @@ import {
 } from "./components/Icons";
 import { ALL_FOUR_MIN, bounds, columns, DOCK_FOCUS_MIN, drawerWidth, modeFor, takesColumn, type RailTab } from "./domain/layout";
 import {
-  ACTIONS, ACTIONS_FOR, asAttachment, canAttach, docForNode, makeDoc, tablesWritten, touched,
+  ACTIONS, ACTIONS_FOR, asAttachment, canAttach, docForNode, docFromOpenEvent, isRunObject,
+  makeDoc, OPEN_EVENTS, tablesWritten, touched,
   type Action, type Doc, type DocKind,
 } from "./domain/docs";
 import { focusFor, NO_FOCUS, sameFocus, withCell, withoutDoc, type Focus } from "./domain/focus";
@@ -73,9 +77,10 @@ const RAIL_LABEL: Record<Rail, string> = {
   sessions: "Sessions", files: "Files", catalog: "Catalog", data: "Data",
 };
 /** The palette's group for each kind of open document. One map, so a new kind cannot be filed under
- *  the wrong heading (spec 013 [UI-5]). */
+ *  the wrong heading (spec 013 [UI-5], spec 014 [UI-2]). */
 const KIND_GROUP: Record<DocKind, string> = {
   notebook: "Files", file: "Files", table: "Tables", lakebase: "Lakebase", app: "Apps",
+  job: "Jobs", pipeline: "Pipelines", run: "Runs",
 };
 const CHAT = "chat";
 
@@ -126,6 +131,27 @@ export function App() {
     const open = () => setKeysOpen(true);
     window.addEventListener("opengenie:shortcuts", open); // OPEN_SHORTCUTS in domain/cellkeys.ts
     return () => window.removeEventListener("opengenie:shortcuts", open);
+  }, []);
+
+  /* Cross-page links. A read-only page cannot navigate the shell by itself, so it dispatches an event and
+   * the shell opens the document — through `docFromOpenEvent`, the one mapping, so the listener is three
+   * lines and its test calls the same function.
+   *
+   * These listeners are the OTHER HALF of two `dispatchEvent` calls that had NO listener at all:
+   * `opengenie:open-lakebase` (013's AppPage) and `opengenie:open-job` (014's RunsPage). A control that
+   * dispatches into the void is the inert control spec 011 [N5] removed — and a screenshot shows a button,
+   * so only a test finds it.
+   *
+   * `openDocRef` because the listener is registered once and must call the CURRENT `openDoc`. */
+  const openDocRef = useRef<(d: Doc) => void>(() => {});
+  useEffect(() => {
+    const names = Object.keys(OPEN_EVENTS);
+    const listener = (e: Event) => {
+      const doc = docFromOpenEvent(e.type, (e as CustomEvent<string>).detail);
+      if (doc) openDocRef.current(doc);
+    };
+    for (const name of names) window.addEventListener(name, listener);
+    return () => { for (const name of names) window.removeEventListener(name, listener); };
   }, []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"providers" | "models">("providers");
@@ -283,6 +309,9 @@ export function App() {
     setFocus(focusFor(doc));
     dismissRailDrawer();
   }, [dismissRailDrawer]);
+  // The listener above is registered once and must always call the CURRENT openDoc, not the one that
+  // existed at mount. Assigning on every render is the cheapest correct way to say that.
+  openDocRef.current = openDoc;
   const selectTab = (id: string) => {
     setView(id);
     if (id === CHAT) { setFocus(withoutDoc()); return; }
@@ -607,6 +636,16 @@ export function App() {
     for (const d of docs) {
       add(`doc:${d.id}`, d.name, KIND_GROUP[d.kind], () => selectTab(d.id), d.ref, 1);
     }
+    // A job, a pipeline and a project the agent built are findable by name even when their tab is closed.
+    // A palette that could only find OPEN documents made "the job you just made" unreachable by its own
+    // name — the gap scene S9 found, and the same class as 013's `@`-mention list (spec 014 [UI-5]).
+    for (const item of recent) {
+      if (!isRunObject(item.kind) && item.kind !== "lakebase" && item.kind !== "app") continue;
+      if (docs.some((d) => d.id === makeDoc(item.kind, item.path, item.name).id)) continue;
+      const doc = makeDoc(item.kind, item.path, item.name);
+      add(`recent:${doc.id}`, doc.name, KIND_GROUP[item.kind],
+        () => openDoc(doc), doc.ref, 2);
+    }
     for (const s of sessions.slice(0, 40)) {
       const title = s.title === "New session" ? s.id.slice(0, 8) : s.title;
       items.push({
@@ -616,7 +655,7 @@ export function App() {
       });
     }
     return items;
-  }, [docs, sessions, railShown, inspShown, newSession, refresh, focus, addContext, ask, openRail,
+  }, [docs, sessions, recent, railShown, inspShown, newSession, refresh, focus, addContext, ask, openRail,
       openInspector, resetAll, toggleDock, dockShown, closedCount, reopenDocument]);
 
   const busy = session.status === "streaming";
@@ -1011,7 +1050,16 @@ export function App() {
                     : viewDoc.kind === "app"
                       ? <AppPage key={viewDoc.id} doc={viewDoc} workspace={workspace}
                           onAsk={(prompt) => void start(prompt, [])} />
-                      : <NotebookViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
+                      : viewDoc.kind === "job"
+                        ? <JobsPage key={viewDoc.id} doc={viewDoc}
+                            onAsk={(prompt) => void start(prompt, [])} />
+                        : viewDoc.kind === "run"
+                          ? <RunsPage key={viewDoc.id} doc={viewDoc}
+                              onAsk={(prompt) => void start(prompt, [])} />
+                          : viewDoc.kind === "pipeline"
+                            ? <PipelinePage key={viewDoc.id} doc={viewDoc}
+                                onAsk={(prompt) => void start(prompt, [])} />
+                            : <NotebookViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
               ) : active ? (
                 <MissionScreen key={active} session={session} conn={conn} dockVisible={dockOnScreen} error={error}
                   onOpen={openDoc} onConversation={() => { reveal(); requestAnimationFrame(() => dockComposer.current?.focus()); }}

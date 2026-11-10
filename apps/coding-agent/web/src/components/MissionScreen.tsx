@@ -6,7 +6,8 @@ import { currentMission, lastAchieved, missionView, type MissionProof } from "..
 import { modelTail } from "../domain/models";
 import { stripEvidence } from "../domain/toolview";
 import { EMPTY_ROUTE, linkTo } from "../domain/route";
-import { Alert, ArrowUpRight, Check, Chat, ChevronDown, Clock, FileIcon, Folder, ListIcon, Lock, Notebook, Ring, Sparkle, Square } from "./Icons";
+import { Alert, ArrowUpRight, Check, Chat, ChevronDown, Clock, Database, FileIcon, Folder, Layers, ListIcon, Lock, Notebook, Play, Ring, Sparkle, Square, Table } from "./Icons";
+import type { DocKind } from "../domain/docs";
 import { CopyButton } from "./CopyButton";
 import { Markdown } from "./Markdown";
 import { MAX_MARKDOWN, ToolCard, TurnView } from "./Transcript";
@@ -62,6 +63,20 @@ function MissionPlan({ view }: { view: ReturnType<typeof missionView> }) {
         && <p className="mission-note">The turn ended before every plan step was marked complete.</p>}
     </> : <p className="mission-empty">No plan was reported for this mission. Activity and results remain available as they arrive.</p>}
   </section>;
+}
+
+/** The glyph for an artifact's kind. Before spec 014 this was `notebook ? <Notebook/> : <FileIcon/>`, so a
+ *  job the agent created appeared as a FILE in "Outputs & references" — the object was openable and its
+ *  icon said it was something else (spec 014 [UI-1]). */
+export function artifactIcon(kind: DocKind) {
+  switch (kind) {
+    case "notebook": return <Notebook size={18} />;
+    case "table": return <Table size={18} />;
+    case "lakebase": return <Database size={18} />;
+    case "job": case "run": return <Play size={18} />;
+    case "pipeline": return <Layers size={18} />;
+    default: return <FileIcon size={18} />;
+  }
 }
 
 export function MissionScreen({ session, conn, dockVisible, error, onOpen, onConversation, onStop, onRestore }: Props) {
@@ -153,7 +168,7 @@ export function MissionScreen({ session, conn, dockVisible, error, onOpen, onCon
               <section className="mission-section mission-outputs" aria-labelledby="mission-outputs-heading">
                 <div className="mission-section-head"><h3 id="mission-outputs-heading"><FileIcon size={15} /> Outputs & references</h3><span>{v.artifacts.length}</span></div>
                 {v.artifacts.length > 0 ? <ul>{v.artifacts.map((a) => <li key={a.doc.id}><button type="button" onClick={() => onOpen(a.doc)} className="mission-output" title={a.doc.ref}>
-                  <span className="mission-output-icon" aria-hidden>{a.doc.kind === "notebook" ? <Notebook size={18} /> : <FileIcon size={18} />}</span>
+                  <span className="mission-output-icon" aria-hidden>{artifactIcon(a.doc.kind)}</span>
                   <span className="mission-output-text"><strong>{a.doc.name}</strong><small>{a.wrote ? "Written" : "Read"} · {a.doc.kind}</small></span><ArrowUpRight size={14} />
                 </button></li>)}</ul> : <p className="mission-empty">No files reported{v.state === "running" || v.state === "auditing" ? " yet" : ""}. Results can also appear in the response.</p>}
               </section>

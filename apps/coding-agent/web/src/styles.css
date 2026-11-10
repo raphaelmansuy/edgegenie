@@ -3433,3 +3433,96 @@ h2.rail-group { margin: 0; text-transform: none; }
 .data-row .tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tree-icon.kind-lakebase { color: var(--teal-700); }
 .tree-icon.kind-app { color: var(--purple-700); }
+
+/* ==========================================================================
+   Spec 014: the job, run and pipeline pages, and the two rail groups they add.
+   Same rhythm as spec 013's pages on purpose — a read-only surface that looks unlike the others
+   makes a user think it behaves unlike them (spec 014 [11 §the rule a picture has to pass]).
+   ========================================================================== */
+
+/* The task graph: a level index, its tasks, and the "after X" that carries the edges. A node-link
+   diagram is unreadable in a 470 px column; levels stay legible at 620 px and are selectable text. */
+.job-graph { display: flex; flex-direction: column; gap: 8px; }
+.job-graph.is-invalid { flex-direction: row; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--ink-2); }
+.job-graph.is-invalid > div { display: flex; flex-direction: column; min-width: 0; }
+.job-level { display: flex; gap: 10px; align-items: flex-start; }
+.job-level-index {
+  flex: 0 0 18px; height: 18px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10.5px; font-variant-numeric: tabular-nums;
+  background: var(--surface-2); color: var(--ink-3); border: 1px solid var(--line);
+}
+.job-level-tasks { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.job-task {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); min-width: 0;
+}
+.job-task-key { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+.job-task-kind { font-size: 11px; color: var(--ink-3); }
+.job-task-target {
+  font-family: var(--mono); font-size: 11.5px; color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.job-task-after { font-size: 11px; color: var(--ink-3); }
+
+/* A paused schedule is stated in a sentence, and the sentence carries a tone: this is the one field on
+   the page that costs money when read wrongly. */
+.infra-schedule { margin: 0; font-size: 12.5px; color: var(--ink-2); }
+.infra-schedule.is-paused { color: var(--ink); }
+
+/* A run's own error, quoted. Monospace and scrollable: an exception is text a person copies. */
+.infra-error-text {
+  margin: 8px 0 0; padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--surface-2); border: 1px solid var(--line);
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.5; color: var(--ink-2);
+  white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto;
+}
+.infra-details { margin-top: 6px; font-size: 12px; color: var(--ink-3); }
+.infra-details summary { cursor: pointer; }
+.infra-details summary:hover { color: var(--ink); }
+
+/* Which identity read the page. Quiet, present, and never the loudest thing on screen. */
+.infra-identity { margin: 10px 0 0; font-size: 11.5px; color: var(--ink-3); }
+
+/* Run and task rows: the same `.infra-row` grid, with the state word before the detail. A queued task
+   reading `not started` is the assertion that matters here, so the word must be a column, not a colour. */
+.run-tasks .infra-row, .pipeline-events .infra-row {
+  display: grid; grid-template-columns: minmax(90px, 1.1fr) auto minmax(60px, auto) minmax(0, 2fr);
+  gap: 10px; align-items: baseline;
+}
+.pipeline-events .infra-row { grid-template-columns: 52px minmax(90px, auto) minmax(0, 3fr); }
+.pipeline-events .infra-row.level-error .infra-row-name { color: var(--pink-700); }
+.pipeline-events .infra-row.level-warn .infra-row-name { color: var(--yellow-800); }
+
+/* The rail's four groups. A count beside the heading is a fact; the heading alone is a label. */
+.tree-group-block { display: flex; flex-direction: column; }
+.tree-group { display: flex; align-items: baseline; gap: 6px; }
+.tree-group-count { font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.tree-icon.kind-job { color: var(--blue-600); }
+.tree-icon.kind-pipeline { color: var(--purple-700); }
+
+/* At 620 px the task rows wrap rather than clip: a two-column grid with a fixed first column pushes the
+   detail out of the viewport, and a clipped graph reads as a graph with fewer tasks. */
+@media (max-width: 700px) {
+  .run-tasks .infra-row, .pipeline-events .infra-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 2px;
+  }
+  .run-tasks .infra-row .infra-row-host, .pipeline-events .infra-row .infra-row-host {
+    grid-column: 1 / -1;
+  }
+}
+
+/* One refusal for a page whose whole read failed. A block-level box is for a block-level denial; when
+   EVERY block was denied for one cause, the cause is stated once and the blocks say only that they could
+   not be read. Five copies of one sentence is the defect 013's [UI-6] recorded, found here by looking. */
+.infra-page-refusal {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--pink-100); background: var(--surface-2);
+  font-size: 12.5px; color: var(--ink-2);
+}
+.infra-page-refusal > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.infra-page-refusal strong { color: var(--ink); font-weight: 600; }
+.infra-page-refusal .btn { align-self: flex-start; }

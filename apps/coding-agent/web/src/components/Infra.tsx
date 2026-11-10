@@ -11,7 +11,10 @@
 import type { ReactNode } from "react";
 import { Alert, Refresh } from "./Icons";
 
-export type BlockState = "loading" | "ready" | "empty" | "error";
+/** Five states, not four. `unread` is a block whose section could not be read for a cause the PAGE already
+ *  stated: it shows that it has no content, and no sentence, and no retry. Without it a page-level refusal
+ *  became five identical boxes (found by looking at S6 of spec 014, after every assertion passed). */
+export type BlockState = "loading" | "ready" | "empty" | "error" | "unread";
 
 export interface BlockProps {
   title: string;
@@ -23,6 +26,10 @@ export interface BlockProps {
   children?: ReactNode;
   /** What "empty" means HERE: an empty list and a zero count are different sentences. */
   empty?: string;
+  /** What "could not be read" means HERE. NEVER the same sentence as `empty`: "no runs" is a claim, and a
+   *  failed read cannot support it. A page that says "this job has not run yet" over a denied read states
+   *  something it does not know (spec 014 [UI-3], and the whole thesis of the spec). */
+  unread?: string;
   onRetry?: () => void;
   /** The action's label, when retrying can help. A refusal gets none ([UI-6], [E-1]). */
   retryLabel?: string;
@@ -58,15 +65,23 @@ export function Block(p: BlockProps) {
             <Alert size={14} />
             <div>
               {/* The platform's sentence, verbatim: a paraphrase of a refusal sends the user to the
-                  wrong person ([E-1], [E-2]). */}
-              <span>{p.error}</span>
-              {p.onRetry && !permanent && (
+                  wrong person ([E-1], [E-2]). A block with NO sentence of its own is a consequence of a
+                  statement made above it (a page-level refusal), so it says that instead of offering a
+                  retry it cannot explain — five unlabelled "Try again" buttons is the same defect as five
+                  identical sentences. */}
+              <span>{p.error || "This section could not be read; the reason is stated above."}</span>
+              {p.onRetry && p.error && !permanent && (
                 <button className="btn sm ghost" onClick={p.onRetry}>
                   <Refresh size={12} /> {p.retryLabel ?? "Try again"}
                 </button>
               )}
             </div>
           </div>
+        )}
+        {p.state === "unread" && (
+          <p className="infra-block-empty" role="status">
+            {p.unread ?? "Could not be read; the reason is stated above this page."}
+          </p>
         )}
         {p.state === "empty" && (
           <>

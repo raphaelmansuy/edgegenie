@@ -124,7 +124,7 @@ export const SHORTCUTS: Shortcut[] = [
   { id: "railSessions", combo: "mod+1", label: "Sessions panel", group: "Panes", owner: "shell" },
   { id: "railFiles", combo: "mod+2", label: "Files panel", group: "Panes", owner: "shell" },
   { id: "railCatalog", combo: "mod+3", label: "Catalog panel", group: "Panes", owner: "shell" },
-  { id: "railData", combo: "mod+4", label: "Data panel (Lakebase and apps)", group: "Panes", owner: "shell" },
+  { id: "railData", combo: "mod+4", label: "Data panel (databases, jobs, pipelines, apps)", group: "Panes", owner: "shell" },
   { id: "toggleRail", combo: "mod+b", label: "Show or hide the left panel", group: "Panes", owner: "shell" },
   { id: "toggleInspector", combo: "mod+i", label: "Show or hide the inspector", group: "Panes", owner: "shell" },
   { id: "toggleDock", combo: "mod+j", label: "Show or hide the assistant", group: "Panes", owner: "shell" },

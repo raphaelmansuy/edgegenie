@@ -40,6 +40,13 @@ before you can run SQL.
 - `max − min ≤ 16 CU`; autoscaling tops out at 64 CU; scale-to-zero needs a maximum of 32 CU or less.
   `dbx_lakebase_compute` checks these before it calls the platform.
 - Writes to `production` are refused unless you name it explicitly. Do not name it.
+- **A second database is rarely the answer.** Every branch arrives with `databricks_postgres`, and a
+  schema inside it is cheaper and more portable than a new database. When one IS wanted,
+  `dbx_lakebase_database(project, branch, database="<name>")` creates it and
+  `dbx_lakebase_database(project, branch)` with no name lists the branch's databases. These three
+  (`dbx_lakebase_database`, `dbx_lakebase_role`, `dbx_lakebase_tables`) are not in the always-advertised
+  `core` tool set, precisely because a scaffold needs each of them once: they are reachable, and this
+  paragraph is how you know they exist.
 
 ## Connecting from a Databricks App (the only form that works when deployed)
 

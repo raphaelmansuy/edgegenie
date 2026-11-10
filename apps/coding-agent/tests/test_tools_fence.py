@@ -205,11 +205,72 @@ def test_a_plain_identifier_is_accepted(monkeypatch, good):
 
 
 # -- the tool surface is a budget, not a wish list --------------------------------------------
-def test_the_core_profile_is_a_deliberate_size(monkeypatch):
-    """[RB-8] Every MCP tool is advertised on every request. The count is asserted so growth is a
-    decision rather than a drift."""
+#: The `core` budget, raised from 25 to 28 by spec 014. The raise is a recorded decision with a
+#: compensating removal and three assertions, not an edited number: `07 §6` of spec 014 carries the
+#: arithmetic and the two merges that were considered and rejected. Every MCP tool is advertised on every
+#: request, so this count is a cost paid on every turn of every session.
+CORE_BUDGET = 28
+
+#: The tools that LEFT `core` in spec 014. Each must still be discoverable, which here means named by a
+#: skill: a tool that left `core` and is named by no skill is a tool the agent can no longer reach.
+DEPARTED = {"dbx_lakebase_database", "dbx_lakebase_role", "dbx_lakebase_tables"}
+
+#: A skill body names a tool when it mentions it in a `code span`. Checked below.
+SKILLS = Path(__file__).resolve().parents[1] / "tools" / "skills"
+
+
+def test_the_core_profile_stays_within_its_budget(monkeypatch):
+    """[TOOL-1] The count is asserted so growth is a decision rather than a drift."""
     m = load(monkeypatch)
-    assert len(m._CORE) == 25, sorted(m._CORE)
+    assert len(m._CORE) <= CORE_BUDGET, (
+        f"_CORE has {len(m._CORE)} tools, over the budget of {CORE_BUDGET}. Adding one means removing "
+        f"one, or raising the budget with a reason in spec 014 [07 §6].")
+
+
+def test_every_core_tool_is_reachable_from_a_flow(monkeypatch):
+    """A tool in `core` that no page reads and no skill requires is context spent on nothing."""
+    m = load(monkeypatch)
+    text = "\n".join(p.read_text() for p in SKILLS.glob("*.md"))
+    undocumented = []
+    for name in sorted(m._CORE):
+        # Reachable means: a skill names it, or it is one of the calls the product's own pages read
+        # (the infra and job tools), which are enumerated here rather than inferred.
+        if name in text or _has_a_page(name):
+            continue
+        undocumented.append(name)
+    assert not undocumented, f"no page reads these and no skill names them: {undocumented}"
+
+
+def _has_a_page(name: str) -> bool:
+    """The tools whose result a page in this app renders. One list, because "reachable" is a claim about
+    the product and this is where the claim is checked."""
+    return name in {
+        "dbx_whoami",                    # the account menu
+        "dbx_list_tables", "dbx_describe_table", "dbx_search_tables",   # the Catalog tab
+        "dbx_run_sql",                   # a SQL cell's result
+        "dbx_list_notebooks", "dbx_read_notebook", "dbx_write_notebook", "dbx_write_file",
+        "dbx_run_notebook", "dbx_run_notebook_status", "dbx_grep_notebook",   # Files tab and editor
+        "dbx_list_jobs", "dbx_create_job", "dbx_run_job", "dbx_job_run_status",
+        "dbx_job_failure_context",       # the Data tab, the job page, the run page
+        "dbx_create_pipeline", "dbx_pipeline_status", "dbx_start_pipeline",
+        "dbx_stop_pipeline",             # the Data tab, the pipeline page
+        "dbx_lakebase_create", "dbx_lakebase_status", "dbx_lakebase_branch", "dbx_lakebase_sql",
+        "dbx_create_app", "dbx_app_health",                              # the Data tab, spec 013 pages
+        "dbx_skill",                     # the mechanism itself
+    }
+
+
+def test_every_tool_that_left_core_is_named_by_a_skill(monkeypatch):
+    """[E-28] The removal's only real risk: a scaffold that used to work loses three calls and the agent
+    has no way to learn they exist."""
+    m = load(monkeypatch)
+    text = "\n".join(p.read_text() for p in SKILLS.glob("*.md"))
+    missing = sorted(DEPARTED - {n for n in DEPARTED if n in text})
+    assert not missing, (
+        f"{missing} left `core` and no skill names them, so nothing can tell the agent they exist")
+    still_registered = {n for n in DEPARTED if hasattr(m, n)}
+    assert still_registered == DEPARTED, (
+        f"these were meant to leave `core` but stay registered in `full`: {DEPARTED - still_registered}")
 
 
 def test_every_tool_a_core_tool_names_in_its_next_hint_exists(monkeypatch):
@@ -227,3 +288,20 @@ def test_every_tool_a_core_tool_names_in_its_next_hint_exists(monkeypatch):
             if not hasattr(m, hinted):
                 missing.append(f"{name} -> {hinted}")
     assert not missing, f"a hint names a tool that does not exist: {missing}"
+
+
+# -- the label the UI shows must be the set the server advertises ---------------------------------
+def test_the_tool_count_the_ui_shows_is_the_real_core_size(monkeypatch):
+    """`TOOL_COUNT_CORE` is a LABEL — the dock's "N tools" — and a label that disagrees with reality is a
+    lie in a variable. Before spec 014 it said 19 while `_CORE` had 25, so the app under-reported its own
+    surface by six tools for as long as both existed.
+
+    This test exists because a comment in `orchestrator.py` claimed one did. A claim about a test is worth
+    nothing without the test, which is the same defect as a policy function with no caller (013 [F4])."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from api.services.orchestrator import TOOL_COUNT_CORE
+
+    m = load(monkeypatch)
+    assert TOOL_COUNT_CORE == len(m._CORE), (
+        f"the UI shows {TOOL_COUNT_CORE} core tools but the server advertises {len(m._CORE)}")

@@ -62,11 +62,18 @@ from ..domain.session import (
 from ..ports import AgentRuntime, RuntimeHandle, SessionSpec, ToolRegistry
 
 MAX_TURNS = 200
-TOOL_COUNT_CORE = 19
+#: How many tools the `core` profile advertises, for the UI's "N tools" badge. It is NOT the authority
+#: on the budget: `NBMCP_PROFILE=core` selects the set, and `tests/test_tools_fence.py` holds it to 28
+#: (spec 014 [TOOL-1]). This number is a label that must match, and a test asserts it does.
+TOOL_COUNT_CORE = 28
 #: The folder the agent may write to, handed to the child so it can name real paths. A reference
 #: agent's scenarios record `/Users/you/…` as a placeholder; without this it reported a path that
 #: does not exist and every demo turn opened a 404.
 FENCE_ENV = "APP_WORKSPACE_FOLDER"
+#: Where each session's ledger of created pipelines lives. Beside the blob store, because it has the same
+#: durability requirement: a session that resumes must still be able to stop what it made (spec 014
+#: [RB-3]). The app owns the directory; the tool server only appends to its own file.
+LEDGER_ENV = "APP_SESSION_LEDGER_DIR"
 
 
 @dataclass
@@ -449,9 +456,12 @@ class Orchestrator:
         #    token from a private file (not the agent's cwd) that every turn refreshes.
         user_token = live.extra.get("user_token") or os.environ.get("DATABRICKS_TOKEN", "")
         self._write_token(live, user_token)
+        ledger_dir = os.environ.get(LEDGER_ENV) or os.path.join(tempfile.gettempdir(),
+                                                               "agent-ledgers")
         live.mcp_url = await self._tools.start(s.id, live.workspace_folder, s.schema,
                                                live.extra.get("token_file"),
-                                               live.extra.get("sp_token_file"))
+                                               live.extra.get("sp_token_file"),
+                                               ledger_dir)
         live.tools = TOOL_COUNT_CORE if live.mcp_url else 0
 
         # 3. The agent process itself. It authenticates as the USER, and it receives exactly one

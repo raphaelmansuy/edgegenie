@@ -1,0 +1,52 @@
+{
+  "_note": [
+    "The state vocabulary of spec 014, as CASES rather than as prose. `api/domain/jobs.py` and",
+    "`web/src/domain/jobs.ts` are both asserted against this file, so a word changed on one side alone",
+    "fails one test that names the row. Same mechanism as `event-parity.json` (spec 010) and",
+    "`scaffold-steps.json` (spec 013): one rule, two runtimes, one fixture.",
+    "",
+    "Every row is a payload the PLATFORM can send. The rows that matter most are the ones where a",
+    "convenient field and an honest field disagree — `IDLE`+`FAILED` and `TERMINATED`+`FAILED` — because",
+    "those are the rows a lazy implementation passes by accident and a screenshot catches."
+  ],
+  "runs": [
+    { "lifeCycle": "QUEUED", "result": null, "word": "queued", "tone": "busy", "active": true, "terminal": false, "cancel": true, "repair": false },
+    { "lifeCycle": "PENDING", "result": null, "word": "pending", "tone": "busy", "active": true, "terminal": false, "cancel": true, "repair": false },
+    { "lifeCycle": "RUNNING", "result": null, "word": "running", "tone": "busy", "active": true, "terminal": false, "cancel": true, "repair": false },
+    { "lifeCycle": "BLOCKED", "result": null, "word": "blocked", "tone": "busy", "active": true, "terminal": false, "cancel": true, "repair": false },
+    { "lifeCycle": "WAITING_FOR_RETRY", "result": null, "word": "waiting to retry", "tone": "busy", "active": true, "terminal": false, "cancel": true, "repair": false },
+    { "lifeCycle": "TERMINATING", "result": null, "word": "finishing", "tone": "busy", "active": true, "terminal": false, "cancel": true, "repair": false },
+    { "lifeCycle": "TERMINATED", "result": "SUCCESS", "word": "succeeded", "tone": "good", "active": false, "terminal": true, "cancel": false, "repair": false },
+    { "lifeCycle": "TERMINATED", "result": "FAILED", "word": "failed", "tone": "bad", "active": false, "terminal": true, "cancel": false, "repair": true },
+    { "lifeCycle": "TERMINATED", "result": "TIMEDOUT", "word": "timed out", "tone": "bad", "active": false, "terminal": true, "cancel": false, "repair": true },
+    { "lifeCycle": "TERMINATED", "result": "CANCELED", "word": "canceled", "tone": "quiet", "active": false, "terminal": true, "cancel": false, "repair": false },
+    { "lifeCycle": "TERMINATED", "result": "UPSTREAM_FAILED", "word": "upstream failed", "tone": "bad", "active": false, "terminal": true, "cancel": false, "repair": false },
+    { "lifeCycle": "TERMINATED", "result": "SUCCESS_WITH_FAILURES", "word": "succeeded with failures", "tone": "bad", "active": false, "terminal": true, "cancel": false, "repair": false },
+    { "lifeCycle": "SKIPPED", "result": null, "word": "skipped", "tone": "quiet", "active": false, "terminal": true, "cancel": false, "repair": false },
+    { "lifeCycle": "INTERNAL_ERROR", "result": null, "word": "platform error", "tone": "bad", "active": false, "terminal": true, "cancel": false, "repair": false },
+    { "lifeCycle": "SOMETHING_NEW", "result": null, "word": "something_new", "tone": "quiet", "active": false, "terminal": false, "cancel": false, "repair": false },
+    { "lifeCycle": null, "result": null, "word": "unknown", "tone": "quiet", "active": false, "terminal": false, "cancel": false, "repair": false }
+  ],
+  "updates": [
+    { "state": "QUEUED", "word": "queued", "active": true },
+    { "state": "WAITING_FOR_RESOURCES", "word": "waiting for compute", "active": true },
+    { "state": "INITIALIZING", "word": "starting", "active": true },
+    { "state": "CREATING_FLOW", "word": "creating flows", "active": true },
+    { "state": "RUNNING", "word": "running", "active": true },
+    { "state": "COMPLETED", "word": "succeeded", "active": false },
+    { "state": "FAILED", "word": "failed", "active": false },
+    { "state": "CANCELED", "word": "canceled", "active": false },
+    { "state": "IDLE", "word": "idle", "active": false },
+    { "state": null, "word": "unknown", "active": false }
+  ],
+  "pipelines": [
+    { "state": "IDLE", "lastUpdate": "COMPLETED", "word": "succeeded", "why": "the last update is what a user asked about" },
+    { "state": "IDLE", "lastUpdate": "FAILED", "word": "failed", "why": "THE row: IDLE + a failed update is a failure, not an idle pipeline" },
+    { "state": "IDLE", "lastUpdate": null, "word": "idle", "why": "never run" },
+    { "state": "RUNNING", "lastUpdate": "RUNNING", "word": "running", "why": "an update in flight" },
+    { "state": "FAILED", "lastUpdate": null, "word": "failed", "why": "a pipeline failure with no update to point at" },
+    { "state": "DELETED", "lastUpdate": null, "word": "deleted", "why": "verbatim, because it is real" },
+    { "state": "SOMETHING_NEW", "lastUpdate": null, "word": "something_new", "why": "an unknown word is never a synonym" },
+    { "state": null, "lastUpdate": null, "word": "unknown", "why": "nothing read is not 'ready'" }
+  ]
+}

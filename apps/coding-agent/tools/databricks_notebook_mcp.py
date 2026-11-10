@@ -70,16 +70,27 @@ WAREHOUSE_ID = os.environ.get("NBMCP_WAREHOUSE_ID", "")
 mcp = FastMCP("databricks-notebook-tools")
 
 # Tool profile. A coding agent advertises every MCP tool on every request, so
-# fewer, better tools beat many. `core` registers the ~20 tools the exam suite
-# showed are actually needed; `full` also registers the rarely-used lookups.
+# fewer, better tools beat many. `core` registers the tools a session actually needs; `full` also
+# registers the rarely-used lookups.
+#
+# THE BUDGET IS 28, AND IT IS A BUDGET (spec 014 [TOOL-1]). Before spec 014 it was 25 and a test asserted
+# equality. The raise is a recorded decision, not a drift: three Lakebase scaffold calls left (each is
+# named by `skills/lakebase-postgres.md`, so still discoverable through `dbx_skill`), and one tool was
+# added for jobs and five for pipelines. `07 §6` of spec 014 carries the arithmetic and the two merges
+# that were considered and rejected. Every member must be reachable from a page or a skill.
 PROFILE = os.environ.get("NBMCP_PROFILE", "full")
 _CORE = {
     "dbx_whoami", "dbx_list_tables", "dbx_describe_table", "dbx_search_tables", "dbx_run_sql",
     "dbx_list_notebooks", "dbx_read_notebook", "dbx_grep_notebook", "dbx_write_notebook",
-    "dbx_write_file", "dbx_run_notebook", "dbx_run_notebook_status", "dbx_create_job", "dbx_run_job", "dbx_job_run_status",
-    "dbx_lakebase_create", "dbx_lakebase_status", "dbx_lakebase_sql", "dbx_lakebase_branch",
-    "dbx_lakebase_database", "dbx_lakebase_role", "dbx_lakebase_tables",
-    "dbx_create_app", "dbx_app_health", "dbx_skill",
+    "dbx_write_file", "dbx_run_notebook", "dbx_run_notebook_status", "dbx_skill",
+    # jobs (spec 014). `dbx_list_jobs` was missing until 014: an agent could create a job and never
+    # enumerate one, which is [F6].
+    "dbx_list_jobs", "dbx_create_job", "dbx_run_job", "dbx_job_run_status", "dbx_job_failure_context",
+    # pipelines (spec 014). There was one read-only pipeline tool before; a pipeline could not be built.
+    "dbx_create_pipeline", "dbx_pipeline_status", "dbx_start_pipeline", "dbx_stop_pipeline",
+    # Lakebase (spec 013). The scaffold trio left `core` in 014 and stays registered in `full`.
+    "dbx_lakebase_create", "dbx_lakebase_status", "dbx_lakebase_branch", "dbx_lakebase_sql",
+    "dbx_create_app", "dbx_app_health",
 }
 
 
@@ -386,6 +397,15 @@ INSTANCE_PREFIX = os.environ.get("NBMCP_WRITE_INSTANCE_PREFIX", "")
 #: INSTANCE_PREFIX, which passed only because the two strings happen to be equal — a fence that
 #: worked by coincidence ([F3], [E-6]).
 APP_PREFIX = os.environ.get("NBMCP_WRITE_APP_PREFIX", "")
+
+#: How this process reaches the host app's run service, and — since spec 014 — the identity half of an
+#: idempotency token (see `_idempotency_token`). Defined HERE rather than beside the run helpers below,
+#: because a module constant read at call time is fine and one read at import time below its user is not:
+#: the first draft placed these 130 lines later and `dbx_list_jobs` referenced `RUN_SESSION` before it
+#: existed, which is a NameError only on the path that uses it.
+RUN_URL = os.environ.get("NBMCP_RUN_URL", "")
+RUN_SESSION = os.environ.get("NBMCP_RUN_SESSION", "")
+RUN_KEY = os.environ.get("NBMCP_RUN_KEY", "")
 
 
 def _check_prefix(kind: str, name: str, prefix: str) -> None:
@@ -857,20 +877,89 @@ def dbx_write_notebook(path: str, cells: list[dict] | None = None, source: str =
 # --------------------------------------------------------------------------
 # jobs / pipelines
 # --------------------------------------------------------------------------
+#: Imported by path, not `import job_graph`: the tool server is spawned as a script
+#: (`python3 tools/databricks_notebook_mcp.py`), so `tools/` is `sys.path[0]` and a plain import would
+#: work — but it would also work by ACCIDENT of how the process was launched, and a test that imports
+#: this module by path would get a second copy. One loader, used by this file and by `api/domain/jobs.py`
+#: (spec 014 [RB-5]).
+def _graph_module():
+    """`tools/job_graph.py` — the validation and levelling rules, shared with the app."""
+    global _GRAPH
+    try:
+        return _GRAPH
+    except NameError:
+        pass
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "job_graph.py")
+    spec = importlib.util.spec_from_file_location("job_graph", path)
+    _GRAPH = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(_GRAPH)
+    return _GRAPH
+
+
+def _idempotency_token(job_id: int, purpose: str) -> str:
+    """A stable token per (session, job, purpose), so two identical runs make ONE run.
+
+    `run-now` accepts `idempotency_token`: "If a run with the provided token already exists, the request
+    does not create a new run but returns the run ID of the existing run." Without it, a retried call — or
+    a double click — starts a second run of a job that bills per minute (spec 014 [TOOL-5], [E-5]).
+
+    The session id makes two conversations independent: a user re-running "yesterday's" job in a new
+    conversation should get a new run, and should not be handed the run from the first one.
+    """
+    import hashlib
+    session = RUN_SESSION or "local"
+    raw = f"{session}:{job_id}:{purpose}".encode()
+    return hashlib.sha256(raw).hexdigest()[:40]
+
+
 @tool()
-def dbx_list_jobs(limit: int = 25) -> str:
-    """List jobs with their latest run state."""
-    data = _get("/api/2.1/jobs/list", {"limit": limit, "expand_tasks": "false"})
-    return _trim(
-        [
-            {
-                "job_id": j.get("job_id"),
-                "name": (j.get("settings") or {}).get("name"),
-                "schedule": ((j.get("settings") or {}).get("schedule") or {}).get("quartz_cron_expression"),
-            }
-            for j in data.get("jobs", [])
-        ]
-    )
+def dbx_list_jobs(limit: int = 25, include_runs: bool = True) -> str:
+    """List jobs, each with its latest run's state when `include_runs`.
+
+    The Jobs API's list payload carries NO run state (spec 014 [F6]) — the docstring used to claim it did
+    — so the state comes from one `runs/list?limit=1` per job. `include_runs=False` skips that, for a
+    caller that only wants names.
+
+    `runsUnread` names the jobs whose run state could not be read, so "no runs" and "not read" are never
+    the same answer (spec 014 [E-9]).
+    """
+    data = _get("/api/2.2/jobs/list", {"limit": min(max(limit, 1), 100), "expand_tasks": "false"})
+    rows = []
+    unread = []
+    for j in data.get("jobs", []):
+        settings = j.get("settings") or {}
+        schedule = settings.get("schedule") or {}
+        row = {
+            "job_id": j.get("job_id"),
+            "name": settings.get("name"),
+            "schedule": {
+                "cron": schedule.get("quartz_cron_expression"),
+                "timezone": schedule.get("timezone_id"),
+                "paused": (schedule.get("pause_status") or "").upper() == "PAUSED",
+            } if schedule else None,
+            "owner": settings.get("run_as_user_name") or j.get("creator_user_name"),
+        }
+        if include_runs and row["job_id"]:
+            try:
+                runs = _get("/api/2.2/jobs/runs/list",
+                            {"job_id": row["job_id"], "limit": 1}).get("runs") or []
+                if runs:
+                    state = runs[0].get("state") or {}
+                    row["lastRun"] = {
+                        "run_id": runs[0].get("run_id"),
+                        "life_cycle": state.get("life_cycle_state"),
+                        "result": state.get("result_state"),
+                        "start_time": runs[0].get("start_time"),
+                        "end_time": runs[0].get("end_time"),
+                    }
+                else:
+                    row["lastRun"] = None
+            except Exception as e:  # noqa: BLE001 - one unreadable job is not a failed list
+                unread.append(row["job_id"])
+                row["lastRun"] = None
+        rows.append(row)
+    return _trim(rows if not unread else {"jobs": rows, "runsUnread": unread})
 
 
 def _task_outputs(run: dict) -> list[dict]:
@@ -883,7 +972,7 @@ def _task_outputs(run: dict) -> list[dict]:
                 "result": st.get("result_state"), "message": st.get("state_message") or None}
         if st.get("life_cycle_state") == "TERMINATED":
             try:
-                o = _get("/api/2.1/jobs/runs/get-output", {"run_id": t["run_id"]})
+                o = _get("/api/2.2/jobs/runs/get-output", {"run_id": t["run_id"]})
                 nb = o.get("notebook_output") or {}
                 if nb.get("result") is not None:
                     item["exit_value"] = nb["result"][:2000]
@@ -901,7 +990,7 @@ def _wait_run(run_id: int, wait_seconds: int) -> dict:
     import time
     t0 = time.time()
     while True:
-        d = _get("/api/2.1/jobs/runs/get", {"run_id": run_id})
+        d = _get("/api/2.2/jobs/runs/get", {"run_id": run_id})
         if (d.get("state") or {}).get("life_cycle_state") in ("TERMINATED", "SKIPPED", "INTERNAL_ERROR"):
             return d
         if time.time() - t0 >= wait_seconds:
@@ -923,11 +1012,6 @@ def _run_summary(run_id: int, d: dict) -> str:
         payload["note"] = ("run succeeded but no task returned an exit value: the notebook never called "
                            "dbutils.notebook.exit(...). If the task required one, the notebook is incomplete.")
     return _trim(payload)
-
-
-RUN_URL = os.environ.get("NBMCP_RUN_URL", "")
-RUN_SESSION = os.environ.get("NBMCP_RUN_SESSION", "")
-RUN_KEY = os.environ.get("NBMCP_RUN_KEY", "")
 
 
 def _app_call(method: str, url: str, **kw: Any) -> dict:
@@ -1026,7 +1110,7 @@ def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int =
     if params:
         task["notebook_task"]["base_parameters"] = {k: str(v) for k, v in params.items()}
     try:
-        run_id = _post("/api/2.1/jobs/runs/submit", {"run_name": "nbmcp-run", "tasks": [task]})["run_id"]
+        run_id = _post("/api/2.2/jobs/runs/submit", {"run_name": "nbmcp-run", "tasks": [task]})["run_id"]
     except PermissionError:
         # A Databricks App's user authorization has no jobs scope, so the user's token cannot submit a
         # run. When the host app offers to run it itself (as the app, for administrators), ask it to.
@@ -1060,14 +1144,27 @@ def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int =
 
 @tool()
 def dbx_create_job(name: str, tasks: list[dict] | None = None, cron: str = "", timezone: str = "UTC",
-                   max_retries: int = 0, tasks_json: str = "") -> str:
-    """Create a Databricks Job whose tasks are notebooks, on serverless compute.
+                   max_retries: int = 0, tasks_json: str = "", timeout_seconds: int = 0,
+                   performance_target: str = "STANDARD") -> str:
+    """Create a Databricks Job whose tasks are notebooks, on serverless compute, via Jobs API 2.2.
 
     `tasks` is a list of objects (native list, not a string), in any order:
       [{"task_key": "silver", "notebook_path": "/Users/me/x/silver", "depends_on": []},
        {"task_key": "gold",   "notebook_path": "/Users/me/x/gold",   "depends_on": ["silver"]}]
-    cron is an optional Quartz expression ("0 0 6 * * ?"). The job name must
-    start with the allowed prefix. Returns job_id; run it with dbx_run_job.
+
+    A task may carry `timeout_seconds` and `max_retries` of its own, and exactly one task type:
+    `notebook_path`, `python_file`, `sql_file`, `pipeline_id` or `job_id`.
+
+    The graph is validated HERE, before any HTTP call: unique keys, known dependencies, exactly one type
+    per task, no cycle. A malformed graph returns every problem in one sentence and creates NOTHING —
+    the platform's own `400` for the same graph says less and arrives after a round trip (spec 014
+    [TOOL-3], [F3]).
+
+    `cron` is an optional Quartz expression ("0 0 6 * * ?") and the schedule is created PAUSED, so an
+    agent cannot start a recurring cost without the user resuming it ([JOB-4]).
+
+    Queueing is on explicitly (2.2's default made visible) so a run requested while the job is busy is
+    queued instead of skipped ([TOOL-2], [E-6]).
     """
     _need_writes()
     _check_prefix("job", name, JOB_PREFIX)
@@ -1076,57 +1173,661 @@ def dbx_create_job(name: str, tasks: list[dict] | None = None, cron: str = "", t
             tasks = json.loads(tasks_json)
         except Exception as e:  # noqa: BLE001
             return _trim({"error": f"tasks_json is not valid JSON ({e}). Pass `tasks` as a native list."})
-    if not tasks:
-        return _trim({"error": "no tasks given"})
-    built = []
-    for t in tasks:
-        _check_path_scope(t["notebook_path"])
-        item: dict = {"task_key": t["task_key"], "notebook_task": {"notebook_path": t["notebook_path"]}}
-        if t.get("depends_on"):
-            item["depends_on"] = [{"task_key": k} for k in t["depends_on"]]
-        if max_retries:
-            item["max_retries"] = max_retries
-        built.append(item)
-    tasks = built
-    body: dict = {"name": name, "tasks": tasks}
+    if not isinstance(tasks, list):
+        return _trim({"error": "tasks must be a list of objects, not "
+                               f"{type(tasks).__name__}; each task is "
+                               "{'task_key': ..., 'notebook_path': ...}"})
+
+    graph = _graph_module()
+    found = graph.problems(tasks)
+    if found:
+        # Every problem, one sentence, ZERO calls made. `nothing_was_created` is the half that stops a
+        # model from reporting a job that does not exist (spec 014 [E-3]).
+        return _trim({"error": "; ".join(found), "nothing_was_created": True,
+                      "hint": "fix every problem named above and call again; nothing was sent to Databricks"})
+
+    built = [_task_body(t, max_retries) for t in tasks]
+
+    body: dict = {
+        "name": name,
+        "tasks": built,
+        "queue": {"enabled": True},
+        "performance_target": performance_target if performance_target in
+        ("PERFORMANCE_OPTIMIZED", "STANDARD", "COST_OPTIMIZED") else "STANDARD",
+    }
+    if timeout_seconds:
+        body["timeout_seconds"] = int(timeout_seconds)
     if cron:
-        body["schedule"] = {"quartz_cron_expression": cron, "timezone_id": timezone, "pause_status": "PAUSED"}
-    data = _post("/api/2.1/jobs/create", body)
-    return _trim({"job_id": data.get("job_id"), "name": name, "tasks": [t["task_key"] for t in tasks],
-                  "schedule": "created PAUSED" if cron else None,
-                  "next": "call dbx_run_job(job_id, wait_seconds=300) to run it"})
+        body["schedule"] = {"quartz_cron_expression": cron, "timezone_id": timezone,
+                            "pause_status": "PAUSED"}
+    try:
+        data = _post("/api/2.2/jobs/create", body)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 400:
+            return _trim({"created": False, "http_status": 400,
+                          "platform_error": e.response.text[:800], "nothing_was_created": True,
+                          "hint": "the platform refused the settings; report this text, do not retry"})
+        raise
+    return _trim({
+        "job_id": data.get("job_id"), "name": name,
+        "tasks": [t["task_key"] for t in built],
+        "levels": graph.levels(tasks),
+        "summary": graph.describe(tasks),
+        "schedule": ({"cron": cron, "timezone": timezone, "pauseStatus": "PAUSED"} if cron else None),
+        "queueing": "on",
+        "next": (f"call dbx_run_job(job_id={data.get('job_id')}, purpose='first-run') to run it once"
+                 if not cron else
+                 f"the schedule is PAUSED; call dbx_run_job(job_id={data.get('job_id')}) to prove it "
+                 "works now, and tell the user nothing runs on a schedule until they resume it"),
+    })
+
+
+#: How one task type becomes the platform's task body. ONE table, so a new type is a row and the two
+#: maps the first draft used (a key and an inner field, kept in step by hand) cannot drift. `None` as the
+#: inner field means the id IS the inner value; `notebook_path` is the nested common case.
+_TASK_BODY: dict[str, tuple[str, str | None]] = {
+    "notebook_path": ("notebook_task", "notebook_path"),
+    "python_file": ("spark_python_task", "python_file"),
+    "sql_file": ("sql_task", "file"),
+    "pipeline_id": ("pipeline_task", "pipeline_id"),
+    "job_id": ("run_job_task", "job_id"),
+}
+
+
+def _task_body(task: dict, default_retries: int) -> dict:
+    """One task as the Jobs API 2.2 wants it. `task` has already passed `job_graph.problems()`.
+
+    The shape is `{task_key, <one task type field>, depends_on[], max_retries?, timeout_seconds?}`. The
+    task type is looked up, never guessed: `problems()` guarantees exactly one is present.
+    """
+    kind = next(k for k in _TASK_BODY if task.get(k))
+    field, inner = _TASK_BODY[kind]
+    value = task[kind]
+    if kind in ("notebook_path", "python_file", "sql_file"):
+        _check_path_scope(value)             # the fence, on the write targets only
+    item: dict = {
+        "task_key": task["task_key"],
+        field: {inner: value} if inner else value,
+    }
+    if task.get("depends_on"):
+        item["depends_on"] = [{"task_key": k} for k in task["depends_on"]]
+    retries = task.get("max_retries", default_retries)
+    if retries:
+        item["max_retries"] = int(retries)
+    if task.get("timeout_seconds"):
+        item["timeout_seconds"] = int(task["timeout_seconds"])
+    return item
 
 
 @tool()
-def dbx_run_job(job_id: int, wait_seconds: int = 45) -> str:
-    """Trigger a job run. With wait_seconds > 0 wait for it and return per-task
-    results (exit values, errors). Requires NBMCP_ALLOW_WRITES=1."""
+def dbx_run_job(job_id: int, wait_seconds: int = 45, purpose: str = "run") -> str:
+    """Trigger a job run and, with wait_seconds > 0, return per-task results. Requires writes.
+
+    **Idempotent.** The run carries an `idempotency_token` derived from (session, job, `purpose`), so
+    calling twice with the same purpose returns the SAME run instead of starting a second one that bills
+    (spec 014 [TOOL-5], [F2]). Use a different `purpose` for a deliberate re-run after a fix, e.g.
+    `"retry-after-fix"`.
+
+    The job is re-read and its NAME re-checked against this session's prefix before anything is
+    triggered: the fence is re-applied to the object the platform returned, not to the id in the
+    arguments ([TOOL-4]).
+    """
     _need_writes()
-    job = _get("/api/2.1/jobs/get", {"job_id": job_id})
+    job = _get("/api/2.2/jobs/get", {"job_id": job_id})
     _check_prefix("job", (job.get("settings") or {}).get("name", ""), JOB_PREFIX)
-    run_id = _post("/api/2.1/jobs/run-now", {"job_id": job_id})["run_id"]
+
+    token = _idempotency_token(job_id, purpose)
+    # Read the newest run BEFORE the call, so the result can say whether this call created one or re-used
+    # one. The platform does not tell us: it answers with a run id either way.
+    before = _newest_run_id(job_id)
+    run_id = _post("/api/2.2/jobs/run-now",
+                   {"job_id": job_id, "idempotency_token": token})["run_id"]
+    reused = before is not None and run_id == before
+
     if wait_seconds > 0:
-        return _run_summary(run_id, _wait_run(run_id, wait_seconds))
-    return _trim({"run_id": run_id, "hint": "poll with dbx_job_run_status(run_id)"})
+        summary = _run_summary(run_id, _wait_run(run_id, wait_seconds))
+        return summary if not reused else _annotate(summary, {"reused": True, "purpose": purpose})
+    return _trim({"run_id": run_id, "reused": reused, "purpose": purpose,
+                  "job_id": job_id,
+                  "hint": "poll with dbx_job_run_status(run_id)"})
+
+
+def _newest_run_id(job_id: int) -> int | None:
+    """The most recent run of a job, or None. One call, `limit=1`; a failure here is not a failure to run."""
+    try:
+        runs = _get("/api/2.2/jobs/runs/list", {"job_id": job_id, "limit": 1}).get("runs") or []
+        return runs[0].get("run_id") if runs else None
+    except Exception:  # noqa: BLE001 - the annotation is a courtesy, never a reason to fail
+        return None
+
+
+def _annotate(summary_json: str, extra: dict) -> str:
+    """One string with a few keys added. A summary is JSON, so this re-parses rather than concatenating:
+    a model reading two JSON documents in one string guesses which is true."""
+    try:
+        data = json.loads(summary_json)
+    except (ValueError, TypeError):
+        return summary_json
+    if not isinstance(data, dict):
+        return summary_json
+    data.update(extra)
+    return _trim(data)
+
+
+@tool()
+def dbx_job_failure_context(job_id: int) -> str:
+    """Why a job's last run failed — assembled from three calls, in one answer.
+
+    Returns the failing task, its error and the tail of its trace, the tables that task's notebook reads
+    with their REAL columns, and the last successful run's duration.
+
+    This exists because "why did my job fail?" is the most common question after a job turn, and a model
+    left to assemble it makes three calls and has three chances to conclude "the job is broken" when the
+    truth is "the column was renamed" (spec 014 [06 §7]). The schema hint is the same trick
+    `dbx_run_notebook` already uses on a failed run: read the tables the code names, and hand back the
+    columns that actually exist.
+    """
+    job = _get("/api/2.2/jobs/get", {"job_id": job_id})
+    settings = job.get("settings") or {}
+    name = settings.get("name", "")
+    # NO prefix fence here, deliberately: this tool only READS, and inspecting a job you may not run is
+    # not a write. `dbx_lakebase_branch` already draws this line between listing and creating, and a model
+    # asked "why did this fail?" about a colleague's job must be able to answer (spec 014 [E-2]).
+
+    runs = _get("/api/2.2/jobs/runs/list", {"job_id": job_id, "limit": 10}).get("runs") or []
+    failed = next((r for r in runs
+                   if (r.get("state") or {}).get("result_state") in ("FAILED", "TIMEDOUT")), None)
+    last_ok = next((r for r in runs
+                    if (r.get("state") or {}).get("result_state") == "SUCCESS"), None)
+    if failed is None:
+        return _trim({"job_id": job_id, "name": name, "failed": False,
+                      "note": ("no failed run in the last 10" if runs else "this job has never run"),
+                      "lastSuccess": _run_brief(last_ok) if last_ok else None})
+
+    detail = _get("/api/2.2/jobs/runs/get", {"run_id": failed["run_id"]})
+    tasks = _task_outputs(detail)
+    broken = next((t for t in tasks if t.get("result") in ("FAILED", "TIMEDOUT")), None) \
+        or (tasks[0] if tasks else None)
+
+    hints = _schema_hints(settings, broken.get("task_key") if broken else "")
+    return _trim({
+        "job_id": job_id, "name": name, "failed": True,
+        "run_id": failed.get("run_id"),
+        "when": failed.get("start_time"),
+        "failingTask": broken,
+        "lastSuccess": _run_brief(last_ok) if last_ok else None,
+        "tables": hints,
+        "next": ("fix the code using exactly these column names, then call "
+                 "dbx_run_job(job_id, purpose='retry-after-fix') — a NEW purpose, so the re-run is a new "
+                 "run rather than the re-use of the failed one"),
+    })
+
+
+def _run_brief(run: dict) -> dict:
+    state = run.get("state") or {}
+    return {"run_id": run.get("run_id"), "result": state.get("result_state"),
+            "start_time": run.get("start_time"), "end_time": run.get("end_time")}
+
+
+def _schema_hints(settings: dict, task_key: str) -> list[dict]:
+    """The tables the failing task's notebook reads, with their real columns.
+
+    A notebook task names a path; the notebook is exported and scanned for `from`/`join` targets. This is
+    the same approach `dbx_run_notebook` uses, and it is bounded: at most three tables, and any failure
+    yields an empty list rather than a worse error.
+    """
+    path = ""
+    for task in settings.get("tasks") or []:
+        if task.get("task_key") == task_key:
+            path = (task.get("notebook_task") or {}).get("notebook_path") or ""
+            break
+    if not path:
+        return []
+    try:
+        import base64 as _b64
+        exported = _get("/api/2.0/workspace/export", {"path": path, "format": "SOURCE"})
+        source = _b64.b64decode(exported.get("content") or "").decode(errors="replace")
+    except Exception:  # noqa: BLE001 - a hint is a bonus, never a reason to fail
+        return []
+    tables = sorted(set(re.findall(r"\b(?:from|join)\s+([\w.]+)", source, re.I)))[:3]
+    out = []
+    for table in tables:
+        if table.count(".") != 2:
+            continue
+        try:
+            columns = _get(f"/api/2.1/unity-catalog/tables/{table}").get("columns") or []
+            out.append({"table": table, "columns": [c.get("name") for c in columns]})
+        except Exception:  # noqa: BLE001
+            continue
+    return out
 
 
 @tool()
 def dbx_job_run_status(run_id: int, wait_seconds: int = 0) -> str:
     """State of a run, plus per-task exit values and error text once finished.
-    wait_seconds > 0 blocks until it finishes or the time is up."""
+    wait_seconds > 0 blocks until it finishes or the time is up.
+
+    `life_cycle` and `result` are separate on purpose: a run that failed is `TERMINATED` + `FAILED`, and
+    `TERMINATED` alone is not a verdict (spec 014 [E-10])."""
     return _run_summary(run_id, _wait_run(run_id, wait_seconds) if wait_seconds else
-                        _get("/api/2.1/jobs/runs/get", {"run_id": run_id}))
+                        _get("/api/2.2/jobs/runs/get", {"run_id": run_id}))
 
 
 @tool()
 def dbx_list_pipelines(limit: int = 25) -> str:
-    """List Lakeflow Spark Declarative Pipelines."""
-    data = _get("/api/2.0/pipelines", {"max_results": limit})
-    return _trim(
-        [{"pipeline_id": p.get("pipeline_id"), "name": p.get("name"),
-          "state": p.get("state"), "catalog": p.get("catalog")}
-         for p in data.get("statuses", data.get("pipelines", []))]
-    )
+    """List Lakeflow Spark Declarative Pipelines, each with its LAST UPDATE's state.
+
+    The list payload's `state` is the PIPELINE's state, and `IDLE` means both "never run" and "the last
+    update failed" — so it cannot answer "did the last run work?" (spec 014 [F5], [TOOL-8]). Each row
+    therefore carries `lastUpdate` from the pipeline's own `latest_updates`, and `null` when it has never
+    been updated.
+    """
+    data = _get("/api/2.0/pipelines", {"max_results": min(max(limit, 1), 100)})
+    rows = []
+    for p in data.get("statuses", data.get("pipelines", [])):
+        updates = p.get("latest_updates") or []
+        latest = updates[0] if updates else None
+        rows.append({
+            "pipeline_id": p.get("pipeline_id"),
+            "name": p.get("name"),
+            "state": p.get("state"),
+            "lastUpdate": ({"update_id": latest.get("update_id"), "state": latest.get("state"),
+                            "creation_time": latest.get("creation_time")} if latest else None),
+            "catalog": p.get("catalog"),
+            "creator": p.get("creator_user_name"),
+        })
+    return _trim(rows)
+
+
+# ---------------------------------------------------------------------------------------------
+# pipelines: the ledger fence
+# ---------------------------------------------------------------------------------------------
+#: The ledger of pipelines THIS session created. A pipeline id is a platform UUID with no session prefix,
+#: so a prefix rule cannot exist; the honest rule is "did this conversation make it?" (spec 014 [TOOL-6],
+#: [RB-3]). It lives in a FILE the host app owns and passes by path, because the tool server is a
+#: subprocess that dies with the session and 010's durable sessions make a restart routine.
+LEDGER = os.environ.get("NBMCP_SESSION_LEDGER", "")
+
+
+def _ledger_read() -> list[dict]:
+    """Every object this session created, newest last. A missing or unreadable file is an empty ledger:
+    a fence that fails closed on a corrupt file would refuse work the user can see they did."""
+    if not LEDGER:
+        return []
+    try:
+        with open(LEDGER, encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+    except (OSError, ValueError):
+        return []
+
+
+def _ledger_add(kind: str, identifier: str, name: str) -> None:
+    """Append one object. Best effort by design: the ledger is a fence input, and failing a CREATE because
+    the fence could not be recorded would refuse the work rather than protect it. The caller is told."""
+    if not LEDGER:
+        return
+    import time
+    try:
+        os.makedirs(os.path.dirname(LEDGER) or ".", exist_ok=True)
+        with open(LEDGER, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"kind": kind, "id": identifier, "name": name,
+                                 "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}) + "\n")
+    except OSError:
+        pass
+
+
+def _ledger_has(kind: str, identifier: str) -> bool:
+    return any(row.get("kind") == kind and str(row.get("id")) == str(identifier)
+               for row in _ledger_read())
+
+
+def _pipeline_fence(identifier: str) -> None:
+    """Refuse a pipeline this session did not create, in words that say what that means.
+
+    Not "permission denied": a permission is something an admin can grant, and no grant makes a pipeline
+    this conversation's. The distinction is what stops a user being sent to the wrong person (spec 014
+    [TOOL-6], [E-2]).
+    """
+    _check_prefix("pipeline", identifier, PIPELINE_PREFIX)
+    if PIPELINE_PREFIX:
+        return                      # a prefix IS a fence, when one is configured
+    if _ledger_has("pipeline", identifier):
+        return
+    known = [row.get("name") for row in _ledger_read() if row.get("kind") == "pipeline"]
+    raise PermissionError(
+        f"write blocked: pipeline {identifier} was not created in this conversation. "
+        f"This session created {len(known)}"
+        + (f" ({', '.join(str(k) for k in known[:5])})" if known else "")
+        + ". A pipeline someone else owns is changed in Databricks; open it there.")
+
+
+PIPELINE_PREFIX = os.environ.get("NBMCP_WRITE_PIPELINE_PREFIX", "")
+
+
+def _pipeline_body_module():
+    """`tools/pipeline_body.py` — the shape rules, shared with the tests. Loaded by path, like the graph."""
+    global _PIPE_BODY
+    try:
+        return _PIPE_BODY
+    except NameError:
+        pass
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pipeline_body.py")
+    spec = importlib.util.spec_from_file_location("pipeline_body", path)
+    _PIPE_BODY = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(_PIPE_BODY)
+    return _PIPE_BODY
+
+
+@tool()
+def dbx_create_pipeline(name: str, notebooks: list[str] | None = None, files: list[str] | None = None,
+                        catalog: str = "", schema: str = "", edition: str = "ADVANCED",
+                        channel: str = "CURRENT", continuous: bool = False,
+                        development: bool = False) -> str:
+    """Create a Lakeflow Spark Declarative Pipeline on serverless compute, with its id recorded.
+
+    A pipeline is NOT a job. Use one when the user says pipeline, declarative, streaming table,
+    expectation, or medallion; a job orchestrates notebooks and has no lineage graph. The `etl-pipelines`
+    skill is the decision table.
+
+    `notebooks` / `files` are the paths `dbx_write_notebook` / `dbx_write_file` returned — inside this
+    session's folder. `catalog` and `schema` are required (a serverless pipeline always publishes to Unity
+    Catalog), and `edition` defaults ADVANCED because expectations need it.
+
+    The pipeline is created but NOT started: call dbx_start_pipeline(validate_only=True) to check the code
+    for free, then dbx_start_pipeline() to run it.
+    """
+    _need_writes()
+    pipes = _pipeline_body_module()
+    _check_prefix("pipeline", name, PIPELINE_PREFIX)
+    try:
+        body = pipes.build(name=name, notebooks=notebooks, files=files, catalog=catalog, schema=schema,
+                           edition=edition, channel=channel, continuous=continuous,
+                           development=development, check_path=_check_path_scope)
+    except pipes.PipelineProblem as e:
+        return _trim({"error": str(e), "nothing_was_created": True})
+    try:
+        data = _post("/api/2.0/pipelines", body)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in (400, 403):
+            return _trim({"created": False, "http_status": e.response.status_code,
+                          "platform_error": e.response.text[:800], "nothing_was_created": True,
+                          "hint": _serverless_hint(e.response.text),
+                          "do_not_retry": "this refusal will not change on a second identical call"})
+        raise
+    identifier = data.get("pipeline_id") or ""
+    _ledger_add("pipeline", identifier, name)
+    return _trim({
+        "created": True, "pipeline_id": identifier, "name": name, "state": data.get("state"),
+        "libraries": pipes.describe_libraries(body),
+        "catalog": body.get("catalog"), "schema": body.get("schema"),
+        "serverless": True, "edition": body.get("edition"),
+        "next": (f"call dbx_start_pipeline(pipeline_id='{identifier}', validate_only=True) to check the "
+                 "code without materialising anything, then call it again with no validate_only to run it"),
+    })
+
+
+def _serverless_hint(platform_text: str) -> str:
+    """Name the three workspace properties a serverless pipeline needs, when the refusal is about them.
+
+    A `400` saying "serverless is not enabled" does not tell a user which of three settings to change.
+    Saying so once, here, is cheaper than a user discovering it in three tabs (spec 014 [RB-8], [E-4]).
+    """
+    lowered = (platform_text or "").lower()
+    if "serverless" in lowered or "edition" in lowered or "catalog" in lowered:
+        return ("a serverless pipeline needs: Unity Catalog enabled, the ADVANCED edition, and the "
+                "serverless terms accepted in this region. Check the workspace's serverless settings, "
+                "or build a classic pipeline in Databricks and open it here")
+    return "report this text to the user; do not retry"
+
+
+@tool()
+def dbx_pipeline_status(pipeline_id: str, include_events: bool = True, events: int = 20) -> str:
+    """A pipeline, its last three updates, and (by default) its recent events — one call, one object.
+
+    The `state` here is the PIPELINE's; the answer to "did the last run work?" is `lastUpdate.state`,
+    which is `COMPLETED`, `FAILED` or absent when the pipeline has never updated (spec 014 [PIPE-5]).
+    """
+    pipes = _pipeline_body_module()
+    identifier = _pipeline_id(pipeline_id)
+    detail = _get(f"/api/2.0/pipelines/{identifier}")
+    spec = detail.get("spec") or {}
+    updates = _get(f"/api/2.0/pipelines/{identifier}/updates",
+                   {"max_results": 3}).get("updates") or []
+    latest = updates[0] if updates else None
+    out: dict = {
+        "pipeline_id": identifier,
+        "name": spec.get("name"),
+        "state": detail.get("state"),
+        "lastUpdate": ({"update_id": latest.get("update_id"), "state": latest.get("state"),
+                        "creation_time": latest.get("creation_time"),
+                        "full_refresh": latest.get("full_refresh")} if latest else None),
+        "updates": [{"update_id": u.get("update_id"), "state": u.get("state"),
+                     "creation_time": u.get("creation_time")} for u in updates],
+        "libraries": pipes.describe_libraries(spec),
+        "catalog": spec.get("catalog"),
+        "schema": spec.get("schema"),
+        "serverless": spec.get("serverless"),
+        "edition": spec.get("edition"),
+        "channel": spec.get("channel"),
+        "continuous": spec.get("continuous"),
+        "activeUpdate": next((u.get("update_id") for u in updates
+                              if (u.get("state") or "").upper() in
+                              ("QUEUED", "WAITING_FOR_RESOURCES", "INITIALIZING", "RESETTING",
+                               "CREATING_FLOW", "RUNNING")), None),
+    }
+    if include_events:
+        out["events"] = _pipeline_events(identifier, events)
+        failed = (latest or {}).get("state") == "FAILED"
+        if failed:
+            first_error = next((e for e in out["events"]
+                                if (e.get("level") or "").upper() == "ERROR"), None)
+            out["failureDetail"] = first_error.get("message") if first_error else (
+                "the platform reported a FAILED update with no ERROR event")
+    return _trim(out)
+
+
+def _pipeline_events(identifier: str, limit: int = 20) -> list[dict]:
+    """Recent events, errors and warnings first.
+
+    A model reading 200 INFO lines spends its context on nothing, so the filter is applied server-side
+    and the order puts the thing that went wrong first (spec 014 [06 §7], [PIPE-6]).
+    """
+    try:
+        data = _get(f"/api/2.0/pipelines/{identifier}/events",
+                    {"max_results": min(max(limit, 1), 100),
+                     "filter": "level in ('ERROR', 'WARN')"})
+        events_list = data.get("events") or []
+    except httpx.HTTPStatusError:
+        return []
+    rank = {"ERROR": 0, "WARN": 1, "INFO": 2}
+    rows = [{"level": (e.get("level") or "").upper(), "message": (e.get("message") or "")[:400],
+             "timestamp": e.get("timestamp"),
+             "stack_trace": (e.get("details") or {}).get("stack_trace")}
+            for e in events_list]
+    rows.sort(key=lambda r: rank.get(r["level"], 9))
+    return rows
+
+
+@tool()
+def dbx_start_pipeline(pipeline_id: str, full_refresh: bool = False, validate_only: bool = False,
+                       refresh_selection: list[str] | None = None,
+                       full_refresh_selection: list[str] | None = None,
+                       wait_seconds: int = 0) -> str:
+    """Start an update of a pipeline this session created.
+
+    Three modes, each with its own cost, and the caller must choose:
+      * `validate_only=True` — checks the code, materialises NOTHING, is free;
+      * (neither)            — incremental: re-reads only new data;
+      * `full_refresh=True`  — resets every table and re-reads every source. Expensive.
+
+    If the pipeline is already being updated the platform refuses, and the refusal names the active update
+    so the user can watch it instead of retrying (spec 014 [E-7]).
+    """
+    _need_writes()
+    pipes = _pipeline_body_module()
+    identifier = _pipeline_id(pipeline_id)
+    _pipeline_fence(identifier)
+    try:
+        body = pipes.start_body(full_refresh=full_refresh, validate_only=validate_only,
+                                refresh_selection=refresh_selection,
+                                full_refresh_selection=full_refresh_selection)
+    except pipes.PipelineProblem as e:
+        return _trim({"error": str(e), "nothing_was_started": True})
+    try:
+        data = _post(f"/api/2.0/pipelines/{identifier}/updates", body)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 400:
+            active = _active_update(identifier)
+            return _trim({"started": False, "http_status": 400,
+                          "platform_error": e.response.text[:600],
+                          "activeUpdate": active,
+                          "hint": (f"update {active} is already running; watch it with "
+                                   "dbx_pipeline_status" if active else
+                                   "the platform refused the update; report this text")})
+        raise
+    update_id = data.get("update_id")
+    out: dict = {"started": True, "pipeline_id": identifier, "update_id": update_id,
+                 "mode": ("validated only" if validate_only else
+                          "full refresh" if full_refresh else "incremental")}
+    if wait_seconds > 0:
+        out.update(_wait_update(identifier, update_id, wait_seconds))
+    else:
+        out["hint"] = (f"call dbx_start_pipeline(pipeline_id='{identifier}', wait_seconds=120) to watch "
+                       "it, or dbx_pipeline_status to read the result")
+    return _trim(out)
+
+
+def _active_update(identifier: str) -> str | None:
+    try:
+        updates = _get(f"/api/2.0/pipelines/{identifier}/updates",
+                       {"max_results": 3}).get("updates") or []
+    except httpx.HTTPStatusError:
+        return None
+    for u in updates:
+        if (u.get("state") or "").upper() in ("QUEUED", "WAITING_FOR_RESOURCES", "INITIALIZING",
+                                              "RESETTING", "CREATING_FLOW", "RUNNING"):
+            return u.get("update_id")
+    return None
+
+
+def _wait_update(identifier: str, update_id: str | None, wait_seconds: int) -> dict:
+    """Poll an update until it is terminal or the time is up. A `validate_only` update finishes fast."""
+    import time
+    t0 = time.time()
+    state = ""
+    while True:
+        try:
+            d = _get(f"/api/2.0/pipelines/{identifier}/updates/{update_id}")
+        except httpx.HTTPStatusError:
+            return {"waiting": False, "note": "the update could not be read; check dbx_pipeline_status"}
+        state = ((d.get("update") or {}).get("state") or d.get("state") or "").upper()
+        if state in ("COMPLETED", "FAILED", "CANCELED") or time.time() - t0 >= wait_seconds:
+            break
+        time.sleep(4)
+    return {"updateState": state or "unknown",
+            "finished": state in ("COMPLETED", "FAILED", "CANCELED")}
+
+
+@tool()
+def dbx_stop_pipeline(pipeline_id: str) -> str:
+    """Stop the active update of a pipeline this session created.
+
+    Refused when nothing is active, with the reason: a Stop that always succeeds teaches a user that the
+    button did something (spec 014 [PIPE-4]).
+    """
+    _need_writes()
+    identifier = _pipeline_id(pipeline_id)
+    _pipeline_fence(identifier)
+    active = _active_update(identifier)
+    if not active:
+        return _trim({"stopped": False, "reason": "no update is active on this pipeline",
+                      "hint": "nothing to stop; dbx_pipeline_status shows its last update"})
+    try:
+        _post(f"/api/2.0/pipelines/{identifier}/updates/{active}/cancel", {})
+    except httpx.HTTPStatusError as e:
+        return _trim({"stopped": False, "update_id": active, "http_status": e.status_code,
+                      "platform_error": e.response.text[:600]})
+    return _trim({"stopped": True, "update_id": active,
+                  "note": "cancellation is asynchronous: the update may still be running for a moment",
+                  "hint": f"call dbx_pipeline_status(pipeline_id='{identifier}') to see it finish"})
+
+
+@tool()
+def dbx_pipeline_edit(pipeline_id: str, name: str = "", notebooks: list[str] | None = None,
+                      files: list[str] | None = None) -> str:
+    """Replace a pipeline's libraries (and optionally its name) with a new list.
+
+    An edit REPLACES the library list, so a file that is dropped stops being part of the pipeline and its
+    tables stop being maintained. The removed paths are named in the result, so a removal cannot happen
+    silently (spec 014 [E-18]).
+    """
+    _need_writes()
+    pipes = _pipeline_body_module()
+    identifier = _pipeline_id(pipeline_id)
+    _pipeline_fence(identifier)
+    current = _get(f"/api/2.0/pipelines/{identifier}")
+    spec = current.get("spec") or {}
+    try:
+        body = pipes.build(name=name or spec.get("name") or "",
+                           notebooks=notebooks, files=files,
+                           catalog=spec.get("catalog") or "",
+                           schema=spec.get("schema") or "",
+                           serverless=bool(spec.get("serverless", True)),
+                           edition=spec.get("edition") or "ADVANCED",
+                           channel=spec.get("channel") or "CURRENT",
+                           continuous=bool(spec.get("continuous")),
+                           development=bool(spec.get("development")),
+                           check_path=_check_path_scope)
+    except pipes.PipelineProblem as e:
+        return _trim({"error": str(e), "nothing_was_changed": True})
+    body["id"] = identifier
+    try:
+        _put(f"/api/2.0/pipelines/{identifier}", body)
+    except httpx.HTTPStatusError as e:
+        return _trim({"updated": False, "http_status": e.status_code,
+                      "platform_error": e.response.text[:600]})
+    removed = pipes.removed_libraries(spec, body)
+    return _trim({"updated": True, "pipeline_id": identifier,
+                  "libraries": pipes.describe_libraries(body),
+                  "removed": removed,
+                  "warning": (f"{len(removed)} library path(s) removed from the pipeline; their tables "
+                              "will no longer be maintained" if removed else None),
+                  "next": "start an update to apply the new code" if removed else
+                          "call dbx_start_pipeline(validate_only=True) to check the new code"})
+
+
+def _pipeline_id(value: str) -> str:
+    """A pipeline id as the platform spells it. A NAME is refused with the alternative, because a 404 for
+    a name reads as a permission problem (spec 014 [E-17], the class 013's [RB-12] recorded)."""
+    text = (value or "").strip()
+    if not text:
+        raise ValueError(
+            "a pipeline is named by its id, for example 'f0e1c4a2-…-9a2b'. "
+            "Call dbx_list_pipelines to find the id.")
+    looks_uuid = len(text) == 36 and text.count("-") == 4 and all(
+        c in "0123456789abcdef-" for c in text.lower())
+    if not looks_uuid and not _ledger_has("pipeline", text):
+        import re as _re
+        if not _re.match(r"^[A-Za-z0-9-]+$", text):
+            raise ValueError(f"{text!r} is not a pipeline id")
+        if "-" not in text:
+            raise ValueError(
+                f"{text!r} looks like a pipeline NAME; a pipeline is identified by its UUID. "
+                "Call dbx_list_pipelines to find the id.")
+    return text
+
+
+def _put(path: str, body: dict) -> Any:
+    """A full replacement. Idempotent: the same body twice leaves one state."""
+    def go():
+        with _client() as c:
+            r = c.put(path, json=body)
+            data = r.json() if r.headers.get("content-type", "").startswith("application/json") \
+                else {"raw": r.text}
+            r.raise_for_status()
+            return data
+    return _retry(go, idempotent=True)
 
 
 @tool()

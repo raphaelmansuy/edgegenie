@@ -77,6 +77,164 @@ export interface LakebaseProject {
 export interface LakebaseBranch { ref: string; name: string; isDefault: boolean; state: string; project?: string }
 export type { LakebasePageData, AppView, AppHealth };
 
+// -- jobs, runs and pipelines (spec 014) -------------------------------------------------------
+// The shapes the adapter produces. Every field a page shows is here, and every block may arrive as
+// `{error}` instead of data — the contract `Block` renders ([UI-3]).
+export interface Schedule { cron: string; timezone: string; paused: boolean }
+
+export interface JobTask {
+  task_key: string;
+  depends_on: string[];
+  notebook_path?: string;
+  python_file?: string;
+  sql_file?: string;
+  pipeline_id?: string;
+  job_id?: string;
+  timeout_seconds?: number;
+  max_retries?: number;
+}
+
+export interface RunRow {
+  run_id: number | null;
+  job_id?: number | null;
+  lifeCycle: string;
+  result: string | null;
+  word: string;
+  tone: "good" | "busy" | "bad" | "quiet";
+  startTime: number | null;
+  endTime: number | null;
+  duration: string;
+  active: boolean;
+  cancel: boolean;
+  repair: boolean;
+  message?: string;
+  url?: string;
+}
+
+export interface TaskRun {
+  taskKey: string;
+  taskRunId: number | null;
+  lifeCycle: string;
+  result: string | null;
+  word: string;
+  tone: "good" | "busy" | "bad" | "quiet";
+  duration: string;
+  message?: string;
+}
+
+export interface RunOutput { taskKey?: string; error: string; traceTail?: string }
+
+export interface JobRow {
+  job_id: number | null;
+  name: string;
+  owner: string;
+  schedule: Schedule | null;
+  paused: boolean;
+}
+
+export interface JobFacts {
+  job_id: number;
+  name: string;
+  owner: string;
+  created: number | null;
+  schedule: Schedule | null;
+  tasks: JobTask[];
+  queueing: boolean;
+  timeoutSeconds: number;
+  maxRetries: number;
+  tags: Record<string, string>;
+  performanceTarget: string;
+}
+
+export type MaybeError<T> = T | { error: string };
+
+export interface JobPageData {
+  job: MaybeError<JobFacts>;
+  runs: MaybeError<RunRow[]>;
+  latestRun: MaybeError<RunRow & { tasks?: TaskRun[]; output?: RunOutput; trigger?: string }> | null;
+  levels: string[][];
+  graphProblem: string | null;
+  summary: string;
+  identity: string;
+}
+
+export interface RunPageData extends RunRow {
+  tasks: TaskRun[];
+  output?: RunOutput;
+  trigger?: string;
+  /** The job's name, so a pasted run link carries context and not only an id ([RUN-1]). */
+  jobName?: string;
+}
+
+export interface PipelineRow {
+  pipeline_id: string;
+  name: string;
+  state: string;
+  word: string;
+  tone: "good" | "busy" | "bad" | "quiet";
+  lastUpdate: { update_id: string; state: string; creationTime?: number } | null;
+  catalog: string;
+  creator: string;
+}
+
+export interface PipelineUpdate {
+  updateId: string;
+  state: string;
+  word: string;
+  tone: "good" | "busy" | "bad" | "quiet";
+  creationTime: number | null;
+  fullRefresh: boolean;
+  cause: string;
+  active: boolean;
+}
+
+export interface PipelineEvent {
+  level: "ERROR" | "WARN" | "INFO" | string;
+  message: string;
+  timestamp: number | null;
+  stackTrace: string;
+}
+
+export interface PipelineLibrary { kind: string; path: string }
+
+export interface PipelineFacts {
+  pipeline_id: string;
+  name: string;
+  state: string;
+  catalog: string;
+  schema: string;
+  serverless: boolean;
+  edition: string;
+  channel: string;
+  continuous: boolean;
+  development: boolean;
+  libraries: PipelineLibrary[];
+  creator: string;
+  storage: string;
+}
+
+export interface PipelinePageData {
+  pipeline: MaybeError<PipelineFacts>;
+  updates: MaybeError<PipelineUpdate[]>;
+  lastUpdate: MaybeError<PipelineUpdate> | null;
+  events: MaybeError<PipelineEvent[]>;
+  word: string;
+  tone: "good" | "busy" | "bad" | "quiet";
+  activeUpdate: PipelineUpdate | null;
+  identity: string;
+}
+
+export interface LedgerRow { kind: string; id: string; name: string; created: string; session: string }
+
+export interface RunActionsView {
+  word: string;
+  tone: "good" | "busy" | "bad" | "quiet";
+  active: boolean;
+  terminal: boolean;
+  cancel: boolean;
+  repair: boolean;
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, init);
   if (!r.ok) {
@@ -263,4 +421,23 @@ export const api = {
   app: (name: string, health = true) => call<AppView>(`/api/apps/${encodeURIComponent(name)}?health=${health}`),
   appHealth: (name: string, fresh = false) =>
     call<AppHealth>(`/api/apps/${encodeURIComponent(name)}/health?fresh=${fresh}`),
+
+  // -- jobs, runs and pipelines (spec 014) -----------------------------------------------------
+  // There is NO write call here, and that is a decision rather than an omission: every action (run,
+  // resume, cancel, repair, start, stop) goes through the agent, so the write fence has one home
+  // ([07 §5]). `test_infra_routes.py` asserts the route table has no POST for these prefixes.
+  jobs: (limit = 25) => call<{ items: JobRow[]; identity: string }>(`/api/jobs?limit=${limit}`),
+  job: (id: string | number) => call<JobPageData>(`/api/jobs/${encodeURIComponent(String(id))}`),
+  run: (id: string | number) => call<RunPageData>(`/api/runs/${encodeURIComponent(String(id))}`),
+  pipelines: (limit = 25) =>
+    call<{ items: PipelineRow[]; identity: string }>(`/api/pipelines?limit=${limit}`),
+  pipeline: (id: string, events = 20) =>
+    call<PipelinePageData>(`/api/pipelines/${encodeURIComponent(id)}?events=${events}`),
+  pipelineEvents: (id: string, limit = 20) =>
+    call<{ items: PipelineEvent[] }>(`/api/pipelines/${encodeURIComponent(id)}/events?limit=${limit}`),
+  /** What this conversation created, so a page only offers the controls it may use ([TOOL-6]). */
+  ledger: () => call<{ items: LedgerRow[] }>("/api/infra/ledger"),
+  /** Which controls belong on screen for a run's state, answered by the domain module. */
+  runActions: (lifeCycle: string, result = "") =>
+    call<RunActionsView>(`/api/infra/run-actions?life_cycle=${encodeURIComponent(lifeCycle)}&result=${encodeURIComponent(result)}`),
 };

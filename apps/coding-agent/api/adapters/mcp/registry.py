@@ -46,8 +46,14 @@ class SubprocessToolRegistry:
         self._logs: dict[str, str] = {}
 
     async def start(self, session_id: str, folder: str, schema: str | None,
-                    token_file: str | None = None, sp_token_file: str | None = None) -> str:
+                    token_file: str | None = None, sp_token_file: str | None = None,
+                    ledger_dir: str | None = None) -> str:
         port = free_port()
+        # The session ledger: what THIS conversation created. A pipeline id is a platform UUID with no
+        # session prefix, so the fence for it cannot be a prefix; it is "in this ledger" (spec 014
+        # [TOOL-6]). The file is owned by the app, not by the tool server, because the tool server is a
+        # subprocess and 010's durable sessions make a restart routine ([RB-3], [E-16]).
+        ledger = os.path.join(ledger_dir, f"{session_id}.jsonl") if ledger_dir else ""
         env = {
             **os.environ,
             "NBMCP_TRANSPORT": "http",
@@ -63,6 +69,9 @@ class SubprocessToolRegistry:
             # a fence that works only because two strings happen to match is not a fence
             # (spec 013 [F3], [AP-2], [E-6]).
             "NBMCP_WRITE_APP_PREFIX": f"agent-{session_id[:8]}-",
+            # No pipeline prefix: a pipeline id is a UUID, so the ledger is the fence ([TOOL-6]).
+            "NBMCP_WRITE_PIPELINE_PREFIX": "",
+            **({"NBMCP_SESSION_LEDGER": ledger} if ledger else {}),
             "NBMCP_SKILLS_DIR": str(self._server.parent / "skills"),
             # Where the server reads the user's current token; never the agent's working folder.
             **({"NBMCP_TOKEN_FILE": token_file} if token_file else {}),
@@ -125,11 +134,43 @@ class SubprocessToolRegistry:
                 proc.kill()
 
 
+def read_ledger(ledger_dir: str | None = None) -> list[dict]:
+    """Every object any session created, newest last, read from the ledger files.
+
+    The ledger is one JSONL file per session (spec 014 [RB-3]); this reads them all so a page can ask "did
+    this conversation make this pipeline?" by checking the session prefix in its own client. A missing
+    directory is an empty ledger: a fence that fails closed on a missing file refuses work the user can
+    see they did.
+    """
+    import json
+    from pathlib import Path
+
+    root = Path(ledger_dir or os.environ.get("APP_SESSION_LEDGER_DIR")
+                or os.path.join(tempfile.gettempdir(), "agent-ledgers"))
+    rows: list[dict] = []
+    try:
+        for path in sorted(root.glob("*.jsonl")):
+            session = path.stem
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(row, dict):
+                    rows.append({**row, "session": session})
+    except OSError:
+        return []
+    return rows
+
+
 class NullToolRegistry:
     """Demo mode: no tool server. The advertised count is 0 and the UI says writes are off."""
 
     async def start(self, session_id: str, folder: str, schema: str | None,
-                    token_file: str | None = None, sp_token_file: str | None = None) -> str:
+                    token_file: str | None = None, sp_token_file: str | None = None,
+                    ledger_dir: str | None = None) -> str:
         return ""
 
     async def health(self, url: str) -> int:

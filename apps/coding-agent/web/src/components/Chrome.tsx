@@ -7,7 +7,8 @@ import { ModelPicker } from "./ModelPicker";
 import { FolderPicker } from "./FolderPicker";
 import { LogoMark } from "./Logo";
 import { ModelFacts } from "./ModelFacts";
-import { ArrowUpRight, Bug, ChevronRight, Clock, Database, FileIcon, ListIcon, Monitor, Notebook, Search, Sparkle, Table } from "./Icons";
+import { ArrowUpRight, Bug, ChevronRight, Clock, Database, FileIcon, Layers, ListIcon, Monitor, Notebook, Play, Search, Sparkle, Table } from "./Icons";
+import type { RecentDoc } from "../domain/recent";
 
 export function ApprovalSheet({ approval, sessionId, onDecided }: {
   approval: Approval; sessionId: string; onDecided: () => void;
@@ -199,10 +200,12 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
   onStart: (prompt: string) => Promise<void>;
   /** Who is signed in, so the screen can say whose workspace this is. */
   user?: string;
-  /** Notebooks and tables that already exist, so the first screen is a way IN rather than only a way
-   *  to start: the most common task is "change something I already have". */
-  recent?: { name: string; path: string; kind: "notebook" | "file" | "table" | "lakebase" | "app" }[];
-  onOpenRecent?: (path: string, kind: "notebook" | "file" | "table" | "lakebase" | "app") => void;
+  /** Notebooks, tables and the objects the agent built, so the first screen is a way IN rather than only
+   *  a way to start: the most common task is "change something I already have". The kind is `RecentDoc`'s
+   *  own union, imported rather than restated — a second copy of it silently stopped three kinds from
+   *  reaching this screen when spec 014 added them. */
+  recent?: RecentDoc[];
+  onOpenRecent?: (path: string, kind: RecentDoc["kind"]) => void;
   onOpenSearch?: () => void;
   onOpenCatalog?: () => void;
   onAskAssistant?: () => void;
@@ -278,7 +281,7 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
                   <li key={`${r.kind}:${r.path}`}>
                     <button className="home-recent-item" onClick={() => onOpenRecent?.(r.path, r.kind)} title={r.path}>
                       <span className={`home-recent-ico is-${r.kind}`} aria-hidden>
-                        {r.kind === "table" ? <Table size={12} /> : r.kind === "notebook" ? <Notebook size={12} /> : r.kind === "lakebase" ? <Database size={12} /> : r.kind === "app" ? <Monitor size={12} /> : <FileIcon size={12} />}
+                        {r.kind === "table" ? <Table size={12} /> : r.kind === "notebook" ? <Notebook size={12} /> : r.kind === "lakebase" ? <Database size={12} /> : r.kind === "app" ? <Monitor size={12} /> : r.kind === "job" ? <Play size={12} /> : r.kind === "pipeline" ? <Layers size={12} /> : r.kind === "run" ? <Clock size={12} /> : <FileIcon size={12} />}
                       </span>
                       <span className="home-recent-name">{r.name}</span>
                       <ArrowUpRight size={12} className="home-recent-go" />
