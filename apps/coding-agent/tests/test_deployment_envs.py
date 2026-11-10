@@ -216,3 +216,23 @@ def test_the_deploy_script_and_the_reference_body_agree_on_the_repository():
     reference = json.loads((APP / "app.create.json").read_text())["git_repository"]["url"]
     assert declared.group(1) == reference, (
         f"env.sh says {declared.group(1)}, app.create.json says {reference}")
+
+
+# ---------------------------------------------------------------- credentials
+def test_the_credential_shorthand_is_gitignored():
+    """A FILE named `.venv` in the repo root held a plaintext Databricks PAT. `.gitignore` listed
+    `.venv/` — a DIRECTORY pattern, which does not match a file of that name — so a `git add -A`
+    would have committed a live token. Both spellings must stay ignored."""
+    for path in (REPO / ".venv", APP / ".venv"):
+        result = subprocess.run(["git", "check-ignore", "-q", str(path)],
+                                cwd=REPO, capture_output=True)
+        assert result.returncode == 0, (
+            f"{path} is not gitignored; a `.venv` holding a token would be committed")
+
+
+def test_no_credential_is_committed_in_the_scripts():
+    """A token in a deploy script is a token in the repository's history, forever."""
+    pattern = re.compile(r"dapi[0-9a-f]{32}")
+    offenders = [p.name for p in SCRIPTS.rglob("*")
+                 if p.is_file() and pattern.search(p.read_text(errors="ignore"))]
+    assert not offenders, f"these contain what looks like a Databricks PAT: {offenders}"
