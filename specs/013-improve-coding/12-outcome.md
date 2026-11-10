@@ -91,20 +91,43 @@ as an app" *at the scope level* — so that case lives in `test_tools_fence.py`,
 deliberately different prefixes. Both files say so in a comment, because a test that passes for the
 wrong reason is worse than no test.
 
+## Three things the DEPLOYMENT found that nothing else did
+
+The spec's `[RB-2]` predicted the first of these. The other two only exist once a real browser session
+and a real `make deploy` are in the loop.
+
+| # | What the deployed app showed | Root cause | Fix |
+|---|---|---|---|
+| 1 | `make verify` failed: **`missing scopes: postgres, apps`** | `make deploy` was `provision sync deploy-only verify`, and `deploy-only` only shipped code — it never ran the `apps update` that sends `user_api_scopes`. The body builder lived in `deploy.sh`, which nothing called. The deploy shipped commit `f6a96c5` while the app still held the *previous* scope list | `deploy` now calls `scripts/deploy.sh`, the one ordered path. A second implementation of the same thing is how the two diverged |
+| 2 | The Data pane drew the **same "sign-in needs refreshing" box twice** — once per failed call | projects and apps are two calls that fail for one reason (one missing scope), and `DataTree` rendered one `PaneError` per call | `errorBoxes` collapses identical messages, keeps distinct ones. `[UI-6]`'s one-statement-per-fact rule, which `[012]` applied to the dock |
+| 3 | The message said **"clear this site's cookies"**, and did not name the permission | the front end discarded the scope name that `ScopeMissing` carries, and offered a prose remedy | it names the scope, and offers a **"Sign in again"** link to `/.auth/logout` — measured to redirect straight into a fresh OAuth authorize with `approval_prompt=consent`. Retry is withheld: a stale token cannot be retried away |
+
+Each is mutation-tested: reverting the fix fails a named test (`names the scope the server reported`,
+`shows ONE box when two calls fail for the same reason`).
+
+**Why these matter more than the code-size suggests.** All three are the *same* failure this spec is
+about, arriving from a direction the tests could not reach: a check that cannot see a failure. The
+Makefile never saw that it was not configuring the app; the pane never saw that it was saying one thing
+twice; the message never saw that it knew the answer and threw it away.
+
 ## Verification
 
 | Gate | Result |
 |---|---|
 | `pytest` (backend) | **769 passed, 7 skipped** (was 643 + 7) |
-| `vitest` (front end) | **733 passed, 0 failed** (was 655) |
+| `vitest` (front end) | **741 passed, 0 failed** (was 655) |
 | `tsc -b --noEmit` | clean |
 | `make check` | all green |
+| `make deploy ENV=dev` | **DEPLOYED AND CURRENT** — commit `7972cd1`, `SUCCEEDED`, `RUNNING`, 11/11 scopes effective |
 | `lakebase-e2e.mjs` | **8/8 scenes**, 41 checks, screenshots in [`e2e/screenshots/`](e2e/screenshots/README.md) |
 | `verify-spec-ascii.mjs` | **0 problems** across 22 boxes |
 | `verify-spec-mermaid.mjs` | **8 diagrams, 0 failing** |
-| `verify-spec-links.mjs` | 78 links, 0 problems |
+| `verify-spec-links.mjs` | 79 links, 0 problems |
 | `cls-audit.mjs` | worst shift **0.0047** (budget 0.01) |
 | A screenshot inspected | every one, with what it changed |
+
+**Live:** https://coding-agent-7474647158015570.aws.databricksapps.com (dev workspace
+`dbc-cb61f1e1-bd8e`, commit `7972cd1`).
 
 **Two gates I could not run here, and a defect that hiding them exposed.** `a11y-audit.mjs` and
 `overflow-audit.mjs` drive a real workspace: they open `Files`, search for a notebook named `taxi`, and
