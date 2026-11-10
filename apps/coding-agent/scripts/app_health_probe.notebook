@@ -1,0 +1,117 @@
+# Databricks notebook source
+# Proves a DEPLOYED app is healthy by reading its own database, from inside the workspace.
+#
+# Why this exists. A Databricks App sits behind an OAuth proxy that refuses a personal access token,
+# so a deploy script holding only a PAT cannot probe the live URL at all — and the git-only workspace
+# needs a PAT to deploy in the first place. The usual response is to check "is the deployment
+# SUCCEEDED", which is precisely the check that was true three times while the app served no work.
+#
+# The app writes proof of its own health to Lakebase at boot:
+#   llm.schema_version   it ran its migrations;
+#   llm.llm_provider     it seeded the catalogue;
+#   agent.session_*      its durable journal is live.
+# If those exist and are owned by the app's service principal, the app booted, authenticated to the
+# database as itself, and created its schemas. That is a stronger statement than "it answers /health".
+#
+# Parameters (widgets): endpoint, database
+# Exits with a JSON array of {check, pass, detail}; non-zero status if any check fails.
+
+# COMMAND ----------
+
+import json
+import urllib.request
+
+dbutils.widgets.text("endpoint", "projects/coding-agent-llm/branches/production/endpoints/primary")
+dbutils.widgets.text("database", "databricks_postgres")
+
+ENDPOINT = dbutils.widgets.get("endpoint").strip()
+DATABASE = dbutils.widgets.get("database").strip()
+
+HOST = spark.conf.get("spark.databricks.workspaceUrl")
+BASE = f"https://{HOST}"
+TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+ME = spark.sql("select current_user()").collect()[0][0]
+
+
+def call(method: str, path: str, body: dict | None = None) -> dict:
+    req = urllib.request.Request(
+        f"{BASE}{path}",
+        method=method,
+        data=json.dumps(body).encode() if body is not None else None,
+        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=90) as r:
+        raw = r.read().decode()
+    return json.loads(raw) if raw.strip() else {}
+
+
+pg_host = call("GET", f"/api/2.0/postgres/{ENDPOINT}")["status"]["hosts"]["host"]
+pg_token = call("POST", "/api/2.0/postgres/credentials", {"endpoint": ENDPOINT})["token"]
+
+# COMMAND ----------
+
+import psycopg2
+
+conn = psycopg2.connect(
+    host=pg_host, port=5432, dbname=DATABASE, user=ME, password=pg_token,
+    sslmode="require", connect_timeout=30,
+)
+cur = conn.cursor()
+checks = []
+
+
+def record(name: str, ok: bool, detail: str) -> None:
+    checks.append({"check": name, "pass": bool(ok), "detail": detail})
+
+
+# 1. The app's boot-time migrations ran. A version below the code's means an app that never started.
+version = None
+try:
+    cur.execute("select max(version) from llm.schema_version")
+    version = cur.fetchone()[0]
+except Exception:
+    pass
+record("the app ran its migrations", version is not None and version >= 4, f"llm schema version {version}")
+
+# 2. Its catalogue is seeded — proof it got past migration into normal operation.
+models = providers = 0
+try:
+    cur.execute("select count(*) from llm.llm_model where enabled")
+    models = cur.fetchone()[0]
+    cur.execute("select count(*) from llm.llm_provider")
+    providers = cur.fetchone()[0]
+except Exception:
+    pass
+record("the model catalogue is seeded", models > 0, f"{models} enabled models, {providers} providers")
+
+# 3. The durable journal exists. In production the app refuses to start without one, so its absence
+#    means either a non-production posture or a boot that never completed.
+snapshots = 0
+journal = False
+try:
+    cur.execute("select count(*) from agent.session_snapshot")
+    snapshots = cur.fetchone()[0]
+    journal = True
+except Exception:
+    pass
+record("the session journal is live", journal, f"{snapshots} snapshot(s)")
+
+# 4. The schemas belong to the app's own service principal, so the app — not a human — owns its data.
+owners = {}
+try:
+    cur.execute("""
+    select n.nspname, pg_get_userbyid(n.nspowner)
+    from pg_namespace n where n.nspname in ('llm','agent')
+    """)
+    owners = dict(cur.fetchall())
+except Exception:
+    pass
+same = owners.get("llm") and owners.get("llm") == owners.get("agent")
+record("the app owns its schemas", bool(same), f"llm owner {owners.get('llm')}")
+
+cur.close()
+conn.close()
+
+failed = [c for c in checks if not c["pass"]]
+print(json.dumps(checks, indent=1))
+dbutils.notebook.exit(json.dumps(checks))

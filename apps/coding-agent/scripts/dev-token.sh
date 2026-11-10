@@ -12,7 +12,7 @@
 set -euo pipefail
 
 PORT="${1:-8061}"
-HOST="${DATABRICKS_HOST:-https://dbc-1e111e44-3334.cloud.databricks.com}"
+HOST="${DATABRICKS_HOST:?set DATABRICKS_HOST (or run via make, which reads it from scripts/env.sh)}"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 
 TOKEN="$(databricks auth token --host "$HOST" -o json | python3 -c 'import json,sys;print(json.load(sys.stdin)["access_token"])')"

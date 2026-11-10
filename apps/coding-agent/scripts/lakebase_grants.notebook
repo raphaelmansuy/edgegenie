@@ -1,0 +1,91 @@
+# Databricks notebook source
+# Grants an app's service principal what it needs on a Lakebase project. Runs as the project owner.
+#
+# Why a notebook rather than a `psql` call in a shell script: on a workspace whose Lakebase endpoint
+# resolves to a private-link ingress, port 5432 is open to the internet and not reachable from it.
+# Measured on dbc-cb61f1e1-bd8e: `nc -z` reported the port open, then every psql connection timed out
+# after 30 s on all three ingress IPs. In-workspace serverless compute reaches the database; a laptop
+# does not. So the grants run where the connection works, and this is that place.
+#
+# The app creates its own schemas at boot (`llm` for the model catalogue, `agent` for the session
+# journal), so its role needs CONNECT and CREATE on the database. Granting those two is the whole
+# job; anything more would be a privilege the app never uses.
+#
+# Parameters (widgets): endpoint, database, app_sp
+
+# COMMAND ----------
+
+import json
+import urllib.request
+
+dbutils.widgets.text("endpoint", "projects/coding-agent-llm/branches/production/endpoints/primary")
+dbutils.widgets.text("database", "databricks_postgres")
+dbutils.widgets.text("app_sp", "")
+
+ENDPOINT = dbutils.widgets.get("endpoint").strip()
+DATABASE = dbutils.widgets.get("database").strip()
+APP_SP = dbutils.widgets.get("app_sp").strip()
+
+if not APP_SP:
+    dbutils.notebook.exit(json.dumps({"ok": False, "error": "app_sp is required"}))
+
+HOST = spark.conf.get("spark.databricks.workspaceUrl")
+BASE = f"https://{HOST}"
+TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+ME = spark.sql("select current_user()").collect()[0][0]
+
+
+def call(method: str, path: str, body: dict | None = None) -> dict:
+    req = urllib.request.Request(
+        f"{BASE}{path}",
+        method=method,
+        data=json.dumps(body).encode() if body is not None else None,
+        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=90) as r:
+        raw = r.read().decode()
+    return json.loads(raw) if raw.strip() else {}
+
+
+pg_host = call("GET", f"/api/2.0/postgres/{ENDPOINT}")["status"]["hosts"]["host"]
+pg_token = call("POST", "/api/2.0/postgres/credentials", {"endpoint": ENDPOINT})["token"]
+print(f"endpoint {ENDPOINT}\nhost     {pg_host}\nidentity {ME}")
+
+# COMMAND ----------
+
+import psycopg2
+
+conn = psycopg2.connect(
+    host=pg_host, port=5432, dbname=DATABASE, user=ME, password=pg_token,
+    sslmode="require", connect_timeout=30,
+)
+conn.autocommit = True
+cur = conn.cursor()
+
+cur.execute('GRANT CONNECT, CREATE ON DATABASE "%s" TO "%s"' % (DATABASE, APP_SP))
+# `public` is where psql and most tooling land by default; without USAGE the first connect is noisy.
+cur.execute(f'GRANT USAGE, CREATE ON SCHEMA public TO "{APP_SP}"')
+
+cur.execute(
+    "select has_database_privilege(%s,%s,'CONNECT'), has_database_privilege(%s,%s,'CREATE')",
+    (APP_SP, DATABASE, APP_SP, DATABASE),
+)
+connect_ok, create_ok = cur.fetchone()
+
+cur.execute("select rolname from pg_roles where rolname = %s", (APP_SP,))
+role_present = cur.fetchone() is not None
+
+summary = {
+    "ok": bool(connect_ok and create_ok and role_present),
+    "endpoint": ENDPOINT,
+    "database": DATABASE,
+    "app_sp": APP_SP,
+    "role_present": role_present,
+    "can_connect": bool(connect_ok),
+    "can_create": bool(create_ok),
+}
+
+cur.close()
+conn.close()
+print(json.dumps(summary, indent=1))
+dbutils.notebook.exit(json.dumps(summary))

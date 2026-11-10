@@ -86,25 +86,30 @@ exactly the behaviour that matters when the model is unavailable.
 
 ## Deploying when the quota resets
 
-Everything is scripted. One command, which stops at the first real blocker and names it:
+Everything is scripted. Choose the environment; nothing else decides where the deploy goes:
 
 ```bash
-export DATABRICKS_HOST=https://YOUR-WORKSPACE.cloud.databricks.com
-export DATABRICKS_TOKEN=...                       # or a profile
-apps/coding-agent/scripts/deploy.sh               # preflight, quota probe, create, scopes, deploy, verify
-apps/coding-agent/scripts/e2e-running-app.sh https://<app-url>   # end-to-end against the deployed app
+export DATABRICKS_TOKEN=...                        # a PAT, or `databricks auth login`
+apps/coding-agent/scripts/deploy.sh dev            # the development workspace
+apps/coding-agent/scripts/deploy.sh prod           # the live workspace
+apps/coding-agent/scripts/provision-secrets.sh dev # once, or when a key changes
 ```
+
+Each environment's host and transport are declared in
+[`scripts/env.sh`](../../apps/coding-agent/scripts/env.sh); see [21](21-two-workspaces.md) for why the
+two cannot share one.
 
 What each step does, and why it is written that way:
 
 | Step | Detail | Source |
 |---|---|---|
-| Preflight | fails fast if the CLI, the token or the app folder is wrong | this run |
+| Preflight | fails fast if the CLI, the token, the app folder or the workspace identity is wrong | this run |
 | Quota probe | starts a stopped app **and re-reads its state**, because a start request alone is not proof | this run: a first version wrongly reported "compute is available" |
-| Create | `--json @app.create.json`; `git_repository` is required in this workspace, and `source_code_path` goes at the top level, not inside it | three validation iterations |
-| Scopes | `user_api_scopes` are **requested** by `app.yaml` and must be **granted** separately | Databricks auth docs |
-| Deploy | waits for `RUNNING`, fails on `CRASHED` | app runtime contract |
-| Verify | HTTP checks plus the E2E script above | this run |
+| Create | the full app body built in one place; a git source is required on the dev workspace and refused as a *deploy* source there | three validation iterations, then [21](21-two-workspaces.md) |
+| Scopes | `user_api_scopes` are **requested** by `app.yaml` and must be **granted** separately, in the same full-replacement call as the resources | Databricks auth docs |
+| Lakebase | project, the app's Postgres role, and `CONNECT`/`CREATE` — the app creates its own schemas at boot and crashes without them | [21](21-two-workspaces.md) |
+| Deploy | waits for `SUCCEEDED`, then separately for `RUNNING`; `SUCCEEDED` alone is compatible with a crashed process | app runtime contract |
+| Verify | the platform's view, the app's own database, and — when an OAuth token is available — the live URL | this run, [21](21-two-workspaces.md) |
 
 ## Two pitfalls found while scripting it
 
