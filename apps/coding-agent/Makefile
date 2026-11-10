@@ -53,7 +53,7 @@ ENVSH      := . "$(SCRIPTS)/env.sh" "$(ENV)" &&
 help: ## Show this help
 	@printf '\n\033[1mOpenGenie coding agent\033[0m — deployment and development\n\n'
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
-	@printf '\n\033[2m  deploy = provision + sync + deploy + verify. SUCCEEDED alone does not mean your code is live.\033[0m\n'
+	@printf '\n\033[2m  deploy = the one ordered path in scripts/deploy.sh: configure, provision, ship, verify. SUCCEEDED alone does not mean your code is live.\033[0m\n'
 	@printf '\033[2m  ENV selects the workspace (dev or prod); scripts/env.sh says where each one is.\033[0m\n\n'
 
 # ---------------------------------------------------------------- is this machine ready
@@ -170,26 +170,24 @@ sync: ## (prod only) Copy the TRACKED files into the workspace folder the app de
 	fi
 
 deploy-only: ## Deploy the current source and wait until the app is RUNNING (does not verify)
+	@# The app's CONFIGURATION is part of deploying it: `apps update` is a full replacement, so a
+	@# deploy that ships code and skips the update leaves the app with whatever scopes and resources
+	@# it had. Measured on 2026-11-10: this target shipped commit f6a96c5 while the app still held the
+	@# scope list from before it, and the only thing that caught it was `make verify` reporting
+	@# `missing scopes: postgres, apps`. The full ordered path -- create, grant scopes, provision
+	@# Lakebase, deploy -- lives in scripts/deploy.sh, which this target now calls instead of
+	@# reimplementing the last step. A second implementation is how the two diverged.
 	@$(ENVSH) printf '\033[1mdeploy\033[0m  %s -> %s (%s)\n' "$$APP_NAME" "$$DATABRICKS_HOST" "$$DEPLOY_SOURCE"
-	@# The CLI waits by default. `--wait` is not a flag: it prints help and exits non-zero, and piping
-	@# that help through `tail` used to hide the failure (tail exits 0), so make reported success for a
-	@# deploy that never started. pipefail keeps the CLI's exit code, and SUCCEEDED must appear.
-	@$(ENVSH) log=$$(mktemp); \
-	  set -o pipefail; \
-	  if [ "$$DEPLOY_SOURCE" = "git" ]; then \
-	    databricks apps deploy "$$APP_NAME" --git-branch "$$DEPLOY_GIT_BRANCH" \
-	      --git-source-code-path "$$DEPLOY_GIT_PATH" --auto-approve 2>&1 | tee "$$log" | tail -30; \
-	  else \
-	    databricks apps deploy "$$APP_NAME" --source-code-path "$$DEPLOY_WS_SRC" --auto-approve 2>&1 | tee "$$log" | tail -30; \
-	  fi; \
-	  code=$$?; \
-	  if [ $$code -ne 0 ] || ! grep -q SUCCEEDED "$$log"; then \
-	    printf '\033[31mdeploy failed\033[0m (exit %s). The lines above are the reason.\n' "$$code"; \
-	    rm -f "$$log"; exit 1; \
-	  fi; \
-	  rm -f "$$log"
+	@$(ENVSH) "$(SCRIPTS)/deploy.sh" "$(ENV)"
 
-deploy: provision sync deploy-only verify ## provision -> sync -> deploy -> verify the LIVE url
+deploy: sync ## Deploy: configure the app, provision, ship the code, verify the LIVE url
+	@# ONE ordered path, and it is scripts/deploy.sh: preflight -> quota -> create the app
+	@# resource -> grant scopes and attach secrets -> provision Lakebase -> deploy -> verify.
+	@# This target used to be `provision sync deploy-only verify`, which shipped code without ever
+	@# applying the app's configuration: the app kept the scope list it had before the change, and
+	@# only `verify` noticed. `sync` stays here because only prod uses it.
+	@$(ENVSH) printf '\033[1mdeploy\033[0m  %s -> %s (%s)\n' "$$APP_NAME" "$$DATABRICKS_HOST" "$$DEPLOY_SOURCE"
+	@$(ENVSH) "$(SCRIPTS)/deploy.sh" "$(ENV)"
 
 verify: ## Is the LIVE app serving THIS checkout? Fails when it is not.
 	@$(ENVSH) "$(SCRIPTS)/verify-deployed.sh"

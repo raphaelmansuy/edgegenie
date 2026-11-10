@@ -17,6 +17,14 @@ export interface Explained {
   detail: string;
   /** Retrying can help: a transient failure, not a refusal. */
   retryable: boolean;
+  /**
+   * A link that actually fixes it. The message told the user to "open a private window or clear
+   * this site's cookies", which is a bad instruction: it asks them to understand cookies and to lose
+   * every other session on the machine. `/.auth/logout` on the app redirects straight back into a
+   * fresh OAuth authorize with `approval_prompt=consent` (measured), which re-issues the token with
+   * the permissions as they are NOW — the one thing that resolves a stale sign-in.
+   */
+  action?: { label: string; href: string };
 }
 
 const ACL = /do not have access to (.+?)\.?$/i;
@@ -25,11 +33,18 @@ const UNREACHABLE = /cannot reach|failed to fetch|networkerror|server answered 5
 export function explain(message: string): Explained {
   const text = (message || "").trim();
   if (/app setting/i.test(text) && /granted/i.test(text)) {
+    // The server names the scope when it knows it (`ScopeMissing` carries `scopes`). Naming it is
+    // the difference between "sign in again" and "sign in again, and this is what you were missing",
+    // and on the deployed app the names were absent so the user had to guess (spec 013 [RB-2]).
+    const named = /\(`([^`]+)`\)/.exec(text)?.[1]?.trim();
     return {
       kind: "scope",
       title: "Your sign-in needs refreshing",
-      detail: "It's not your access. This sign-in predates the app's current permissions. Sign in again: open the app in a private window, or clear this site's cookies. If it still fails, ask the app's owner to add the missing permission.",
+      detail: named
+        ? `The app now has the \`${named}\` permission. This browser session signed in before it was granted, so its token does not carry it. Sign in again to get a token with the current permissions; if it still fails, ask the app's owner to check the app's scopes.`
+        : "It's not your access. This sign-in predates the app's current permissions. Sign in again to get a token with the current permissions; if it still fails, ask the app's owner to check the app's scopes.",
       retryable: false,
+      action: { label: "Sign in again", href: "/.auth/logout" },
     };
   }
   const acl = ACL.exec(text);

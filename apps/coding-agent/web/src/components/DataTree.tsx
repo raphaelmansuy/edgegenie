@@ -51,12 +51,19 @@ export function DataTree({ onOpen, selected }: {
         </button>
       </div>
 
-      {projects.state === "error" && projects.error && (
-        <PaneError message={projects.error} onRetry={retry} />
-      )}
-      {apps.state === "error" && apps.error && (
-        <PaneError message={apps.error} onRetry={retry} />
-      )}
+      {/*
+        ONE message for two failed calls. The screenshot of the deployed app showed this pane with
+        the identical "Your sign-in needs refreshing" box twice — once for the projects call and once
+        for the apps call — because both fail for the same reason (one missing scope). Two copies of
+        one fact read as two problems, and a user cannot tell whether fixing one is enough
+        (spec 013 [UI-6]: one statement per fact, which is the rule [012] applied to the dock).
+
+        Identical messages collapse to one. DIFFERENT messages stay separate, because two distinct
+        faults are genuinely two things to fix.
+      */}
+      {errorBoxes(projects, apps).map((e) => (
+        <PaneError key={e} message={e} onRetry={retry} />
+      ))}
 
       <div role="tree" aria-label="Lakebase and apps" className="tree-body">
         <div className="tree-group">Lakebase</div>
@@ -110,4 +117,25 @@ function Skeleton() {
       ))}
     </div>
   );
+}
+
+/** The distinct failures to show, as a short list.
+ *
+ *  Two calls, one cause, one box: projects and apps both ask the Postgres and Apps APIs, so a single
+ *  missing scope fails both with the same sentence. Rendering it twice (which the deployed app did)
+ *  reads as two problems. A message that DIFFERS is kept, because two faults are two things to fix.
+ *
+ *  Pure and exported so the collapsing is testable without a browser. */
+export function errorBoxes(
+  ...loads: { state: string; error?: string }[]
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const load of loads) {
+    if (load.state !== "error" || !load.error) continue;
+    if (seen.has(load.error)) continue;
+    seen.add(load.error);
+    out.push(load.error);
+  }
+  return out;
 }
