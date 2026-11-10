@@ -46,7 +46,7 @@ class SubprocessToolRegistry:
         self._logs: dict[str, str] = {}
 
     async def start(self, session_id: str, folder: str, schema: str | None,
-                    token_file: str | None = None) -> str:
+                    token_file: str | None = None, sp_token_file: str | None = None) -> str:
         port = free_port()
         env = {
             **os.environ,
@@ -66,6 +66,8 @@ class SubprocessToolRegistry:
             "NBMCP_SKILLS_DIR": str(self._server.parent / "skills"),
             # Where the server reads the user's current token; never the agent's working folder.
             **({"NBMCP_TOKEN_FILE": token_file} if token_file else {}),
+            # The app's own identity, for the one API a user token can never call ([RB-10]).
+            **({"NBMCP_SP_TOKEN_FILE": sp_token_file} if sp_token_file else {}),
             **(self._bridge.env_for(session_id) if self._bridge else {}),
         }
         # stderr goes to a file, not a pipe nobody reads and not /dev/null: when the server cannot
@@ -127,7 +129,7 @@ class NullToolRegistry:
     """Demo mode: no tool server. The advertised count is 0 and the UI says writes are off."""
 
     async def start(self, session_id: str, folder: str, schema: str | None,
-                    token_file: str | None = None) -> str:
+                    token_file: str | None = None, sp_token_file: str | None = None) -> str:
         return ""
 
     async def health(self, url: str) -> int:

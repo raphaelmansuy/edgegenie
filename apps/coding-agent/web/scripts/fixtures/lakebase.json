@@ -2,7 +2,7 @@
   "_note": [
     "Recorded payloads for the infrastructure pages, captured once from a real workspace and then",
     "frozen. A field the platform does not send is NOT here, so a page that reads one renders an em",
-    "dash and the scene catches it (spec 013 [11 §How the scenes run]).",
+    "dash and the scene catches it (spec 013 [11 \u00a7How the scenes run]).",
     "",
     "The project page: one object, four independent blocks, exactly the shape",
     "`api/adapters/databricks/lakebase.page_blocks` returns."
@@ -12,18 +12,26 @@
       "ref": "projects/pg_tickets",
       "name": "pg_tickets",
       "displayName": "pg_tickets",
-      "state": "ready",
-      "stateRaw": "READY",
-      "ready": true,
       "pgVersion": 17,
       "defaultBranch": "production"
     },
     "branches": [
-      { "ref": "projects/pg_tickets/branches/production", "name": "production", "isDefault": true, "state": "ready" },
-      { "ref": "projects/pg_tickets/branches/agent-4ff4405d", "name": "agent-4ff4405d", "isDefault": false, "state": "ready" }
+      {
+        "ref": "projects/pg_tickets/branches/production",
+        "name": "production",
+        "isDefault": true
+      },
+      {
+        "ref": "projects/pg_tickets/branches/agent-4ff4405d",
+        "name": "agent-4ff4405d",
+        "isDefault": false
+      }
     ],
     "databases": [
-      { "ref": "projects/pg_tickets/branches/production/databases/databricks_postgres", "name": "databricks_postgres" }
+      {
+        "ref": "projects/pg_tickets/branches/production/databases/databricks_postgres",
+        "name": "databricks_postgres"
+      }
     ],
     "compute": [
       {
@@ -33,7 +41,7 @@
         "state": "ready",
         "suspended": false,
         "host": "ep-cool-butterfly-9f2.database.cloud.databricks.com",
-        "range": "0.5 – 4 CU   max − min = 3.5  ✓ (≤ 16)",
+        "range": "0.5 \u2013 4 CU   max \u2212 min = 3.5  \u2713 (\u2264 16)",
         "rangeValid": true,
         "lastActive": "2026-11-10T10:42:01Z"
       }
@@ -43,7 +51,11 @@
     "schema": "public",
     "database": "databricks_postgres",
     "branch": "production",
-    "tables": ["tickets", "agents", "ticket_events"],
+    "tables": [
+      "tickets",
+      "agents",
+      "ticket_events"
+    ],
     "truncated": false
   },
   "app": {
@@ -55,7 +67,7 @@
     "creator": "you@example.com",
     "computeSize": "MEDIUM",
     "deploymentState": "SUCCEEDED",
-    "servicePrincipal": "2f4a…",
+    "servicePrincipal": "2f4a\u2026",
     "resources": [
       {
         "name": "postgres",
@@ -64,7 +76,13 @@
         "branch": "projects/pg_tickets/branches/production"
       }
     ],
-    "health": { "status": 200, "ms": 412, "state": "running", "url": "https://tickets-app-1.aws.databricksapps.com", "checkedAt": "10:42:11" }
+    "health": {
+      "status": 200,
+      "ms": 412,
+      "state": "running",
+      "url": "https://tickets-app-1.aws.databricksapps.com",
+      "checkedAt": "10:42:11"
+    }
   },
   "app_cold": {
     "name": "tickets-app",
@@ -76,26 +94,71 @@
     "computeSize": "MEDIUM",
     "deploymentState": "SUCCEEDED",
     "resources": [
-      { "name": "postgres", "kind": "postgres", "permission": "CAN_CONNECT_AND_CREATE", "branch": "projects/pg_tickets/branches/production" }
+      {
+        "name": "postgres",
+        "kind": "postgres",
+        "permission": "CAN_CONNECT_AND_CREATE",
+        "branch": "projects/pg_tickets/branches/production"
+      }
     ],
-    "health": { "status": null, "ms": 15000, "state": "starting", "checkedAt": "10:43:02", "detail": "no response in 15 s: a cold start, or a hung process" }
+    "health": {
+      "status": null,
+      "ms": 15000,
+      "state": "starting",
+      "checkedAt": "10:43:02",
+      "detail": "no response in 15 s: a cold start, or a hung process"
+    }
   },
   "projects_list": {
     "items": [
-      { "ref": "projects/pg_tickets", "name": "pg_tickets", "displayName": "pg_tickets", "state": "ready", "stateRaw": "READY", "ready": true },
-      { "ref": "projects/pg_orders", "name": "pg_orders", "displayName": "pg_orders", "state": "starting", "stateRaw": "PROVISIONING", "ready": false }
+      {
+        "ref": "projects/pg_tickets",
+        "name": "pg_tickets",
+        "displayName": "pg_tickets",
+        "pgVersion": 17
+      },
+      {
+        "ref": "projects/pg_orders",
+        "name": "pg_orders",
+        "displayName": "pg_orders",
+        "pgVersion": 17
+      }
     ]
   },
   "apps_list": {
     "items": [
-      { "name": "tickets-app", "url": "https://tickets-app-1.aws.databricksapps.com", "state": "running", "stateRaw": "RUNNING", "lakebase": "pg_tickets", "resources": [], "creator": "you@example.com" },
-      { "name": "orders-api", "url": "https://orders-api-1.aws.databricksapps.com", "state": "stopped", "stateRaw": "STOPPED", "lakebase": "pg_orders", "resources": [], "creator": "you@example.com" }
+      {
+        "name": "tickets-app",
+        "url": "https://tickets-app-1.aws.databricksapps.com",
+        "state": "running",
+        "stateRaw": "RUNNING",
+        "lakebase": "pg_tickets",
+        "resources": [],
+        "creator": "you@example.com"
+      },
+      {
+        "name": "orders-api",
+        "url": "https://orders-api-1.aws.databricksapps.com",
+        "state": "stopped",
+        "stateRaw": "STOPPED",
+        "lakebase": "pg_orders",
+        "resources": [],
+        "creator": "you@example.com"
+      }
     ]
   },
   "refused": {
-    "project": { "error": "PERMISSION_DENIED: you need CAN MANAGE on project pg_tickets" },
-    "branches": { "error": "you do not have access to projects/pg_tickets/branches" },
-    "databases": { "error": "you do not have access to projects/pg_tickets/branches/production/databases" },
-    "compute": { "error": "you do not have access to projects/pg_tickets/branches/production/endpoints" }
+    "project": {
+      "error": "PERMISSION_DENIED: you need CAN MANAGE on project pg_tickets"
+    },
+    "branches": {
+      "error": "you do not have access to projects/pg_tickets/branches"
+    },
+    "databases": {
+      "error": "you do not have access to projects/pg_tickets/branches/production/databases"
+    },
+    "compute": {
+      "error": "you do not have access to projects/pg_tickets/branches/production/endpoints"
+    }
   }
 }

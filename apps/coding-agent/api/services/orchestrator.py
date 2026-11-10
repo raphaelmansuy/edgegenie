@@ -450,7 +450,8 @@ class Orchestrator:
         user_token = live.extra.get("user_token") or os.environ.get("DATABRICKS_TOKEN", "")
         self._write_token(live, user_token)
         live.mcp_url = await self._tools.start(s.id, live.workspace_folder, s.schema,
-                                               live.extra.get("token_file"))
+                                               live.extra.get("token_file"),
+                                               live.extra.get("sp_token_file"))
         live.tools = TOOL_COUNT_CORE if live.mcp_url else 0
 
         # 3. The agent process itself. It authenticates as the USER, and it receives exactly one
@@ -539,9 +540,13 @@ class Orchestrator:
             out[var] = path
         return out
 
-    @staticmethod
-    def _write_token(live: Live, token: str | None) -> None:
-        """Keep the tool server's credential current. A forwarded user token lasts about an hour."""
+    def _write_token(self, live: Live, token: str | None) -> None:
+        """Keep the tool server's credentials current. A forwarded user token lasts about an hour.
+
+        An instance method, not a static one, because it also writes the app's own service-principal
+        token: `postgres` cannot be called as the user (spec 013 [RB-10]), so the Lakebase tools need
+        a second credential beside the user's.
+        """
         if not token:
             return
         live.extra["user_token"] = token
@@ -559,6 +564,24 @@ class Orchestrator:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as fh:
             fh.write(token)
+
+        # A SECOND token, for the one API the user's token can never call.
+        #
+        # `[RB-10]`: `postgres` is "always bound to the SP, not OBO", so `/api/2.0/postgres` refuses a
+        # forwarded user token however many scopes the app declares. The tool server's Lakebase tools
+        # therefore need the app's own identity, and they read it from this file. Written beside the
+        # user token, same 0600 file, and only when this process HAS a service principal — on a laptop
+        # there is none and the tools fall back to the user token as before.
+        sp = getattr(self, "_sp_token", None)
+        if sp is not None and sp.available():
+            try:
+                sp_path = os.path.join(os.path.dirname(path), "sp-token")
+                fd = os.open(sp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w") as fh:
+                    fh.write(sp.get())
+                live.extra["sp_token_file"] = sp_path
+            except Exception:      # noqa: BLE001 - the tools degrade to the user token, as on a laptop
+                log.debug("no service-principal token for this session's tool server")
 
     async def model_options(self, session_id: str) -> dict:
         live = self.get(session_id)

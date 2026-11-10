@@ -77,10 +77,18 @@ export function DataTree({ onOpen, selected }: {
             <button key={p.ref} role="treeitem" aria-selected={selected === doc.id}
               className={`tree-row data-row${selected === doc.id ? " is-selected" : ""}`}
               onClick={() => onOpen(doc)}
-              title={`${p.ref}\n${p.state}`}>
+              title={`${p.ref}${p.owner ? `\nowner ${p.owner}` : ""}`}>
               <span className={`tree-icon kind-lakebase`} aria-hidden>▤</span>
               <span className="tree-name">{p.displayName || p.name}</span>
-              <span className={`infra-pill tone-${p.ready ? "good" : "busy"}`}>{p.state}</span>
+              {/*
+                NO state pill, and that is the correction. A Lakebase PROJECT has no state field:
+                measured, neither the get nor the list payload carries one, because readiness belongs
+                to a branch and a compute. This used to render `p.ready ? "ready" : "busy"`, so every
+                project showed a green "ready" whatever its real state was — a fabricated fact, which
+                is worse than no fact (spec 013 [RB-12]).
+                The Postgres version is real in the same payload, so it takes the space instead.
+              */}
+              {p.pgVersion ? <span className="infra-tag quiet">v{p.pgVersion}</span> : null}
             </button>
           );
         })}

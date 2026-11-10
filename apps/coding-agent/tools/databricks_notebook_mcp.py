@@ -107,6 +107,70 @@ def _token() -> str:
     return TOKEN
 
 
+def _sp_token() -> str:
+    """The APP'S SERVICE PRINCIPAL token, for the one API that cannot be called as the user.
+
+    `[RB-10]`: `postgres` is "always bound to the SP, not OBO", so a user's forwarded token never
+    carries it and every `/api/2.0/postgres` call 403s no matter what scope the app declares. The
+    host app writes a second token file for exactly this; when it is absent (a laptop) the user
+    token is returned so behaviour is unchanged outside a deployment.
+    """
+    path = os.environ.get("NBMCP_SP_TOKEN_FILE", "")
+    if path:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                sp = fh.read().strip()
+            if sp:
+                return sp
+        except OSError:
+            pass
+    return _token()
+
+
+def _sp_client() -> httpx.Client:
+    """An HTTP client authenticated as the service principal. Same refusal contract as `_client`."""
+    token = _sp_token()
+    if not HOST or not token:
+        raise RuntimeError(
+            "the workspace connection is not available to this tool server: "
+            "this is an app configuration problem, not something to retry or work around")
+    return httpx.Client(
+        event_hooks={"response": [_refuse_response]},
+        base_url=HOST,
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=120.0,
+    )
+
+
+def _refuse_response(response: httpx.Response) -> None:
+    if response.status_code in (401, 403):
+        raise PermissionError(
+            f"permission denied by the workspace for {response.request.method} "
+            f"{response.request.url.path}. The signed-in user or this app's authorization does not "
+            "allow it. Do not retry; use another tool or report it.")
+
+
+def _get_sp(path: str, params: dict | None = None) -> Any:
+    """A GET as the service principal, for the Postgres API ([RB-10])."""
+    def go():
+        with _sp_client() as c:
+            r = c.get(path, params=params)
+            r.raise_for_status()
+            return r.json()
+    return _retry(go, idempotent=True)
+
+
+def _post_sp(path: str, body: dict | None = None) -> Any:
+    def go():
+        with _sp_client() as c:
+            r = c.post(path, json=body or {})
+            data = r.json() if r.headers.get("content-type", "").startswith("application/json") \
+                else {"raw": r.text}
+            r.raise_for_status()
+            return data
+    return _retry(go, idempotent=False)
+
+
 def _client() -> httpx.Client:
     token = _token()
     if not HOST or not token:
@@ -1055,23 +1119,27 @@ def dbx_lakebase_create(name: str, capacity: str = "CU_1", wait_seconds: int = 4
             "autoscaling_limit_max_cu": float(max_cu or max(min_cu, 1.0)),
         }
     try:
-        d = _get(f"/api/2.0/postgres/{project}")
+        d = _get_sp(f"/api/2.0/postgres/{project}")
     except httpx.HTTPStatusError as e:
         if e.response.status_code != 404:
             raise
-        d = _post("/api/2.0/postgres/projects", body)
+        d = _post_sp("/api/2.0/postgres/projects", body)
     t0 = time.time()
+    # MEASURED: a PROJECT has no state field, so polling one always waited the full timeout and then
+    # reported ready=false for a project that was fine. Readiness belongs to the default BRANCH, whose
+    # status carries `current_state` (spec 013 [RB-12]).
+    state = ""
     while True:
-        d = _get(f"/api/2.0/postgres/{project}")
-        state = (d.get("status") or {}).get("state") or d.get("state") or ""
+        branches = _get_sp(f"/api/2.0/postgres/{project}/branches").get("branches", [])
+        default = next((b for b in branches if (b.get("status") or {}).get("default")), None)
+        state = ((default or {}).get("status") or {}).get("current_state") or ""
         if state in ("READY", "AVAILABLE", "ACTIVE") or time.time() - t0 > wait_seconds:
             break
         time.sleep(6)
-    state = (d.get("status") or {}).get("state") or d.get("state") or ""
     ready = state in ("READY", "AVAILABLE", "ACTIVE")
     branch = _lakebase_endpoint(project, "production", "primary")
     return _trim({
-        "project": project, "name": name, "state": state, "ready": ready,
+        "project": project, "name": name, "defaultBranchState": state, "ready": ready,
         "branch": f"{project}/branches/production", "endpoint": branch,
         "next": None if ready else f"call dbx_lakebase_status('{name}') to wait for READY",
         "next_when_ready": f"call dbx_lakebase_branch(project='{project}', branch='agent-<your session>')",
@@ -1099,23 +1167,85 @@ def _capacity_problem(min_cu: float, max_cu: float) -> str | None:
 
 @tool()
 def dbx_lakebase_status(name: str) -> str:
-    """State of a Lakebase project: readiness, its branches, and its project id."""
+    """State of a Lakebase project: its branches, their computes, and whether anything is suspended.
+
+    `name` is the project ID (`coding-agent-llm`), never a display name. A display name can contain
+    spaces and a word like "dev", and a 404 for a guessed id reads as a permission problem — which is
+    what happened when an agent turned `coding-agent-llm dev` into `coding-agent-llm-dev` and was told
+    "permission denied" (spec 013 [RB-12]). Call dbx_lakebase_list first if you are unsure.
+    """
     project = _lakebase_project(name)
-    d = _get(f"/api/2.0/postgres/{project}")
-    branches = _get(f"/api/2.0/postgres/{project}/branches").get("branches", [])
+    try:
+        d = _get_sp(f"/api/2.0/postgres/{project}")
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            try:
+                known = [p.get("name", "").rsplit("/", 1)[-1]
+                         for p in _get_sp("/api/2.0/postgres/projects").get("projects", [])]
+            except Exception:  # noqa: BLE001 - the hint is a courtesy
+                known = []
+            return _trim({
+                "error": f"no Lakebase project with id {project!r}",
+                "not_a_permission_problem": True,
+                "knownProjectIds": known,
+                "hint": "pass one of knownProjectIds. A display name is not an id; call "
+                        "dbx_lakebase_list to see both.",
+            })
+        raise
+    status = d.get("status") or {}
+    branches = _get_sp(f"/api/2.0/postgres/{project}/branches").get("branches", [])
+
+    observed = []
+    for b in branches:
+        bstatus = b.get("status") or {}
+        bid = (b.get("name") or "").rsplit("/", 1)[-1]
+        eps = _get_sp(f"/api/2.0/postgres/{project}/branches/{bid}/endpoints").get("endpoints", [])
+        computes = []
+        for e in eps:
+            est = e.get("status") or {}
+            lo, hi = est.get("autoscaling_limit_min_cu"), est.get("autoscaling_limit_max_cu")
+            spread = round((hi - lo), 2) if (lo is not None and hi is not None) else None
+            computes.append({
+                "endpoint": (e.get("name") or "").rsplit("/", 1)[-1],
+                "type": (est.get("endpoint_type") or "").replace("ENDPOINT_TYPE_", "").lower(),
+                # MEASURED: a compute's state is `current_state`, and a suspended compute reports
+                # SUSPENDED/IDLE here rather than a separate flag.
+                "state": est.get("current_state"),
+                "suspended": (est.get("current_state") or "").upper() in ("SUSPENDED", "IDLE"),
+                "disabled": est.get("disabled"),
+                "min_cu": lo, "max_cu": hi, "spread_cu": spread,
+                "range_legal": (spread is not None and spread <= 16
+                                and (lo or 0) >= 0.5 and (hi or 0) <= 64),
+                "last_active": est.get("last_active_time"),
+                "host": (est.get("hosts") or {}).get("host", ""),
+            })
+        observed.append({
+            "branch": bid,
+            # MEASURED: `current_state` and `default`, not `state` and `is_default`.
+            "state": bstatus.get("current_state"),
+            "is_default": bool(bstatus.get("default")),
+            "protected": bool(bstatus.get("is_protected")),
+            "computes": computes,
+        })
+
     return _trim({
         "project": project,
-        "state": (d.get("status") or {}).get("state") or d.get("state") or "",
-        "pgVersion": (d.get("status") or {}).get("pg_version") or (d.get("spec") or {}).get("pg_version"),
-        "displayName": (d.get("status") or {}).get("display_name") or (d.get("spec") or {}).get("display_name"),
-        "branches": [b.get("name", "").rsplit("/", 1)[-1] for b in branches],
+        "displayName": status.get("display_name"),
+        "pgVersion": status.get("pg_version"),
+        "owner": status.get("owner"),
+        # A project has no state of its own; readiness is per branch and per compute. Saying so is
+        # more useful than emitting an empty string.
+        "note": "a project has no state field; readiness is reported per branch and per compute",
+        "branches": observed,
+        "anythingSuspended": any(c["suspended"] for b in observed for c in b["computes"]),
+        "everyRangeLegal": all(c["range_legal"] for b in observed for c in b["computes"]) if observed else None,
     })
 
 
 @tool()
 def dbx_lakebase_list(limit: int = 50) -> str:
     """List the Lakebase projects this user can see."""
-    data = _get("/api/2.0/postgres/projects", {"page_size": limit})
+    data = _get_sp("/api/2.0/postgres/projects", {"page_size": limit})
     return _trim([{"project": p.get("name"),
                    "displayName": (p.get("status") or {}).get("display_name")}
                   for p in data.get("projects", [])])
@@ -1124,31 +1254,43 @@ def dbx_lakebase_list(limit: int = 50) -> str:
 @tool()
 def dbx_lakebase_branch(project: str, branch: str = "", from_branch: str = "production",
                         wait_seconds: int = 30) -> str:
-    """Create a branch in a project, or list the branches when `branch` is empty.
+    """Create a branch in a project, or list its branches when `branch` is empty.
 
     A branch is a copy-on-write copy: schema, data and roles at the moment it is created, isolated
     afterwards. Use one branch per session so a scaffold never writes to `production`
     (spec 013 [LB-2], [E-16]).
+
+    LISTING is a read and works on any project you can see — inspecting infrastructure is not creating
+    it. CREATING must name a project inside this session's prefix, and a refusal says so plainly
+    rather than looking like a permission problem on a remote object (spec 013 [RB-12]).
     """
-    _need_writes()
     p = _lakebase_project(project)
-    _check_prefix("instance", p.rsplit("/", 1)[-1], INSTANCE_PREFIX)
     if not branch:
-        data = _get(f"/api/2.0/postgres/{p}/branches")
-        return _trim([{"branch": b.get("name")} for b in data.get("branches", [])])
+        data = _get_sp(f"/api/2.0/postgres/{p}/branches")
+        return _trim([{
+            "branch": (b.get("name") or "").rsplit("/", 1)[-1],
+            "state": (b.get("status") or {}).get("current_state"),
+            "is_default": bool((b.get("status") or {}).get("default")),
+        } for b in data.get("branches", [])])
+
+    _need_writes()
+    _check_prefix("instance", p.rsplit("/", 1)[-1], INSTANCE_PREFIX)
     if not re.match(r"^[a-z][a-z0-9-]{1,62}$", branch):
         return _trim({"error": f"a branch id must be lowercase letters, digits and hyphens; got {branch!r}"})
-    body = {"branch_id": branch, "spec": {"source_branch": f"{p}/branches/{from_branch or 'production'}"}}
+    body = {"branch_id": branch,
+            "spec": {"source_branch": f"{p}/branches/{from_branch or 'production'}"}}
     try:
-        _post(f"/api/2.0/postgres/{p}/branches", body)
+        _post_sp(f"/api/2.0/postgres/{p}/branches", body)
     except httpx.HTTPStatusError as e:
-        if e.response.status_code != 409:
+        if e.response.status_code != 409:      # already exists is the idempotent case
             raise
     import time
     t0 = time.time()
+    # MEASURED: a branch reports `current_state`, not `state`.
+    state = ""
     while True:
-        d = _get(f"/api/2.0/postgres/{p}/branches/{branch}")
-        state = (d.get("status") or {}).get("state") or ""
+        d = _get_sp(f"/api/2.0/postgres/{p}/branches/{branch}")
+        state = (d.get("status") or {}).get("current_state") or ""
         if state in ("READY", "AVAILABLE", "ACTIVE") or time.time() - t0 > wait_seconds:
             break
         time.sleep(4)
@@ -1168,16 +1310,16 @@ def dbx_lakebase_database(project: str, branch: str = "production", database: st
     p = _lakebase_project(project)
     _check_prefix("instance", p.rsplit("/", 1)[-1], INSTANCE_PREFIX)
     if not database:
-        data = _get(f"/api/2.0/postgres/{p}/branches/{branch}/databases")
+        data = _get_sp(f"/api/2.0/postgres/{p}/branches/{branch}/databases")
         return _trim([{"database": d.get("name")} for d in data.get("databases", [])])
     _pg_identifier(database, "database")
     try:
-        d = _post(f"/api/2.0/postgres/{p}/branches/{branch}/databases",
+        d = _post_sp(f"/api/2.0/postgres/{p}/branches/{branch}/databases",
                   {"database_id": database, "spec": {}})
     except httpx.HTTPStatusError as e:
         if e.response.status_code != 409:
             raise
-        d = _get(f"/api/2.0/postgres/{p}/branches/{branch}/databases/{database}")
+        d = _get_sp(f"/api/2.0/postgres/{p}/branches/{branch}/databases/{database}")
     return _trim({"database": d.get("name") or f"{p}/branches/{branch}/databases/{database}",
                   "next": f"call dbx_lakebase_sql(project='{p.rsplit('/', 1)[-1]}', "
                           f"branch='{branch}', database='{database}', sql='SELECT 1')"})
@@ -1192,7 +1334,7 @@ def dbx_lakebase_role(project: str, branch: str = "production", role: str = "") 
     resource and then reads the role back here to prove it exists (spec 013 [RB-4], [SCF-1] step 4).
     """
     p = _lakebase_project(project)
-    data = _get(f"/api/2.0/postgres/{p}/branches/{branch}/roles")
+    data = _get_sp(f"/api/2.0/postgres/{p}/branches/{branch}/roles")
     roles = data.get("roles", [])
     rows = [{"role": r.get("name", "").rsplit("/", 1)[-1],
              "identity": (r.get("spec") or {}).get("postgres_role") or (r.get("status") or {}).get("postgres_role"),
@@ -1273,7 +1415,7 @@ def _pg_identifier(value: str, what: str) -> str:
 def _lakebase_token(endpoint: str) -> str:
     """Mint a credential for one endpoint. Never cached: a cached credential is a credential on disk."""
     import uuid
-    return _post("/api/2.0/postgres/credentials",
+    return _post_sp("/api/2.0/postgres/credentials",
                  {"endpoint": endpoint, "request_id": str(uuid.uuid4())}).get("token", "")
 
 
@@ -1286,7 +1428,7 @@ def _lakebase_connect_user(project: str, branch: str, wanted: str) -> str:
     (spec 013 [RB-11]).
     """
     p = _lakebase_project(project)
-    data = _get(f"/api/2.0/postgres/{p}/branches/{branch or 'production'}/roles")
+    data = _get_sp(f"/api/2.0/postgres/{p}/branches/{branch or 'production'}/roles")
     identities = [((r.get("status") or {}).get("postgres_role")
                    or (r.get("spec") or {}).get("postgres_role") or "")
                   for r in data.get("roles", [])]

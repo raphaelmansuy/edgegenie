@@ -72,7 +72,14 @@ class LakebaseBrowser:
             "displayName": status.get("display_name") or spec.get("display_name") or "",
             "pgVersion": status.get("pg_version") or spec.get("pg_version"),
             "historyRetention": status.get("history_retention_duration"),
-            "defaultBranch": (spec.get("default_branch") or "").rsplit("/", 1)[-1] or "production",
+            # MEASURED: a project carries NO state field. A project is a container; readiness belongs
+            # to its branches and computes, so the page reports those. Inventing a project state
+            # showed `—` where a user expected "ready" (spec 013 [RB-12]).
+            "owner": status.get("owner") or "",
+            "lastActive": status.get("compute_last_active_time") or "",
+            "defaultBranch": lakebase.branch_id(status.get("default_branch") or "")
+            or "production",
+            "defaultRange": status.get("default_endpoint_settings") or {},
         }
         return self._cache.put(token, key, row)
 
@@ -82,13 +89,24 @@ class LakebaseBrowser:
             return hit
         data = await self._http.get(f"{BASE}/{lakebase.project_ref(ref)}/branches", token)
         project = lakebase.project_ref(ref)
-        rows = [{
-            "ref": b.get("name") or "",
-            "name": lakebase.branch_id(b.get("name") or ""),
-            "isDefault": lakebase.branch_id(b.get("name") or "") == "production",
-            "state": lakebase.state_word((b.get("status") or {}).get("state") or ""),
-            "project": project,
-        } for b in data.get("branches", [])]
+        rows = []
+        for b in data.get("branches", []):
+            status = b.get("status") or {}
+            name = lakebase.branch_id(b.get("name") or "")
+            # MEASURED: a branch's status carries `current_state` and `default`, not `state` and
+            # `is_default`. Reading the wrong keys showed every branch as stateless and no branch as
+            # the default, which is why the page could not answer "is it ready" (spec 013 [RB-12]).
+            rows.append({
+                "ref": b.get("name") or "",
+                "name": name,
+                "isDefault": bool(status.get("default")),
+                "state": lakebase.state_word(status.get("current_state") or ""),
+                "stateRaw": status.get("current_state") or "",
+                "protected": bool(status.get("is_protected")),
+                "sizeBytes": status.get("logical_size_bytes"),
+                "changedAt": status.get("state_change_time") or "",
+                "project": project,
+            })
         return self._cache.put(token, key, rows)
 
     async def databases(self, ref: str, branch: str, token: str | None) -> list[dict[str, Any]]:
@@ -216,14 +234,13 @@ class LakebaseBrowser:
         spec = p.get("spec") or {}
         status = p.get("status") or {}
         name = p.get("name") or ""
-        state = status.get("state") or p.get("state") or ""
+        # MEASURED: a project has NO state field. This row used to emit `state: ""` from a missing
+        # key, which rendered as an em dash where a user expected "ready". Readiness lives on the
+        # branches and computes, so the row says nothing about it (spec 013 [RB-12]).
         return {
             "ref": name,
             "name": lakebase.project_id(name),
             "displayName": status.get("display_name") or spec.get("display_name") or lakebase.project_id(name),
-            "state": lakebase.state_word(state),
-            "stateRaw": state,
-            "ready": lakebase.is_ready(state),
         }
 
 

@@ -69,8 +69,10 @@ import type { LakebasePageData } from "../domain/lakebase";
 const encodePath = (ref: string) =>
   ref.split("/").filter(Boolean).map(encodeURIComponent).join("/");
 
+/** A project as the API actually describes it: no state, because a project has none. */
 export interface LakebaseProject {
-  ref: string; name: string; displayName: string; state: string; stateRaw: string; ready: boolean;
+  ref: string; name: string; displayName: string;
+  pgVersion?: number; owner?: string;
 }
 export interface LakebaseBranch { ref: string; name: string; isDefault: boolean; state: string; project?: string }
 export type { LakebasePageData, AppView, AppHealth };

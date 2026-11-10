@@ -99,6 +99,11 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
                         store_llm=llm.store if llm is not None else None,
                         health=llm.health if llm is not None else None,
                         max_run_seconds=cfg.session_max_run_seconds, max_concurrent=cfg.max_concurrent_agents)
+    # The app's own identity, so a session's tool server can call the Postgres API that a user token
+    # can never call (spec 013 [RB-10]).
+    from .adapters.databricks.sp_token import ServicePrincipalToken
+
+    orch._sp_token = ServicePrincipalToken()      # noqa: SLF001 - one owner, set at construction
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

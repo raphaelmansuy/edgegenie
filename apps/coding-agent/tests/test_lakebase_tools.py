@@ -166,7 +166,10 @@ def test_listing_projects_is_one_call():
     b = LakebaseBrowser("h", None, http=http)
     rows = run(b.projects("tok"))
     assert [r["name"] for r in rows] == ["a", "b"]
-    assert rows[0]["state"] == "ready" and rows[1]["state"] == "starting"
+    assert rows[0]["displayName"] == "A"
+    # A project has NO state field (measured): the row must not invent one, because a fabricated
+    # "ready" pill is worse than no pill (spec 013 [RB-12]).
+    assert "state" not in rows[0] and "ready" not in rows[0]
     assert len(http.calls) == 1
 
 
@@ -181,13 +184,15 @@ def test_a_project_read_carries_its_version_and_default_branch():
 
 
 def test_a_branch_list_marks_the_default():
+    """MEASURED: `default` and `current_state`, not `is_default` and `state`."""
     http = FakeHttp({"/api/2.0/postgres/projects/a/branches": {"branches": [
-        {"name": "projects/a/branches/production", "status": {"state": "READY"}},
-        {"name": "projects/a/branches/agent-9"},
+        {"name": "projects/a/branches/production", "status": {"default": True, "current_state": "READY"}},
+        {"name": "projects/a/branches/agent-9", "status": {"default": False}},
     ]}})
     rows = run(LakebaseBrowser("h", None, http=http).branches("a", "tok"))
     assert [r["name"] for r in rows] == ["production", "agent-9"]
     assert rows[0]["isDefault"] and not rows[1]["isDefault"]
+    assert rows[0]["state"] == "ready"
 
 
 def test_a_compute_reads_its_host_and_range():
@@ -210,7 +215,7 @@ def test_a_project_page_survives_one_failing_block():
         "/api/2.0/postgres/projects/a/branches/production/endpoints": {"endpoints": []},
     })
     blocks = run(page_blocks("tok", "a", "production", LakebaseBrowser("h", None, http=http)))
-    assert blocks["project"]["state"] == "ready"
+    assert blocks["project"]["name"] == "a"
     assert "CAN MANAGE" in blocks["branches"]["error"]
     assert blocks["databases"] == [] and blocks["compute"] == []
 
@@ -377,3 +382,53 @@ def test_reading_tables_asks_the_roles_endpoint_for_the_username(monkeypatch):
     run(b.tables("p", "b", "databricks_postgres", "public", "tok"))
     assert any("/roles" in p for p in seen), "tables() never asked which role to connect as"
     assert any(p.startswith("POST") and "credentials" in p for p in seen)
+
+
+# -- the field names, measured against the live API ([RB-12]) -----------------------------------
+# Every one of these was wrong in the first version, and each produced a plausible empty string
+# rather than an error: a project showed no state, a branch showed no state, nothing showed whether
+# it was the default, and a poll for a state that does not exist always burned its full timeout.
+def test_a_branch_reads_current_state_and_default_not_state_and_is_default():
+    """MEASURED branch.status = {default, is_protected, current_state, ...}."""
+    http = FakeHttp({"/api/2.0/postgres/projects/p/branches": {"branches": [{
+        "name": "projects/p/branches/production",
+        "status": {"default": True, "is_protected": False, "current_state": "READY",
+                   "logical_size_bytes": 34406400, "state_change_time": "2026-11-10T01:13:18Z"}}]}})
+    row = run(LakebaseBrowser("h", None, http=http).branches("p", "tok"))[0]
+    assert row["state"] == "ready" and row["stateRaw"] == "READY"
+    assert row["isDefault"] is True and row["protected"] is False
+    assert row["sizeBytes"] == 34406400
+
+
+def test_a_project_has_no_state_field_and_does_not_invent_one():
+    """MEASURED project.status has NO `state`. Readiness is per branch and per compute."""
+    http = FakeHttp({"/api/2.0/postgres/projects/p": {"name": "projects/p", "status": {
+        "display_name": "p dev", "pg_version": 17, "owner": "me@example.com",
+        "default_branch": "projects/p/branches/production",
+        "compute_last_active_time": "2026-11-10T07:05:44Z",
+        "default_endpoint_settings": {"autoscaling_limit_min_cu": 1.0, "autoscaling_limit_max_cu": 1.0}}}})
+    row = run(LakebaseBrowser("h", None, http=http).project("p", "tok"))
+    assert "state" not in row, "a project has no state; emitting one showed a dash where 'ready' was expected"
+    assert row["defaultBranch"] == "production"
+    assert row["owner"] == "me@example.com"
+    assert row["defaultRange"]["autoscaling_limit_max_cu"] == 1.0
+
+
+def test_an_endpoint_compute_reports_its_range_and_suspension():
+    """MEASURED endpoint.status carries current_state and the autoscaling limits."""
+    http = FakeHttp({"/api/2.0/postgres/projects/p/branches/b/endpoints": {"endpoints": [{
+        "name": "projects/p/branches/b/endpoints/primary",
+        "status": {"endpoint_type": "ENDPOINT_TYPE_READ_WRITE", "current_state": "ACTIVE",
+                   "autoscaling_limit_min_cu": 1.0, "autoscaling_limit_max_cu": 1.0,
+                   "hosts": {"host": "ep.example"}}}]}})
+    row = run(LakebaseBrowser("h", None, http=http).endpoints("p", "b", "tok"))[0]
+    assert row["rangeValid"] is True
+    assert row["suspended"] is False
+    assert row["host"] == "ep.example"
+
+
+def test_a_suspended_compute_is_reported_as_suspended():
+    http = FakeHttp({"/api/2.0/postgres/projects/p/branches/b/endpoints": {"endpoints": [{
+        "name": "x", "status": {"current_state": "SUSPENDED", "endpoint_type": "ENDPOINT_TYPE_READ_WRITE",
+                                "autoscaling_limit_min_cu": 1, "autoscaling_limit_max_cu": 1}}]}})
+    assert run(LakebaseBrowser("h", None, http=http).endpoints("p", "b", "tok"))[0]["suspended"] is True
