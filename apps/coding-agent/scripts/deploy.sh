@@ -301,13 +301,34 @@ PY
     echo "  SKIP database probe: the job produced no result (see run $run_id)"; return 0
   fi
 
+  # The notebook exits a JSON OBJECT: {"checks": [...], "skipped": [...]}. It used to exit a bare list,
+  # and this reader iterated the object's keys — `check["pass"]` on the string "checks" raised a
+  # TypeError that printed a traceback and then reported "verification failed", which hid the real
+  # verdict. Both shapes are accepted so an older deployed notebook still verifies.
   printf '%s' "$result" | python3 -c '
 import json, sys
-checks = json.load(sys.stdin)
+
+data = json.load(sys.stdin)
+if isinstance(data, dict):
+    checks, skipped = data.get("checks") or [], data.get("skipped") or []
+else:
+    checks, skipped = data, []
+
+failed = 0
 for check in checks:
-    mark = "\033[32mPASS\033[0m" if check["pass"] else "\033[31mFAIL\033[0m"
-    print("  %s %s — %s" % (mark, check["check"], check["detail"]))
-sys.exit(1 if any(not c["pass"] for c in checks) else 0)'
+    ok = bool(check.get("pass"))
+    failed += 0 if ok else 1
+    mark = "\033[32mPASS\033[0m" if ok else "\033[31mFAIL\033[0m"
+    print("  %s %s — %s" % (mark, check.get("check"), check.get("detail")))
+# A skip is NOT a pass. Saying so is the point: the first version of the probe counted an HTTP 401 from
+# the app proxy as "served", so four routes passed without a handler ever running.
+for skip in skipped:
+    print("  \033[33mSKIP\033[0m %s — %s" % (skip.get("check"), skip.get("detail")))
+
+if failed or not checks:
+    print("  \033[31mFAIL\033[0m the database probe verified %d check(s)" % len(checks))
+    sys.exit(1)
+sys.exit(0)'
 }
 
 case "$ACTION" in
