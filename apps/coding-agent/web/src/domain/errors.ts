@@ -33,18 +33,20 @@ const UNREACHABLE = /cannot reach|failed to fetch|networkerror|server answered 5
 export function explain(message: string): Explained {
   const text = (message || "").trim();
   if (/app setting/i.test(text) && /granted/i.test(text)) {
-    // The server names the scope when it knows it (`ScopeMissing` carries `scopes`). Naming it is
-    // the difference between "sign in again" and "sign in again, and this is what you were missing",
-    // and on the deployed app the names were absent so the user had to guess (spec 013 [RB-2]).
+    // The app names the scope when the platform does (`ScopeMissing` carries `scopes`).
+    //
+    // There is deliberately NO action here. An earlier version offered "Sign in again", and the
+    // deployed app proved it a dead end: `postgres` is bound to the app's service principal and can
+    // never appear in a user token, so re-authenticating changes nothing (spec 013 [RB-10]). The
+    // fix is on the app side, so the only honest thing to say is who can make it.
     const named = /\(`([^`]+)`\)/.exec(text)?.[1]?.trim();
     return {
       kind: "scope",
-      title: "Your sign-in needs refreshing",
+      title: "This app is missing a permission",
       detail: named
-        ? `The app now has the \`${named}\` permission. This browser session signed in before it was granted, so its token does not carry it. Sign in again to get a token with the current permissions; if it still fails, ask the app's owner to check the app's scopes.`
-        : "It's not your access. This sign-in predates the app's current permissions. Sign in again to get a token with the current permissions; if it still fails, ask the app's owner to check the app's scopes.",
+        ? `The app has not been granted \`${named}\`. This is an app setting, not your access, and signing in again will not change it: ask whoever owns this deployment to grant the scope and redeploy.`
+        : "This is an app setting, not your access. Ask whoever owns this deployment to grant the missing scope and redeploy.",
       retryable: false,
-      action: { label: "Sign in again", href: "/.auth/logout" },
     };
   }
   const acl = ACL.exec(text);

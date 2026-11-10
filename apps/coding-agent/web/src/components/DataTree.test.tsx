@@ -44,7 +44,7 @@ describe("the sign-in message names what was missing", () => {
     // [RB-2] the server already says `postgres`; the page must not throw that away.
     const e = explain(SCOPE_MESSAGE);
     expect(e.kind).toBe("scope");
-    expect(e.title).toBe("Your sign-in needs refreshing");
+    expect(e.title).toBe("This app is missing a permission");
     expect(e.detail).toContain("postgres");
     expect(e.retryable).toBe(false);
   });
@@ -52,7 +52,7 @@ describe("the sign-in message names what was missing", () => {
   it("still explains itself when the scope is not named", () => {
     const e = explain("this app has not been granted the permission it needs. This is an app setting, not your access.");
     expect(e.kind).toBe("scope");
-    expect(e.detail).toMatch(/sign in again/i);
+    expect(e.detail).toMatch(/not your access/i);
     expect(e.retryable).toBe(false);
   });
 });
@@ -67,24 +67,26 @@ describe("the Data pane on a refusal", () => {
   it("renders one box, not two, when both reads are refused", async () => {
     globalThis.fetch = vi.fn(async () => json({ detail: SCOPE_MESSAGE }, 403)) as unknown as typeof fetch;
     render(<DataTree selected={null} onOpen={() => {}} />);
-    const found = await screen.findAllByText(/sign-in needs refreshing/i);
+    const found = await screen.findAllByText(/missing a permission/i);
     expect(found).toHaveLength(1);
   });
 
   it("offers no retry for a permission wall", async () => {
     globalThis.fetch = vi.fn(async () => json({ detail: SCOPE_MESSAGE }, 403)) as unknown as typeof fetch;
     render(<DataTree selected={null} onOpen={() => {}} />);
-    await screen.findAllByText(/sign-in needs refreshing/i);
+    await screen.findAllByText(/missing a permission/i);
     // PaneError only draws the retry when the failure is retryable.
     expect(screen.queryByRole("button", { name: /Try again/i })).not.toBeInTheDocument();
   });
 
-  it("offers a real sign-in action instead of telling the user to clear cookies", async () => {
-    // The deployed app said "clear this site's cookies", which asks the user to lose every other
-    // session. `/.auth/logout` re-authorises with the current permissions (measured).
+  it("offers NO sign-in action, because signing in cannot fix it", async () => {
+    // The deployed app offered "Sign in again" and the user proved it a dead end: `postgres` is bound
+    // to the app's service principal and never appears in a user token (spec 013 [RB-10]). Offering
+    // it again would be the dead end this spec keeps removing.
     globalThis.fetch = vi.fn(async () => json({ detail: SCOPE_MESSAGE }, 403)) as unknown as typeof fetch;
     render(<DataTree selected={null} onOpen={() => {}} />);
-    const link = await screen.findByRole("link", { name: /sign in again/i });
-    expect(link).toHaveAttribute("href", "/.auth/logout");
+    await screen.findAllByText(/missing a permission/i);
+    expect(screen.queryByRole("link", { name: /sign in/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/not your access/i)).toBeInTheDocument();
   });
 });

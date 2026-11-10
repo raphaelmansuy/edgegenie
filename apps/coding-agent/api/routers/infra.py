@@ -22,7 +22,27 @@ router = APIRouter(prefix="/api")
 
 # -- shared plumbing: one definition, used by both groups ---------------------------------------
 def _token(request: Request) -> str | None:
+    """The token the INFRASTRUCTURE calls use: the app's service principal, not the user's.
+
+    This replaced `_user_token` because the platform will not put these permissions in a user token.
+    `postgres` is "always bound to the SP, not OBO" and Lakebase resources "cannot run OBO, even under
+    `--auth-mode obo`" (spec 013 [RB-10]). Declaring the scope made it *effective* on the app and
+    changed nothing in the forwarded token, so every call 403'd and no sign-in could help.
+
+    The consequence, stated so it is not a surprise: these two panes show what the APP may see, not
+    what the viewer may see. That is the correct model for a management surface — a Databricks App's
+    own service principal is the thing that owns the infrastructure it created — and it is why the
+    page says so instead of blaming the user's sign-in.
+    """
     from .api import _user_token
+    source = getattr(request.app.state, "sp_token", None)
+    if source is not None and source.available():
+        try:
+            return source.get()
+        except Exception:  # noqa: BLE001 - fall through to the user token and let the API refuse
+            pass
+    # Local development has no injected service principal, so the configured token is the identity —
+    # the same one the agent's tool server uses there.
     return _user_token(request)
 
 

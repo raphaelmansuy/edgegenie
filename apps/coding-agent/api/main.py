@@ -153,19 +153,20 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
         os.environ.get("DATABRICKS_HOST", ""),
         lambda: os.environ.get("DATABRICKS_TOKEN") or None,
     )
-    # The two object types a coding task builds with (spec 013). Built lazily like the rest: a
-    # session that never mentions Lakebase or an app never reaches the workspace through these.
+    # The two object types a coding task builds with (spec 013). They authenticate as the APP'S
+    # SERVICE PRINCIPAL, not as the signed-in user, and that is a platform rule rather than a choice:
+    # `postgres` is "always bound to the SP, not OBO" (spec 013 [RB-10]), so a forwarded user token
+    # never carries it and every Lakebase call 403s no matter how many times the user signs in.
+    # Unity Catalog is still the boundary for what the *agent* may touch; this is the app reading the
+    # infrastructure it is allowed to manage.
     from .adapters.databricks.apps import AppsBrowser
     from .adapters.databricks.lakebase import LakebaseBrowser
+    from .adapters.databricks.sp_token import ServicePrincipalToken, provider
 
-    app.state.lakebase = LakebaseBrowser(
-        os.environ.get("DATABRICKS_HOST", ""),
-        lambda: os.environ.get("DATABRICKS_TOKEN") or None,
-    )
-    app.state.apps = AppsBrowser(
-        os.environ.get("DATABRICKS_HOST", ""),
-        lambda: os.environ.get("DATABRICKS_TOKEN") or None,
-    )
+    sp = ServicePrincipalToken()
+    app.state.sp_token = sp
+    app.state.lakebase = LakebaseBrowser(os.environ.get("DATABRICKS_HOST", ""), provider(sp))
+    app.state.apps = AppsBrowser(os.environ.get("DATABRICKS_HOST", ""), provider(sp))
     app.state.dev_token = os.environ.get("APP_DEV_TOKEN") or os.environ.get("DATABRICKS_TOKEN")
 
     # Bytes the user hands us (spec 009). A directory in dev, memory in tests; the port makes a third
