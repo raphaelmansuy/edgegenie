@@ -47,3 +47,8 @@ site/dist/
 # `site-e2e-screenshots` artifact; the reviewed findings live in tests/sites/e2e/visual-inspection.md.
 tests/sites/e2e/screenshots/
 tests/sites/e2e/report.json
+
+# The build-time install locations. `prepare-app.sh` creates these inside apps/coding-agent, and they
+# are large, machine-specific and regenerated: a dependency tree and the agent binary, never source.
+apps/coding-agent/node_modules/
+apps/coding-agent/.bin/

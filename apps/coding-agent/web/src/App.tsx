@@ -49,6 +49,9 @@ import {
   ACTIONS, asAttachment, docForNode, makeDoc, tablesWritten, touched, type Action, type Doc,
 } from "./domain/docs";
 import { focusFor, NO_FOCUS, sameFocus, withCell, withoutDoc, type Focus } from "./domain/focus";
+import { canDecide, canSend } from "./domain/compose";
+import { escapeTarget } from "./domain/keys";
+import { useScrollHandoff } from "./hooks/useScrollHandoff";
 import { attachmentsFor, autoAttachment } from "./domain/binding";
 import { searchRoot as computeSearchRoot } from "./domain/searchroot";
 import type { Attachment } from "./domain/events";
@@ -197,7 +200,7 @@ export function App() {
   const composerBox = useRef<HTMLTextAreaElement | null>(null);
   const dockComposer = useRef<HTMLTextAreaElement | null>(null);
 
-  const { session, conn, error, send, stop, restore, setSession } = useSessionStream(active);
+  const { session, conn, error, send, stop, restore, retry: retryConnection, setSession } = useSessionStream(active);
   // The active stream is fresher than the visibility-aware history poll.
   const sessions = savedSessions.map((s) => s.id !== session.id || session.status === "provisioning" ? s : {
     ...s, status: session.status, requiresResume: session.requiresResume,
@@ -598,6 +601,10 @@ export function App() {
       openInspector, resetAll, toggleDock, dockShown, closedCount, reopenDocument]);
 
   const busy = session.status === "streaming";
+  /* ONE answer to "may this be sent", shared by both composers and by the approval buttons.
+     It cannot see the connection: losing the stream means the answer will not ARRIVE yet, not that
+     the question is refused (specs/012 01 §P1). This replaces three expressions that disagreed. */
+  const sendDecision = canSend({ status: session.status, requiresResume: session.requiresResume });
   /** Drawn as a column, or as the right-hand drawer. Never "on" and invisible.
    *
    *  In focus only the work and the conversation are drawn, so the inspector is not a column there
@@ -653,19 +660,38 @@ export function App() {
         closeDoc(view);
         return true;
       },
-      /* Escape, in one ordered meaning (007 KB-8): unwinds the topmost transient. Stop-the-agent is
-         the composer's own affordance and is handled there, next to the button that shows it. */
+      /* Escape, resolved by the ONE function that documents its order (specs/012 [KB-A]).
+       *
+       * This replaces a chain of five `if`s. That chain happened to be right, and it was unverifiable:
+       * its behaviour was a function of a `useMemo` dependency list that includes `layout`, `mode` and
+       * `narrow`, so Escape's precedence varied with window width and no test covered the wiring.
+       * `escapeTarget()` was exported, documented, unit-tested and cited by a comment in
+       * `useHotkeys` — and called only from its own tests (specs/012 [F4]).
+       *
+       * A `switch` over the union is exhaustive: adding an `EscapeTarget` is now a compile error
+       * rather than a silent fall-through. */
       stop: () => {
-        if (settingsOpen) { setSettingsOpen(false); return true; }
-        if (paletteOpen || keysOpen) { setPaletteOpen(false); setKeysOpen(false); return true; }
-        if (dockDrawer) { setDockDrawer(false); toggle("assistant", false); return true; }
-        if (inspectorDrawer) { toggle("inspector", false); return true; }
-        if (drawer) {
-          setDrawer(null);
-          toggle("rail", false);
-          return true;
+        const target = escapeTarget({
+          dialog: settingsOpen || paletteOpen || keysOpen,
+          popover: modelOpen > 0,
+          drawer: dockDrawer || inspectorDrawer || Boolean(drawer),
+          editing: false,
+          running: session.status === "streaming",
+          composerFocused: document.activeElement === dockComposer.current
+            || document.activeElement === composerBox.current,
+        });
+        switch (target) {
+          case "dialog": setSettingsOpen(false); setPaletteOpen(false); setKeysOpen(false); return true;
+          case "popover": setModelOpen(0); return true;
+          case "drawer":
+            if (dockDrawer) { setDockDrawer(false); toggle("assistant", false); }
+            else if (inspectorDrawer) { toggle("inspector", false); }
+            else { setDrawer(null); toggle("rail", false); }
+            return true;
+          case "edit": return false;                  // the editor owns its own Escape
+          case "stop-agent": void stop(); return true;
+          case "nothing": return false;               // never steal the browser's meaning [KB-D]
         }
-        return false;
       },
     };
   }, [docs, view, paletteOpen, keysOpen, settingsOpen, newSession, focusComposer, drawer, dockDrawer,
@@ -679,6 +705,9 @@ export function App() {
     running: () => Boolean(session.status === "streaming"),
   }), [settingsOpen, paletteOpen, keysOpen, session.status]);
   useHotkeys(handlers, hotkeyContext);
+  /* One delegated wheel listener: a contained scroller hands its remainder to the nearest scrollable
+     ancestor, so a wheel at the edge of a cell's output keeps reading (specs/012 [SC-1]). */
+  useScrollHandoff();
   /* A write that did not land in the document on screen. The centre must say so: a screen that does
      not change while the dock reports a write reads as "the refresh is broken" (it happened on the
      deployed app, with the agent correctly writing a copy outside the repo). */
@@ -805,6 +834,7 @@ export function App() {
       running={busy}
       conn={conn}
       error={error}
+      onRetryConnection={retryConnection}
       onSend={(text, mine) => message(text, mine)}
       onStop={stop}
       onRestore={restore}
@@ -990,11 +1020,13 @@ export function App() {
                   )}
                 </p>
               )}
-              {pending && <InlineApproval approval={pending} disabled={conn !== "live"}
+              {/* Approvals need a WRITABLE session, not a live stream: deciding one is a POST.
+                  `conn !== "live"` here was specs/012 [F3] — the control disabled by the symptom. */}
+              {pending && <InlineApproval approval={pending} disabled={!canDecide({ status: session.status, requiresResume: session.requiresResume })}
                 onDecide={(a, outcome) => decide(a.approvalId, outcome)} />}
               <Composer compact
                 inputRef={composerBox}
-                disabled={session.status === "archived" || session.requiresResume || conn !== "live" && Boolean(active)} busy={busy} onSend={message} onStop={stop}
+                blockedReason={sendDecision.canSend ? null : sendDecision.reason} busy={busy} onSend={message} onStop={stop}
                 attachments={attachments} auto={viewDoc ? asAttachment(viewDoc) : null}
                 onAdd={addContext} onRemove={(a) => setAttachments((cur) => cur.filter((x) => x !== a))}
                 openDocs={docs}

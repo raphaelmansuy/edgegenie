@@ -1,19 +1,38 @@
-/** useSessionStream: SSE with replay. The reducer owns all state changes.
+/** useSessionStream: SSE with replay. The reducer owns all state changes; `domain/stream` owns the
+ * decision of what state comes next.
  *
- * Two things here are load-bearing and were each a real bug:
+ * Four things here are load-bearing and each was a real bug:
  *  - switching session must reset the view (a new session used to show the old transcript);
  *  - the stream effect must NOT depend on anything that changes when state changes, or it
- *    reconnects in a loop and the transcript never renders.
+ *    reconnects in a loop and the transcript never renders;
+ *  - the replay cursor resets on every session change (see 2, below), or a reload shows nothing;
+ *  - a refusal must be NAMED. `EventSource` retries only a connection that dropped after a 200; a
+ *    non-200 is final, and the old code rendered that final failure as "reconnecting…" forever while
+ *    every control gated on `conn === "live"` was disabled. `domain/stream.ts` is the correction and
+ *    `retry()` is the manual way out (specs/012-ux-improve 01, 02 §F2).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
 import { emptySession, newTurn, PENDING, reduce, type AgentEvent, type Attachment, type SessionView, type Turn } from "../domain/events";
+import { afterFailure, afterOpen, afterRetry, afterSwitch, IDLE, type StreamState } from "../domain/stream";
 
 /** How long streamed events are collected before one state update. One long answer arrives as
  *  hundreds of deltas; rendering each one re-parses the whole markdown tree and froze the tab. */
 const BATCH_MS = 40;
 
-export type Conn = "idle" | "connecting" | "live" | "reconnecting" | "lost";
+/** The probe that learns WHY a stream failed. `EventSource` does not expose the HTTP status, so a
+ *  failed open is followed by one `fetch` to the same URL to learn it. Without this, a 404 and a 503
+ *  are indistinguishable — which is precisely the defect (specs/012 02 §F2). */
+async function probeStatus(url: string): Promise<number | null> {
+  try {
+    const r = await fetch(url, { method: "GET", headers: { Accept: "text/event-stream" }, cache: "no-store" });
+    // Read a byte and hang up: we want the status, not the stream body.
+    void r.body?.cancel().catch(() => {});
+    return r.status;
+  } catch {
+    return null;
+  }
+}
 
 /** Adapt one server turn into the client's `Turn`.
  *
@@ -96,18 +115,21 @@ function hydrate(id: string, d: Partial<SessionView> | undefined): SessionView {
 
 export function useSessionStream(sessionId: string | null) {
   const [session, setSession] = useState<SessionView>(() => emptySession());
-  const [conn, setConn] = useState<Conn>("idle");
+  const [conn, setConn] = useState<StreamState>(IDLE);
   const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
+  /** Bumped by `retry()` to re-run the stream effect without changing any state it depends on. */
+  const [retryNonce, setRetryNonce] = useState(0);
 
   // 1) reset + hydrate when the session changes
   useEffect(() => {
     if (!sessionId) {
       setSession(emptySession());
-      setConn("idle");
+      setConn(IDLE);
       return;
     }
     setSession(hydrate(sessionId, undefined));
+    setConn(afterSwitch());
     let live = true;
     api.session(sessionId)
       .then((d) => {
@@ -146,6 +168,9 @@ export function useSessionStream(sessionId: string | null) {
     let stopped = false;
     let queued: AgentEvent[] = [];
     let timer: number | null = null;
+    let retryTimer: number | null = null;
+    /** Consecutive failures, for the backoff. Reset by a successful open and by a manual retry. */
+    let attempt = 0;
 
     const flush = () => {
       timer = null;
@@ -155,12 +180,46 @@ export function useSessionStream(sessionId: string | null) {
       setSession((s) => batch.reduce(reduce, s));
     };
 
+    const url = () => `/api/sessions/${sessionId}/stream?after=${seq.current}`;
+
+    /** Everything that must be cancelled when the effect tears down. A leaked retry timer keeps a
+     *  closed session's connection alive behind the user's back. */
+    const clear = () => {
+      if (timer !== null) { window.clearTimeout(timer); timer = null; }
+      if (retryTimer !== null) { window.clearTimeout(retryTimer); retryTimer = null; }
+    };
+
+    const schedule = (state: StreamState) => {
+      if (state.kind !== "reconnecting") return;
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+      retryTimer = window.setTimeout(() => { retryTimer = null; if (!stopped) open(); }, state.nextInMs);
+    };
+
     const open = () => {
       source?.close();
-      source = new EventSource(`/api/sessions/${sessionId}/stream?after=${seq.current}`);
-      setConn((c) => (c === "live" ? c : "connecting"));
-      source.onopen = () => { if (!stopped) setConn("live"); };
-      source.onerror = () => { if (!stopped) setConn(navigator.onLine ? "reconnecting" : "lost"); };
+      source = new EventSource(url());
+      // Keep a live stream live: re-announcing "connecting" on every reconnect would flicker the
+      // one indicator that is supposed to be quiet when everything is fine.
+      setConn((c) => (c.kind === "live" ? c : { kind: "connecting" }));
+      source.onopen = () => {
+        if (stopped) return;
+        attempt = 0;
+        setConn(afterOpen());
+      };
+      source.onerror = () => {
+        if (stopped) return;
+        attempt += 1;
+        /* The browser has already given up on a non-200 and will not retry it, so we must. First
+           learn WHY, then let `domain/stream` decide: a 404 closes for good, a 503 retries. The probe
+           is one request per failure, and it is the only way to tell the two apart — which is the
+           whole defect (specs/012 02 §F2). */
+        void probeStatus(url()).then((status) => {
+          if (stopped) return;
+          const next = afterFailure(status, attempt, navigator.onLine);
+          setConn(next);
+          if (next.kind === "reconnecting") schedule(next);
+        });
+      };
       source.onmessage = (m) => {
         let ev: AgentEvent;
         try { ev = JSON.parse(m.data); } catch { return; }
@@ -175,23 +234,39 @@ export function useSessionStream(sessionId: string | null) {
     open();
 
     const onVisible = () => {
-      if (document.visibilityState === "visible" && source?.readyState === EventSource.CLOSED) open();
+      // A backgrounded tab's source may have been closed by the browser. Re-open only then, so
+      // returning to a healthy tab does not reset the connection for nothing.
+      if (document.visibilityState === "visible" && source?.readyState === EventSource.CLOSED) {
+        attempt = 0;
+        open();
+      }
     };
-    const onOnline = () => { if (!stopped) open(); };
-    const onOffline = () => setConn("lost");
+    const onOnline = () => { if (!stopped) { attempt = 0; open(); } };
+    // Offline is a retry, not a death: the backoff will carry it while the socket is gone, and the
+    // `online` handler above resets the counter the moment there is a network again.
+    const onOffline = () => {
+      if (stopped) return;
+      const next = afterFailure(null, Math.max(1, attempt), false);
+      setConn(next);
+      schedule(next);
+    };
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       stopped = true;
-      if (timer !== null) window.clearTimeout(timer);
+      clear();
       queued = [];
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisible);
       source?.close();
     };
-  }, [sessionId]);
+    /* `retryNonce` is in the dependency list on purpose: it is how `retry()` re-runs this effect
+       without touching any state the effect reads, which is what keeps the reconnect-loop regression
+       (see this file's header) from coming back. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, retryNonce]);
 
   const send = useCallback(async (text: string, attachments: Attachment[] = []) => {
     if (!sessionId) return;
@@ -220,5 +295,12 @@ export function useSessionStream(sessionId: string | null) {
     setSession((s) => ({ ...s, ...result }));
   }, [sessionId]);
 
-  return { session, conn, error, send, stop, restore, setSession };
+  /** The user pressed Retry. Re-runs the stream effect from the current cursor with a fresh attempt
+   *  counter, so a manual retry is not punished for the failures before it (specs/012 ST-3). */
+  const retry = useCallback(() => {
+    setConn(afterRetry());
+    setRetryNonce((n) => n + 1);
+  }, []);
+
+  return { session, conn, error, send, stop, restore, retry, setSession };
 }

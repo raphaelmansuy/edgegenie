@@ -11,10 +11,11 @@ import { CopyButton } from "./CopyButton";
 import { Markdown } from "./Markdown";
 import { MAX_MARKDOWN, ToolCard, TurnView } from "./Transcript";
 import { RunStatus } from "./RunStatus";
+import type { StreamState } from "../domain/stream";
 
 interface Props {
   session: SessionView;
-  conn: string;
+  conn: StreamState;
   dockVisible: boolean;
   error?: string | null;
   onOpen: (doc: Doc) => void;

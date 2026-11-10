@@ -5,18 +5,21 @@ import { missionLabel, missionStatus } from "./mission";
 describe("server mission visibility", () => {
   it("separates observation loss from execution and never claims fresh offline progress", () => {
     const s = { ...emptySession("s"), status: "streaming" };
-    expect(missionStatus(s, "live").title).toBe("Working on the server");
-    expect(missionStatus(s, "lost").title).toBe("You’re offline");
-    expect(missionStatus(s, "reconnecting").detail).toContain("catch up");
+    expect(missionStatus(s, { kind: "live" }).title).toBe("Working on the server");
+    /* `StreamNotice` owns the announcement now (specs/012 [ST-4]), so `missionStatus` reports the
+       tone and lets that component say "offline" or "reconnecting". What this test still guards is
+       the thing it was written for: a disconnection never makes the mission claim fresh progress. */
+    expect(missionStatus(s, { kind: "reconnecting", attempt: 1, nextInMs: 1000 }).tone).toBe("connection");
+    expect(missionStatus(s, { kind: "reconnecting", attempt: 2, nextInMs: 2000 }).detail).toContain("catch up");
   });
   it("offers explicit recovery ahead of a stale running indicator", () => {
     const s = { ...emptySession("s"), status: "streaming", requiresResume: true };
-    expect(missionStatus(s, "live").tone).toBe("attention");
+    expect(missionStatus(s, { kind: "live" }).tone).toBe("attention");
     expect(missionLabel(s)).toBe("Needs attention");
   });
   it("marks a completed mission ready for review", () => {
     const s = { ...emptySession("s"), turns: [{ ...newTurn("t", 1), status: "completed" as const }] };
-    expect(missionStatus(s, "live").title).toBe("Ready for your review");
+    expect(missionStatus(s, { kind: "live" }).title).toBe("Ready for your review");
   });
   it("expires old permissions on recovery and clears recovery after load", () => {
     const s = { ...emptySession("s"), approvals: [{ approvalId: "a", action: "write", target: "/x", reason: "", options: [] }] };
@@ -48,8 +51,8 @@ describe("mission projection — spec 011", () => {
     expect(currentMission(sessionOf(finished(), q, { ...q, id: "q2" }))).toBe(q);
     expect(currentMission(sessionOf(finished("a"), finished("b", 2)))?.id).toBe("b");
     expect(currentMission(sessionOf())).toBeUndefined();
-    expect(missionView(sessionOf(), undefined, "live").state).toBe("ready");
-    expect(missionView(emptySession(), undefined, "live").state).toBe("starting");
+    expect(missionView(sessionOf(), undefined, { kind: "live" }).state).toBe("ready");
+    expect(missionView(emptySession(), undefined, { kind: "live" }).state).toBe("starting");
   });
   it("requires nonempty proof, a successful matching call and completion for achievement", () => {
     const t = finished();
@@ -66,7 +69,7 @@ describe("mission projection — spec 011", () => {
   it("does not let another mission provide a missing source", () => {
     const previous = finished();
     const current = { ...finished("second", 2), tools: [] };
-    expect(missionView(sessionOf(previous, current), current, "live").proven).toBe(0);
+    expect(missionView(sessionOf(previous, current), current, { kind: "live" }).proven).toBe(0);
     expect(lastAchieved(sessionOf(previous, current))).toBe(previous);
   });
   it("finds last achieved independently of last completed and current failures", () => {
@@ -76,41 +79,41 @@ describe("mission projection — spec 011", () => {
   });
   it.each(["running", "auditing", "queued", "blocked", "failed", "cancelled", "interrupted"] as TurnStatus[])("keeps %s explicit", (status) => {
     const t = { ...newTurn("t", 1), status };
-    expect(missionView(sessionOf(t), t, "live").state).toBe(status);
+    expect(missionView(sessionOf(t), t, { kind: "live" }).state).toBe(status);
   });
   it("overlays recovery and permission only on the foreground; archive is read only", () => {
     const old = finished(), t = newTurn("t", 2);
     const s = { ...sessionOf(old, t), requiresResume: true, approvals: [{ approvalId: "a", action: "write", target: "/x", reason: "", options: [] }] };
-    expect(missionView(s, t, "live").state).toBe("recovery");
-    expect(missionView(s, old, "live").state).toBe("achieved");
-    expect(missionView({ ...s, requiresResume: false }, t, "live").state).toBe("waiting");
-    expect(missionView({ ...s, status: "archived" }, t, "live").state).toBe("archived");
+    expect(missionView(s, t, { kind: "live" }).state).toBe("recovery");
+    expect(missionView(s, old, { kind: "live" }).state).toBe("achieved");
+    expect(missionView({ ...s, requiresResume: false }, t, { kind: "live" }).state).toBe("waiting");
+    expect(missionView({ ...s, status: "archived" }, t, { kind: "live" }).state).toBe("archived");
   });
   it("separates transport freshness from saved execution", () => {
     const t = newTurn("t", 1), s = sessionOf(finished(), t);
-    for (const conn of ["lost", "connecting", "reconnecting"]) {
+    for (const conn of [{ kind: "reconnecting", attempt: 1, nextInMs: 1000 }, { kind: "connecting" }, { kind: "reconnecting", attempt: 2, nextInMs: 2000 }] as const) {
       expect(missionView(s, t, conn)).toMatchObject({ state: "running", paused: true });
       expect(missionView(s, s.turns[0], conn).paused).toBe(false);
     }
   });
   it("never auto-completes an unknown or unfinished plan", () => {
     const t = { ...finished(), plan: [{ content: "A", status: "completed" }, { content: "B", status: "unknown" }] };
-    const v = missionView(sessionOf(t), t, "live");
+    const v = missionView(sessionOf(t), t, { kind: "live" });
     expect(v.planDone).toBe(1); expect(v.plan[1].status).toBe("unknown");
-    expect(missionView(sessionOf(finished()), finished(), "live").plan).toEqual([]);
+    expect(missionView(sessionOf(finished()), finished(), { kind: "live" }).plan).toEqual([]);
   });
   it("counts failed calls without discarding recovered proof; keeps per-turn artifacts", () => {
     const t = { ...finished(), tools: [...finished().tools, { callId: "bad", name: "run_sql", status: "error" }] };
-    expect(missionView(sessionOf(t), t, "live")).toMatchObject({ state: "achieved", failedCalls: 1, proven: 1 });
+    expect(missionView(sessionOf(t), t, { kind: "live" })).toMatchObject({ state: "achieved", failedCalls: 1, proven: 1 });
     const next = newTurn("next", 2);
-    expect(missionView(sessionOf(t, next), next, "live").artifacts).toEqual([]);
+    expect(missionView(sessionOf(t, next), next, { kind: "live" }).artifacts).toEqual([]);
     expect(missionProof(t)[0].source?.callId).toBe("c1");
   });
   it("preserves complete request, model provenance and only valid recorded durations", () => {
     const t = { ...finished(), prompt: `${"Long objective ".repeat(20)}\nKeep the full second line [[scenario:notebook]]`, seconds: NaN };
-    const v = missionView({ ...sessionOf(t), model: "future/model" }, t, "live");
+    const v = missionView({ ...sessionOf(t), model: "future/model" }, t, { kind: "live" });
     expect(v.title.length).toBe(110); expect(v.request).toContain("second line"); expect(v.request).not.toContain("[[scenario:");
     expect(v.model).toBe("recorded/model"); expect(v.seconds).toBeUndefined();
-    expect(missionView(sessionOf({ ...t, seconds: 4.2 }), { ...t, seconds: 4.2 }, "live").seconds).toBe(4.2);
+    expect(missionView(sessionOf({ ...t, seconds: 4.2 }), { ...t, seconds: 4.2 }, { kind: "live" }).seconds).toBe(4.2);
   });
 });

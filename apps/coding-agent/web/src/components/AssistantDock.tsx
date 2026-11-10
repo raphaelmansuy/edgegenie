@@ -22,6 +22,9 @@ import { followUps } from "../domain/followups";
 import { conversationMarkdown, exportName } from "../domain/transcript";
 import type { SessionSummary } from "../api/client";
 import { RunStatus } from "./RunStatus";
+import { StreamNotice } from "./StreamNotice";
+import { canSend } from "../domain/compose";
+import type { StreamState } from "../domain/stream";
 import { Composer } from "./Composer";
 import { TurnView } from "./Transcript";
 import type { Doc } from "../domain/docs";
@@ -32,7 +35,9 @@ export interface DockProps {
   /** False until a session exists: the dock still works, it just has no turns yet (AD-5). */
   hasSession: boolean;
   running: boolean;
-  conn: "idle" | "connecting" | "live" | "reconnecting" | "lost";
+  /** The stream state MACHINE, not a boolean. Two failures that need different exits — a dropped
+   *  connection and a refused one — used to be one word, which is specs/012 [F2]. */
+  conn: StreamState;
   error: string | null;
   /** The model control, rendered by the App so both placements use one component (MC-2). */
   modelSlot?: React.ReactNode;
@@ -43,6 +48,8 @@ export interface DockProps {
   onSuggestion: (s: Suggestion) => void;
   onApprove: (a: Approval, outcome: "allow_once" | "allow_session" | "deny") => Promise<void>;
   onRetry: () => void;
+  /** Re-open the event stream. Distinct from `onRetry` (which re-runs a failed turn). */
+  onRetryConnection: () => void;
   onNewSession: () => void;
   onHide?: () => void;
   onAttach: (a: Attachment) => void;
@@ -87,7 +94,11 @@ export function AssistantDock(p: DockProps) {
   });
   const scroller = useRef<HTMLElement>(null);
   const last = turns.at(-1);
-  const canSend = p.session.status !== "archived" && !p.session.requiresResume && (!p.hasSession || p.conn === "live");
+  /* ONE answer to "may this be sent", from the domain. The connection is deliberately not an input:
+     it may gate what you are TOLD, never what you may ASK (specs/012 01 §P1). The old expression
+     ended in `(!p.hasSession || p.conn === "live")`, which disabled the textarea — and a disabled
+     textarea is unfocusable in every browser, which is the exact report this spec starts from. */
+  const decision = canSend({ status: p.session.status, requiresResume: p.session.requiresResume });
   /* Follow the stream while the reader is pinned to the bottom, and stop the moment they scroll up.
      "Pinned" is remembered from the last scroll event, not measured after an update: by the time an
      effect runs the content has already grown, so measuring then says "far from the bottom" for any
@@ -131,11 +142,9 @@ export function AssistantDock(p: DockProps) {
           <span className="dock-context-value">{focusLabel(p.focus)}</span>
         </span>
         <span className="dock-head-spacer" />
-        {p.conn !== "live" && p.hasSession && (
-          <span className={`pill ${p.conn}`} title="The event stream is reconnecting">
-            {p.conn === "reconnecting" ? "reconnecting…" : p.conn}
-          </span>
-        )}
+        {/* The state and its action, in one control group, from the one function that owns the
+            wording. A passive pill here was the dead end: it said "reconnecting…" and offered
+            nothing, while every control that could help was disabled by the same flag. [ST-4] [ST-5] */}
         {p.sessions && p.onOpenSession && p.onDeleteSession && (
           <DockHistory sessions={p.sessions} activeId={p.activeId ?? null} onOpen={p.onOpenSession} onDelete={p.onDeleteSession} />
         )}
@@ -150,6 +159,21 @@ export function AssistantDock(p: DockProps) {
         )}
       </header>
 
+      {/* ONE notice, in the BODY rather than the header, and this is a measured decision.
+       *
+       * The header is a 380 px row already holding the session state, the context label and four icon
+       * buttons; a state word plus "Retry" plus "New conversation" does not fit, so the first version
+       * truncated the word and hid an action — reintroducing "a state with no way out", for layout
+       * reasons, which is the defect this spec exists to remove.
+       *
+       * In the body the notice has the full column, so the WORD and BOTH ACTIONS are drawn together
+       * ([ST-4], [ST-5]) and there is no second copy anywhere. It appears for every non-live state,
+       * including an archived session: "archived" means you cannot write here, "closed" means the app
+       * cannot reach the session at all, and a user needs to tell those apart.
+       *
+       * `live` and `idle` render nothing, so a healthy dock gains no chrome. */}
+      {p.hasSession && <StreamNotice state={p.conn} onRetry={p.onRetryConnection} onNew={p.onNewSession} />}
+
       <RunStatus key={p.session.id} session={p.session} conn={p.conn} onRestore={p.onRestore} onStop={p.onStop} />
 
       <div className="dock-body" ref={scroller as React.RefObject<HTMLDivElement>} onScroll={onScroll} role="log"
@@ -158,24 +182,30 @@ export function AssistantDock(p: DockProps) {
 
         {turns.map((t) => (
           // Retry is offered on the last turn only, and only when it is not the thing already running.
-          <TurnView key={t.id} turn={t} onRetry={canSend && t === last && state !== "streaming" && state !== "asking" && t.status !== "interrupted" ? p.onRetry : undefined} />
+          <TurnView key={t.id} turn={t} onRetry={decision.canSend && t === last && state !== "streaming" && state !== "asking" && t.status !== "interrupted" ? p.onRetry : undefined} />
         ))}
 
         {/* The next step, derived from what this turn actually did. Only on the last turn, and only when
             nothing is running or waiting: a chip beside a pending approval is a second place to look. */}
-        {last && canSend && state === "empty" && (
+        {last && decision.canSend && state === "empty" && (
           <FollowUps items={followUps(last)} onPick={p.onSuggestion} />
         )}
 
         {state === "asking" && pending.map((a) => (
-          <InlineApproval key={a.approvalId} approval={a} disabled={!canSend} onDecide={p.onApprove} />
+          <InlineApproval key={a.approvalId} approval={a} disabled={!decision.canSend} onDecide={p.onApprove} />
         ))}
 
-        {state === "failed" && canSend && (
+        {state === "failed" && decision.canSend && (
           <FailedTurn error={p.error} turn={last} onRetry={p.onRetry} />
         )}
 
-        {p.error && state !== "failed" && (
+        {/* One statement per fact. When the stream state is `closed`, the notice in the header has
+            already named the fault AND offered the two actions; repeating the raw server message
+            underneath ("no such session") says the same thing a second time in a second voice, which
+            reads as a stack trace rather than a state. That duplication is visible in
+            `s5-closed-1480.png` and was found by inspecting it. The raw error is still shown for
+            every other failure, where the notice does NOT have the words for it. */}
+        {p.error && state !== "failed" && p.conn.kind !== "closed" && (
           <p className="dock-error" role="alert"><Alert size={13} /> {p.error}</p>
         )}
       </div>
@@ -191,7 +221,7 @@ export function AssistantDock(p: DockProps) {
       )}
       <Composer
         variant="dock"
-        disabled={!canSend}
+        blockedReason={decision.canSend ? null : decision.reason}
         busy={state === "streaming"}
         onSend={(text, mine = []) => p.onSend(text, [...p.attachments, ...mine])}
         onStop={p.onStop}

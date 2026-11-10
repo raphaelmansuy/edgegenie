@@ -2159,7 +2159,11 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
   background: var(--surface); }
 
 .dock-head {
-  display: flex; align-items: center; gap: 6px; height: 40px; flex: none;
+  /* `min-height`, not `height`. A fixed 40 px row could not hold a state word AND its action, so the
+     notice overflowed the header vertically when the session closed — measured at 66 px in a 40 px
+     box, starting 14 px above the header's own top edge, which is what made a header chip look like a
+     floating toast. The header grows by the few pixels the notice needs and stays one row. */
+  display: flex; align-items: center; gap: 6px; min-height: 40px; flex: none;
   padding: 0 6px 0 12px; border-bottom: 1px solid var(--line); background: var(--surface);
   min-width: 0;
 }
@@ -3227,3 +3231,96 @@ h2.rail-group { margin: 0; text-transform: none; }
 .mission-picker select { appearance: none; -webkit-appearance: none; }
 .mission-picker > .icon { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--ink-3); }
 .dock-state.tone-archived { color: var(--ink-3); }
+
+/* ================================================================================================
+   A composer that cannot be written into — and says so  (specs/012 [FX-2] [FX-3])
+
+   `disabled` used to do this job, and it removed the field from the tab order and the accessibility
+   tree: the user could not focus the one place they were meant to type, which was the reported
+   defect. The box is now `readOnly`, so it stays reachable, and the difference is STATED rather than
+   withheld.
+
+   The visual contract, in priority order: it must be obvious at a glance that the box is closed, it
+   must still look like a text field (so its content is readable and selectable), and the focus ring
+   must still appear when it is focused — a blocked field a keyboard user cannot see is the same
+   failure with a nicer colour.
+   ================================================================================================ */
+.composer-box.is-blocked {
+  border-style: dashed;
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+  box-shadow: none;
+}
+.composer-box.is-blocked:focus-within {
+  border-color: var(--ink-3);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink-3) 12%, transparent);
+}
+.composer-box.is-blocked textarea { color: var(--ink-2); cursor: default; }
+.composer-box.is-blocked textarea::placeholder { color: var(--ink-2); opacity: 1; font-style: normal; }
+/* The reason is said ONCE.
+ *
+ * It is visible in the placeholder (where a sighted user already looks, and where it replaces the
+ * invitation), and this element carries the same sentence to assistive technology through
+ * `aria-describedby`. Rendering it visibly as well produced the sentence twice — a picture of that
+ * is what caught it — so this copy is for the accessibility tree only. One statement, two audiences,
+ * which is exactly what `aria-describedby` is for. */
+.composer-blocked-reason {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+/* The action row of a blocked composer recedes: the box is still usable as a place to read and
+   select text, but nothing in it invites a press. */
+.composer-box.is-blocked .composer-actions .btn.primary { opacity: 0.55; }
+
+/* ================================================================================================
+   The stream notice: state word + its action, one group  (specs/012 [ST-4] [ST-5] [ST-7])
+
+   It replaces a passive `.pill`. The old pill said "reconnecting…" and offered nothing, while every
+   control that could have helped was disabled by the same flag — a dead end dressed as a transition.
+   ================================================================================================ */
+/* A box, not a chip: in the dock body it holds a word, an action group and a sentence, and a pill
+   shape cannot. `align-self: stretch` so it lines up with the turns above and below it. */
+.stream-notice {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px;
+  padding: 7px 9px 7px 10px; border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 620; line-height: 1.5;
+  border: 1px solid transparent; flex: none;
+}
+.stream-notice.is-reconnecting { background: var(--yellow-100); color: var(--yellow-800); border-color: var(--yellow-300); }
+.stream-notice.is-closed { background: var(--pink-100); color: var(--pink-700); border-color: var(--pink-300); }
+.stream-notice.is-connecting { background: var(--surface-3); color: var(--ink-2); }
+.stream-notice-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.stream-notice.is-reconnecting .stream-notice-dot { animation: pulse 1.4s ease-in-out infinite; }
+.stream-notice-word { white-space: nowrap; }
+.stream-notice-actions { display: inline-flex; align-items: center; gap: 4px; }
+/* A button inside a tinted chip has to lose the chip's tint, or it reads as part of the label. */
+.stream-notice .btn.sm { min-height: 22px; padding: 0 8px; font-size: 11px; border-radius: var(--radius-xs, 6px); }
+.stream-notice .btn.sm.ghost { color: inherit; border-color: currentColor; background: transparent; }
+.stream-notice .btn.sm.primary { background: var(--ink); border-color: var(--ink); color: var(--on-accent); }
+.stream-notice-detail {
+  flex-basis: 100%; margin: 0; font-weight: 400; font-size: 11.5px; line-height: 1.5;
+  color: var(--ink-2); display: flex; align-items: flex-start; gap: 5px;
+}
+/* In the dock header the notice must not push the context label aside: compact drops the sentence and
+   keeps the word and the action, which is the half that can change anything.
+ *
+ * MEASURED: it must also be ONE LINE. `.dock-head` is a fixed-height 40 px flex row, and the first
+ * version let the chip wrap to 66 px — it then overflowed the header VERTICALLY (y=38 for a header
+ * starting at y=52) and drew over the panel above it, which is what made it read as a floating toast
+ * rather than part of the header. Nothing about the markup was wrong; the box simply could not fit.
+ * `nowrap` here and `align-self: center` below are the fix. */
+.stream-notice.is-compact {
+  flex: 0 1 auto; min-width: 0; flex-wrap: nowrap; align-self: center;
+  white-space: nowrap; overflow: hidden;
+}
+.stream-notice.is-compact .stream-notice-detail { display: none; }
+/* The action keeps its size while the word may be truncated: a chip that hides its own button on a
+   narrow dock is a chip that has lost the only useful half. */
+.stream-notice.is-compact .stream-notice-actions { flex: none; }
+.stream-notice.is-compact .stream-notice-word { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* The actions are NEVER hidden to make room. ST-4/ST-5 say the action lives beside the word, and
+   dropping "Retry" in the narrow dock would leave the one state that needs an action without one —
+   the defect this whole spec is about, reintroduced for layout reasons. The header grows instead
+   (its `height` is now a `min-height`). */
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
