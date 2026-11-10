@@ -366,6 +366,8 @@ computed.
 
 | Id | Roadblock | Can we fix it? | Cost if ignored |
 |---|---|---|---|
+| `[RB-10]` | **`postgres` cannot run as the user at all** | **yes** — the app's own service principal, and say so | a 403 no sign-in can fix |
+| `[RB-11]` | the Postgres username is on a **role**, and a credential is bound to its **minter** | **yes** — read the role; mint per identity | an empty username, or a misleading refusal |
 | `[RB-6]` | the old API answers with the old shape | **yes** — rewrite, assert the vocabulary | wrong output that looks right |
 | `[RB-9]` | two artefacts, one ships | **yes** — delete + assert uniqueness | a fix that reaches nobody |
 | `[RB-5]` | the fence cannot be shared code | **yes** — share values, parity table | a false claim in a docstring |
@@ -379,3 +381,7 @@ computed.
 The last row is the only true roadblock, and it is the product behaving correctly: **Unity Catalog and
 Lakebase permissions are the boundary, and an app that could bypass them would be a security defect.**
 Everything above it has a way past, and each one names what it leaves behind.
+
+`[RB-10]` and `[RB-11]` were added **after** the first deployment, because no amount of reading the code
+had revealed them. Both are recorded with the probe output that established them, in
+[12 Outcome](12-outcome.md).

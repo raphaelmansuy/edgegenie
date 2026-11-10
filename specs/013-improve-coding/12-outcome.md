@@ -93,22 +93,87 @@ wrong reason is worse than no test.
 
 ## Three things the DEPLOYMENT found that nothing else did
 
-The spec's `[RB-2]` predicted the first of these. The other two only exist once a real browser session
-and a real `make deploy` are in the loop.
+The spec's `[RB-2]` predicted the first of these. The rest only exist once a real browser session, a
+real `make deploy` and a real Postgres connection are in the loop.
 
 | # | What the deployed app showed | Root cause | Fix |
 |---|---|---|---|
-| 1 | `make verify` failed: **`missing scopes: postgres, apps`** | `make deploy` was `provision sync deploy-only verify`, and `deploy-only` only shipped code — it never ran the `apps update` that sends `user_api_scopes`. The body builder lived in `deploy.sh`, which nothing called. The deploy shipped commit `f6a96c5` while the app still held the *previous* scope list | `deploy` now calls `scripts/deploy.sh`, the one ordered path. A second implementation of the same thing is how the two diverged |
-| 2 | The Data pane drew the **same "sign-in needs refreshing" box twice** — once per failed call | projects and apps are two calls that fail for one reason (one missing scope), and `DataTree` rendered one `PaneError` per call | `errorBoxes` collapses identical messages, keeps distinct ones. `[UI-6]`'s one-statement-per-fact rule, which `[012]` applied to the dock |
-| 3 | The message said **"clear this site's cookies"**, and did not name the permission | the front end discarded the scope name that `ScopeMissing` carries, and offered a prose remedy | it names the scope, and offers a **"Sign in again"** link to `/.auth/logout` — measured to redirect straight into a fresh OAuth authorize with `approval_prompt=consent`. Retry is withheld: a stale token cannot be retried away |
+| 1 | `make verify` failed: **`missing scopes: postgres, apps`** | `make deploy` was `provision sync deploy-only verify`, and `deploy-only` only shipped code — it never ran the `apps update` that sends `user_api_scopes`. The body builder lived in `deploy.sh`, which nothing called | `deploy` now calls `scripts/deploy.sh`, the one ordered path |
+| 2 | The Data pane drew the **same "sign-in needs refreshing" box twice** | projects and apps are two calls that fail for one reason, and `DataTree` rendered one `PaneError` per call | `errorBoxes` collapses identical messages, keeps distinct ones |
+| 3 | The message said **"clear this site's cookies"** and did not name the permission | the front end discarded the scope name `ScopeMissing` carries, and offered a prose remedy | it names the scope and points at the app's owner — see `[RB-10]`, which then removed the action entirely |
 
-Each is mutation-tested: reverting the fix fails a named test (`names the scope the server reported`,
-`shows ONE box when two calls fail for the same reason`).
+## `[RB-10]` · `postgres` cannot be an on-behalf-of-user scope, at all
 
-**Why these matter more than the code-size suggests.** All three are the *same* failure this spec is
-about, arriving from a direction the tests could not reach: a check that cannot see a failure. The
-Makefile never saw that it was not configuring the app; the pane never saw that it was saying one thing
-twice; the message never saw that it knew the answer and threw it away.
+**The strongest constraint in this spec, and the one I got wrong first.**
+
+The deployed app showed a 403 on `/api/lakebase/projects` and `/api/apps`. The scopes were granted, the
+upstream APIs answered 200 to the same identity, and the app offered a "Sign in again" button. The user
+pressed it. It did nothing — and it could never have done anything, because Databricks' own platform
+guide says:
+
+> `postgres` — Lakebase (**always bound to the SP, not OBO**; see below)
+>
+> `secret`, Lakebase (`database` / `postgres`), and MLflow (`experiment`) resources are **always** bound
+> to the service principal and **cannot run OBO**, even under `--auth-mode obo`.
+> — *databricks-agent-skills*, `skills/databricks-apps/references/platform-guide.md`
+
+So declaring the scope puts it in the app's `effective_user_api_scopes` and **never** in the forwarded
+user token. `_user_token` returns the forwarded token, so every Lakebase call was unauthorizable by
+design, and no number of sign-ins could change it. My "Sign in again" button was a dead end I built
+myself — the exact defect class this spec exists to remove.
+
+**The fix, and what it costs.** The two infrastructure read paths now authenticate as the **app's own
+service principal** (`adapters/databricks/sp_token.py`, an `oauth-m2m` token built from the
+`DATABRICKS_CLIENT_ID`/`SECRET` a Databricks App injects). That is the same mechanism
+`adapters/llm/store/lakebase.py` has always used, which is why the model registry worked while this page
+did not.
+
+The consequence, stated rather than hidden: **these two panes show what the app may see, not what the
+viewer may see.** That is the right model for a management surface — the app's SP owns the infrastructure
+it created — but it is a different promise from the rest of the product, where Unity Catalog decides per
+user. `[RB-1]` still governs what the *agent* may touch; this is the page reading what already exists.
+
+## `[RB-11]` · The Postgres username is on a ROLE, and a credential is bound to its minter
+
+Two facts, each of which produced a `403`/auth failure that looked like a permissions problem.
+
+**1. `postgres_role` is not a field on an endpoint.** `tables()` built the username from
+`endpoint.status.postgres_role`. Measured against a live endpoint, `status` has
+`autoscaling_limit_max_cu, autoscaling_limit_min_cu, current_state, disabled, endpoint_id,
+endpoint_type, group, hosts, last_active_time, settings, suspend_timeout_duration` — and no
+`postgres_role`. So `user` was always `""`. The username lives on a **role object**, at
+`role.status.postgres_role`.
+
+**2. A Lakebase credential may only be used by the identity that minted it.** Decode `sub` from the
+credential JWT and it is the user or service principal behind the token. Connecting with
+`user=<someone else>` fails with `OAuth: User is not authorized` *even when that identity owns a
+Postgres role*. My first probe minted one credential as the human and then tried to connect twice — as
+the SP and as the human — and reported the SP as unauthorised. **The failure was in the probe, not the
+product.** That is worth recording because it is the shape of most "it must be permissions" conclusions.
+
+The corrected probe, run as an in-workspace job against the real database, reports six passes:
+
+```
+PASS the endpoint has a host
+PASS the endpoint's status has NO postgres_role (reading it gave an empty user)
+PASS the branch lists the identities that may connect —
+     ad7545de-… (coding-agent-sp), raphael.mansuy@gmail.com (raphael-mansuy)
+PASS the credential is bound to the minting identity — sub=raphael.mansuy@gmail.com
+PASS connected and read information_schema as raphael.mansuy@gmail.com —
+     current_user=raphael.mansuy@gmail.com; [('agent', 2), ('information_schema', 4), ('llm', 9), ('pg_catalog', 64)]
+PASS this identity has a Postgres role on the branch
+```
+
+`scripts/lakebase_read_probe.notebook` is that probe, kept in the repository because a laptop genuinely
+cannot run it: the endpoint is a private-link ingress, so port 5432 times out from here (measured, and
+already documented by `env.sh`'s `DEPLOY_LAKEBASE_DIRECT="no"`).
+
+**Why these matter more than the code size suggests.** All of them are the *same* failure this spec is
+about, arriving from a direction the tests could not reach: **a check that cannot see a failure.** The
+Makefile never saw that it was not configuring the app. The pane never saw that it was saying one thing
+twice. The message never saw that it knew the answer and threw it away. And my probe never saw that it
+was testing an identity combination the platform forbids — it reported `PERMISSION_DENIED` for a
+symptom three layers away from the cause.
 
 ## Verification
 
@@ -118,7 +183,8 @@ twice; the message never saw that it knew the answer and threw it away.
 | `vitest` (front end) | **741 passed, 0 failed** (was 655) |
 | `tsc -b --noEmit` | clean |
 | `make check` | all green |
-| `make deploy ENV=dev` | **DEPLOYED AND CURRENT** — commit `7972cd1`, `SUCCEEDED`, `RUNNING`, 11/11 scopes effective |
+| `make deploy ENV=dev` | **DEPLOYED AND CURRENT** — `SUCCEEDED`, `RUNNING`, 11/11 scopes effective |
+| In-workspace Postgres probe | **6/6 checks**, including a real `information_schema` read |
 | `lakebase-e2e.mjs` | **8/8 scenes**, 41 checks, screenshots in [`e2e/screenshots/`](e2e/screenshots/README.md) |
 | `verify-spec-ascii.mjs` | **0 problems** across 22 boxes |
 | `verify-spec-mermaid.mjs` | **8 diagrams, 0 failing** |
