@@ -60,7 +60,19 @@ class ServicePrincipalToken:
         if self._client is None:
             from databricks.sdk import WorkspaceClient
 
-            self._client = WorkspaceClient()
+            # NAME the identity instead of letting the SDK's default auth chain choose one. The chain
+            # tries a PAT (DATABRICKS_TOKEN) before oauth-m2m, so a container that happens to define
+            # DATABRICKS_TOKEN would silently authenticate as a person here — the same class of
+            # implicit-identity bug this module exists to remove. A Databricks App injects
+            # DATABRICKS_CLIENT_ID and DATABRICKS_CLIENT_SECRET; when both are present, use them.
+            client_id = os.environ.get("DATABRICKS_CLIENT_ID", "")
+            client_secret = os.environ.get("DATABRICKS_CLIENT_SECRET", "")
+            host = os.environ.get("DATABRICKS_HOST", "")
+            if client_id and client_secret:
+                self._client = WorkspaceClient(host=host or None, client_id=client_id,
+                                               client_secret=client_secret, auth_type="oauth-m2m")
+            else:
+                self._client = WorkspaceClient()
         return self._client
 
     def get(self) -> str:
@@ -68,6 +80,13 @@ class ServicePrincipalToken:
         with self._lock:
             if self._token and self._clock() - self._at < REFRESH_EARLY_SECONDS:
                 return self._token
+            if not self.available():
+                # Fail loudly rather than minting whatever the SDK's chain finds. A personal token
+                # here would make the panes show one person's projects while claiming to show the
+                # app's, which is a worse failure than an honest refusal (spec 013 [RB-10]).
+                raise RuntimeError(
+                    "this process has no service principal (DATABRICKS_CLIENT_ID is unset); the "
+                    "Lakebase and Apps panes need the app's own identity, not a user's")
             client = self._workspace()
             auth = getattr(client.config, "authenticate", None)
             if auth is None:                       # pragma: no cover - SDK shape guard

@@ -67,10 +67,46 @@ def test_a_token_is_refreshed_before_it_expires():
     assert source.get() == "tok-2"
 
 
-def test_no_identity_is_reported_rather_than_guessed():
-    """Outside a Databricks App there is no client id, so the caller must know before it calls."""
+def test_no_identity_is_refused_rather_than_borrowed_from_the_sdk_chain(monkeypatch):
+    """Outside a Databricks App there is no client id, and `get()` must say so.
+
+    It used to call `WorkspaceClient()` anyway, whose default auth chain tries a PAT before
+    oauth-m2m — so a container that happened to define DATABRICKS_TOKEN would authenticate as a
+    person while the panes claimed to show the app's objects. A refusal is the honest answer."""
+    monkeypatch.delenv("DATABRICKS_CLIENT_ID", raising=False)
+    monkeypatch.delenv("DATABRICKS_CLIENT_SECRET", raising=False)
     source = ServicePrincipalToken()
-    assert source.available() is (bool(__import__("os").environ.get("DATABRICKS_CLIENT_ID")))
+    assert source.available() is False
+    with pytest.raises(RuntimeError, match="no service principal"):
+        source.get()
+
+
+def test_the_service_principal_is_named_not_inferred(monkeypatch):
+    """With both credentials present the client is built for oauth-m2m specifically.
+
+    The constructor is intercepted rather than called: a real `WorkspaceClient` reaches the network,
+    and this test is about which arguments we pass, not about the SDK working.
+    """
+    import databricks.sdk
+
+    captured: dict = {}
+
+    class Spy:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.config = type("C", (), {"authenticate": lambda self: {"Authorization": "Bearer x"}})()
+
+    monkeypatch.setattr(databricks.sdk, "WorkspaceClient", Spy)
+    monkeypatch.setenv("DATABRICKS_CLIENT_ID", "abc-123")
+    monkeypatch.setenv("DATABRICKS_CLIENT_SECRET", "shh")
+    monkeypatch.setenv("DATABRICKS_HOST", "https://h.cloud.databricks.com")
+
+    source = ServicePrincipalToken()
+    assert source.available() is True
+    assert source.get() == "x"
+    assert captured["auth_type"] == "oauth-m2m", "the identity must be NAMED, not inferred"
+    assert captured["client_id"] == "abc-123"
+    assert captured["client_secret"] == "shh"
 
 
 def test_the_provider_returns_none_instead_of_raising():
