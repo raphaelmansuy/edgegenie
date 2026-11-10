@@ -132,6 +132,23 @@ if [ -n "$TOKEN" ]; then
     ok '/api/sessions/{id}/events exists'
   fi
 
+  # -- 2b. the two object types spec 013 added (a fingerprint, not a health check) -----------------
+  # The routes exist ONLY in this work, so a 404 or the SPA's HTML means the backend is older than the
+  # checkout. A 200 with `items`, or a 403/502 carrying a sentence, both mean the route is registered:
+  # a denial is a real answer and the pages render it (spec 013 [E-1], [RB-2]).
+  for route in /api/lakebase/projects /api/apps; do
+    body=$(curl -s --max-time 30 "$URL$route" "${H[@]}")
+    if printf '%s' "$body" | grep -q '<!doctype html'; then
+      bad "$route fell through to the front end — the backend is OLDER than this checkout"
+    elif printf '%s' "$body" | grep -q '"items"'; then
+      ok "$route is served and lists objects"
+    elif printf '%s' "$body" | grep -qE '"detail"'; then
+      ok "$route is served and answered with a reason: $(printf '%s' "$body" | head -c 90)"
+    else
+      bad "$route gave an unexpected answer: ${body:0:120}"
+    fi
+  done
+
   # -- 3. the catalogue carries the vision fact ---------------------------------------------------
   models=$(curl -s --max-time 30 "$URL/api/llm/models" "${H[@]}")
   printf '%s' "$models" | python3 -c '

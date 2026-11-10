@@ -11,7 +11,7 @@
  * layout system: `columns()` still produces the only grid string, and the same clamps apply.
  */
 
-export type RailTab = "sessions" | "files" | "catalog";
+export type RailTab = "sessions" | "files" | "catalog" | "data";
 export type Mode = "wide" | "mid" | "narrow";
 export type Zone = "rail" | "inspector" | "assistant";
 
@@ -83,7 +83,7 @@ export const MAX_SHARE = 0.4;
 export const KEY_STEP = 8;
 export const KEY_STEP_COARSE = 64;
 
-export const RAIL_TABS: readonly RailTab[] = ["sessions", "files", "catalog"];
+export const RAIL_TABS: readonly RailTab[] = ["sessions", "files", "catalog", "data"];
 
 export const DEFAULTS: Layout = {
   railWidth: RAIL_DEFAULT,

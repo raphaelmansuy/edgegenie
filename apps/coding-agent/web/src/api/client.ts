@@ -61,6 +61,19 @@ export interface SaveCredentialResult {
 }
 
 import { errorText } from "../domain/apierror";
+import type { AppHealth, AppView } from "../domain/app";
+import type { LakebasePageData } from "../domain/lakebase";
+
+/** A Lakebase project's ref contains slashes; each segment is encoded and the slashes are kept, which
+ *  is how the server's `{ref:path}` route reads it. */
+const encodePath = (ref: string) =>
+  ref.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+
+export interface LakebaseProject {
+  ref: string; name: string; displayName: string; state: string; stateRaw: string; ready: boolean;
+}
+export interface LakebaseBranch { ref: string; name: string; isDefault: boolean; state: string; project?: string }
+export type { LakebasePageData, AppView, AppHealth };
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, init);
@@ -229,4 +242,23 @@ export const api = {
   setModel: (id: string, model: string) =>
     call<{ current: string; available: string[]; restartRequired?: boolean }>(
       `/api/sessions/${id}/model`, { method: "POST", headers: json, body: JSON.stringify({ model }) }),
+
+  // -- Lakebase and Databricks Apps (spec 013) ------------------------------------------------
+  // One call per object: a project page asks for the whole page and receives four independent
+  // blocks, any of which may be `{error}` instead of data ([UI-3], [E-11]).
+  lakebaseProjects: () => call<{ items: LakebaseProject[] }>("/api/lakebase/projects"),
+  lakebaseProject: (ref: string, branch = "production") =>
+    call<LakebasePageData>(`/api/lakebase/projects/${encodePath(ref)}?branch=${encodeURIComponent(branch)}`),
+  lakebaseBranches: (ref: string) =>
+    call<{ items: LakebaseBranch[] }>(`/api/lakebase/projects/${encodePath(ref)}/branches`),
+  lakebaseTables: (ref: string, branch: string, database: string, schema: string) =>
+    call<{ schema: string; tables: string[]; truncated: boolean }>(
+      `/api/lakebase/projects/${encodePath(ref)}/tables?branch=${encodeURIComponent(branch)}`
+      + `&database=${encodeURIComponent(database)}&schema=${encodeURIComponent(schema)}`),
+  refreshLakebase: (ref: string) =>
+    call<{ refreshed: boolean }>(`/api/lakebase/projects/${encodePath(ref)}/refresh`, { method: "POST" }),
+  apps: (lakebase = "") => call<{ items: AppView[] }>(`/api/apps${lakebase ? `?lakebase=${encodeURIComponent(lakebase)}` : ""}`),
+  app: (name: string, health = true) => call<AppView>(`/api/apps/${encodeURIComponent(name)}?health=${health}`),
+  appHealth: (name: string, fresh = false) =>
+    call<AppHealth>(`/api/apps/${encodeURIComponent(name)}/health?fresh=${fresh}`),
 };

@@ -29,6 +29,9 @@ import { SessionList } from "./components/SessionList";
 import { AccountMenu } from "./components/AccountMenu";
 import { ShortcutSheet } from "./components/ShortcutSheet";
 import { CatalogTree } from "./components/CatalogTree";
+import { DataTree } from "./components/DataTree";
+import { AppPage } from "./components/AppPage";
+import { LakebasePage } from "./components/LakebasePage";
 import { FilesPane } from "./components/FilesPane";
 import { Composer } from "./components/Composer";
 import { OpenDoc, WorkspaceLinks } from "./components/DocContext";
@@ -46,7 +49,8 @@ import {
 } from "./components/Icons";
 import { ALL_FOUR_MIN, bounds, columns, DOCK_FOCUS_MIN, drawerWidth, modeFor, takesColumn, type RailTab } from "./domain/layout";
 import {
-  ACTIONS, asAttachment, docForNode, makeDoc, tablesWritten, touched, type Action, type Doc,
+  ACTIONS, ACTIONS_FOR, asAttachment, canAttach, docForNode, makeDoc, tablesWritten, touched,
+  type Action, type Doc, type DocKind,
 } from "./domain/docs";
 import { focusFor, NO_FOCUS, sameFocus, withCell, withoutDoc, type Focus } from "./domain/focus";
 import { canDecide, canSend } from "./domain/compose";
@@ -63,7 +67,16 @@ import { copyText } from "./domain/clipboard";
 import { readWorkingSet, saveWorkingSet } from "./domain/workingset";
 import { afterClose, docTabId, moveTab } from "./domain/tabs";
 
-type Rail = "sessions" | "files" | "catalog";
+type Rail = "sessions" | "files" | "catalog" | "data";
+/** One label per rail tab, so the strip, the palette and the tests cannot disagree ([UI-2]). */
+const RAIL_LABEL: Record<Rail, string> = {
+  sessions: "Sessions", files: "Files", catalog: "Catalog", data: "Data",
+};
+/** The palette's group for each kind of open document. One map, so a new kind cannot be filed under
+ *  the wrong heading (spec 013 [UI-5]). */
+const KIND_GROUP: Record<DocKind, string> = {
+  notebook: "Files", file: "Files", table: "Tables", lakebase: "Lakebase", app: "Apps",
+};
 const CHAT = "chat";
 
 const dedupe = (items: Attachment[]) => {
@@ -265,8 +278,7 @@ export function App() {
     setDocs((cur) => (cur.some((d) => d.id === doc.id) ? cur : [...cur, doc]));
     // What the home screen offers as "pick up where you left off". A table is not a path in the
     // workspace, so it is remembered under its own kind.
-    setRecent(rememberDoc({ path: doc.ref, name: doc.name || nameOf(doc.kind, doc.ref), kind: doc.kind }));
-    setView(doc.id);
+    setRecent(rememberDoc({ path: doc.ref, name: doc.name || nameOf(doc.kind, doc.ref), kind: doc.kind }));    setView(doc.id);
     // Opening a document IS the binding (006 FX-1): the dock is now about it, and its cell is cleared.
     setFocus(focusFor(doc));
     dismissRailDrawer();
@@ -428,9 +440,13 @@ export function App() {
 
   const ask = (action: Action, doc: Doc) => {
     if (!dockOnScreen) reveal();
+    // A project or an app is not attachable content; asking about one sends the prompt alone, and the
+    // dock's binding still names it (spec 013 [UI-5]).
+    const attachment = asAttachment(doc);
+    const carry = attachment ? [attachment] : [];
     void (async () => {
-      if (!active) await start(ACTIONS[action].prompt, [asAttachment(doc)]);
-      else await message(ACTIONS[action].prompt, [asAttachment(doc)]);
+      if (!active) await start(ACTIONS[action].prompt, carry);
+      else await message(ACTIONS[action].prompt, carry);
     })();
   };
 
@@ -561,9 +577,9 @@ export function App() {
       toggleDock, display("mod+j"), 2);
     add("act:reset", "Reset layout", "Actions", resetAll, "panels, widths and tab", 1);
     add("act:refresh", "Refresh sessions and models", "Actions", () => void refresh());
-    for (const r of ["sessions", "files", "catalog"] as Rail[]) {
-      const key = r === "sessions" ? "mod+1" : r === "files" ? "mod+2" : "mod+3";
-      add(`rail:${r}`, `${r[0].toUpperCase()}${r.slice(1)} panel`, "Panels",
+    for (const r of ["sessions", "files", "catalog", "data"] as Rail[]) {
+      const key = r === "sessions" ? "mod+1" : r === "files" ? "mod+2" : r === "catalog" ? "mod+3" : "mod+4";
+      add(`rail:${r}`, `${RAIL_LABEL[r]} panel`, "Panels",
         () => setRailAndOpen(r), display(key), 2);
     }
     add("panel:rail", railShown ? "Hide the left panel" : "Show the left panel", "Panels",
@@ -578,15 +594,18 @@ export function App() {
     const bound = focus.doc;
     if (bound) {
       const doc = docs.find((d) => d.id === focus.docId) ?? makeDoc(bound.kind, bound.ref);
-      add("act:attach", `Add ${bound.name} to the message`, "Actions",
-        () => addContext(asAttachment(doc)), undefined, 2);
-      for (const a of ["explain", "fix", "document", "optimize"] as Action[]) {
-        if (!(ACTIONS[a] && doc)) continue;
+      // "Add to the message" only when the server can re-read it: a project and an app are not
+      // attachable content (spec 013 [UI-5]).
+      if (canAttach(doc.kind)) {
+        add("act:attach", `Add ${bound.name} to the message`, "Actions",
+          () => { const a = asAttachment(doc); if (a) addContext(a); }, undefined, 2);
+      }
+      for (const a of ACTIONS_FOR[doc.kind]) {
         add(`act:${a}:${doc.id}`, `${ACTIONS[a].label} ${bound.name}`, "Actions", () => ask(a, doc), a, 3);
       }
     }
     for (const d of docs) {
-      add(`doc:${d.id}`, d.name, d.kind === "table" ? "Tables" : "Files", () => selectTab(d.id), d.ref, 1);
+      add(`doc:${d.id}`, d.name, KIND_GROUP[d.kind], () => selectTab(d.id), d.ref, 1);
     }
     for (const s of sessions.slice(0, 40)) {
       const title = s.title === "New session" ? s.id.slice(0, 8) : s.title;
@@ -646,6 +665,7 @@ export function App() {
       railSessions: go("sessions"),
       railFiles: go("files"),
       railCatalog: go("catalog"),
+      railData: go("data"),
       cycleTheme: theme.cycle,
       toggleRail: () => openRail(!railDrawn),
       /* ONE implementation, shared with the toolbar button and the palette: a chord that sets the
@@ -740,7 +760,7 @@ export function App() {
   const viewerActions = useMemo(() => ({
     onDirtyChange: documentDirty,
     onAsk: ask,
-    onAttach: (d: Doc) => addContext(asAttachment(d)),
+    onAttach: (d: Doc) => { const a = asAttachment(d); if (a) addContext(a); },
     onAskCell: (d: Doc, cell: number) => focusCell(d, cell),
     onPromptCell: promptCell,
     onCopyLink: (d: Doc, cell?: number) =>
@@ -782,12 +802,12 @@ export function App() {
           onResize={(px) => setWidth("rail", px)} onReset={() => resetOne("rail")} />
       )}
       <div className="rail-tabs" role="tablist" aria-label="Navigator">
-        {(["sessions", "files", "catalog"] as RailTab[]).map((r) => (
+        {(["sessions", "files", "catalog", "data"] as RailTab[]).map((r) => (
           <button key={r} id={`rail-tab-${r}`} className="rail-tab" role="tab" aria-selected={rail === r}
             aria-controls={`rail-panel-${r}`} tabIndex={rail === r ? 0 : -1}
             onClick={() => setRail(r)}
             onKeyDown={(e) => {
-              const order = ["sessions", "files", "catalog"] as RailTab[];
+              const order = ["sessions", "files", "catalog", "data"] as RailTab[];
               const at = order.indexOf(rail);
               if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
                 e.preventDefault();
@@ -796,7 +816,7 @@ export function App() {
                 requestAnimationFrame(() => document.getElementById(`rail-tab-${next}`)?.focus());
               }
             }}>
-            {r === "sessions" ? "Sessions" : r === "files" ? "Files" : "Catalog"}
+            {RAIL_LABEL[r]}
           </button>
         ))}
       </div>
@@ -820,6 +840,11 @@ export function App() {
         {rail === "catalog" && (
           <div className="rail-tree">
             <CatalogTree selected={selectedRef} onAttach={addContext} onOpenTable={(ref) => openDoc(makeDoc("table", ref))} />
+          </div>
+        )}
+        {rail === "data" && (
+          <div className="rail-tree">
+            <DataTree selected={viewDoc?.id ?? null} onOpen={openDoc} />
           </div>
         )}
       </div>
@@ -981,7 +1006,12 @@ export function App() {
               {viewDoc ? (
                 viewDoc.kind === "table"
                   ? <TableViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
-                  : <NotebookViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
+                  : viewDoc.kind === "lakebase"
+                    ? <LakebasePage key={viewDoc.id} doc={viewDoc} workspace={workspace} />
+                    : viewDoc.kind === "app"
+                      ? <AppPage key={viewDoc.id} doc={viewDoc} workspace={workspace}
+                          onAsk={(prompt) => void start(prompt, [])} />
+                      : <NotebookViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
               ) : active ? (
                 <MissionScreen key={active} session={session} conn={conn} dockVisible={dockOnScreen} error={error}
                   onOpen={openDoc} onConversation={() => { reveal(); requestAnimationFrame(() => dockComposer.current?.focus()); }}

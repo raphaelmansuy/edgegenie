@@ -59,6 +59,10 @@ class SubprocessToolRegistry:
             "NBMCP_WRITE_PATHS": folder.rstrip("/") + "/",
             "NBMCP_WRITE_JOB_PREFIX": f"agent_{session_id[:8]}_",
             "NBMCP_WRITE_INSTANCE_PREFIX": f"agent-{session_id[:8]}-",
+            # The app prefix is passed separately even though it currently equals the instance one:
+            # a fence that works only because two strings happen to match is not a fence
+            # (spec 013 [F3], [AP-2], [E-6]).
+            "NBMCP_WRITE_APP_PREFIX": f"agent-{session_id[:8]}-",
             "NBMCP_SKILLS_DIR": str(self._server.parent / "skills"),
             # Where the server reads the user's current token; never the agent's working folder.
             **({"NBMCP_TOKEN_FILE": token_file} if token_file else {}),

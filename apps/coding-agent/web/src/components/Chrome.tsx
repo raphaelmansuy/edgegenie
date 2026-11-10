@@ -7,7 +7,7 @@ import { ModelPicker } from "./ModelPicker";
 import { FolderPicker } from "./FolderPicker";
 import { LogoMark } from "./Logo";
 import { ModelFacts } from "./ModelFacts";
-import { ArrowUpRight, Bug, ChevronRight, Clock, Database, FileIcon, ListIcon, Notebook, Search, Sparkle, Table } from "./Icons";
+import { ArrowUpRight, Bug, ChevronRight, Clock, Database, FileIcon, ListIcon, Monitor, Notebook, Search, Sparkle, Table } from "./Icons";
 
 export function ApprovalSheet({ approval, sessionId, onDecided }: {
   approval: Approval; sessionId: string; onDecided: () => void;
@@ -173,7 +173,9 @@ const CARDS = [
     scenario: "slow",
     prompt: "Create a job that recomputes daily revenue at 06:00 after a dependency task, run it once, and prove the run succeeded." },
   { icon: Database, fg: "var(--teal-700)", bg: "var(--teal-100)", t: "Lakebase and an app", d: "Postgres, then a small web page",
-    scenario: "notebook",
+    // The card's own scenario, so the demo shows the seven-step scaffold it promises (spec 013
+    // [SCF-3]). It said "notebook" until the S6 screenshot showed the card building a taxi notebook.
+    scenario: "lakebase",
     prompt: "Create a Lakebase database with one table and a small app that reads it. Show me the connection details." },
   { icon: ListIcon, fg: "var(--purple-700)", bg: "var(--purple-100)", t: "Document tables", d: "Comments grounded in real values",
     scenario: "injection",
@@ -199,8 +201,8 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
   user?: string;
   /** Notebooks and tables that already exist, so the first screen is a way IN rather than only a way
    *  to start: the most common task is "change something I already have". */
-  recent?: { name: string; path: string; kind: "notebook" | "file" | "table" }[];
-  onOpenRecent?: (path: string, kind: "notebook" | "file" | "table") => void;
+  recent?: { name: string; path: string; kind: "notebook" | "file" | "table" | "lakebase" | "app" }[];
+  onOpenRecent?: (path: string, kind: "notebook" | "file" | "table" | "lakebase" | "app") => void;
   onOpenSearch?: () => void;
   onOpenCatalog?: () => void;
   onAskAssistant?: () => void;
@@ -276,7 +278,7 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
                   <li key={`${r.kind}:${r.path}`}>
                     <button className="home-recent-item" onClick={() => onOpenRecent?.(r.path, r.kind)} title={r.path}>
                       <span className={`home-recent-ico is-${r.kind}`} aria-hidden>
-                        {r.kind === "table" ? <Table size={12} /> : r.kind === "notebook" ? <Notebook size={12} /> : <FileIcon size={12} />}
+                        {r.kind === "table" ? <Table size={12} /> : r.kind === "notebook" ? <Notebook size={12} /> : r.kind === "lakebase" ? <Database size={12} /> : r.kind === "app" ? <Monitor size={12} /> : <FileIcon size={12} />}
                       </span>
                       <span className="home-recent-name">{r.name}</span>
                       <ArrowUpRight size={12} className="home-recent-go" />

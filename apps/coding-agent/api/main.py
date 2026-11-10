@@ -29,6 +29,7 @@ log = logging.getLogger("app.main")
 from .config import Settings
 from .config import settings as load_settings
 from .routers.api import router
+from .routers.infra import router as infra_router
 from .routers.llm import router as llm_router
 from .routers.llm_admin import router as llm_admin_router
 from .routers.internal import router as internal_router
@@ -152,6 +153,19 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
         os.environ.get("DATABRICKS_HOST", ""),
         lambda: os.environ.get("DATABRICKS_TOKEN") or None,
     )
+    # The two object types a coding task builds with (spec 013). Built lazily like the rest: a
+    # session that never mentions Lakebase or an app never reaches the workspace through these.
+    from .adapters.databricks.apps import AppsBrowser
+    from .adapters.databricks.lakebase import LakebaseBrowser
+
+    app.state.lakebase = LakebaseBrowser(
+        os.environ.get("DATABRICKS_HOST", ""),
+        lambda: os.environ.get("DATABRICKS_TOKEN") or None,
+    )
+    app.state.apps = AppsBrowser(
+        os.environ.get("DATABRICKS_HOST", ""),
+        lambda: os.environ.get("DATABRICKS_TOKEN") or None,
+    )
     app.state.dev_token = os.environ.get("APP_DEV_TOKEN") or os.environ.get("DATABRICKS_TOKEN")
 
     # Bytes the user hands us (spec 009). A directory in dev, memory in tests; the port makes a third
@@ -208,6 +222,7 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
     app.include_router(llm_router)
     app.include_router(llm_admin_router)
     app.include_router(internal_router)
+    app.include_router(infra_router)
 
     if WEB_DIST.exists():
         app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")

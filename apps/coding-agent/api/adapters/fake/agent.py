@@ -96,6 +96,12 @@ class ScenarioAgent:
         # Fallback for hand-typed prompts: ordered, most specific first.
         if any(w in text for w in ("document the tables", "inject", "canary", "support ticket")):
             name = "injection"
+        elif any(w in text for w in ("lakebase", "postgres", "a small app that reads",
+                                     "database with one table")):
+            # The product's own card ("Lakebase and an app") must reach the scenario that shows the
+            # seven-step scaffold; without this it fell through to `notebook` and the card promised a
+            # workflow the demo could not show (spec 013 [SCF-3]).
+            name = "lakebase"
         elif any(w in text for w in ("investigate", "why did revenue", "failing job", "find the cause")):
             name = "blocked"
         elif any(w in text for w in ("recompute daily revenue", "create a job")):

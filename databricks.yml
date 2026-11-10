@@ -54,6 +54,15 @@ resources:
         - catalog.catalogs:read
         - catalog.schemas:read
         - catalog.tables:read
+        # Spec 013: the Data tab reads Lakebase projects and Databricks Apps, so the app needs the
+        # scopes those APIs require. Without them every read answers 403 with a sentence the app
+        # reports honestly (ScopeMissing) but cannot fix. Keep this list in step with
+        # apps/coding-agent/scripts/env.sh DEPLOY_REQUIRED_SCOPES: the deploy grants it, the
+        # verification checks it, and they must not drift.
+        - postgres
+        - apps
+        - catalog.schemas:read
+        - catalog.tables:read
       # Secret RESOURCES, never secret values. The JSON key lives in the Databricks secret scope
       # `coding-agent-llm` and is injected at runtime via app.yaml `valueFrom`. `apps update` is a
       # full replacement: sending this list without `user_api_scopes` drops every scope.

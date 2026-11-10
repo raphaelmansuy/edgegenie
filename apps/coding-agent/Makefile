@@ -134,9 +134,17 @@ unit: ## pytest + vitest
 audits: ## Accessibility, overflow and layout shift, against a running app on PORT
 	@printf '\033[1maudits against http://127.0.0.1:$(PORT)\033[0m\n'
 	@cd $(WEB) && \
-	  APP_URL=http://127.0.0.1:$(PORT) node scripts/a11y-audit.mjs 2>&1 | grep TOTAL; \
-	  for w in 1480 1180 900; do APP_URL=http://127.0.0.1:$(PORT) WIDTHS=$$w node scripts/overflow-audit.mjs 2>&1 | grep TOTAL; done; \
-	  APP_URL=http://127.0.0.1:$(PORT) node scripts/cls-audit.mjs 2>&1 | tail -1
+	  fail=0; \
+	  out=$$(APP_URL=http://127.0.0.1:$(PORT) node scripts/a11y-audit.mjs 2>&1); \
+	  code=$$?; echo "$$out" | grep TOTAL || true; \
+	  if [ $$code -ne 0 ]; then printf '\033[31ma11y-audit did not finish\033[0m (exit %s). It needs a real workspace: it searches Files for a notebook.\n' "$$code"; fail=1; fi; \
+	  for w in 1480 1180 900; do \
+	    out=$$(APP_URL=http://127.0.0.1:$(PORT) WIDTHS=$$w node scripts/overflow-audit.mjs 2>&1); \
+	    code=$$?; echo "$$out" | grep TOTAL || true; \
+	    if [ $$code -ne 0 ]; then printf '\033[31moverflow-audit at %spx did not finish\033[0m (exit %s). It needs a real workspace too.\n' "$$w" "$$code"; fail=1; fi; \
+	  done; \
+	  APP_URL=http://127.0.0.1:$(PORT) node scripts/cls-audit.mjs 2>&1 | tail -1; \
+	  if [ $$fail -ne 0 ]; then printf '\033[33mOne or more audits could not run; their results are NOT a pass.\033[0m\n'; fi
 
 vision: ## Prove the model can READ an image (needs dev-real on REAL_PORT)
 	@cd $(WEB) && APP_URL=http://127.0.0.1:$(REAL_PORT) node scripts/vision-e2e.mjs

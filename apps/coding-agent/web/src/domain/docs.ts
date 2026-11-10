@@ -1,7 +1,11 @@
 /** Open documents, quick-action prompts and "which object did this tool touch". Pure, no React. */
 import type { Attachment } from "./events";
+import { projectRef } from "./lakebase";
 
-export type DocKind = "notebook" | "file" | "table";
+/** What can be open in a tab. `lakebase` and `app` are read-only viewers of infrastructure the agent
+ *  built (spec 013 [UI-1]); adding a member here is what makes the compiler point at every place
+ *  that must handle it — the tab icon, the actions map, the palette, the `@` hint. */
+export type DocKind = "notebook" | "file" | "table" | "lakebase" | "app";
 export interface Doc { id: string; kind: DocKind; ref: string; name: string; rev: number }
 
 /** One path, two spellings, one object.
@@ -23,14 +27,46 @@ export function parentOf(path: string): string {
   return parts.length > 1 ? parts[parts.length - 2] : parts[0] ?? "";
 }
 
-export const docId = (kind: DocKind, ref: string) => `${kind}:${canonicalPath(ref)}`;
+export const docId = (kind: DocKind, ref: string, name?: string) =>
+  `${kind}:${keyOf(kind, ref, name)}`;
 
-export function makeDoc(kind: DocKind, ref: string): Doc {
-  const canon = canonicalPath(ref);
-  return { id: docId(kind, canon), kind, ref: canon, name: kind === "table" ? canon.split(".").pop() ?? canon : canon.split("/").pop() ?? canon, rev: 0 };
+/** The identity a kind uses to decide "is this the same object as that one".
+ *
+ *  A project is `projects/pg_tickets` however it is spelled ([LB-5]); an app is its name; a
+ *  workspace object is its canonical path. One function, so `docId` and `makeDoc` cannot disagree. */
+function keyOf(kind: DocKind, ref: string, name?: string): string {
+  if (kind === "lakebase") {
+    try { return projectRef(ref); } catch { return ref; }
+  }
+  if (kind === "app") {
+    // An app is its name; a resource path or a URL is accepted and reduced to that name.
+    const bare = (name || ref || "").trim().replace(/^https?:\/\//, "").split("/")[0];
+    return bare.split(".")[0];
+  }
+  return canonicalPath(ref);
 }
 
-export const asAttachment = (d: Doc): Attachment => ({ kind: d.kind, ref: d.ref, name: d.name });
+export function makeDoc(kind: DocKind, ref: string, name?: string): Doc {
+  const key = keyOf(kind, ref, name);
+  const display = name
+    || (kind === "table" ? key.split(".").pop()
+      : kind === "lakebase" ? key.split("/").pop()
+        : kind === "app" ? key
+          : key.split("/").pop()) || key;
+  return { id: docId(kind, ref, name), kind, ref: kind === "lakebase" ? key : ref, name: display, rev: 0 };
+}
+
+export const asAttachment = (d: Doc): Attachment | null => {
+  // A notebook, file or table is a reference the server can re-read with the user's own token. A
+  // Lakebase project and an app are not: they are management objects, not content, and the server
+  // has no resolver for them (spec 013 [UI-5] offers them in the palette, not as attachments).
+  if (d.kind === "lakebase" || d.kind === "app") return null;
+  return { kind: d.kind, ref: d.ref, name: d.name };
+};
+
+/** Whether a kind can ride along with a message. One predicate, used by the composer and the chip. */
+export const canAttach = (kind: DocKind): kind is "notebook" | "file" | "table" =>
+  kind === "notebook" || kind === "file" || kind === "table";
 
 /** Opening a list entry (workspace node kinds) as a document. Folders are not documents. */
 export function docForNode(kind: string, path: string): Doc | null {
@@ -43,6 +79,9 @@ const NOTEBOOK_TOOLS = /(write|read|run|grep)_notebook/;
 const FILE_TOOLS = /write_file/;
 const MUTATING = /(write_notebook|write_file)/;
 const PATH_ARG = /"path"\s*:\s*"(\/[^"]+)"/;
+/** The two infrastructure tools that name an object worth opening (spec 013 [UI-5]). */
+const LAKEBASE_TOOLS = /^dbx_lakebase_(create|status|branch|database)$/;
+const APP_TOOLS = /^dbx_(create_app|app_health)$/;
 
 /**
  * The workspace object a tool call touched, read from its (possibly truncated) argument summary and,
@@ -52,12 +91,38 @@ const PATH_ARG = /"path"\s*:\s*"(\/[^"]+)"/;
  * Returns null when nothing openable is named: we never guess a path.
  */
 export function touched(name: string, args?: string, result?: string): { doc: Doc; mutates: boolean } | null {
+  // A Lakebase project's identity is in the RESULT, not the arguments: the create call asks for a
+  // name and the platform answers with the canonical resource path, which is the one key ([LB-5]).
+  if (LAKEBASE_TOOLS.test(name)) {
+    const found = projectFrom(result) ?? projectFrom(args);
+    if (!found) return null;
+    return { doc: makeDoc("lakebase", found), mutates: /create|branch|database/.test(name) };
+  }
+  if (APP_TOOLS.test(name)) {
+    const app = appFrom(result) ?? appFrom(args);
+    if (!app) return null;
+    return { doc: makeDoc("app", app), mutates: /create_app/.test(name) };
+  }
   const m = (args && PATH_ARG.exec(args)) || (result && PATH_ARG.exec(result)) || null;
   if (!m) return null;
   const mutates = MUTATING.test(name);
   if (NOTEBOOK_TOOLS.test(name)) return { doc: makeDoc("notebook", m[1]), mutates };
   if (FILE_TOOLS.test(name)) return { doc: makeDoc("file", m[1]), mutates };
   return null;
+}
+
+/** `"projects/pg_tickets"` out of a tool's JSON reply or its arguments. */
+function projectFrom(text?: string): string | null {
+  if (!text) return null;
+  const m = /"project"\s*:\s*"([^"]+)"/.exec(text);
+  return m ? m[1] : null;
+}
+
+/** An app's name, from `"app": "tickets_app"` or the arguments' `"name"`. */
+function appFrom(text?: string): string | null {
+  if (!text) return null;
+  const m = /"app"\s*:\s*"([^"]+)"/.exec(text);
+  return m ? m[1] : null;
 }
 
 const SQL_WRITE = /\b(?:create\s+(?:or\s+replace\s+)?(?:temp\w*\s+)?table(?:\s+if\s+not\s+exists)?|insert\s+(?:into|overwrite)(?:\s+table)?|merge\s+into|update|delete\s+from|truncate\s+table|alter\s+table|drop\s+table(?:\s+if\s+exists)?|create\s+(?:or\s+replace\s+)?view)\s+`?([\w]+(?:`?\.`?[\w]+){0,2})`?/gi;
@@ -90,4 +155,9 @@ export const ACTIONS_FOR: Record<DocKind, Action[]> = {
   notebook: ["explain", "fix", "document", "optimize"],
   file: ["explain"],
   table: ["profile", "query"],
+  // A project and an app are read-only viewers of something the agent built, so there is no quick
+  // action that changes them. An empty list is the honest answer: a button that cannot act is the
+  // inert control spec 011 [N5] removed.
+  lakebase: [],
+  app: [],
 };

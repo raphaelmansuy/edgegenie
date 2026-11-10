@@ -10,7 +10,8 @@
 export interface RecentDoc {
   path: string;
   name: string;
-  kind: "notebook" | "file" | "table";
+  /** The five document kinds. A project and an app are "recently looked at" too (spec 013 [UI-1]). */
+  kind: "notebook" | "file" | "table" | "lakebase" | "app";
 }
 
 const KEY = "coding-agent:recent-docs:v1";
@@ -30,8 +31,9 @@ function load(): void {
 
 function valid(v: unknown): v is RecentDoc {
   const d = v as RecentDoc;
-  return !!d && typeof d.path === "string" && d.path.startsWith("/")
-    && typeof d.name === "string" && (d.kind === "notebook" || d.kind === "file" || d.kind === "table");
+  const kinds = ["notebook", "file", "table", "lakebase", "app"];
+  return !!d && typeof d.path === "string" && d.path.length > 0
+    && typeof d.name === "string" && kinds.includes(d.kind);
 }
 
 function save(): void {
@@ -61,5 +63,8 @@ export function forgetDocs(): void {
 
 /** Tables are named `catalog.schema.table`, so a "name" is the last part, not the last path segment. */
 export function nameOf(kind: RecentDoc["kind"], path: string): string {
-  return kind === "table" ? path.split(".").pop() ?? path : path.split("/").pop() ?? path;
+  if (kind === "table") return path.split(".").pop() ?? path;
+  if (kind === "lakebase") return path.split("/").pop() ?? path;
+  if (kind === "app") return path;
+  return path.split("/").pop() ?? path;
 }

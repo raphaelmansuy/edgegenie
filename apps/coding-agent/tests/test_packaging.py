@@ -25,29 +25,85 @@ def test_requirements_txt_exists_with_the_runtime_dependencies():
 
 
 def test_every_runtime_import_is_declared():
-    """Walk the imports and fail if something is used but not declared."""
+    """Walk the imports and fail if something is used but not declared.
+
+    The tool server is a SEPARATE PROCESS the app spawns with `sys.executable`, so its imports are
+    app runtime dependencies too. This walk used to cover `api/` only, and that blind spot shipped a
+    `psycopg2` import in `tools/databricks_notebook_mcp.py` that nothing declared — the card's first
+    data step raised ModuleNotFoundError on a deployed app (spec 013 [F1]).
+    """
     import sys
     stdlib = set(sys.stdlib_module_names)
     declared = (APP / "requirements.txt").read_text().lower()
     alias = {"pydantic_settings": "pydantic-settings", "psycopg_pool": "psycopg-pool"}
     missing: set[str] = set()
-    for py in (APP / "api").rglob("*.py"):
-        # Parse actual imports. Notebook runner templates are string data executed remotely,
-        # and optional serverless packages inside them are not app runtime dependencies.
-        for node in ast.walk(ast.parse(py.read_text())):
-            if isinstance(node, ast.Import):
-                modules = [a.name.split(".")[0] for a in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-                modules = [node.module.split(".")[0]]
-            else:
+    roots = [APP / "api", APP / "tools"]
+    for root in roots:
+        for py in root.rglob("*.py"):
+            if ".venv" in py.parts or "__pycache__" in py.parts:
                 continue
-            for mod in modules:
-                if mod in stdlib or mod in ("api",) or mod.startswith("_"):
+            # Parse actual imports. Notebook runner templates are string data executed remotely,
+            # and optional serverless packages inside them are not app runtime dependencies.
+            for node in ast.walk(ast.parse(py.read_text())):
+                if isinstance(node, ast.Import):
+                    modules = [a.name.split(".")[0] for a in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                    modules = [node.module.split(".")[0]]
+                else:
                     continue
-                name = alias.get(mod, mod).lower()
-                if name not in declared:
-                    missing.add(mod)
+                for mod in modules:
+                    if mod in stdlib or mod in ("api",) or mod.startswith("_"):
+                        continue
+                    name = alias.get(mod, mod).lower()
+                    if name not in declared:
+                        missing.add(mod)
     assert not missing, f"imported but not in requirements.txt: {sorted(missing)}"
+
+
+def test_the_tool_server_uses_the_client_the_app_ships():
+    """One Postgres client. `psycopg2` was imported by the tool server and declared nowhere; `psycopg`
+    (v3) is in requirements.txt and is what the rest of the app uses (spec 013 [F1], [LB-3])."""
+    req = (APP / "requirements.txt").read_text()
+    assert re.search(r"^psycopg\b", req, re.M), "the app must declare psycopg (v3)"
+    server = (APP / "tools" / "databricks_notebook_mcp.py").read_text()
+    assert "import psycopg2" not in server and "psycopg2.connect" not in server
+
+
+def test_exactly_one_tool_server_exists():
+    """The app resolves `tools/` first and a deployment ships only that. A second copy under `mcp/`
+    had drifted by 117 lines, so a fix there reached nobody (spec 013 [F8], [RB-9])."""
+    repo = APP.parents[1]
+    found = [p for p in repo.rglob("databricks_notebook_mcp.py")
+             if ".venv" not in p.parts and "node_modules" not in p.parts]
+    assert len(found) == 1, f"exactly one tool server must exist; found {[str(p) for p in found]}"
+
+
+def test_exactly_one_copy_of_each_skill():
+    """Four skills were duplicated byte for byte in `mcp/skills` and `tools/skills` (spec 013 [F9])."""
+    repo = APP.parents[1]
+    names: dict[str, list[Path]] = {}
+    for p in repo.rglob("*.md"):
+        if "skills" not in p.parts or ".venv" in p.parts or "node_modules" in p.parts:
+            continue
+        names.setdefault(p.name, []).append(p)
+    doubled = {n: [str(x) for x in ps] for n, ps in names.items() if len(ps) > 1}
+    assert not doubled, f"a skill exists in more than one place: {doubled}"
+
+
+def test_the_lakebase_skill_teaches_the_app_resource_contract():
+    """The skill is the agent's teaching surface, so it is tested like code (spec 013 [F7])."""
+    text = (APP / "tools" / "skills" / "lakebase-postgres.md").read_text()
+    for required in ("PGHOST", "LAKEBASE_ENDPOINT", "psycopg", "max − min"):
+        assert required in text, f"the Lakebase skill must mention {required!r}"
+    for forbidden in ("psycopg2", "instance_names", "read_write_dns"):
+        assert forbidden not in text, f"the Lakebase skill must not teach {forbidden!r}"
+
+
+def test_the_apps_skill_teaches_the_resource_that_lets_it_connect():
+    text = (APP / "tools" / "skills" / "databricks-apps.md").read_text()
+    for required in ("resources", "CAN_CONNECT_AND_CREATE", "git_repository", "0.0.0.0", "logz"):
+        assert required in text, f"the Apps skill must mention {required!r}"
+    assert "dbx_app_health" in text, "the skill must tell the agent how to prove the app works"
 
 
 def test_app_yaml_is_valid_and_has_no_shell():

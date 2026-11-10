@@ -82,8 +82,12 @@ export DEPLOY_SECRET_SCOPE="${DEPLOY_SECRET_SCOPE:-coding-agent-llm}"
 # GRANTS it (deploy.sh) and the script that CHECKS it (verify-deployed.sh) cannot drift apart — a
 # verification that checks a different set than the deploy requests fails forever, or passes wrongly.
 DEPLOY_REQUIRED_SCOPES=(sql files model-serving ai-gateway genie workspace.workspace
-                        catalog.catalogs:read catalog.schemas:read catalog.tables:read)
+                        catalog.catalogs:read catalog.schemas:read catalog.tables:read
+                        postgres apps)
 export DEPLOY_REQUIRED_SCOPES_CSV="${DEPLOY_REQUIRED_SCOPES[*]}"
+# Spec 013 [RB-2]: the two object types the Data tab manages are behind their own scopes. Granting
+# them is declared HERE, beside the others, because `apps update` is a full replacement: a list that
+# omits a scope clears it, and the Data tab then answers 403 for every user.
 
 # The identity every script must find when it asks the workspace who it is talking to.
 # A deploy that lands in the wrong workspace is not a bad deployment, it is the wrong product.

@@ -9,7 +9,7 @@ import { api, type CatalogItem, type WsHit } from "../api/client";
 import { applyCommand, commandAt, matchCommands, pushHistory, stepHistory, type Command } from "../domain/commands";
 import type { Attachment } from "../domain/events";
 import { reasonText, type BlockedReason } from "../domain/compose";
-import type { Doc } from "../domain/docs";
+import { canAttach, type Doc } from "../domain/docs";
 import { ACCEPT } from "../domain/blob";
 import { AttachMenu } from "./AttachMenu";
 import { Chip } from "./Chip";
@@ -144,9 +144,15 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
     };
     // An open document says so; an open table also says where it lives, so two `trips` in
     // different schemas are told apart.
-    openDocs.filter((d) => !q || d.name.toLowerCase().includes(q) || d.ref.toLowerCase().includes(q))
-      .forEach((d) => add({ kind: d.kind, ref: d.ref, name: d.name },
-        d.kind === "table" ? d.ref.split(".").slice(0, -1).join(".") : "open"));
+    // Only what the server can re-read is offerable: a project or an app is not attachable content
+    // (spec 013 [UI-5]), so it is not in this list. The palette finds them instead.
+    openDocs.filter((d) => canAttach(d.kind))
+      .filter((d) => !q || d.name.toLowerCase().includes(q) || d.ref.toLowerCase().includes(q))
+      .forEach((d) => {
+        if (!canAttach(d.kind)) return;          // the predicate, where the narrowing happens
+        add({ kind: d.kind, ref: d.ref, name: d.name },
+          d.kind === "table" ? d.ref.split(".").slice(0, -1).join(".") : "open");
+      });
     found.forEach((h) => add({ kind: h.kind === "notebook" ? "notebook" : "file", ref: h.path, name: h.name },
       h.path.split("/").slice(0, -1).join("/")));
     // the hint is where the table lives, so two `trips` in different schemas are told apart

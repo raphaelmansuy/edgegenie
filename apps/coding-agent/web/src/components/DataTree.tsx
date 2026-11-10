@@ -1,0 +1,113 @@
+/** The Data rail tab: Lakebase projects and Databricks Apps, and nothing else.
+ *
+ * A fourth tab rather than a folder in Files or a section in Catalog, and the reason is a mental
+ * model: a project is not a workspace path (Files would need a fake one) and not Unity Catalog
+ * (Catalog is governed by a different API). The two object types share a lifecycle — build, run,
+ * verify — which is what a tab is for (spec 013 [UI-2], [06 §2.3]).
+ *
+ * One call per kind, no fan-out: this lists on every page load ([06 §6.1]).
+ */
+import { useEffect, useState } from "react";
+import { api, type LakebaseProject, type AppView } from "../api/client";
+import { appStateWord, tone } from "../domain/app";
+import { makeDoc, type Doc } from "../domain/docs";
+import { PaneError } from "./PaneError";
+import { Refresh } from "./Icons";
+
+type Load<T> = { state: "loading" | "ready" | "error"; data: T; error?: string };
+
+export function DataTree({ onOpen, selected }: {
+  onOpen: (d: Doc) => void;
+  /** The `docId` of the open document, so the row can mark itself. */
+  selected: string | null;
+}) {
+  const [projects, setProjects] = useState<Load<LakebaseProject[]>>({ state: "loading", data: [] });
+  const [apps, setApps] = useState<Load<AppView[]>>({ state: "loading", data: [] });
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    let live = true;
+    setProjects({ state: "loading", data: [] });
+    setApps({ state: "loading", data: [] });
+    api.lakebaseProjects()
+      .then((r) => live && setProjects({ state: "ready", data: r.items }))
+      .catch((e) => live && setProjects({ state: "error", data: [], error: e instanceof Error ? e.message : "cannot read Lakebase" }));
+    api.apps()
+      .then((r) => live && setApps({ state: "ready", data: r.items }))
+      .catch((e) => live && setApps({ state: "error", data: [], error: e instanceof Error ? e.message : "cannot read Apps" }));
+    return () => { live = false; };
+  }, [tick]);
+
+  const retry = () => setTick((n) => n + 1);
+  const busy = projects.state === "loading" || apps.state === "loading";
+
+  return (
+    <div className="tree data-tree">
+      <div className="tree-search">
+        <div className="tree-hint">Lakebase databases and apps you can see</div>
+        <button className="icon-btn tree-refresh" title="Refresh" aria-label="Refresh Lakebase and apps"
+          disabled={busy} onClick={retry}>
+          <Refresh size={15} className={busy ? "spin" : ""} />
+        </button>
+      </div>
+
+      {projects.state === "error" && projects.error && (
+        <PaneError message={projects.error} onRetry={retry} />
+      )}
+      {apps.state === "error" && apps.error && (
+        <PaneError message={apps.error} onRetry={retry} />
+      )}
+
+      <div role="tree" aria-label="Lakebase and apps" className="tree-body">
+        <div className="tree-group">Lakebase</div>
+        {projects.state === "loading" && <Skeleton />}
+        {projects.state === "ready" && projects.data.length === 0 && (
+          <div className="tree-empty">No projects yet. Ask the agent to create one.</div>
+        )}
+        {projects.data.map((p) => {
+          const doc = makeDoc("lakebase", p.ref, p.displayName || p.name);
+          return (
+            <button key={p.ref} role="treeitem" aria-selected={selected === doc.id}
+              className={`tree-row data-row${selected === doc.id ? " is-selected" : ""}`}
+              onClick={() => onOpen(doc)}
+              title={`${p.ref}\n${p.state}`}>
+              <span className={`tree-icon kind-lakebase`} aria-hidden>▤</span>
+              <span className="tree-name">{p.displayName || p.name}</span>
+              <span className={`infra-pill tone-${p.ready ? "good" : "busy"}`}>{p.state}</span>
+            </button>
+          );
+        })}
+
+        <div className="tree-group">Databricks Apps</div>
+        {apps.state === "loading" && <Skeleton />}
+        {apps.state === "ready" && apps.data.length === 0 && (
+          <div className="tree-empty">No apps yet. Ask the agent to build one.</div>
+        )}
+        {apps.data.map((a) => {
+          const doc = makeDoc("app", a.name);
+          return (
+            <button key={a.name} role="treeitem" aria-selected={selected === doc.id}
+              className={`tree-row data-row${selected === doc.id ? " is-selected" : ""}`}
+              onClick={() => onOpen(doc)}
+              title={`${a.name}\n${a.state}`}>
+              <span className="tree-icon kind-app" aria-hidden>▢</span>
+              <span className="tree-name">{a.name}</span>
+              <span className={`infra-pill tone-${tone(appStateWord(a.state))}`}>{appStateWord(a.state)}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="tree-note">Only databases and apps your account may see are listed.</p>
+    </div>
+  );
+}
+
+function Skeleton() {
+  return (
+    <div className="sk-list" role="status" aria-label="Loading">
+      {[0, 1].map((i) => (
+        <div className="sk-row" key={i}><span className="sk a" /><span className="sk b" /></div>
+      ))}
+    </div>
+  );
+}

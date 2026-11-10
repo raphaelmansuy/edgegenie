@@ -7,6 +7,7 @@
  * one of its cells sends the same text twice and spends the context budget on a duplicate.
  */
 import type { Attachment } from "./events";
+import { canAttach } from "./docs";
 import { cellRef, type Focus } from "./focus";
 
 export function attachmentsFor(focus: Focus): Attachment[] {
@@ -18,6 +19,10 @@ export function attachmentsFor(focus: Focus): Attachment[] {
       return [{ kind: "cell", ref, name: `${doc.name} · cell ${focus.cell}` }];
     }
   }
+  // A Lakebase project and an app are not content: the server has no resolver that could read one
+  // with the user's token, so they ride along as the dock's binding rather than as attachments
+  // (spec 013 [UI-5]). Returning [] is the honest answer, not a silently dropped chip.
+  if (!canAttach(doc.kind)) return [];
   return [{ kind: doc.kind, ref: doc.ref, name: doc.name }];
 }
 

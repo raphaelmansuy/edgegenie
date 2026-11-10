@@ -77,7 +77,9 @@ _CORE = {
     "dbx_whoami", "dbx_list_tables", "dbx_describe_table", "dbx_search_tables", "dbx_run_sql",
     "dbx_list_notebooks", "dbx_read_notebook", "dbx_grep_notebook", "dbx_write_notebook",
     "dbx_write_file", "dbx_run_notebook", "dbx_run_notebook_status", "dbx_create_job", "dbx_run_job", "dbx_job_run_status",
-    "dbx_lakebase_create", "dbx_lakebase_status", "dbx_lakebase_sql", "dbx_create_app", "dbx_skill",
+    "dbx_lakebase_create", "dbx_lakebase_status", "dbx_lakebase_sql", "dbx_lakebase_branch",
+    "dbx_lakebase_database", "dbx_lakebase_role", "dbx_lakebase_tables",
+    "dbx_create_app", "dbx_app_health", "dbx_skill",
 }
 
 
@@ -179,6 +181,20 @@ def _post(path: str, body: dict | None = None) -> Any:
     return _retry(go, idempotent=False)
 
 
+def _patch(path: str, body: dict | None = None) -> Any:
+    """A partial update. Idempotent by nature: the same body twice leaves the same state."""
+    def go():
+        with _client() as c:
+            r = c.patch(path, json=body or {})
+            if r.headers.get("content-type", "").startswith("application/json"):
+                data = r.json()
+            else:
+                data = {"raw": r.text}
+            r.raise_for_status()
+            return data
+    return _retry(go, idempotent=True)
+
+
 def _need_writes() -> None:
     if not ALLOW_WRITES:
         raise PermissionError(
@@ -231,6 +247,10 @@ def _check_sql_scope(sql: str) -> str | None:
 
 JOB_PREFIX = os.environ.get("NBMCP_WRITE_JOB_PREFIX", "")
 INSTANCE_PREFIX = os.environ.get("NBMCP_WRITE_INSTANCE_PREFIX", "")
+#: The app prefix is its own variable. Before spec 013 `dbx_create_app` compared app names to
+#: INSTANCE_PREFIX, which passed only because the two strings happen to be equal — a fence that
+#: worked by coincidence ([F3], [E-6]).
+APP_PREFIX = os.environ.get("NBMCP_WRITE_APP_PREFIX", "")
 
 
 def _check_prefix(kind: str, name: str, prefix: str) -> None:
@@ -239,7 +259,20 @@ def _check_prefix(kind: str, name: str, prefix: str) -> None:
 
 
 def _check_path_scope(path: str) -> None:
-    if WRITE_PATHS and not any(path.startswith(p) for p in WRITE_PATHS):
+    """Refuse a path outside the session's folder — and refuse a `..` escape inside it.
+
+    A prefix test alone accepts `/fence/../elsewhere/x`, because the STRING starts with the fence.
+    The app's own `scope.check_path` normalises and rejects `..` (spec 013 [F4], [E-27]); this is the
+    tool server's half of the same rule, and before it was added the two disagreed on exactly that
+    case. `tests/test_tools_fence.py` holds both sides to one table.
+    """
+    normalised = path.replace("\\", "/")
+    while "//" in normalised:
+        normalised = normalised.replace("//", "/")
+    if ".." in normalised.split("/"):
+        raise PermissionError(f"write blocked: {path} contains '..' and is not a real location "
+                              f"inside {WRITE_PATHS}")
+    if WRITE_PATHS and not any(normalised.startswith(p) for p in WRITE_PATHS):
         raise PermissionError(f"write blocked: {path} outside allowed paths {WRITE_PATHS}")
 
 
@@ -989,82 +1022,494 @@ def dbx_write_file(path: str, content: str, overwrite: bool = True) -> str:
 
 
 @tool()
-def dbx_lakebase_create(name: str, capacity: str = "CU_1", wait_seconds: int = 45) -> str:
-    """Create a Lakebase (managed Postgres) instance and wait until AVAILABLE.
-    Idempotent: if it exists, returns its state. Name must start with the allowed prefix."""
+def dbx_lakebase_create(name: str, capacity: str = "CU_1", wait_seconds: int = 45,
+                        min_cu: float = 0, max_cu: float = 0) -> str:
+    """Create a Lakebase Autoscaling project and wait until it is ready.
+
+    A project is the container: it arrives with a `production` branch and a `primary` read-write
+    compute. Idempotent — if it exists, its state is returned. The name must start with the session's
+    allowed prefix and is the project id, so it must be lowercase letters, digits and hyphens.
+
+    `capacity` is the Provisioned spelling and is accepted for compatibility: `CU_1` means 1 CU. Pass
+    `min_cu`/`max_cu` for an autoscaling range (max − min ≤ 16, max ≤ 64; scale-to-zero needs max ≤ 32).
+
+    Returns the project path, its `production` branch and the `next` call, because a model should copy
+    an identity it was just given rather than remember one (spec 013 [LB-2], [LB-4]).
+    """
     _need_writes()
     _check_prefix("instance", name, INSTANCE_PREFIX)
+    problem = _capacity_problem(min_cu, max_cu)
+    if problem:
+        return _trim({"error": problem,
+                      "hint": "reduce the maximum to min + 16, or use a fixed size, then call again"})
+    project = _lakebase_project(name)
+    if not re.match(r"^[a-z][a-z0-9-]{1,62}$", name):
+        return _trim({"error": f"a Lakebase project id must be lowercase letters, digits and hyphens, "
+                               f"starting with a letter; got {name!r}",
+                      "hint": "lowercase the name and replace underscores with hyphens, then call again"})
     import time
+    body: dict = {"project_id": name, "spec": {"display_name": name}}
+    if min_cu or max_cu:
+        body["spec"]["default_endpoint_settings"] = {
+            "autoscaling_limit_min_cu": float(min_cu or 0.5),
+            "autoscaling_limit_max_cu": float(max_cu or max(min_cu, 1.0)),
+        }
     try:
-        _get(f"/api/2.0/database/instances/{name}")
-    except httpx.HTTPStatusError:
-        _post("/api/2.0/database/instances", {"name": name, "capacity": capacity})
+        d = _get(f"/api/2.0/postgres/{project}")
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code != 404:
+            raise
+        d = _post("/api/2.0/postgres/projects", body)
     t0 = time.time()
     while True:
-        d = _get(f"/api/2.0/database/instances/{name}")
-        if d.get("state") == "AVAILABLE" or time.time() - t0 > wait_seconds:
+        d = _get(f"/api/2.0/postgres/{project}")
+        state = (d.get("status") or {}).get("state") or d.get("state") or ""
+        if state in ("READY", "AVAILABLE", "ACTIVE") or time.time() - t0 > wait_seconds:
             break
-        time.sleep(8)
-    return _trim({"name": name, "state": d.get("state"), "capacity": d.get("capacity"),
-                  "host": d.get("read_write_dns"), "database": "databricks_postgres",
-                  "hint": None if d.get("state") == "AVAILABLE" else "not AVAILABLE yet: call dbx_lakebase_status"})
+        time.sleep(6)
+    state = (d.get("status") or {}).get("state") or d.get("state") or ""
+    ready = state in ("READY", "AVAILABLE", "ACTIVE")
+    branch = _lakebase_endpoint(project, "production", "primary")
+    return _trim({
+        "project": project, "name": name, "state": state, "ready": ready,
+        "branch": f"{project}/branches/production", "endpoint": branch,
+        "next": None if ready else f"call dbx_lakebase_status('{name}') to wait for READY",
+        "next_when_ready": f"call dbx_lakebase_branch(project='{project}', branch='agent-<your session>')",
+    })
+
+
+def _capacity_problem(min_cu: float, max_cu: float) -> str | None:
+    """The platform's autoscaling rules, checked here so the answer names the rule (spec 013 [LB-4])."""
+    lo, hi = float(min_cu or 0), float(max_cu or 0)
+    if not lo and not hi:
+        return None
+    lo = lo or 0.5
+    hi = hi or lo
+    if lo < 0.5:
+        return f"the minimum is 0.5 CU; got {lo}"
+    if hi > 64:
+        return f"the maximum is 64 CU; got {hi}"
+    if hi < lo:
+        return f"the maximum ({hi}) is below the minimum ({lo})"
+    if hi - lo > 16:
+        return (f"max − min must not exceed 16 CU; {hi} − {lo} = {hi - lo}. "
+                f"Choose a maximum of at most {lo + 16}")
+    return None
 
 
 @tool()
 def dbx_lakebase_status(name: str) -> str:
-    """State, host and capacity of a Lakebase instance."""
-    d = _get(f"/api/2.0/database/instances/{name}")
-    return _trim({"name": name, "state": d.get("state"), "capacity": d.get("capacity"),
-                  "host": d.get("read_write_dns"), "database": "databricks_postgres"})
+    """State of a Lakebase project: readiness, its branches, and its project id."""
+    project = _lakebase_project(name)
+    d = _get(f"/api/2.0/postgres/{project}")
+    branches = _get(f"/api/2.0/postgres/{project}/branches").get("branches", [])
+    return _trim({
+        "project": project,
+        "state": (d.get("status") or {}).get("state") or d.get("state") or "",
+        "pgVersion": (d.get("status") or {}).get("pg_version") or (d.get("spec") or {}).get("pg_version"),
+        "displayName": (d.get("status") or {}).get("display_name") or (d.get("spec") or {}).get("display_name"),
+        "branches": [b.get("name", "").rsplit("/", 1)[-1] for b in branches],
+    })
 
 
 @tool()
-def dbx_lakebase_sql(instance: str, sql: str, database: str = "databricks_postgres", limit: int = 100) -> str:
-    """Run SQL on a Lakebase (Postgres) instance using a short-lived credential.
-    Multiple statements allowed. Returns rows for queries, or the row count."""
+def dbx_lakebase_list(limit: int = 50) -> str:
+    """List the Lakebase projects this user can see."""
+    data = _get("/api/2.0/postgres/projects", {"page_size": limit})
+    return _trim([{"project": p.get("name"),
+                   "displayName": (p.get("status") or {}).get("display_name")}
+                  for p in data.get("projects", [])])
+
+
+@tool()
+def dbx_lakebase_branch(project: str, branch: str = "", from_branch: str = "production",
+                        wait_seconds: int = 30) -> str:
+    """Create a branch in a project, or list the branches when `branch` is empty.
+
+    A branch is a copy-on-write copy: schema, data and roles at the moment it is created, isolated
+    afterwards. Use one branch per session so a scaffold never writes to `production`
+    (spec 013 [LB-2], [E-16]).
+    """
     _need_writes()
-    _check_prefix("instance", instance, INSTANCE_PREFIX)
-    import uuid
-    import psycopg2
-    d = _get(f"/api/2.0/database/instances/{instance}")
-    cred = _post("/api/2.0/database/credentials", {"request_id": str(uuid.uuid4()), "instance_names": [instance]})
-    me = _get("/api/2.0/preview/scim/v2/Me").get("userName")
-    conn = psycopg2.connect(host=d["read_write_dns"], port=5432, dbname=database, user=me,
-                            password=cred["token"], sslmode="require", connect_timeout=20)
-    conn.autocommit = True
+    p = _lakebase_project(project)
+    _check_prefix("instance", p.rsplit("/", 1)[-1], INSTANCE_PREFIX)
+    if not branch:
+        data = _get(f"/api/2.0/postgres/{p}/branches")
+        return _trim([{"branch": b.get("name")} for b in data.get("branches", [])])
+    if not re.match(r"^[a-z][a-z0-9-]{1,62}$", branch):
+        return _trim({"error": f"a branch id must be lowercase letters, digits and hyphens; got {branch!r}"})
+    body = {"branch_id": branch, "spec": {"source_branch": f"{p}/branches/{from_branch or 'production'}"}}
     try:
+        _post(f"/api/2.0/postgres/{p}/branches", body)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code != 409:
+            raise
+    import time
+    t0 = time.time()
+    while True:
+        d = _get(f"/api/2.0/postgres/{p}/branches/{branch}")
+        state = (d.get("status") or {}).get("state") or ""
+        if state in ("READY", "AVAILABLE", "ACTIVE") or time.time() - t0 > wait_seconds:
+            break
+        time.sleep(4)
+    return _trim({"branch": f"{p}/branches/{branch}", "from": from_branch, "state": state,
+                  "next": f"call dbx_lakebase_sql(project='{p.rsplit('/', 1)[-1]}', "
+                          f"branch='{branch}', sql='CREATE SCHEMA IF NOT EXISTS app')"})
+
+
+@tool()
+def dbx_lakebase_database(project: str, branch: str = "production", database: str = "") -> str:
+    """Create a database in a branch, or list the branch's databases when `database` is empty.
+
+    Most work needs none: every branch arrives with `databricks_postgres`, and a schema inside it is
+    cheaper than a database.
+    """
+    _need_writes()
+    p = _lakebase_project(project)
+    _check_prefix("instance", p.rsplit("/", 1)[-1], INSTANCE_PREFIX)
+    if not database:
+        data = _get(f"/api/2.0/postgres/{p}/branches/{branch}/databases")
+        return _trim([{"database": d.get("name")} for d in data.get("databases", [])])
+    _pg_identifier(database, "database")
+    try:
+        d = _post(f"/api/2.0/postgres/{p}/branches/{branch}/databases",
+                  {"database_id": database, "spec": {}})
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code != 409:
+            raise
+        d = _get(f"/api/2.0/postgres/{p}/branches/{branch}/databases/{database}")
+    return _trim({"database": d.get("name") or f"{p}/branches/{branch}/databases/{database}",
+                  "next": f"call dbx_lakebase_sql(project='{p.rsplit('/', 1)[-1]}', "
+                          f"branch='{branch}', database='{database}', sql='SELECT 1')"})
+
+
+@tool()
+def dbx_lakebase_role(project: str, branch: str = "production", role: str = "") -> str:
+    """List the Postgres roles on a branch, or read one by name.
+
+    An app's role is created by the PLATFORM when its `postgres` resource is attached: the role name is
+    the service principal's client id. So a scaffold does not create that role — it attaches the
+    resource and then reads the role back here to prove it exists (spec 013 [RB-4], [SCF-1] step 4).
+    """
+    p = _lakebase_project(project)
+    data = _get(f"/api/2.0/postgres/{p}/branches/{branch}/roles")
+    roles = data.get("roles", [])
+    rows = [{"role": r.get("name", "").rsplit("/", 1)[-1],
+             "identity": (r.get("spec") or {}).get("postgres_role") or (r.get("status") or {}).get("postgres_role"),
+             "type": (r.get("spec") or {}).get("identity_type")} for r in roles]
+    if role:
+        rows = [r for r in rows if r["role"] == role or r["identity"] == role]
+        if not rows:
+            return _trim({"found": False, "role": role, "roles": rows,
+                          "hint": "attach the app's postgres resource first; the platform creates the role"})
+    return _trim({"found": bool(rows), "roles": rows})
+
+
+@tool()
+def dbx_lakebase_compute(project: str, branch: str = "production", endpoint: str = "primary",
+                         min_cu: float = 0, max_cu: float = 0) -> str:
+    """Read a branch's compute, or set its autoscaling range.
+
+    Reading returns the endpoint type, the range, the host and whether the compute is suspended.
+    Setting validates the platform's rules first: max − min ≤ 16, max ≤ 64, min ≥ 0.5
+    (spec 013 [LB-4]).
+    """
+    p = _lakebase_project(project)
+    path = f"/api/2.0/postgres/{p}/branches/{branch}/endpoints/{endpoint or 'primary'}"
+    if min_cu or max_cu:
+        _need_writes()
+        problem = _capacity_problem(min_cu, max_cu)
+        if problem:
+            return _trim({"error": problem})
+        _patch(path, {"spec": {"autoscaling_limit_min_cu": float(min_cu or 0.5),
+                               "autoscaling_limit_max_cu": float(max_cu)}})
+    d = _get(path)
+    status = d.get("status") or {}
+    return _trim({
+        "endpoint": d.get("name") or path,
+        "type": status.get("endpoint_type"),
+        "state": status.get("current_state"),
+        "host": (status.get("hosts") or {}).get("host", ""),
+        "minCu": status.get("autoscaling_limit_min_cu"),
+        "maxCu": status.get("autoscaling_limit_max_cu"),
+        "lastActive": status.get("last_active_time"),
+    })
+
+
+def _lakebase_endpoint(project: str, branch: str = "production", endpoint: str = "primary") -> str:
+    """The read-write endpoint's resource path. The one place that builds this string.
+
+    Lakebase addresses a compute as `projects/{p}/branches/{b}/endpoints/{e}`. Every credential and
+    every connection names one, because a token minted for an endpoint is what authorises the
+    connection: there is no "instance" to name any more (spec 013 [LB-1], [RB-6]).
+    """
+    p = _lakebase_project(project)
+    b = branch or "production"
+    if b.startswith("projects/"):
+        b = b.rsplit("/", 1)[-1]
+    return f"{p}/branches/{b}/endpoints/{endpoint or 'primary'}"
+
+
+def _lakebase_project(name: str) -> str:
+    """`pg_tickets` and `projects/pg_tickets` are one object (spec 013 [LB-5])."""
+    n = (name or "").strip().strip("/")
+    return n if n.startswith("projects/") else f"projects/{n}"
+
+
+def _pg_identifier(value: str, what: str) -> str:
+    """An identifier that needs escaping is not an identifier (spec 013 [E-19]).
+
+    The connection string is assembled by the driver from these values, and the SQL may interpolate
+    them. Refusing a quote or a semicolon here is cheaper and stricter than escaping downstream.
+    """
+    import re as _re
+    if not _re.match(r"^[A-Za-z_][A-Za-z0-9_$]*$", value or ""):
+        raise ValueError(
+            f"{what} must be a plain Postgres identifier (letters, digits, underscore; no quotes, "
+            f"spaces or semicolons); got {value!r}")
+    return value
+
+
+def _lakebase_token(endpoint: str) -> str:
+    """Mint a credential for one endpoint. Never cached: a cached token is a credential on disk."""
+    import uuid
+    return _post("/api/2.0/postgres/credentials",
+                 {"endpoint": endpoint, "request_id": str(uuid.uuid4())}).get("token", "")
+
+
+def _lakebase_connect(endpoint: str, database: str, user: str):
+    """One connection, for one statement batch, closed by the caller.
+
+    `psycopg` v3 is what this app already ships (`requirements.txt`); `psycopg2` was imported here and
+    declared nowhere, which is why the card's first data step raised ModuleNotFoundError
+    (spec 013 [F1]). The token is minted per call by design: the tool runs SQL the agent wrote.
+    """
+    import psycopg
+    d = _get(endpoint)
+    host = ((d.get("status") or {}).get("hosts") or {}).get("host", "")
+    if not host:
+        raise RuntimeError(
+            f"{endpoint} has no host yet; the compute is still starting. A connection resumes a "
+            "suspended compute, so call again in a few seconds.")
+    token = _lakebase_token(endpoint)
+    if not token:
+        raise RuntimeError("the workspace returned no Lakebase credential for this endpoint")
+    return psycopg.connect(host=host, port=5432, dbname=_pg_identifier(database, "database"),
+                           user=user, password=token, sslmode="require", connect_timeout=20)
+
+
+@tool()
+def dbx_lakebase_sql(project: str, sql: str, branch: str = "production",
+                     database: str = "databricks_postgres", limit: int = 100) -> str:
+    """Run SQL on a Lakebase database using a short-lived credential.
+
+    `project` is the id or the full path ("pg_tickets" or "projects/pg_tickets"). `branch` names which
+    branch the SQL runs on; the read-write compute of THAT branch is used, so a scaffold writes to its
+    own branch and never to `production` (spec 013 [LB-3], [E-16]).
+
+    Multiple statements are allowed. Returns rows for a query, or the row count for a write.
+    """
+    _need_writes()
+    _check_prefix("instance", project, INSTANCE_PREFIX)
+    endpoint = _lakebase_endpoint(project, branch)
+    me = _get("/api/2.0/preview/scim/v2/Me").get("userName")
+    conn = None
+    try:
+        conn = _lakebase_connect(endpoint, database, me)
+        conn.autocommit = True
         cur = conn.cursor()
         cur.execute(sql)
         if cur.description:
             cols = [c.name for c in cur.description]
             rows = cur.fetchall()
-            return _trim({"columns": cols, "rows": [[str(v) for v in r] for r in rows[:limit]], "row_count": len(rows)})
-        return _trim({"ok": True, "rowcount": cur.rowcount})
-    except Exception as e:  # noqa: BLE001
-        return _trim({"error": str(e)[:600]})
+            return _trim({"columns": cols, "rows": [[str(v) for v in r] for r in rows[:limit]],
+                          "row_count": len(rows), "branch": _branch_name(endpoint),
+                          "database": database})
+        return _trim({"ok": True, "rowcount": cur.rowcount, "branch": _branch_name(endpoint),
+                      "database": database})
+    except Exception as e:  # noqa: BLE001 - a driver error is a fact the agent must read, not a crash
+        return _trim({"error": str(e)[:600], "branch": _branch_name(endpoint)})
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
+
+
+def _branch_name(endpoint: str) -> str:
+    """`projects/p/branches/b/endpoints/e` -> `b`. Used only to report which branch ran."""
+    parts = endpoint.split("/")
+    return parts[parts.index("branches") + 1] if "branches" in parts else ""
 
 
 @tool()
-def dbx_create_app(name: str, source_code_path: str = "") -> str:
-    """Try to create (and deploy) a Databricks App. Returns the platform's answer
-    verbatim, including refusals (some workspaces require a Git repository for
-    Apps). Report that text to the user exactly; never claim a deploy that failed."""
+def dbx_lakebase_tables(project: str, branch: str = "production", schema: str = "public",
+                        database: str = "databricks_postgres", limit: int = 50) -> str:
+    """Tables in a schema of a Lakebase database, with a row count for each.
+
+    The count is bounded: a table that takes longer than 5 s reports `>= 1000` rather than 0, because
+    "could not count" and "empty" are different facts and a page must not confuse them
+    (spec 013 [E-18]). At most `limit` tables are listed; `truncated` says whether more exist.
+    """
     _need_writes()
-    _check_prefix("app", name, INSTANCE_PREFIX)
+    endpoint = _lakebase_endpoint(project, branch)
+    me = _get("/api/2.0/preview/scim/v2/Me").get("userName")
+    _pg_identifier(schema, "schema")
+    _pg_identifier(database, "database")
+    conn = None
+    try:
+        conn = _lakebase_connect(endpoint, database, me)
+        conn.autocommit = True
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = %s AND table_type = 'BASE TABLE' "
+            "ORDER BY table_name LIMIT %s", (schema, limit + 1))
+        names = [r[0] for r in cur.fetchall()]
+        truncated = len(names) > limit
+        names = names[:limit]
+        rows = []
+        for name in names:
+            safe = name.replace('"', '""')
+            try:
+                cur.execute('SET LOCAL statement_timeout = 5000')
+                cur.execute(f'SELECT count(*) FROM "{schema}"."{safe}"')
+                rows.append({"table": name, "rows": cur.fetchone()[0]})
+            except Exception:  # noqa: BLE001 - a slow table is a bound, not a failure
+                conn.rollback()
+                rows.append({"table": name, "rows": ">= 1000", "note": "count timed out"})
+        return _trim({"schema": schema, "database": database, "branch": _branch_name(endpoint),
+                      "tables": rows, "truncated": truncated})
+    except Exception as e:  # noqa: BLE001
+        return _trim({"error": str(e)[:600], "branch": _branch_name(endpoint)})
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+@tool()
+def dbx_create_app(name: str, source_code_path: str = "", project: str = "", branch: str = "",
+                   database: str = "databricks_postgres", scopes: list[str] | None = None,
+                   wait_seconds: int = 90) -> str:
+    """Create (and deploy) a Databricks App, optionally wired to a Lakebase database.
+
+    Pass `project` and `branch` when the app should read the database: that becomes a `postgres`
+    RESOURCE, which is what makes the platform inject PGHOST/PGDATABASE/PGUSER/PGSSLMODE and create
+    the app's Postgres role. An app created without it starts and cannot connect — the defect this
+    signature exists to remove (spec 013 [AP-1], [F6]).
+
+    The name must start with this session's app prefix. The platform's answer is returned verbatim,
+    including refusals: quote it, and never claim a deployment you did not observe running.
+    """
+    _need_writes()
+    if not re.match(r"^[a-z0-9][a-z0-9-]{0,28}[a-z0-9]$", name):
+        return _trim({"error": f"an app name is 2–30 lowercase letters, digits and hyphens, starting and "
+                               f"ending with a letter or digit; got {name!r}",
+                      "hint": "lowercase the name and replace underscores with hyphens, then call again"})
+    _check_prefix("app", name, APP_PREFIX)
     if source_code_path:
         _check_path_scope(source_code_path)
+    resources: list[dict] = []
+    if project:
+        if not branch:
+            return _trim({"error": "a postgres resource needs a branch; pass branch='<your session branch>'",
+                          "hint": "do not use 'production': create a branch for this session first"})
+        p = _lakebase_project(project)
+        resources.append({"name": "postgres", "postgres": {
+            "branch": f"{p}/branches/{branch}",
+            "database": f"{p}/branches/{branch}/databases/{database}",
+            "permission": "CAN_CONNECT_AND_CREATE",
+        }})
+    body: dict = {"name": name}
+    if resources:
+        body["resources"] = resources
+        body["user_api_scopes"] = scopes or ["postgres"]
+    elif scopes:
+        body["user_api_scopes"] = scopes
     with _client() as c:
-        r = c.post("/api/2.0/apps", json={"name": name})
+        r = c.post("/api/2.0/apps", json=body)
         if not r.is_success:
-            return _trim({"created": False, "http_status": r.status_code, "platform_error": r.text[:800]})
+            return _trim({"created": False, "http_status": r.status_code,
+                          "platform_error": r.text[:800],
+                          "do_not_retry": "a refusal will not change on a second identical call; "
+                                          "report this text to the user"})
         app = r.json()
+        out: dict = {"created": True, "app": app.get("name"), "url": app.get("url"),
+                     "servicePrincipal": app.get("service_principal_client_id"),
+                     "resources": [x.get("name") for x in (app.get("resources") or [])]}
         if source_code_path:
-            dep = c.post(f"/api/2.0/apps/{name}/deployments", json={"source_code_path": source_code_path})
-            return _trim({"created": True, "app": app.get("name"), "url": app.get("url"),
-                          "deploy_http_status": dep.status_code, "deploy": dep.text[:600]})
-        return _trim({"created": True, "app": app.get("name"), "url": app.get("url")})
+            dep = c.post(f"/api/2.0/apps/{name}/deployments",
+                         json={"source_code_path": source_code_path})
+            out["deploy_http_status"] = dep.status_code
+            if not dep.is_success:
+                out["platform_error"] = dep.text[:600]
+                out["verified"] = False
+                return _trim(out)
+            out["verified"], out["state"] = _wait_app(c, name, wait_seconds)
+        else:
+            out["verified"], out["state"] = _wait_app(c, name, wait_seconds)
+        out["next"] = (f"call dbx_app_health(app='{name}') to prove it answers"
+                       if out["verified"] else
+                       f"read the logs at {out.get('url') or ''}/logz, then fix and redeploy")
+        return _trim(out)
+
+
+def _wait_app(c, name: str, wait_seconds: int) -> tuple[bool, str]:
+    """Poll until the app is RUNNING. `verified` is what was OBSERVED, never what was requested.
+
+    `SUCCEEDED` on a deployment means the process started, not that it is running your code — the
+    distinction this repository learned the expensive way (spec 013 [AP-3]).
+    """
+    import time
+    t0 = time.time()
+    state = ""
+    while time.time() - t0 <= min(wait_seconds, 120):
+        try:
+            d = c.get(f"/api/2.0/apps/{name}").json()
+        except Exception:  # noqa: BLE001 - a read failure is not a deployment verdict
+            time.sleep(3)
+            continue
+        state = ((d.get("app_status") or {}).get("state")
+                 or (d.get("active_deployment") or {}).get("status", {}).get("state", ""))
+        if state == "RUNNING":
+            return True, state
+        if state in ("CRASHED", "ERROR", "FAILED"):
+            return False, state
+        time.sleep(3)
+    return False, state or "UNKNOWN"
+
+
+@tool()
+def dbx_app_health(app: str, wait_seconds: int = 15) -> str:
+    """Fetch a Databricks App's URL and report the status code and the time it took.
+
+    This is the proof that an app works (spec 013 [AP-4]). A first request after the app scaled to
+    zero is slow and is reported as `starting`, not `down`: an app that is waking is healthy
+    (spec 013 [E-14]).
+    """
+    d = _get(f"/api/2.0/apps/{app}")
+    url = d.get("url") or ""
+    if url and not url.startswith("http"):
+        url = "https://" + url
+    if not url:
+        return _trim({"app": app, "state": "no-url", "detail": "the platform has not assigned a URL yet"})
+    import time
+    t0 = time.time()
+    try:
+        with httpx.Client(timeout=min(wait_seconds, 30), follow_redirects=True) as c:
+            r = c.get(url)
+        ms = int((time.time() - t0) * 1000)
+        if r.status_code < 500:
+            state = "running"
+        else:
+            state = "failing"
+        return _trim({"app": app, "url": url, "status": r.status_code, "ms": ms, "state": state,
+                      "logs": f"{url}/logz"})
+    except httpx.TimeoutException:
+        return _trim({"app": app, "url": url, "state": "starting",
+                      "detail": f"no response in {wait_seconds}s: a cold start, or a hung process",
+                      "logs": f"{url}/logz"})
+    except httpx.HTTPError as e:
+        return _trim({"app": app, "url": url, "state": "unreachable", "detail": type(e).__name__,
+                      "logs": f"{url}/logz"})
 
 
 # --------------------------------------------------------------------------

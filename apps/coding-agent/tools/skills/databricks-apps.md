@@ -1,33 +1,110 @@
-# Databricks Apps: app.yaml format, port, database access, deployment
+---
+name: databricks-apps
+description: Build and deploy a Databricks App — app.yaml, requirements, the Lakebase resource that lets it connect, deployment, and the health check that proves it works. Use when asked to build, scaffold or deploy an app.
+---
 
-## app.yaml (the manifest) - exact format
-`command` is a TOP-LEVEL list. `env` is a top-level LIST of objects with `name` and
-`value` (or `valueFrom` to reference a resource or secret). Nothing is nested under
-`entry:` or `environment:` - those keys do not exist.
+# Databricks Apps: the files, the resource, the deploy, the proof
 
-```yaml
-command: ["python", "app.py"]
-env:
-  - name: PGDATABASE
-    value: "databricks_postgres"
-  - name: PGHOST
-    valueFrom: "database"      # a database resource attached to the app
-  - name: PGPORT
-    value: "5432"
+An app is a small web process inside the workspace. It gets an HTTPS URL, the signed-in user's
+identity, and whatever resources you attach to it. Attaching the resource is not optional if the app
+needs a database: without it the platform injects no `PGHOST` and the app cannot connect.
+
+## The shape that works
+
+```text
+<folder>/app.yaml            the runtime contract
+<folder>/requirements.txt    pip packages
+<folder>/main.py             the app
 ```
 
-## Runtime contract
-- Listen on `0.0.0.0` at the port in env `DATABRICKS_APP_PORT` (default 8000 locally).
-  Typical FastAPI entry: `uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("DATABRICKS_APP_PORT", "8000")))`.
-- `requirements.txt` lists pip packages (fastapi, uvicorn, psycopg2-binary, databricks-sdk, pydantic).
-- Never put tokens or passwords in any file. Read PGPASSWORD from the environment, or
-  generate a short-lived Lakebase credential with the SDK (see skill `lakebase-postgres`).
+`app.yaml` — `command` is a top-level **list**, never a shell string, and only
+`$DATABRICKS_APP_PORT` is substituted:
 
-## Files
-Use `dbx_write_file` for app.py, app.yaml, requirements.txt (plain workspace files, not notebooks).
+```yaml
+command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+env:
+  - name: LAKEBASE_ENDPOINT
+    valueFrom: postgres        # the resource key, from databricks.yml / the app's resources
+```
 
-## Deployment
-Some workspaces refuse to create Apps unless the app is backed by a Git repository.
-`dbx_create_app` returns the platform's answer verbatim, including refusals. If it
-refuses, quote the exact `platform_error` in your report and say the app was NOT
-deployed. Never claim a deployment, URL or "running" status you did not observe.
+`requirements.txt`:
+
+```text
+fastapi
+uvicorn[standard]
+psycopg[binary]>=3.2
+databricks-sdk
+```
+
+`main.py` — read the connection from the environment, never from a file:
+
+```python
+import os
+import psycopg
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/")
+def root():
+    with psycopg.connect(host=os.environ["PGHOST"], dbname=os.environ["PGDATABASE"],
+                         user=os.environ["PGUSER"],
+                         sslmode=os.environ.get("PGSSLMODE", "require")) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM app.tickets")
+            return {"tickets": cur.fetchone()[0]}
+```
+
+## The create call carries the resource
+
+`dbx_create_app` takes the database with it. This is the difference between an app that works and an
+app that starts and cannot connect:
+
+```text
+dbx_create_app(
+    name="agent-<session>-tickets",
+    project="<project id>",
+    branch="agent-<session>",           # never "production"
+    database="databricks_postgres",
+    source_code_path="/Users/me/agent_scratch/tickets_app")
+```
+
+That sends, in one call:
+
+```json
+{"name": "...",
+ "resources": [{"name": "postgres",
+                "postgres": {"branch": "projects/p/branches/b",
+                             "database": "projects/p/branches/b/databases/databricks_postgres",
+                             "permission": "CAN_CONNECT_AND_CREATE"}}],
+ "user_api_scopes": ["postgres"]}
+```
+
+When the resource is attached the **platform creates the Postgres role** for the app's service
+principal and grants it `CONNECT` and `CREATE`. Do not create a role yourself; read it back with
+`dbx_lakebase_role` to prove it exists.
+
+## Rules that decide whether it works
+
+- **Listen on `0.0.0.0`** at `DATABRICKS_APP_PORT`. Bound to `127.0.0.1` the app is unreachable and the
+  deployment still reports `SUCCEEDED`.
+- **Never put a token or password in any file.** Read it from the environment, or mint it.
+- **State on local disk is lost** when the app stops. Keep state in Lakebase or a volume.
+- **`SUCCEEDED` means the process started**, not that it serves your code. Prove it with
+  `dbx_app_health(app=...)`, and report the status code.
+- **A first request after the app was idle is slow** (it scaled to zero). `state: "starting"` is
+  healthy; `unreachable` is not.
+- **Some workspaces require a Git repository** to create an app at all. On those, pass
+  `git_repository: {"url": "...", "provider": "gitHub"}` — or, if the platform refuses a
+  workspace-path source, the refusal is in `platform_error`: quote it exactly, say the app was NOT
+  deployed, and tell the user to deploy from git. **Never retry the same call.**
+- Logs are at `https://<app-url>/logz` and are lost when compute stops. Quote the first error line, not
+  the whole log.
+
+## Report, in this order
+
+1. The app name and its URL.
+2. Whether it is `RUNNING`, and the deployment state you observed.
+3. The health check: status code and elapsed time. If you did not run it, say so.
+4. The resource: which project, branch and database, and the role you read back.
+5. Anything the platform refused, verbatim.

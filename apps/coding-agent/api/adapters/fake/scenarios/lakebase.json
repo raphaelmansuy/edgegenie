@@ -1,0 +1,247 @@
+{
+ "models": [
+  "fake/model-a"
+ ],
+ "turn": {
+  "updates": [
+   {
+    "sessionUpdate": "agent_thought_chunk",
+    "messageId": "t1",
+    "content": {
+     "type": "text",
+     "text": "Build a Lakebase database, put a table in it, then build an app that reads it."
+    }
+   },
+   {
+    "sessionUpdate": "plan",
+    "entries": [
+     {
+      "content": "Create the database",
+      "priority": "high",
+      "status": "in_progress"
+     },
+     {
+      "content": "Make a branch",
+      "priority": "high",
+      "status": "pending"
+     },
+     {
+      "content": "Create the table",
+      "priority": "high",
+      "status": "pending"
+     },
+     {
+      "content": "Attach the database to the app",
+      "priority": "high",
+      "status": "pending"
+     },
+     {
+      "content": "Write the app's files",
+      "priority": "medium",
+      "status": "pending"
+     },
+     {
+      "content": "Deploy",
+      "priority": "medium",
+      "status": "pending"
+     },
+     {
+      "content": "Prove it answers",
+      "priority": "medium",
+      "status": "pending"
+     }
+    ]
+   },
+   {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "c1",
+    "title": "dbx_lakebase_create",
+    "kind": "other",
+    "status": "pending",
+    "rawInput": {}
+   },
+   {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "c1",
+    "status": "completed",
+    "rawInput": {
+     "name": "agent-4ff-pg_tickets"
+    },
+    "content": {
+     "type": "text",
+     "text": "{\"project\": \"projects/pg_tickets\", \"branch\": \"projects/pg_tickets/branches/production\", \"state\": \"READY\", \"ready\": true, \"endpoint\": \"projects/pg_tickets/branches/production/endpoints/primary\"}"
+    }
+   },
+   {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "c2",
+    "title": "dbx_lakebase_branch",
+    "kind": "other",
+    "status": "pending",
+    "rawInput": {}
+   },
+   {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "c2",
+    "status": "completed",
+    "rawInput": {
+     "project": "projects/pg_tickets",
+     "branch": "agent-4ff4405d"
+    },
+    "content": {
+     "type": "text",
+     "text": "{\"branch\": \"projects/pg_tickets/branches/agent-4ff4405d\", \"from\": \"production\", \"state\": \"READY\"}"
+    }
+   },
+   {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "c3",
+    "title": "dbx_lakebase_sql",
+    "kind": "other",
+    "status": "pending",
+    "rawInput": {}
+   },
+   {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "c3",
+    "status": "completed",
+    "rawInput": {
+     "branch": "agent-4ff4405d",
+     "sql": "CREATE TABLE app.tickets (...); INSERT INTO app.tickets ..."
+    },
+    "content": {
+     "type": "text",
+     "text": "{\"ok\": true, \"rowcount\": 12, \"branch\": \"agent-4ff4405d\", \"database\": \"databricks_postgres\"}"
+    }
+   },
+   {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "c4",
+    "title": "dbx_lakebase_tables",
+    "kind": "other",
+    "status": "pending",
+    "rawInput": {}
+   },
+   {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "c4",
+    "status": "completed",
+    "rawInput": {
+     "schema": "app"
+    },
+    "content": {
+     "type": "text",
+     "text": "{\"schema\": \"app\", \"branch\": \"agent-4ff4405d\", \"tables\": [{\"table\": \"tickets\", \"rows\": 12}], \"truncated\": false}"
+    }
+   },
+   {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "c5",
+    "title": "dbx_write_file",
+    "kind": "other",
+    "status": "pending",
+    "rawInput": {}
+   },
+   {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "c5",
+    "status": "completed",
+    "rawInput": {
+     "path": "/Users/you/agent_scratch/tickets_app/app.yaml"
+    },
+    "content": {
+     "type": "text",
+     "text": "{\"path\": \"/Users/you/agent_scratch/tickets_app/app.yaml\", \"bytes\": 214}"
+    }
+   },
+   {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "c6",
+    "title": "dbx_create_app",
+    "kind": "other",
+    "status": "pending",
+    "rawInput": {}
+   },
+   {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "c6",
+    "status": "completed",
+    "rawInput": {
+     "name": "agent-4ff-tickets",
+     "project": "projects/pg_tickets",
+     "branch": "agent-4ff4405d"
+    },
+    "content": {
+     "type": "text",
+     "text": "{\"created\": true, \"app\": \"agent-4ff-tickets\", \"url\": \"https://agent-4ff-tickets.aws.databricksapps.com\", \"resources\": [\"postgres\"], \"deploy_http_status\": 200, \"verified\": true, \"state\": \"RUNNING\"}"
+    }
+   },
+   {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "c7",
+    "title": "dbx_app_health",
+    "kind": "other",
+    "status": "pending",
+    "rawInput": {}
+   },
+   {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "c7",
+    "status": "completed",
+    "rawInput": {
+     "app": "agent-4ff-tickets"
+    },
+    "content": {
+     "type": "text",
+     "text": "{\"app\": \"agent-4ff-tickets\", \"url\": \"https://agent-4ff-tickets.aws.databricksapps.com\", \"status\": 200, \"ms\": 388, \"state\": \"running\"}"
+    }
+   },
+   {
+    "sessionUpdate": "plan",
+    "entries": [
+     {
+      "content": "Create the database",
+      "priority": "high",
+      "status": "completed"
+     },
+     {
+      "content": "Make a branch",
+      "priority": "high",
+      "status": "completed"
+     },
+     {
+      "content": "Create the table",
+      "priority": "high",
+      "status": "completed"
+     },
+     {
+      "content": "Attach the database to the app",
+      "priority": "high",
+      "status": "completed"
+     },
+     {
+      "content": "Write the app's files",
+      "priority": "medium",
+      "status": "completed"
+     },
+     {
+      "content": "Deploy",
+      "priority": "medium",
+      "status": "completed"
+     },
+     {
+      "content": "Prove it answers",
+      "priority": "medium",
+      "status": "completed"
+     }
+    ]
+   }
+  ],
+  "answer": "Built and proved.\n\n- `pg_tickets` on branch `agent-4ff4405d`, table `app.tickets` with 12 rows.\n- `agent-4ff-tickets`, with the database attached as a postgres resource, answered HTTP 200 in 388 ms.\n\nEVIDENCE\n\n| requirement | tool | summary |\n|---|---|---|\n| create the database | dbx_lakebase_create | projects/pg_tickets |\n| put a table in it | dbx_lakebase_sql | 12 rows |\n| build an app that reads it | dbx_create_app | postgres resource, verified |\n| prove it works | dbx_app_health | HTTP 200 |\n",
+  "usage": {
+   "inputTokens": 21000,
+   "outputTokens": 1800,
+   "totalTokens": 22800
+  }
+ }
+}

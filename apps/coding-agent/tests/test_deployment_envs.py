@@ -29,10 +29,13 @@ REPO = APP.parents[1]
 SCRIPTS = APP / "scripts"
 
 #: The scopes `apps update` must receive EVERY time. A full-replacement call that omits one clears it.
+#: `postgres` and `apps` arrived with spec 013: the Data tab reads Lakebase projects and Databricks
+#: Apps, and those calls answer 403 without them. Adding a scope means adding it HERE, in
+#: `scripts/env.sh` and in `databricks.yml` — the three-way parity is what this file enforces.
 REQUIRED_SCOPES = {
     "sql", "files", "model-serving", "ai-gateway", "genie",
     "workspace.workspace", "catalog.catalogs:read", "catalog.schemas:read",
-    "catalog.tables:read",
+    "catalog.tables:read", "postgres", "apps",
 }
 
 

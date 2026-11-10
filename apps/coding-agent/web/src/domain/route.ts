@@ -5,19 +5,22 @@
  *   #/notebook/Users/me@x.com/agent_scratch/etl?cell=3     a notebook, optionally at a cell
  *   #/file/Users/me@x.com/notes.py                         a workspace file
  *   #/table/main.sales.orders                              a Unity Catalog table
+ *   #/lakebase/projects/pg_tickets                         a Lakebase project
+ *   #/lakebase/projects/pg_tickets/branches/agent-4ff      one of its branches
+ *   #/app/tickets_app                                      a Databricks App
  *   #/session/<id>                                         a conversation
  *   #/settings/models   #/settings/providers               the settings screen, on a tab
  *   (empty)                                                 the start page
  *
  * Paths are written the way people write them, so a link can be read and typed: `/` and `@` stay,
  * everything else that matters is percent-encoded per segment. `parse(format(r))` is `r` for every
- * route (the tests hold that), and anything unrecognised parses to the empty route rather than throwing:
- * a stale link must open the app, not a blank page.
+ * route (the tests hold that), and anything unrecognised parses to the empty route rather than
+ * throwing: a stale link must open the app, not a blank page.
  */
-export type DocRouteKind = "notebook" | "file" | "table";
+export type DocRouteKind = "notebook" | "file" | "table" | "lakebase" | "app";
 
 export interface Route {
-  doc: { kind: DocRouteKind; ref: string } | null;
+  doc: { kind: DocRouteKind; ref: string; name?: string } | null;
   /** 1-based cell number within `doc`. */
   cell: number | null;
   session: string | null;
@@ -64,6 +67,15 @@ export function parseRoute(hash: string): Route {
   }
   if (head === "table" && rest.length === 1 && rest[0]) {
     return { ...EMPTY_ROUTE, doc: { kind: "table", ref: decodeSegment(rest[0]) } };
+  }
+  // A Lakebase route carries a resource path, so its segments are decoded one by one and re-joined
+  // with `/`. `projects/pg_tickets` is the canonical form; a bare id still opens the project.
+  if (head === "lakebase" && rest.length > 0 && rest.join("")) {
+    const ref = rest.map(decodeSegment).join("/");
+    return { ...EMPTY_ROUTE, doc: { kind: "lakebase", ref: ref.startsWith("projects/") ? ref : `projects/${ref}` } };
+  }
+  if (head === "app" && rest.length === 1 && rest[0]) {
+    return { ...EMPTY_ROUTE, doc: { kind: "app", ref: decodeSegment(rest[0]) } };
   }
   return EMPTY_ROUTE;
 }

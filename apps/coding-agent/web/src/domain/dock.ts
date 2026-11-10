@@ -100,6 +100,23 @@ export function suggestionsFor(focus: Focus): Suggestion[] {
       { label: "Rewrite it in my folder", prompt: `Rewrite the attached file in my working folder with the same behaviour and clearer structure. Leave the original alone.` },
     ];
   }
+  /* A project and an app are infrastructure, so the suggestions are about their state rather than
+   * about reading code. Showing "Explain this notebook" over a Lakebase project is the defect the S2
+   * screenshot found: a plausible button that is wrong about the subject (spec 013 [UI-3], [UI-4]). */
+  if (doc.kind === "lakebase") {
+    return [
+      { label: `What is in ${doc.name}?`, prompt: `List the tables in the Lakebase project ${doc.name} with their row counts, and name the branch you read. Quote the numbers.` },
+      { label: "Is it healthy?", prompt: `Check the Lakebase project ${doc.name}: are its compute and branches ready, is anything suspended, and is the autoscaling range legal? Report what you observe, not what you assume.` },
+      { label: "Add a table", prompt: `Create a new table in the Lakebase project ${doc.name} on a branch for this session (never on production), insert a few seed rows, and show me the count you read back.` },
+    ];
+  }
+  if (doc.kind === "app") {
+    return [
+      { label: `Is ${doc.name} working?`, prompt: `Run a health check on the Databricks App ${doc.name}: report the status code and the time it took. If it is failing, read its logs and tell me the first error.` },
+      { label: "What does it read?", prompt: `Describe the Databricks App ${doc.name}: its resources, which Lakebase branch it connects to, and which tables it reads.` },
+      { label: "Fix it", prompt: `The Databricks App ${doc.name} is not working. Read its logs at its /logz URL, find the cause, fix the source in my working folder, redeploy, and prove it answers.` },
+    ];
+  }
   return [
     { label: "Explain this notebook", prompt: ACTIONS.explain.prompt, action: "explain" },
     { label: "Find the bug in this notebook", prompt: `Review the attached notebook for bugs. Check every table and column name with describe_table before judging it. Write a corrected copy in your working folder, run it, and show the evidence.`, action: "fix" },

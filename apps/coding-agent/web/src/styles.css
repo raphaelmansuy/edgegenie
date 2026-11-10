@@ -3324,3 +3324,112 @@ h2.rail-group { margin: 0; text-transform: none; }
    (its `height` is now a `min-height`). */
 
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* ==========================================================================
+   Spec 013: the two infrastructure pages (Lakebase project, Databricks App) and the Data tab.
+   Read-only surfaces. They reuse `.viewer-head`, `.kv` and `.pill`'s rhythm rather than inventing a
+   second chrome: a page that looks unlike the rest of the app is a bug even when every assertion
+   passes (spec 013 [11 §the rule for accepting one]).
+   ========================================================================== */
+
+.infra-body { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px 24px; }
+
+.infra-block {
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); min-width: 0;
+}
+.infra-block[data-state="error"] { border-color: var(--pink-100); background: var(--surface-2); }
+.infra-block-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-bottom: 1px solid var(--line);
+  min-height: 32px;             /* a fixed row, so a state change cannot shift the page */
+}
+.infra-block-title {
+  margin: 0; font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--ink-2); font-weight: 600;
+}
+.infra-block-note {
+  font-size: 11.5px; color: var(--ink-3); font-family: var(--mono);
+}
+.infra-block-spacer { flex: 1; }
+.infra-block-body { padding: 10px; }
+.infra-block-empty { margin: 0; font-size: 12.5px; color: var(--ink-3); }
+.infra-block-error { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--ink-2); }
+.infra-block-error > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.infra-block-error .btn { align-self: flex-start; }
+
+.infra-skeleton { display: flex; flex-direction: column; gap: 6px; }
+.infra-skeleton .sk { display: block; height: 10px; border-radius: 4px; background: var(--line); }
+.infra-skeleton .sk.a { width: 62%; }
+.infra-skeleton .sk.b { width: 38%; }
+
+.infra-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px 18px; }
+.infra-fact { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.infra-fact-label {
+  font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--ink-3); flex: 0 0 78px;
+}
+.infra-fact-value { font-size: 12.5px; color: var(--ink); min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.infra-fact-value.is-mono { font-family: var(--mono); font-size: 12px; }
+
+.infra-rows { display: flex; flex-direction: column; }
+.infra-row {
+  display: grid; grid-template-columns: minmax(70px, 1fr) 78px minmax(120px, 1.4fr) 58px minmax(80px, 1fr);
+  gap: 8px; align-items: center; padding: 5px 2px; border-bottom: 1px solid var(--line);
+  font-size: 12px; min-width: 0;
+}
+.infra-row:last-child { border-bottom: 0; }
+.infra-row-name { font-family: var(--mono); color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
+.infra-row-meta, .infra-row-host { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.infra-row-range { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); }
+.infra-row-range.is-bad { color: var(--pink-700); }
+
+.infra-list { margin: 0; padding: 0; list-style: none; }
+.infra-list.cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 14px; }
+.infra-list-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12.5px; }
+.infra-mono { font-family: var(--mono); font-size: 12px; }
+.infra-tag {
+  font-size: 10.5px; padding: 1px 6px; border-radius: 999px;
+  background: var(--green-100); color: var(--green-700);
+}
+.infra-tag.quiet { background: var(--surface-2); color: var(--ink-3); }
+
+.infra-pill {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 8px;
+  border-radius: 999px; font-size: 11px; letter-spacing: 0.02em; white-space: nowrap;
+  flex: none;
+}
+.infra-pill.tone-good { background: var(--green-100); color: var(--green-700); }
+.infra-pill.tone-busy { background: var(--yellow-100); color: var(--yellow-800); }
+.infra-pill.tone-bad { background: var(--pink-100); color: var(--pink-700); }
+.infra-pill.tone-quiet { background: var(--surface-2); color: var(--ink-3); border: 1px solid var(--line); }
+
+.infra-health {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line); background: var(--surface-2);
+  font-size: 12.5px;
+}
+.infra-health.tone-good { border-color: var(--green-100); }
+.infra-health.tone-bad { border-color: var(--pink-100); }
+.infra-health-sentence { flex: 1; min-width: 0; }
+.infra-health-code { font-family: var(--mono); font-size: 12px; color: var(--ink-2); flex: none; }
+
+.infra-fix { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; flex-wrap: wrap; }
+.infra-note { margin: 8px 0 0; font-size: 12px; color: var(--ink-3); }
+.infra-link { color: var(--teal-700); text-decoration: none; background: none; border: 0;
+  padding: 0; font: inherit; cursor: pointer; }
+.infra-link:hover { text-decoration: underline; }
+
+/* The Data tab's rows: one glyph, a name, a state. The state is always a word, never colour only. */
+.tree-group {
+  font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-3); padding: 10px 8px 4px; font-weight: 600;
+}
+.data-row { display: flex; align-items: center; gap: 8px; width: 100%;
+  border: 0; background: none; text-align: left; cursor: pointer; }
+.data-row:hover { background: var(--surface); }
+.data-row .tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-icon.kind-lakebase { color: var(--teal-700); }
+.tree-icon.kind-app { color: var(--purple-700); }
