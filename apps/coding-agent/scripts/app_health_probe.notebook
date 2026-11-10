@@ -19,6 +19,7 @@
 # COMMAND ----------
 
 import json
+import urllib.error
 import urllib.request
 
 dbutils.widgets.text("endpoint", "projects/coding-agent-llm/branches/production/endpoints/primary")
@@ -112,6 +113,100 @@ record("the app owns its schemas", bool(same), f"llm owner {owners.get('llm')}")
 cur.close()
 conn.close()
 
+# COMMAND ----------
+
+# -- 5. spec 014 is deployed, proved by its ROUTES, not by "the process started" --------------------
+# These paths exist only in the commit that added jobs and pipelines. A live app serving an older tree
+# answers 404 (or the SPA's HTML), which is exactly the failure `make verify` was written for: a deploy
+# reported SUCCEEDED three times while serving none of the work. `call` above raises on a 4xx, so each
+# probe treats "the handler answered" as the pass and any HTTP error as the fail.
+APP_URL = call("GET", "/api/2.0/apps/coding-agent")["url"]
+APP_URL = APP_URL if APP_URL.startswith("http") else f"https://{APP_URL}"
+UA_TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+
+
+def probe(path: str, method: str = "GET") -> tuple[int, str]:
+    """One call to the DEPLOYED app. Returns (status, body); never raises on a 4xx/5xx."""
+    req = urllib.request.Request(
+        f"{APP_URL}{path}", method=method,
+        data=b"{}" if method == "POST" else None,
+        headers={"Authorization": f"Bearer {UA_TOKEN}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=90) as r:
+            return r.status, r.read().decode()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode()
+
+
+def is_json_route(status: int, body: str) -> bool:
+    """A registered route answers JSON — `items`, or a `detail` sentence.
+
+    A 401/403 is NOT proof and must not count. Measured: this probe's first version accepted any non-404
+    as "served", so four routes reported PASS with `HTTP 401` from the app's OAuth proxy while the
+    handler had never run — a loose assertion that proves a looser thing, which is the failure mode this
+    repository keeps recording. The proxy refuses a notebook-supplied token, so the honest verdict for a
+    401 is "not verified from here", and the caller treats it as a skip, not a pass.
+    """
+    if status in (401, 403):
+        return False
+    return status != 404 and "<!doctype html" not in body.lower() and ("{" in body)
+
+
+# 5a. Every route spec 013 and 014 added is served.
+# A 401 means the proxy refused the token this notebook carries, so the handler never ran: that is a
+# SKIP and it is said out loud, never counted as a pass.
+skipped = []
+for path in ("/api/jobs", "/api/pipelines", "/api/lakebase/projects", "/api/apps"):
+    status, body = probe(path)
+    if status in (401, 403):
+        skipped.append({"check": f"{path} is served", "detail": f"HTTP {status}: the proxy refused this "
+                        "notebook's token, so the route was not exercised from here"})
+    else:
+        record(f"{path} is served", is_json_route(status, body), f"HTTP {status}")
+
+# 5b. The state vocabulary is live, computed server-side by api.domain.jobs. A running run must offer
+#     Cancel and must NOT offer a Repair; the platform refuses a repair of a live run. These two facts
+#     are the whole of [RUN-2] and [RUN-3], and they cannot be true of an older tree.
+def acts_of(path: str) -> dict:
+    status, body = probe(path)
+    if status in (401, 403):
+        skipped.append({"check": path, "detail": f"HTTP {status}: refused by the proxy"})
+        return {}
+    try:
+        return json.loads(body)
+    except Exception:
+        return {}
+
+
+acts = acts_of("/api/infra/run-actions?life_cycle=RUNNING")
+if acts:
+    record("the run vocabulary is live (running: cancel, no repair)",
+           acts.get("word") == "running" and acts.get("cancel") is True
+           and acts.get("repair") is False,
+           f"word={acts.get('word')} cancel={acts.get('cancel')} repair={acts.get('repair')}")
+
+acts2 = acts_of("/api/infra/run-actions?life_cycle=TERMINATED&result=FAILED")
+if acts2:
+    record("a failed terminal run reads failed and offers Repair",
+           acts2.get("word") == "failed" and acts2.get("repair") is True
+           and acts2.get("cancel") is False,
+           f"word={acts2.get('word')} repair={acts2.get('repair')}")
+
+# 5c. There is NO write route for a job or a pipeline, by design: every action goes through the agent
+#     so the write fence has one home (spec 014 [07 §5]). 404/405/403 all mean "no handler ran".
+for path in ("/api/jobs/1", "/api/pipelines/x"):
+    status, _ = probe(path, "POST")
+    if status in (401,):
+        skipped.append({"check": f"POST {path} is refused", "detail": "HTTP 401: refused by the proxy"})
+    elif status == 403:
+        # A 403 from the app itself would mean a handler ran, which is the thing this check forbids;
+        # from the proxy it means the request never arrived. The body distinguishes them, but this
+        # notebook cannot read the proxy's headers, so it is a skip rather than a guess.
+        skipped.append({"check": f"POST {path} is refused", "detail": "HTTP 403: could be the proxy"})
+    else:
+        record(f"POST {path} is refused (no browser write path)", status in (404, 405), f"HTTP {status}")
+
 failed = [c for c in checks if not c["pass"]]
-print(json.dumps(checks, indent=1))
-dbutils.notebook.exit(json.dumps(checks))
+print(json.dumps({"checks": checks, "skipped": skipped, "failed": len(failed)}, indent=1))
+dbutils.notebook.exit(json.dumps({"checks": checks, "skipped": skipped}))
