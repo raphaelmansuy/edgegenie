@@ -12,7 +12,8 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { Doc } from "../domain/docs";
 import {
-  isError, lakebaseUrl, orDash, projectId, type LakebasePageData,
+  isError, isReady, lakebaseUrl, orDash, projectId, projectState, stateWord,
+  type LakebasePageData,
 } from "../domain/lakebase";
 import type { Workspace } from "../domain/links";
 import { ExtLink } from "./ExtLink";
@@ -70,13 +71,19 @@ export function LakebasePage({ doc, workspace }: { doc: Doc; workspace: Workspac
     setTick((n) => n + 1);
   };
 
+  // [RB-12] The header's word is DERIVED from the branch and compute reads, because a project has no
+  // state field of its own. Before this, the pill read `project.state`, got `undefined`, and said
+  // "loading" forever over a project that was ready — a defect a screenshot found and no assertion did.
+  const derived = projectState(branches, compute);
+  const headerState = page.state === "error" ? "unreadable" : derived || page.state;
+
   return (
     <section className="viewer infra-view" aria-label={`${doc.name} project`}>
       <header className="viewer-head">
         <div className="viewer-title">
           <span className="viewer-name">{project?.displayName || doc.name}</span>
-          <StatePill state={project?.state ? project.state : page.state === "error" ? "unreadable" : "loading"}
-            tone={project?.ready ? "good" : page.state === "error" ? "bad" : "busy"} />
+          <StatePill state={headerState}
+            tone={page.state === "error" ? "bad" : derived && isReady(derived) ? "good" : "busy"} />
         </div>
         <button className="viewer-path" title={`Copy the resource name ${doc.ref}`}
           aria-label={`Copy the resource name ${doc.ref}`}
@@ -102,7 +109,10 @@ export function LakebasePage({ doc, workspace }: { doc: Doc; workspace: Workspac
             <Fact label="id" value={projectId(doc.ref)} />
             <Fact label="postgres" value={orDash(project?.pgVersion)} />
             <Fact label="default branch" value={orDash(project?.defaultBranch)} />
-            <Fact label="state" value={orDash(project?.state)} mono={false} />
+            <Fact label="state" value={derived ? stateWord(derived) : "—"} mono={false} />
+            {!derived && (
+              <Fact label="readiness" value="see branch + compute" mono={false} />
+            )}
           </div>
         </Block>
 

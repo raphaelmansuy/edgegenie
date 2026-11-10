@@ -216,13 +216,102 @@ The tests that matter most, and why:
 `test_lakebase_tools.py::test_the_adapter_never_speaks_the_provisioned_dialect` | the old API creeping back — a vocabulary test for a vocabulary defect |
 `route.test.ts` (the three original kinds) | a regression in the existing grammar while adding two members |
 
+## A second pass, from a question the agent could not answer
+
+After the deployment above, the Lakebase tools were still failing — and this time the failure was
+reported by the *agent itself*, in a transcript that said:
+
+```text
+dbx_lakebase_status('coding-agent-llm-dev')  ->  permission denied by the workspace
+```
+
+Six tool calls, two scratch notebooks and a final answer that could not report a single fact. The task
+had asked a narrow question — *are the compute and branches ready, is anything suspended, is the
+autoscaling range legal* — and the answer came back "permissions". It was not permissions. Three
+defects were stacked, and each one hid the next.
+
+| # | What was actually true | How the transcript read |
+|---|---|---|
+| `[RB-13]` | the tool server still reached `/api/2.0/postgres` through the **user** token at three call sites | "permission denied by the workspace" |
+| `[RB-14]` | `coding-agent-llm-dev` is a *display name* ("coding-agent-llm dev"); the id is `coding-agent-llm`, and a 404 was reported as a 403 | "permission denied by the workspace" |
+| `[RB-11]` | the connection picked `roles[0]`, so it could connect as the human while the credential was minted by the SP | `OAuth: User is not authorized` |
+
+**The reasoning that separated them, which is the part worth recording.** A wrong id answers **404**. A
+missing grant answers **403**. Both ids — the real one and the guessed one — answered **403**, so the
+id could not be the cause; the one identity that gets 403 on a project it owns is a user token. That
+inference took one `curl` and settled what six tool calls had failed to settle, because the platform
+*does* distinguish the causes and our message did not.
+
+**What changed.**
+
+| File | Change |
+|---|---|
+`tools/databricks_notebook_mcp.py` | `_patch_sp` added; `_lakebase_connect` and `dbx_lakebase_compute` moved to the SP transport; `_lakebase_connect_user` prefers the SP's role and refuses instead of guessing; `_refuse_response` names the identity it used and says whether the cause is a defect or a grant; `_has_sp()` tells a deployment from a laptop |
+`api/services/orchestrator.py` | a missing SP token warns at `WARNING` instead of a `DEBUG` nobody reads — the cause of a 403 three layers away |
+`tests/test_tool_server_identity.py` | **9 new tests**, including a source-level guard that fails if *any* `_get`/`_post`/`_patch` is called with a Postgres path |
+`web/src/domain/lakebase.ts` | **`projectState()`**: readiness derived from the branch and its compute, because a project has none of its own |
+`web/src/components/LakebasePage.tsx` | the header pill and the `state` fact read that derived word instead of a field the API never sends |
+`specs/013-improve-coding/10-roadblocks.md` | `[RB-12]`, `[RB-13]`, `[RB-14]` — the three findings, each with its measurement |
+
+### The fourth defect, and it took a picture
+
+After every suite was green — 797 backend, 749 front end — the S2 screenshot showed the project page
+with a **"loading"** pill above a project whose compute said `ready`. The cause was the same `[RB-12]`
+class in the UI: the payload type declared `project.state` and `project.ready`, the adapter correctly
+sent neither, and the header expression `project?.state ? … : "loading"` therefore always took the
+`else` branch.
+
+**Why no test saw it.** The component fixture *invented* the missing fields:
+
+```ts
+project: { ref: "…", name: "pg_tickets", displayName: "Tickets",
+           state: "ready", ready: true, pgVersion: 17 }   // ← the last three: not in the payload
+```
+
+The fixture agreed with the component and disagreed with the API, so the two wrongs cancelled. The
+fixture now matches the measured payload, and two tests assert the *derived* word — one for `ready`,
+one for `starting`, because a derived word must not become a cheerful lie.
+
+**The rule now lives in the domain**, `projectState(branches, compute)`, with six unit tests. It says
+`ready` only when the default branch is ready and no compute on it has failed; it treats a suspended
+compute as a state rather than a fault (`[RB-7]`); and it returns `""` — no guess — when the branch
+read itself failed.
+
+**Measured after the fix**, against the live workspace, through the tool itself:
+
+```text
+dbx_lakebase_status('coding-agent-llm')      -> production READY, primary ACTIVE, 1.0-1.0 CU,
+                                                range_legal true, anythingSuspended false
+dbx_lakebase_status('coding-agent-llm-dev')  -> no project with that id; knownProjectIds
+                                                ["coding-agent-llm", "edgequake-spec165-probe"]
+```
+
+The first line is the answer to the question that started this pass, and it is the first time this
+product could answer it. The second is the recovery path: an agent told *which ids exist* does not go
+looking for a grant.
+
+**The lesson is `[F1]`'s, in a new place.** The suite was green — 788 tests — and could see none of
+this, because every test faked the transport and none asserted **which credential the transport
+carried**. A fake that answers 200 cannot tell you the request was unauthorizable. That is why the new
+guard is a *source* test: it asserts a property of every call site, including the ones added later.
+
+| Gate | Before this pass | After |
+|---|---|---|
+| `pytest` | 788 passed, 7 skipped | **797 passed, 7 skipped** |
+| `vitest` | 741 passed | **749 passed** |
+| `tsc -b --noEmit` | clean | clean |
+| `lakebase-e2e.mjs` | 8/8 scenes | **8/8 scenes**, screenshot S2 re-inspected twice |
+| Spec ids | 70 cited, **1 undefined** (a bracketed placeholder in the README legend) | **70 cited, 70 defined, 0 missing** |
+| Live tool call | 403 on both ids | **the project, its branch and its compute; 404 recovery on a wrong id** |
+
 ## Still open, honestly
 
 | Item | Why it is not closed |
 |---|---|
 | A scaffold against a real workspace | needs `CAN MANAGE` on a Lakebase project and an app quota; the adapter asserts every URL and body, and the E2E runs on recorded payloads. `[RB-1]` is the boundary |
 | `a11y-audit.mjs` / `overflow-audit.mjs` against the new pages | both drive a real workspace (they search `Files` for a notebook) and cannot run here. The pages are covered by 11 component tests and by the scenes' own overflow checks. **The target itself was fixed**: it now says which audit could not run instead of exiting 0 |
-| The Postgres API's exact field names on a 2026-11 build | taken from the vendor reference; the adapter reads `status.state`, `status.hosts.host` and the autoscaling limits, and a rename fails loudly with the path in the message rather than silently showing `—` |
+| The Postgres API's exact field names on a 2026-11 build | **half closed.** The names are now measured against a live project, not taken from a reference (see `[RB-12]` for the table). What remains: CI asserts **recorded** payloads, so a workspace-side rename still needs a human to notice |
+| The tool server's **fallback** to the user token | deliberate, so a laptop works. It is also why `[RB-13]` failed quietly. `_refuse_response` now makes that case legible and names it a defect, but the fallback itself is still there |
 | An app created from a Git source | `[RB-3]`: the app cannot obtain a Git credential on the user's behalf. It is accepted as an argument and the refusal is reported verbatim |
 | The `role` step for a **pre-existing** app | the platform creates the role when the resource is attached; for an app created before this change, `dbx_lakebase_role` reports what exists and says what to do |
 | Reading a table's row count on the page | the page lists **names** (one connection, `LIMIT 51`); a count per table is `O(t)` queries and lives in `dbx_lakebase_tables`, where an agent asked for it explicitly |

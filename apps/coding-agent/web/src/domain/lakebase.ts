@@ -73,6 +73,36 @@ export const isReady = (state: string): boolean => stateWord(state) === "ready";
 /** A suspended compute wakes on the first connection; it is a state, not a failure ([RB-7]). */
 export const isSuspended = (state: string): boolean => stateWord(state) === "asleep";
 
+/**
+ * Is a project ready, given that a project has no state of its own? ([RB-12])
+ *
+ * The API sends a project with `status.display_name`, a version, an owner and default endpoint
+ * settings — and **no state field**. Readiness belongs to the branches, and to the computes on them.
+ * The page header therefore derives one word from three facts it actually has, in this order:
+ *
+ * 1. no branch read at all → `""`, which the header renders as the page's own load state. A guess here
+ *    is how the pill said "loading" forever over a project that was ready.
+ * 2. the default branch is not ready → its own state word (`starting`, `asleep`, `failed`).
+ * 3. the default branch is ready but a compute on it is disabled or failed → that word.
+ * 4. otherwise → `READY`.
+ *
+ * Suspended is deliberately **not** a failure: a compute wakes on the first connection ([RB-7]).
+ * Pure and total, so the same table can be tested without a browser.
+ */
+export function projectState(
+  branches: { name: string; state: string; isDefault: boolean }[] | { error: string } | undefined,
+  compute: { state: string; suspended: boolean }[] | { error: string } | undefined,
+): string {
+  if (!branches || isError(branches) || branches.length === 0) return "";
+  const branch = branches.find((b) => b.isDefault) ?? branches[0];
+  if (!isReady(branch.state)) return branch.state;
+  if (compute && !isError(compute)) {
+    const broken = compute.find((c) => stateWord(c.state) === "failed" || stateWord(c.state) === "stopped");
+    if (broken) return broken.state;
+  }
+  return "READY";
+}
+
 /** Where a project and its branch live in the Databricks UI, when the host is known. */
 export function lakebaseUrl(host: string | null | undefined, project: string): string | null {
   if (!host) return null;
@@ -84,7 +114,8 @@ export interface ProjectBlock { error?: string }
 
 /** The four independent blocks a project page renders. Each may be an error instead of data. */
 export interface LakebasePageData {
-  project?: { ref: string; name: string; displayName: string; state: string; ready: boolean;
+  /** [RB-12] A project carries NO `state` and NO `ready` field — see `projectState`. */
+  project?: { ref: string; name: string; displayName: string;
               pgVersion?: number; defaultBranch?: string; error?: string };
   branches?: { ref: string; name: string; isDefault: boolean; state: string }[] | { error: string };
   databases?: { ref: string; name: string }[] | { error: string };

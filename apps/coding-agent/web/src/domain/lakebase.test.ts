@@ -5,7 +5,7 @@
  */
 import {
   branchId, branchRef, describeRange, endpointRef, isError, isReady, isSuspended,
-  lakebaseUrl, orDash, projectId, projectRef, rangeProblem, rangeValid, stateWord,
+  lakebaseUrl, orDash, projectId, projectRef, projectState, rangeProblem, rangeValid, stateWord,
 } from "./lakebase";
 
 describe("project identity", () => {
@@ -104,5 +104,46 @@ describe("page helpers", () => {
     expect(lakebaseUrl("https://h.cloud.databricks.com/", "projects/pg"))
       .toBe("https://h.cloud.databricks.com/database/projects/pg");
     expect(lakebaseUrl(null, "projects/pg")).toBeNull();
+  });
+});
+
+describe("a project's readiness is derived, because it has none of its own", () => {
+  // [RB-12] The defect a screenshot found: the header pill read `project.state`, which the API never
+  // sends, so it said "loading" forever over a project that was ready. No assertion caught it because
+  // every test supplied a `state` the real payload cannot contain.
+  const branches = (state: string, isDefault = true) => [{ name: "production", state, isDefault }];
+
+  it("says ready when the default branch is ready and its compute is fine", () => {
+    expect(projectState(branches("READY"), [{ state: "ACTIVE", suspended: false }])).toBe("READY");
+    expect(stateWord(projectState(branches("READY"), []))).toBe("ready");
+  });
+
+  it("never says ready while the default branch is still starting", () => {
+    expect(stateWord(projectState(branches("PROVISIONING"), []))).toBe("starting");
+  });
+
+  it("reports a suspended compute as a state, not a failure", () => {
+    // [RB-7] A compute wakes on the first connection; calling it broken would be a false alarm.
+    expect(stateWord(projectState(branches("READY"), [{ state: "SUSPENDED", suspended: true }])))
+      .toBe("ready");
+  });
+
+  it("surfaces a failed compute on a ready branch", () => {
+    expect(stateWord(projectState(branches("READY"), [{ state: "FAILED", suspended: false }])))
+      .toBe("failed");
+  });
+
+  it("returns nothing rather than guessing when the branch read failed", () => {
+    expect(projectState(undefined, undefined)).toBe("");
+    expect(projectState({ error: "denied" }, undefined)).toBe("");
+    expect(projectState([], undefined)).toBe("");
+  });
+
+  it("prefers the default branch when the list is not ordered by it", () => {
+    const list = [
+      { name: "agent-9", state: "PROVISIONING", isDefault: false },
+      { name: "production", state: "READY", isDefault: true },
+    ];
+    expect(projectState(list, [])).toBe("READY");
   });
 });

@@ -9,8 +9,11 @@ const project = makeDoc("lakebase", "projects/pg_tickets", "pg_tickets");
 const app = makeDoc("app", "tickets_app");
 
 const page = (over: Record<string, unknown> = {}) => ({
+  // [RB-12] This fixture must match what the API ACTUALLY sends: a project has no `state` and no
+  // `ready`. The old fixture invented both, which is why every test passed while the header pill read
+  // `project.state`, got `undefined`, and said "loading" forever over a ready project.
   project: { ref: "projects/pg_tickets", name: "pg_tickets", displayName: "Tickets",
-    state: "ready", ready: true, pgVersion: 17, defaultBranch: "production" },
+    pgVersion: 17, defaultBranch: "production" },
   branches: [{ ref: "projects/pg_tickets/branches/production", name: "production", isDefault: true, state: "ready" },
     { ref: "projects/pg_tickets/branches/agent-4ff", name: "agent-4ff", isDefault: false, state: "ready" }],
   databases: [{ ref: "projects/pg_tickets/branches/production/databases/databricks_postgres",
@@ -61,11 +64,39 @@ describe("LakebasePage", () => {
   it("says a value could not be read rather than showing zero", async () => {
     // [E-11] the rule this page exists to keep
     mockFetch({ "/tables": { schema: "public", tables: [], truncated: false },
-      "/api/lakebase/projects/": page({ project: { ref: "projects/p", name: "p", displayName: "P",
-        state: "ready", ready: true } }) });
+      "/api/lakebase/projects/": page({ project: { ref: "projects/p", name: "p", displayName: "P" } }) });
     render(<LakebasePage doc={project} workspace={null} />);
     await waitFor(() => expect(screen.getByText("P")).toBeInTheDocument());
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("derives 'ready' in the header instead of saying 'loading' forever", async () => {
+    // [RB-12] The defect a SCREENSHOT found. The project payload has no `state`, so a header that read
+    // one rendered `loading` over a project whose branch said READY. The old fixture invented
+    // `state: "ready"` on the project, so no test could see it. This test refuses the invention.
+    mockFetch({ "/tables": { schema: "public", tables: [], truncated: false },
+      "/api/lakebase/projects/": page() });
+    const { container } = render(<LakebasePage doc={project} workspace={null} />);
+    await waitFor(() => expect(screen.getByText("Tickets")).toBeInTheDocument());
+    // Wait for the branch read, which is what makes readiness knowable.
+    await waitFor(() => {
+      const pill = container.querySelector(".viewer-title .infra-pill");
+      expect(pill?.textContent?.toLowerCase()).toBe("ready");
+    });
+    expect(container.querySelector(".viewer-title .infra-pill")?.className).not.toMatch(/busy/);
+  });
+
+  it("still says 'starting' when the default branch is not ready", async () => {
+    // The other half: a derived word must not become a cheerful lie.
+    mockFetch({ "/tables": { schema: "public", tables: [], truncated: false },
+      "/api/lakebase/projects/": page({
+        branches: [{ ref: "projects/pg_tickets/branches/production", name: "production",
+          isDefault: true, state: "starting" }] }) });
+    const { container } = render(<LakebasePage doc={project} workspace={null} />);
+    await waitFor(() => {
+      expect(container.querySelector(".viewer-title .infra-pill")?.textContent?.toLowerCase())
+        .toBe("starting");
+    });
   });
 
   it("keeps three blocks when the branches call is denied", async () => {

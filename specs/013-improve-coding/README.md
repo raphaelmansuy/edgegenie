@@ -39,9 +39,11 @@ deployment of this app itself (017/021). Cited, not restated.
 | 12 | [Outcome](12-outcome.md) | What shipped, and what the screenshots found |
 | — | [E2E screenshots](e2e/screenshots/README.md) | What it actually looks like, each one inspected |
 
-Cross-references: a requirement is `[LB-3]`, a decision `[D7]`, an edge case `[E-12]`, a scene `[S4]`,
-a roadblock `[RB-5]`. Each id is defined once — in `03`, `09` or `10` — and cited everywhere else. A
-citation that is not in one of those three is a bug in this document set.
+Cross-references: a requirement is `[LB-3]`, an edge case `[E-12]`, a scene `[S4]`, a roadblock
+`[RB-5]`. Each id is defined once — in `03`, `09` or `10` — and cited everywhere else. A citation that
+is not in one of those three is a bug in this document set. (Findings `F1`–`F9` are the exception: they
+are the *evidence*, defined in [02](02-assessment.md), and cited without brackets so they cannot be
+confused with a defined id.)
 
 Builds on:
 [001](../001-databricks-coding-agents/README.md) the app, its ports and its fence ·

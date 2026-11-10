@@ -580,8 +580,16 @@ class Orchestrator:
                 with os.fdopen(fd, "w") as fh:
                     fh.write(sp.get())
                 live.extra["sp_token_file"] = sp_path
-            except Exception:      # noqa: BLE001 - the tools degrade to the user token, as on a laptop
-                log.debug("no service-principal token for this session's tool server")
+            except Exception as exc:      # noqa: BLE001 - the tools degrade to the user token, as on a laptop
+                # Degrading is correct; degrading SILENTLY is not. A missing token file makes every
+                # `/api/2.0/postgres` call answer 403, which reads as a permissions problem on the
+                # user's project — three layers away from this line. `warning`, not `debug`, so the
+                # app's own log answers "why is the Data tab refused" in one line.
+                logging.getLogger("app.session").warning(
+                    "no service-principal token for this session's tool server: %s", exc)
+        elif sp is not None:
+            logging.getLogger("app.session").debug(
+                "this process has no service principal; Lakebase tools use the user token")
 
     async def model_options(self, session_id: str) -> dict:
         live = self.get(session_id)

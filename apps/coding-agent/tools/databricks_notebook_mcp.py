@@ -128,7 +128,21 @@ def _sp_token() -> str:
 
 
 def _sp_client() -> httpx.Client:
-    """An HTTP client authenticated as the service principal. Same refusal contract as `_client`."""
+    """An HTTP client authenticated as the service principal. Same refusal contract as `_client`.
+
+    EVERY call under `/api/2.0/postgres` must go through this and never through `_client`. The rule is
+    the platform's, not ours (spec 013 [RB-10]):
+
+        `postgres` — Lakebase (always bound to the SP, not OBO)
+
+    A forwarded user token therefore never carries it, so `_get`/`_post`/`_patch` against a Postgres
+    path answer 403 for every user no matter which scopes the app declares. That is measured, not
+    inferred: on the deployed app the same human's PAT read `projects/coding-agent-llm` with a 200
+    while the tool reported 403 for it.
+
+    The three helpers below exist so that "which identity" is a property of the PATH'S API rather than
+    of the call site — a call site is what got it wrong.
+    """
     token = _sp_token()
     if not HOST or not token:
         raise RuntimeError(
@@ -142,12 +156,54 @@ def _sp_client() -> httpx.Client:
     )
 
 
+def _has_sp() -> bool:
+    """True when a real service-principal token file is present (a deployment, not a laptop).
+
+    `_sp_token()` falls back to the user token so that a laptop keeps working; this predicate is how a
+    caller says *which* case it is in, without reading the file a second time.
+    """
+    path = os.environ.get("NBMCP_SP_TOKEN_FILE", "")
+    if not path:
+        return False
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return bool(fh.read().strip())
+    except OSError:
+        return False
+
+
 def _refuse_response(response: httpx.Response) -> None:
-    if response.status_code in (401, 403):
-        raise PermissionError(
-            f"permission denied by the workspace for {response.request.method} "
-            f"{response.request.url.path}. The signed-in user or this app's authorization does not "
-            "allow it. Do not retry; use another tool or report it.")
+    """Turn a 401/403 on a service-principal call into a sentence the model can act on.
+
+    **The distinction that matters.** A 403 on `/api/2.0/postgres` almost never means "your permissions
+    are wrong". It means one of two things, and conflating them sent a live investigation down a
+    three-tool dead end:
+
+    * the call carried a **user** token, which can never carry `postgres` ([RB-10]) — a product defect;
+    * the call carried the **SP** token and the SP genuinely lacks the permission — a grant to make.
+
+    Both used to print "permission denied by the workspace … the signed-in user or this app's
+    authorization does not allow it", which reads as *the user needs a grant* and invites an agent to
+    retry, re-authenticate, or blame an id. So this hook names the identity that was used, states that
+    retrying cannot help, and — for the user-token case — says it is a defect in this tool server
+    rather than something the caller can fix.
+    """
+    if response.status_code not in (401, 403):
+        return
+    used_sp = _has_sp()
+    path = response.request.url.path
+    identity = (
+        "the app's service principal" if used_sp
+        else "the signed-in user's token, and this API cannot be called with a user token"
+    )
+    raise PermissionError(
+        f"permission denied by the workspace for {response.request.method} {path}. "
+        f"The request was made as {identity}. "
+        + ("" if used_sp else
+           "That is a defect in this tool server, not something to work around: /api/2.0/postgres is "
+           "always bound to the service principal. Report it and stop. Do not call this tool again. ")
+        + "A retry with the same identity will fail identically."
+    )
 
 
 def _get_sp(path: str, params: dict | None = None) -> Any:
@@ -169,6 +225,21 @@ def _post_sp(path: str, body: dict | None = None) -> Any:
             r.raise_for_status()
             return data
     return _retry(go, idempotent=False)
+
+
+def _patch_sp(path: str, body: dict | None = None) -> Any:
+    """A partial update as the service principal. Idempotent: the same body twice leaves one state.
+
+    Postgres has no `_patch` path that may use the user token, so there is no user-token twin here.
+    """
+    def go():
+        with _sp_client() as c:
+            r = c.patch(path, json=body or {})
+            data = r.json() if r.headers.get("content-type", "").startswith("application/json") \
+                else {"raw": r.text}
+            r.raise_for_status()
+            return data
+    return _retry(go, idempotent=True)
 
 
 def _client() -> httpx.Client:
@@ -1363,9 +1434,9 @@ def dbx_lakebase_compute(project: str, branch: str = "production", endpoint: str
         problem = _capacity_problem(min_cu, max_cu)
         if problem:
             return _trim({"error": problem})
-        _patch(path, {"spec": {"autoscaling_limit_min_cu": float(min_cu or 0.5),
-                               "autoscaling_limit_max_cu": float(max_cu)}})
-    d = _get(path)
+        _patch_sp(path, {"spec": {"autoscaling_limit_min_cu": float(min_cu or 0.5),
+                                  "autoscaling_limit_max_cu": float(max_cu)}})
+    d = _get_sp(path)
     status = d.get("status") or {}
     return _trim({
         "endpoint": d.get("name") or path,
@@ -1423,9 +1494,23 @@ def _lakebase_connect_user(project: str, branch: str, wanted: str) -> str:
     """The Postgres username to connect as, taken from the branch's ROLES.
 
     The `postgres_role` field is on a role's `status`, not on the endpoint: an earlier version read it
-    from the endpoint, got `""`, and every connection failed. The tool acts as the signed-in user, so
-    it looks for that identity first and falls back to the only role when a branch has one
-    (spec 013 [RB-11]).
+    from the endpoint, got `""`, and every connection failed (spec 013 [RB-11]).
+
+    **Which role, when a branch has several.** The credential and the role must belong to the same
+    identity, because a Lakebase credential "may only be used by the identity that minted it"
+    ([RB-11] part 2). The credential is minted with the SERVICE PRINCIPAL token, so the connection must
+    be the service principal's role. Picking `roles[0]` was therefore wrong in the one deployment that
+    has two roles, and it failed in the most confusing way available: the management calls succeeded and
+    the connection reported `OAuth: User is not authorized`.
+
+    Order of preference, the same rule `adapters/databricks/lakebase.py::_connect_role` implements:
+
+    1. the app's own service principal, when this process has one (`DATABRICKS_CLIENT_ID`);
+    2. the caller's identity, when the caller has a role (a laptop, or a hand-provisioned branch);
+    3. the only role, when the branch has exactly one — unambiguous, so it cannot be the wrong one.
+
+    Anything else is a refusal that names the roles, because silently picking one would read another
+    identity's objects.
     """
     p = _lakebase_project(project)
     data = _get_sp(f"/api/2.0/postgres/{p}/branches/{branch or 'production'}/roles")
@@ -1433,8 +1518,15 @@ def _lakebase_connect_user(project: str, branch: str, wanted: str) -> str:
                    or (r.get("spec") or {}).get("postgres_role") or "")
                   for r in data.get("roles", [])]
     identities = [i for i in identities if i]
+
+    # 1. The identity the credential was minted by, when this process has one.
+    client_id = os.environ.get("DATABRICKS_CLIENT_ID", "")
+    if _has_sp() and client_id and client_id in identities:
+        return client_id
+    # 2. The caller, when the caller has a role of their own.
     if wanted and wanted in identities:
         return wanted
+    # 3. The only role: nothing to choose, so nothing to choose wrongly.
     if len(identities) == 1:
         return identities[0]
     if not identities:
@@ -1442,8 +1534,10 @@ def _lakebase_connect_user(project: str, branch: str, wanted: str) -> str:
             f"no Postgres role on branch {branch or 'production'}; attach a database resource to the "
             "app (the platform creates the role) or create one with dbx_lakebase_role")
     raise RuntimeError(
-        f"this branch has {len(identities)} roles and none matches {wanted!r} "
-        f"({', '.join(identities)}); connect as one of those")
+        f"this branch has {len(identities)} roles and none matches this app's identity "
+        f"({', '.join(identities)}); a credential may only be used by the identity that minted it, so "
+        "connecting as another one fails with 'User is not authorized'. Attach the app's postgres "
+        "resource so the platform creates its role")
 
 
 def _lakebase_connect(endpoint: str, database: str, user: str):
@@ -1454,7 +1548,7 @@ def _lakebase_connect(endpoint: str, database: str, user: str):
     (spec 013 [F1]). The token is minted per call by design: the tool runs SQL the agent wrote.
     """
     import psycopg
-    d = _get(endpoint)
+    d = _get_sp(endpoint)
     host = ((d.get("status") or {}).get("hosts") or {}).get("host", "")
     if not host:
         raise RuntimeError(

@@ -362,10 +362,130 @@ computed.
 
 ---
 
+## `[RB-12]` · The API's field names are not the field names you would guess
+
+**The obstacle.** Every wrong guess at a field name failed the same way: not an exception, but an
+**empty string**. A page then renders a dash, a pill says `unknown`, and a poll waits for a state that
+will never arrive. This is the most expensive class of defect in this spec because it looks like data.
+
+**The evidence, measured** against `GET /api/2.0/postgres/projects/coding-agent-llm/...` on
+2026-11-10, a live project in the dev workspace:
+
+| Object | The field that exists | The field that does not, and was read |
+|---|---|---|
+| project | *(none)* — a project has **no** `state` | `status.state` → always empty |
+| branch | `status.current_state`, `status.default`, `status.is_protected` | `status.state`, `status.is_default` |
+| endpoint | `status.current_state`, `status.autoscaling_limit_{min,max}_cu`, `status.hosts.host` | `status.postgres_role` |
+| role | `status.postgres_role`, `status.identity_type` | *(the endpoint carries no role at all)* |
+
+A real endpoint's `status` keys, verbatim:
+
+```text
+autoscaling_limit_max_cu, autoscaling_limit_min_cu, current_state, disabled, endpoint_id,
+endpoint_type, group, hosts, last_active_time, settings, suspend_timeout_duration
+```
+
+**What it costs us.** `dbx_lakebase_create` polled a *project* for a `state` it does not have, so every
+create burned its full timeout and then reported `ready: false` for a project that was ready. A page
+showed `—` where a user expected "ready". Nothing raised, so nothing was fixed.
+
+**The way past.** Read the field the API sends, and when a fact is genuinely absent say so rather than
+emitting an empty string: `dbx_lakebase_status` returns
+`"a project has no state field; readiness is reported per branch and per compute"`. Tests name the
+measured shape in their docstrings (`test_lakebase_tools.py`, "MEASURED …") so a rename fails loudly
+with the path in the message instead of silently showing `—`.
+
+**Left undone.** Field names are asserted against **recorded** payloads, not against the live API in
+CI. A workspace-side rename still needs a human to notice. `dbx_lakebase_status` reports every field it
+could not find, which is the cheapest available alarm.
+
+---
+
+## `[RB-13]` · Half a migration is worse than none: the tool server kept the user token
+
+**The obstacle.** `[RB-10]` moved the **page** to the service principal and left the **tool server**
+partly on the user token. Two call sites still reached `/api/2.0/postgres` through the user transport,
+and a third — the endpoint lookup inside `_lakebase_connect` — did too, so a connection failed with an
+error that looked like an auth problem in Postgres rather than a 403 on a management call.
+
+**The evidence.** On the deployed app, commit `47ade33`, from a live session:
+
+```text
+dbx_lakebase_status('coding-agent-llm')      -> permission denied by the workspace (403)
+dbx_lakebase_status('coding-agent-llm-dev')  -> permission denied by the workspace (403)
+```
+
+and the same two GETs, same workspace, same *person*, with a PAT:
+
+```text
+GET /api/2.0/postgres/projects/coding-agent-llm      -> 200  (the project, with its branches)
+GET /api/2.0/postgres/projects/coding-agent-llm-dev  -> 404  NOT_FOUND
+```
+
+**The reasoning that identifies the defect, and not the id.** A wrong project id answers **404**, not
+403 — measured. A 403 for *both* ids therefore cannot be about the id. The one identity that gets 403 on
+a project it owns is a **user token**, because `postgres` is "always bound to the SP, not OBO". So the
+call was made as the user, not as the app.
+
+**What it costs us.** The whole Lakebase half of the product is unreadable from a session while every
+test passes, because the tests fake the transport and never assert *which credential* it carried. A
+`403` was then paraphrased to the user as a permissions problem on their project.
+
+**The way past.**
+
+1. **One helper per identity, chosen by API not by call site.** `_get_sp`/`_post_sp`/`_patch_sp` for
+   `/api/2.0/postgres`; `_get`/`_post`/`_patch` for everything else.
+2. **A structural test over the source.** `test_tool_server_identity.py` greps for a `_get`/`_post`/
+   `_patch` whose path starts with the Postgres base and fails on any — so a future call site cannot
+   reintroduce it silently.
+3. **A refusal that names the identity it used.** "The request was made as the signed-in user's token,
+   and this API cannot be called with a user token. That is a defect in this tool server" is actionable;
+   "the signed-in user or this app's authorization does not allow it" is not, and invites a dead-end
+   sign-in.
+4. **Log the degradation.** A missing SP token file now warns at `WARNING`, not `DEBUG`, because it is
+   the cause of a 403 three layers away.
+
+**Left undone.** The tool server still *falls back* to the user token when no SP token file exists, so a
+laptop keeps working. That fallback is why this failed quietly; `_refuse_response` now makes the failure
+legible rather than preventing it.
+
+---
+
+## `[RB-14]` · A wrong id and a missing grant are different sentences
+
+**The obstacle.** Three failure causes produced one message: a nonexistent id, a missing
+`CAN MANAGE`, and a user token on a Postgres API. All said "permission denied by the workspace", which
+reads as *you need a grant*. In a live investigation this produced six tool calls and two notebooks
+written to chase a permission that was never the problem, and a final answer that could not report a
+single measured fact.
+
+**The evidence.** The platform distinguishes them clearly; only our message did not.
+
+| Cause | Platform's answer | What we said |
+|---|---|---|
+| id does not exist | `404 NOT_FOUND` "Project with name 'projects/coding-agent-llm-dev' not found" | "permission denied" |
+| the identity may not manage it | `403` | "permission denied" (correct) |
+| a user token on a Postgres API | `403` | "permission denied" (wrong cause) |
+
+**The way past.** Each cause gets its own words, and the id case gets its own recovery path:
+`dbx_lakebase_status` catches `404`, lists the **known project ids**, and says
+`"not_a_permission_problem": true` — because an agent told "permission denied" will go looking for a
+grant, and an agent told "no project with id X; here are the ids that exist" will not.
+
+**A product consequence worth stating.** `projects/coding-agent-llm-dev` is a *display name*
+("coding-agent-llm dev") with a hyphen where the space was. That is the most natural wrong guess a
+person or a model can make, so the tool must make it cheap to recover from rather than expensive to
+diagnose. It now does.
+
+---
+
 ## The register, sorted by what it costs
 
 | Id | Roadblock | Can we fix it? | Cost if ignored |
 |---|---|---|---|
+| `[RB-13]` | **half the tool server still used the user token** | **yes** — one helper per API, a source-level guard | the Lakebase half is unreadable, with green tests |
+| `[RB-14]` | a wrong id, a missing grant and a bad token said the same thing | **yes** — a sentence per cause; 404 names the ids | an investigation that cannot report one fact |
+| `[RB-12]` | the API's field names are not the guessable ones | **yes** — read the measured names, say when absent | `—` where "ready" belongs, with no error |
 | `[RB-10]` | **`postgres` cannot run as the user at all** | **yes** — the app's own service principal, and say so | a 403 no sign-in can fix |
 | `[RB-11]` | the Postgres username is on a **role**, and a credential is bound to its **minter** | **yes** — read the role; mint per identity | an empty username, or a misleading refusal |
 | `[RB-6]` | the old API answers with the old shape | **yes** — rewrite, assert the vocabulary | wrong output that looks right |
