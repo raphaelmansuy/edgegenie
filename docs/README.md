@@ -19,6 +19,9 @@ flowchart LR
     D --> E["05 Exam suite<br/>how we measure"]:::purple
     E --> F["06 Results<br/>what the numbers say"]:::orange
     F --> G["07 Decision guide<br/>what to deploy"]:::teal
+    G --> H["08 Architecture<br/>context, containers, deployment"]:::blue
+    H --> I["09 Security<br/>authn, authz, the fence"]:::pink
+    I --> J["10 Data model<br/>what is stored"]:::green
     classDef blue fill:#E8F0FE,stroke:#A8C0E8,color:#1F2937
     classDef green fill:#E6F4EA,stroke:#A8D5B5,color:#1F2937
     classDef yellow fill:#FFF8E1,stroke:#F2D98D,color:#1F2937
@@ -40,6 +43,9 @@ flowchart LR
 | 05 | [The exam suite](05-exam-suite.md) | trust the measurements | The 11 tasks, how each is graded, and how we checked the graders |
 | 06 | [Results and lessons](06-results-and-lessons.md) | see the evidence | Scores per approach and model, what failed, what fixed it |
 | 07 | [Decision guide](07-decision-guide.md) | pick a setup | Which setup to deploy for which situation, and what to avoid |
+| 08 | [**Architecture**](08-architecture.md) | change the code | Context, containers, the five layers, one turn end to end, the state machines, and every rejected alternative |
+| 09 | [**Security**](09-security.md) | audit it | The three identities, the five authorisation decisions, the fence, envelope encryption, and ten named gaps |
+| 10 | [The data model](10-data-model.md) | query it or store something in it | Two schemas, eleven tables, three kinds of file, and what is deliberately not stored |
 | - | [Glossary](glossary.md) | meet a new word | Every term used here, in plain words |
 | - | [Original specification](genie-code-replacement-spec.md) | go deeper | The first, longer study: the 5 Whys, capability register, 16 experiments, cost model |
 

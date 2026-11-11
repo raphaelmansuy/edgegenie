@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from contextlib import contextmanager
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 
 from ..adapters.databricks.apps import apps_using
 from ..domain import lakebase

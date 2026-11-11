@@ -77,6 +77,19 @@ class Settings(BaseSettings):
     llm_anthropic_base_url: str = ""
     #: `dev` / `production`. A production app refuses a development KEK (R-5).
     app_env: str = "dev"
+
+    #: Cross-origin origins, comma-separated. **Empty means no cross-origin grant at all**, which is
+    #: correct for a deployment: uvicorn serves the built front end, so the browser is same-origin.
+    #: Only a separate dev server needs this (`http://localhost:5173`). It is not a wildcard by
+    #: default, because a wildcard on an app authenticated by a proxy lets any page a user visits
+    #: call this API.
+    cors_origins: str = ""
+
+    #: How often the attachment sweeper runs. The *rules* are in `domain/retention.py` (one hour for a
+    #: blob that never finished uploading, a day for one that was uploaded and never sent, never for
+    #: one a turn references); this is only how often the rule is applied. 0 disables it, which is
+    #: what a store that expires on its own wants.
+    blob_sweep_seconds: int = Field(default=60, ge=0, le=86400)
     #: Demo mode only: add the seed catalogue to `allowed_models`, so the picker's groups, states and
     #: limit evidence can be exercised (and screenshotted) without a workspace. The e2e suite sets it.
     llm_demo_seed: bool = False

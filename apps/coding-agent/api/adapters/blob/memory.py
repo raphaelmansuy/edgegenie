@@ -9,10 +9,11 @@ from __future__ import annotations
 import time
 import uuid
 
+from ...domain import retention
+from ...domain.retention import PENDING_TTL, READY_TTL
 from ...ports import BlobRow
 
-PENDING_TTL = 60 * 60          # 1 h: a chip that never finished uploading
-READY_TTL = 24 * 60 * 60       # 24 h: uploaded, never sent
+__all__ = ["MemoryBlobStore", "PENDING_TTL", "READY_TTL", "_as_dict"]
 
 
 class MemoryBlobStore:
@@ -88,21 +89,18 @@ class MemoryBlobStore:
         return len(self._refs.get(blob_id, ()))
 
     async def sweep(self, now: float) -> dict[str, int]:
-        """Delete what can no longer be reached. A referenced blob is NEVER swept — [V3]."""
-        pending, ready = 0, 0
+        """Delete what `domain/retention.py` says may go. See the note in `adapters/blob/files.py`:
+        the old body branched on a state `put()` never writes, so a blob waiting for its session was
+        swept on the ready TTL."""
+        report = {"pending": 0, "ready": 0}
         for blob_id, row in list(self._rows.items()):
-            if row.state == "swept":
+            decision = retention.retention(
+                retention.candidate(row, self._refs.get(blob_id, ())), now=now)
+            if not retention.is_sweep(decision):
                 continue
-            if self._refs.get(blob_id):
-                continue
-            age = now - row.created_at
-            if row.state == "pending" and age > PENDING_TTL:
-                self._sweep_one(blob_id)
-                pending += 1
-            elif row.state == "ready" and age > READY_TTL:
-                self._sweep_one(blob_id)
-                ready += 1
-        return {"pending": pending, "ready": ready}
+            self._sweep_one(blob_id)
+            report["pending" if decision is retention.Disposition.SWEEP_PENDING else "ready"] += 1
+        return report
 
     def _sweep_one(self, blob_id: str) -> None:
         row = self._rows.pop(blob_id, None)

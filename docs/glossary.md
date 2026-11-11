@@ -28,7 +28,7 @@ takes you there.
 | **Idempotent** | Safe to run twice: the second run gives the same result and does not double the data. |
 | **Lakebase** | Databricks' managed Postgres database. Two APIs exist: older "database instances" and newer "projects". |
 | **MCP (Model Context Protocol)** | A standard way for a program to offer tools to an agent. |
-| **MCP server** | A small program that offers tools through MCP. Ours is `mcp/databricks_notebook_mcp.py`. |
+| **MCP server** | A small program that offers tools through MCP. Ours is `apps/coding-agent/tools/databricks_notebook_mcp.py`. |
 | **Medallion (bronze, silver, gold)** | A common pipeline layout: raw data, cleaned data, business summaries. |
 | **No-op** | An empty attempt. A good grader must fail it. |
 | **OpenCode** | An open-source coding agent that runs in a terminal and supports any model and MCP servers. |

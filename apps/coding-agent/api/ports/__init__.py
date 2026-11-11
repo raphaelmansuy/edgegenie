@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from ..domain.events import Event
-from ..domain.llm import ModelId, ModelSpec, ProviderKind, ResolvedModel
+from ..domain.llm import ModelSpec, ProviderKind, ResolvedModel
 
 
 @dataclass(slots=True)

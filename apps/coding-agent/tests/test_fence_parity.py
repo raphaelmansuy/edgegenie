@@ -87,23 +87,71 @@ def test_path_fence_agrees(tools, scope, path, allowed):
 
 
 # -- SQL write targets -------------------------------------------------------------------------
+# The table now includes the statements that used to fall through to ALLOW. A parity test that
+# accepts "ALLOW or ASK" accepts every verdict except DENY, so it could not fail on the bug where a
+# write with no readable target was ALLOWed. Each row states the answer the fence must give, and both
+# sides are held to it.
+#: The two sides answer slightly different questions, and the difference is deliberate:
+#:
+#:   `expected`        what the APP decides, including the human check for a destructive statement
+#:   `tool_scope`      what the TOOL SERVER decides about scope alone — it has no approval flow, so
+#:                     it cannot ask a human; a destructive statement inside the fence is "in scope"
+#:
+#: Writing both columns is what makes the difference a recorded decision instead of a test that
+#: passes because it accepts any answer. The rule is: the app is never LOOSER than the tool. Where the
+#: app says `allow`, the tool must say in-scope; where the tool says out-of-scope, the app must not
+#: say `allow`.
 SQL_CASES = [
-    (f"CREATE TABLE {SCHEMA}.t (x INT)", True),
-    ("CREATE TABLE main.other.t (x INT)", False),
-    ("INSERT INTO main.other.t VALUES (1)", False),
-    (f"MERGE INTO {SCHEMA}.t USING s ON 1=1 WHEN MATCHED THEN DELETE", True),
-    ("DROP TABLE main.other.t", False),
+    # (statement, app verdict, tool says in scope?)
+    (f"CREATE TABLE {SCHEMA}.t (x INT)", "allow", True),
+    ("CREATE TABLE main.other.t (x INT)", "ask", False),
+    ("INSERT INTO main.other.t VALUES (1)", "ask", False),
+    (f"INSERT INTO {SCHEMA}.t SELECT * FROM main.other.s", "allow", True),
+    (f"MERGE INTO {SCHEMA}.t USING s ON 1=1 WHEN MATCHED THEN DELETE", "allow", True),
+    ("MERGE INTO main.other.t USING s ON 1=1 WHEN MATCHED THEN UPDATE SET x=1", "ask", False),
+    ("DROP TABLE main.other.t", "ask", False),
+    # destructive inside the fence: the tool has no human to ask, so it is merely in scope; the app
+    # asks. This is the one row where the two columns disagree on purpose.
+    ("DROP TABLE main.agent_scratch.t", "ask", True),
+    ("OPTIMIZE main.other.t", "ask", False),             # was ALLOW before the fix
+    ("OPTIMIZE main.agent_scratch.t", "allow", True),
+    ("VACUUM main.other.t", "ask", False),               # was ALLOW before the fix
+    ("VACUUM main.agent_scratch.t", "allow", True),
+    ("COMMENT ON TABLE main.other.t IS 'x'", "ask", False),   # was READ, never reached the fence
+    ("COMMENT ON TABLE main.agent_scratch.t IS 'x'", "allow", True),
+    ("INSERT INTO t VALUES (1)", "ask", False),          # unplaceable, so unprovable
 ]
 
 
-@pytest.mark.parametrize("sql,allowed", SQL_CASES)
-def test_sql_fence_agrees(tools, scope, sql, allowed):
-    tool_side = tools._check_sql_scope(sql) is None
-    app_decision = server_scope.check_sql(scope, sql)
-    app_side = app_decision.verdict is server_scope.Verdict.ALLOW
-    assert tool_side is allowed, f"the tool server's _check_sql_scope disagrees for {sql!r}"
-    assert app_side is allowed or app_decision.verdict is server_scope.Verdict.ASK, (
-        f"the app's check_sql must not DENY a write it merely cannot place: {sql!r}")
+@pytest.mark.parametrize("sql,expected,tool_scope", SQL_CASES)
+def test_sql_fence_agrees(tools, scope, sql, expected, tool_scope):
+    tool_in_scope = tools._check_sql_scope(sql) is None
+    app_verdict = server_scope.check_sql(scope, sql).verdict
+    assert tool_in_scope is tool_scope, (
+        f"the tool server says in-scope={tool_in_scope} for {sql!r}, the table says {tool_scope}")
+    assert (app_verdict is server_scope.Verdict.ALLOW) is (expected == "allow"), (
+        f"the app says {app_verdict.value} for {sql!r}, the table says {expected}")
+    # The invariant, independent of the table: the app may be stricter, never looser.
+    if app_verdict is server_scope.Verdict.ALLOW:
+        assert tool_in_scope, (
+            f"the app ALLOWED {sql!r} while the tool server refuses it out of scope")
+
+
+@pytest.mark.parametrize("sql", [
+    "OPTIMIZE main.other.t", "VACUUM main.other.t", "DROP TABLE main.other.t",
+    "COMMENT ON TABLE main.other.t IS 'x'", "INSERT INTO main.other.t VALUES (1)",
+])
+def test_the_app_is_never_looser_than_the_tool(tools, scope, sql):
+    """The property, stated once and swept: if the tool refuses for scope, the app must not allow.
+
+    This is the bug that existed. `check_sql` answered ALLOW for `OPTIMIZE main.other.t` because it
+    could not read the target; the tool server refused the same statement. A parity test that allowed
+    "ALLOW or ASK" could not see the disagreement, so it passed on a broken fence.
+    """
+    app_allows = server_scope.check_sql(scope, sql).verdict is server_scope.Verdict.ALLOW
+    tool_in_scope = tools._check_sql_scope(sql) is None
+    assert not (app_allows and not tool_in_scope), (
+        f"{sql!r}: the app allowed a statement the tool server refuses as out of scope")
 
 
 def test_a_destructive_statement_always_needs_a_human_on_the_app_side(tools, scope):

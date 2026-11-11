@@ -96,4 +96,14 @@ token ([04](04-safety-and-governance.md#the-hole-the-plain-cli-path-has-no-fence
 **Which parts are verified and which are advice?** Every claim about what ran is backed by a file in `exams/results/` or `docs/e2e/`.
 Recommendations such as the service principal are marked "not tested".
 
+## Where to go next, by role
+
+| You are | Read |
+|---|---|
+| Deciding whether to let a team use it | [04 Safety](04-safety-and-governance.md), then [09 Security](09-security.md) |
+| Going to run it | [02 Setup](02-setup-in-the-databricks-shell.md), then the [install page](https://raphaelmansuy.github.io/opengenie/install/) |
+| Going to change the code | [08 Architecture](08-architecture.md): context, containers, the five layers, one turn end to end |
+| Auditing the security posture | [09 Security](09-security.md): the three identities, five authorisation decisions, ten named gaps |
+| Querying it or storing something in it | [10 Data model](10-data-model.md) |
+
 Back to the [index](README.md).

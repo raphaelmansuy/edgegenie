@@ -178,7 +178,7 @@ Details, alternatives and rejected options: [02 Architecture](02-architecture.md
 |---|---|
 | [`docs/06-results-and-lessons.md`](../../docs/06-results-and-lessons.md) | The measured evidence for tool design, supervisor loops and model choice |
 | [`docs/04-safety-and-governance.md`](../../docs/04-safety-and-governance.md) | The layered defences and the known hole in the command-line path |
-| [`mcp/databricks_notebook_mcp.py`](../../mcp/databricks_notebook_mcp.py) | The 26-tool server this app wraps (19 in the `core` profile) |
-| [`mcp/skills/`](../../mcp/skills) | The four on-demand skills the agent reads |
+| [`apps/coding-agent/tools/databricks_notebook_mcp.py`](../../apps/coding-agent/tools/databricks_notebook_mcp.py) | The 41-tool server this app wraps (28 in the `core` profile) |
+| [`apps/coding-agent/tools/skills/`](../../apps/coding-agent/tools/skills) | The four on-demand skills the agent reads |
 | [`exams/`](../../exams) | The grader patterns this app's evaluation reuses |
 | [`docs/tutorial.md`](../../docs/tutorial.md) | The manual, single-user version of this product |

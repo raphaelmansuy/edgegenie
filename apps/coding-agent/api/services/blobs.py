@@ -13,6 +13,8 @@ Everything a caller needs to know about a blob is in `BlobRow`; everything about
 from __future__ import annotations
 
 import base64
+import inspect
+import logging
 from typing import Protocol
 
 from ..domain import blob as rules
@@ -143,10 +145,19 @@ class BlobService:
         spec = rules.validate(name, raw, declared, model_sees_images=model_sees_images)
         row = await self.store.put(session_id, user_id, spec, raw)
         if self.emit:
-            self.emit(session_id, "blob.attached", {
+            # Awaited when the sink is async, called when it is sync. The store has already accepted
+            # the bytes at this point, so a failing sink must not fail the upload: a user whose
+            # attachment was stored should not be told it was not because a journal write failed.
+            result = self.emit(session_id, "blob.attached", {
                 "blobId": row.id, "name": row.original_name, "mime": row.mime,
                 "bytes": row.size, "family": row.family,
             })
+            if inspect.isawaitable(result):
+                try:
+                    await result
+                except Exception:  # noqa: BLE001 - the bytes are stored; a record is best-effort
+                    logging.getLogger("app.blobs").warning(
+                        "could not record blob.attached for %s", row.id, exc_info=True)
         return row
 
     async def describe(self, row: BlobRow, raw: bytes, *, offset: int = 0,

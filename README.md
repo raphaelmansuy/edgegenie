@@ -10,7 +10,7 @@ of workspace context and hands those two decisions back to you.
 [![Site](https://img.shields.io/badge/site-raphaelmansuy.github.io%2Fopengenie-4C6EF5?style=flat-square)](https://raphaelmansuy.github.io/opengenie/)
 [![Licence](https://img.shields.io/badge/licence-Apache--2.0-37B24D?style=flat-square)](LICENSE)
 [![Evidence](https://img.shields.io/badge/evidence-11%20graded%20tasks-E8590C?style=flat-square)](exams/results)
-[![Tests](https://img.shields.io/badge/tests-622%20python%20%C2%B7%20599%20front--end%20%C2%B7%20162%20site%20views-37B24D?style=flat-square)](apps/coding-agent/tests)
+[![Tests](https://img.shields.io/badge/tests-1291%20python%20%C2%B7%20951%20front--end%20%C2%B7%20162%20site%20views-37B24D?style=flat-square)](apps/coding-agent/tests)
 
 <img src="specs/006-databricks/e2e/home/deployed-1440-home.png" width="1440"
      alt="The OpenGenie shell at 1440 px: sessions and files in the left rail, a notebook in the centre, and the assistant docked on the right, labelled with the notebook it is bound to.">
@@ -55,8 +55,8 @@ locally, it acts as the owner of the token you give it.
 | Lakebase and Apps | creates a Lakebase instance, runs SQL on it, scaffolds a Databricks App | `dbx_lakebase_*`, `dbx_create_app` |
 | Skills | four playbooks: notebook authoring, ETL pipelines, Lakebase, Databricks Apps | `dbx_skill` |
 
-That is the 20-tool `core` profile the app starts. The server
-([`tools/databricks_notebook_mcp.py`](apps/coding-agent/tools/databricks_notebook_mcp.py)) has 28;
+That is the 28-tool `core` profile the app starts. The server
+([`tools/databricks_notebook_mcp.py`](apps/coding-agent/tools/databricks_notebook_mcp.py)) has 41;
 the `full` profile adds catalogue and schema listings, lineage, grants, pipelines and warehouses.
 
 ## Three rules the server enforces
@@ -109,6 +109,7 @@ agent ran; or you want to read, change and self-host the code.
 | Try it without deploying | [**The tutorial**](docs/tutorial.md): about 30 minutes, from a notebook, no local shell |
 | Check the numbers | [**The evidence**](https://raphaelmansuy.github.io/opengenie/evidence/): every score with its fraction and caveat |
 | Read the design | [001](specs/001-databricks-coding-agents/README.md) app · [005](specs/005-llm-models/README.md) models · [006](specs/006-databricks/README.md) Genie Code parity · [010](specs/010-long-running/README.md) durable sessions · [011](specs/011-ux-coding-mission/README.md) missions |
+| Read the architecture | [**Architecture**](docs/08-architecture.md) context, containers, deployment · [**Security**](docs/09-security.md) authn, authz, the fence · [**Data model**](docs/10-data-model.md) what is stored |
 
 ### Prerequisites
 
@@ -134,7 +135,7 @@ make -C apps/coding-agent deploy           # sync -> deploy -> verify the live U
 cd apps/coding-agent
 make setup && make dev                     # scripted agent on http://127.0.0.1:8062
 make dev-real                              # the real opencode agent and model on http://127.0.0.1:8071
-make check                                 # TypeScript types, 622 Python tests and 599 front-end tests; no network
+make check                                 # TypeScript types, 1291 Python tests and 951 front-end tests; no network
 ```
 
 `make dev` replaces the model with a deterministic agent that plays scripted scenarios, which is how the
@@ -179,7 +180,7 @@ python3 site/build.py && python3 site/check.py   # rebuild the site; fails if a 
 apps/coding-agent/   the application: FastAPI, React 19 + CodeMirror 6, opencode over ACP
   api/               domain (pure rules), ports, adapters, routers, services
   web/src/           the front end and its tests
-  tools/             the MCP tool server (28 tools) and its skills
+  tools/             the MCP tool server (41 tools, 28 in the core profile) and its skills
   seed/              the model catalogue the app ships with
 exams/               the exam harness: 11 graded missions and every saved run
 docs/                tutorial, big picture, setup, safety, results, decision guide

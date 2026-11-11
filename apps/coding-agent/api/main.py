@@ -10,6 +10,7 @@ import os
 import re
 import tempfile
 import sys
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -35,12 +36,22 @@ from .routers.llm import router as llm_router
 from .routers.llm_admin import router as llm_admin_router
 from .routers.internal import router as internal_router
 from .services.catalogue import SettingsModelCatalog
-from .services.health_service import HealthService
 from .services.identity import ForwardedIdentity, NullGroups
 from .services.model_registry import Registry, build_registry
 from .services.orchestrator import Orchestrator
 
 WEB_DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
+
+#: A session id in an API path, under any prefix, in any position.
+#:
+#: The owner check used to list the two prefixes that existed when it was written
+#: (`/api/sessions`, `/api/approvals`). That is a rule about today's router table, not about the
+#: boundary: `/api/llm/sessions/{sid}/turns` was added later, names a session, and was outside the
+#: list — so any signed-in user could read another user's model provenance by guessing or observing
+#: an id. `tests/test_cross_user_boundary.py` proves it for both shapes, and this pattern is why a
+#: third router cannot reintroduce it.
+SESSION_IN_PATH = re.compile(
+    r"^/api/(?:(?:[^/]+/)*sessions|approvals)/(?P<sid>[^/]+)(?:/|$)")
 
 
 def build(settings: Settings | None = None, *, llm: Registry | None = None) -> FastAPI:
@@ -118,10 +129,11 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
         reaper = asyncio.create_task(_reap_loop(app))
         discovery = asyncio.create_task(_discover_loop(app))
         database = asyncio.create_task(_database_loop(app))
+        sweeper = asyncio.create_task(_blob_sweep_loop(app))
         try:
             yield
         finally:
-            for task in (reaper, discovery, database):
+            for task in (reaper, discovery, database, sweeper):
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
@@ -189,7 +201,18 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
 
     blob_root = os.environ.get("APP_BLOB_DIR") or os.path.join(tempfile.gettempdir(), "agent-blobs")
     app.state.blob_store = FileBlobStore(blob_root)
-    app.state.blobs = BlobService(app.state.blob_store)
+    # `emit` is wired, not optional in practice: `blob.attached` is part of the event vocabulary and a
+    # transcript that never records an attachment cannot say where a chip's bytes came from. It was
+    # passed by nobody, so the event was a type the app declared and never produced.
+    async def _record_blob(session_id: str, name: str, payload: dict) -> None:
+        try:
+            await orch.record_blob_attached(session_id, name, payload)
+        except KeyError:
+            # No session yet: a blob uploaded before the first message lives under `pending:<user>`,
+            # and its event belongs to the turn that adopts it. Nothing to record, and nothing wrong.
+            log.debug("blob %s uploaded before its session existed", payload.get("blobId"))
+
+    app.state.blobs = BlobService(app.state.blob_store, emit=_record_blob)
     # The orchestrator reads image bytes through the same stage, so an image reaches the model as an
     # image block when the agent advertises the capability — not as base64 in a prompt.
     orch.attach_blobs(app.state.blobs)
@@ -207,7 +230,16 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
         app.state.llm = _sync_registry(cfg)
     app.state.orchestrator.attach_registry(app.state.llm)
 
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    # CORS is same-origin by default: uvicorn serves the built front end, so a browser on the app's
+    # own URL needs no cross-origin grant at all. `allow_origins=["*"]` was here from the first
+    # prototype, when the Vite dev server talked to the API on another port. A wildcard on an app
+    # that is authenticated by a proxy is wider than it needs to be — it lets any page a user visits
+    # call this API with whatever credentials that page can send. A development setup names its
+    # origin instead (`APP_CORS_ORIGINS=http://localhost:5173`).
+    origins = [o.strip() for o in (cfg.cors_origins or "").split(",") if o.strip()]
+    if origins:
+        app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["*"],
+                           allow_headers=["*"])
 
     @app.middleware("http")
     async def identity_middleware(request: Request, call_next):
@@ -223,11 +255,18 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
             request.state.groups = groups.groups_for(request.state.user_id)
         except PermissionError as exc:
             return JSONResponse({"detail": str(exc)}, status_code=401)
-        # Every route under a session (including replay, approvals and mutations) has one owner
-        # boundary. Returning 404 avoids disclosing the existence of another person's journal.
-        match = re.match(r"^/api/(?:sessions|approvals)/([^/]+)(?:/|$)", request.url.path)
+        # Every route that names a session has one owner boundary, whatever its prefix. Returning 404
+        # avoids disclosing the existence of another person's journal.
+        #
+        # The first pattern covered `/api/sessions/…` and `/api/approvals/…`. That was the whole
+        # surface when this middleware was written, and it silently stopped being the whole surface
+        # when `/api/llm/sessions/{sid}/turns` was added: it is provenance for a session, it names
+        # one in its path, and its prefix is `/api/llm`. So the rule is expressed as "a session id in
+        # the path", not as a list of prefixes — a new router cannot reopen the hole by choosing a
+        # name this regex never heard of. `tests/test_cross_user_boundary.py` holds both sides.
+        match = SESSION_IN_PATH.search(request.url.path)
         if match:
-            live = orch._live.get(match.group(1))
+            live = orch._live.get(match.group("sid"))
             if live is None or live.state.session.user_id != request.state.user_id:
                 return JSONResponse({"detail": "no such session"}, status_code=404)
         return await call_next(request)
@@ -290,10 +329,50 @@ async def _reap_loop(app: FastAPI) -> None:
             reaped = await app.state.orchestrator.reap_idle()
             if reaped:
                 log.info("reaped %d idle session(s)", len(reaped))
+            # The projections of sessions that are already archived. Separate from the reaper because
+            # it answers a different question: the process may be gone already, and only the copy in
+            # memory is at stake. The journal is untouched, so this is a cache eviction.
+            evicted = app.state.orchestrator.evict_archived()
+            if evicted:
+                log.info("evicted %d archived projection(s) from memory", len(evicted))
         except asyncio.CancelledError:
             raise
         except Exception:            # noqa: BLE001 - a reaper must outlive its own failures
             log.warning("the session reaper failed once; continuing", exc_info=True)
+
+
+async def _blob_sweep_loop(app: FastAPI) -> None:
+    """Delete attachment bytes that nothing can reach, on a timer.
+
+    The gap this closes: `BlobStore.sweep()` existed on both stores and was called by nothing, so
+    bytes accumulated for the life of the container. A working function with no caller is a leak.
+
+    The loop owns no rule. `domain/retention.py` decides what may go — never a referenced blob, and
+    otherwise a TTL per state — and this only asks it, once a minute. The interval is far more often
+    than the shortest TTL (one hour) needs, and cheap: it reads row metadata, not bytes.
+
+    A store without `sweep` (a test double, or a future backend that expires on its own) is skipped
+    rather than faked, so "no sweeper" is a fact the log states once instead of a silent no-op.
+    """
+    store = getattr(app.state, "blob_store", None)
+    if store is None or not hasattr(store, "sweep"):
+        log.debug("no blob store to sweep")
+        return
+    interval = float(app.state.settings.blob_sweep_seconds)
+    if interval <= 0:
+        log.debug("the attachment sweeper is switched off (APP_BLOB_SWEEP_SECONDS=0)")
+        return
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            report = await store.sweep(time.time())
+            removed = sum(report.values()) if isinstance(report, dict) else 0
+            if removed:
+                log.info("swept %s expired attachment(s)", removed)
+        except asyncio.CancelledError:
+            raise
+        except Exception:            # noqa: BLE001 - a sweeper must outlive its own failures
+            log.warning("the blob sweeper failed once; continuing", exc_info=True)
 
 
 async def _database_loop(app: FastAPI) -> None:

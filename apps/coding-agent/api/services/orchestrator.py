@@ -311,38 +311,103 @@ class Orchestrator:
             for sid, live in self._live.items()
         ]
 
-    async def reap_idle(self, now: float | None = None) -> list[str]:
+    async def reap_idle(self, now: float | None = None, policy=None) -> list[str]:
         """Archive sessions the policy says are finished with. Returns the ids reaped.
 
         This is what calls `archive()`. It existed but was never called, so every session a user
         opened held a subprocess for the life of the server.
+
+        `policy` is injectable for the same reason `reapable` takes one: the default keeps eight
+        sessions, so a test with one session can never reap anything and a test of "does reaping
+        work" passes while reaping nothing.
+
+        **The decision is re-checked under the session's lock.** `idle_candidates` reads a snapshot,
+        and everything after it awaits: a `submit` that lands in that gap would start a turn on a
+        session this pass has already decided to tear down, and the teardown would cancel it. So the
+        lock a submission takes is the lock a reap takes, and the candidate is re-read inside it. A
+        session that became busy in the gap is skipped rather than archived.
         """
         from ..domain.reaper import Policy, reapable
         now = now if now is not None else time.time()
-        policy = Policy()
+        policy = policy or Policy()
         reaped: list[str] = []
         # The cap counts sessions still *open*, and archiving one must reduce that count — otherwise
         # a single pass reaps everything: the guard `live_count > keep_minimum` stayed true for every
         # candidate because nothing decremented it. Observed live with keep_minimum=2: all 8 archived.
         open_now = sum(1 for c in self.idle_candidates(now) if c.status != "archived")
-        for c in self.idle_candidates(now):
-            if reapable(c, now=now, live_count=open_now, policy=policy) is None:
+        for candidate in self.idle_candidates(now):
+            if reapable(candidate, now=now, live_count=open_now, policy=policy) is not None:
+                continue
+            live = self._live.get(candidate.session_id)
+            if live is None:
+                continue
+            async with live.lock:
+                # Re-read inside the lock: this is the re-check the docstring promises.
+                if live.state.running() is not None or self.watchers(candidate.session_id):
+                    continue
+                if live.state.session.status is SessionStatus.ARCHIVED:
+                    continue
                 if self._store.durable:
-                    live = self.get(c.session_id)
                     if live.state.session.requires_resume:
                         continue
                     if live.handle:
                         live.extra["agent_session_id"] = live.handle.session_id
                         await self._rt.close(live.handle)
                         live.handle = None
-                    await self._tools.stop(c.session_id)
+                    await self._tools.stop(candidate.session_id)
                     live.state.session = updated(live.state.session, requires_resume=True)
-                    await self._emit(Event(c.session_id, "session.recovery_required", {"requiresResume": True}))
+                    await self._emit(Event(candidate.session_id, "session.recovery_required",
+                                           {"requiresResume": True}))
                 else:
-                    await self.archive(c.session_id)
-                reaped.append(c.session_id)
-                open_now -= 1
+                    await self.archive(candidate.session_id)
+            reaped.append(candidate.session_id)
+            open_now -= 1
         return reaped
+
+    def projection_candidates(self) -> list:
+        """The in-memory projections, with the fields the eviction policy needs.
+
+        Separate from `idle_candidates` because the two ask different questions of different sets:
+        the reaper considers *open* sessions and decides whether to stop their processes, while
+        eviction considers *archived* ones and decides whether their projection may leave memory.
+        """
+        from ..domain.projection import Candidate as ProjectionCandidate
+        return [
+            ProjectionCandidate(
+                session_id=sid,
+                status=live.state.session.status.value,
+                last_seen=live.last_seen or 0.0,
+                watchers=self.watchers(sid),
+                busy=live.state.running() is not None or (live.task is not None and not live.task.done()),
+            )
+            for sid, live in self._live.items()
+        ]
+
+    def evict_archived(self, now: float | None = None, *, grace_seconds: float | None = None) -> list[str]:
+        """Drop archived projections from memory. The journal is untouched.
+
+        Nothing used to remove an entry from `_live`, so a long-lived server grew by one conversation's
+        worth of memory per conversation. This is the fix, and it is deliberately *not* a size cap: a
+        cap would delete a projection a request is about to read and make behaviour depend on how many
+        sessions happened to be open. `domain/projection.py` holds the rule; this only obeys it.
+
+        Evicting is a cache miss, never data loss: `agent.session_snapshot` and `agent.session_event`
+        stay, and `restore()` rebuilds the projection on the next boot.
+        """
+        from ..domain.projection import evictable
+        now = now if now is not None else time.time()
+        kwargs = {} if grace_seconds is None else {"grace_seconds": grace_seconds}
+        gone: list[str] = []
+        for sid in evictable(self.projection_candidates(), now=now, **kwargs):
+            live = self._live.get(sid)
+            if live is None:
+                continue
+            # A last look under the door: a stream could have connected since the snapshot.
+            if self.watchers(sid) or (live.task is not None and not live.task.done()):
+                continue
+            self._live.pop(sid, None)
+            gone.append(sid)
+        return gone
 
     def scope(self, session_id: str) -> Scope:
         s = self.get(session_id).state.session
@@ -695,6 +760,17 @@ class Orchestrator:
         secret_dir = live.extra.get("secret_dir")
         if secret_dir:       # the provider key files; same rule: only our own mkdtemp folder
             shutil.rmtree(secret_dir, ignore_errors=True)
+        # The attachments this conversation held. Archiving is the user's "delete", so the bytes go
+        # with it: leaving them would mean a deleted conversation left its screenshots on disk with
+        # no chip to reach them, which is the leak the sweeper's reference rule cannot see (a
+        # reference protects a blob only while a turn holds it, and `delete_session` is the other
+        # half). Best-effort: a store without blob deletion must not fail an archive.
+        if self._blobs is not None:
+            try:
+                await self._blobs.store.delete_session(session_id)
+            except Exception:  # noqa: BLE001 - a store that cannot delete must not block teardown
+                logging.getLogger("app.session").warning(
+                    "could not delete the attachments of session %s", session_id, exc_info=True)
         await self._emit(Event(session_id, "session.archived", {}))
 
     async def cancel(self, session_id: str) -> None:
@@ -742,6 +818,20 @@ class Orchestrator:
         """
         self.get(session_id)          # KeyError if there is no such session
         await self._emit(document_saved(session_id, path, size, by=by))
+
+    async def record_blob_attached(self, session_id: str, _name: str, payload: dict) -> None:
+        """Put an attachment into the session's event stream.
+
+        `blob.attached` was in the event vocabulary and emitted by nobody: `BlobService` takes an
+        `emit` callback and `build()` constructed it without one, so an attachment left a row and a
+        file and no record. A transcript could show a chip whose provenance the journal never had.
+
+        A blob uploaded before its session exists lives under `pending:<user>` and has no session to
+        record against — `get` raises `KeyError` and the caller logs it. Its event belongs to the turn
+        that adopts it, which is where the chip appears.
+        """
+        self.get(session_id)          # KeyError when this blob has no session yet
+        await self._emit(Event(session_id, "blob.attached", dict(payload)))
 
     # -- turns ----------------------------------------------------------------
     async def submit(self, session_id: str, text: str, context: str = "",
