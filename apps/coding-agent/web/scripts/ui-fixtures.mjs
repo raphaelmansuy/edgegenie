@@ -7,6 +7,7 @@ export async function fixture(context, { mutations = [], unknown = [], user = "t
     const reply = (data, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) });
     if (req.method() !== 'GET' && p !== '/api/workspace/fence') mutations.push(`${req.method()} ${p}`);
     if (p === '/api/me') return reply({ user, scratch: '/Shared/demo', demo: true, pythonRun: { enabled: false, reason: 'Local UI fixture; no compute is connected.' } });
+    if (p === '/api/version') return reply({ version: '1.0.0', commit: '', docs: 'https://raphaelmansuy.github.io/opengenie/', agentMode: 'fixture' });
     if (p === '/api/sessions') return reply({ sessions: [] });
     if (p === '/api/models') return reply({ default: 'fixture', available: [{ id: 'fixture', name: 'UI test model', provider: 'test', providerName: 'Local fixture', wire: 'fixture', state: 'available', selectable: true, refusal: '', detail: '', capability: 'tools', group: 'Local fixture', credential: { kind: 'none', source: 'env', hint: 'Local fixture' }, limits: { context: 64000, output: 4000, evidence: 'documented', source: '', unverified: false } }], providers: [] });
     if (p === '/api/workspace/save') { const body = req.postDataJSON(); saved.set(body.path, body.text); return reply({ path: body.path, size: body.text.length, version: { token: 'fixture-v2' } }); }

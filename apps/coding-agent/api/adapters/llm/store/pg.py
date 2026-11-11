@@ -60,8 +60,11 @@ class PgRegistryStore:
         from psycopg_pool import AsyncConnectionPool
 
         extra = {"connection_class": connection_class} if connection_class else {}
+        # `check` proves a connection alive as it is handed out. Lakebase suspends an idle compute and
+        # drops its sockets; without the check the first caller after a quiet hour got a dead one.
         pool = AsyncConnectionPool(dsn, min_size=1, max_size=4, open=False,
-                                   max_lifetime=max_lifetime, **extra)
+                                   max_lifetime=max_lifetime,
+                                   check=AsyncConnectionPool.check_connection, **extra)
         await pool.open(wait=True, timeout=10)
         store = cls(pool, seed_path=seed_path)
         await store._migrate()

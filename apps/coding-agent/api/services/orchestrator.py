@@ -493,14 +493,48 @@ class Orchestrator:
         # The user's forwarded token: the agent and the tool server act as this user, not as the app.
         live.extra["user_token"] = user_token
         self._live[sid] = live
-        await self._emit(session_created(sid, folder, resolved.id.value, schema))
+        try:
+            await self._emit(session_created(sid, folder, resolved.id.value, schema))
+        except BaseException:
+            # Never journaled means it does not exist: a listed session the journal has no record of
+            # would vanish at the next restart, and the caller was told it failed.
+            self._live.pop(sid, None)
+            raise
         try:
             await self._provision(live)
         except Exception as exc:  # noqa: BLE001 - a failed provision is a visible state, not a crash
-            live.state.session = live.state.session.transition(SessionStatus.FAILED)
-            await self._emit(Event(sid, "session.degraded", {"detail": str(exc)[:400]}))
+            # Release what the attempt acquired BEFORE recording it: the tool server and the agent are
+            # processes, and `resume()` already stops them on failure. Then record the failure, but never
+            # let the recording hide the failure it records.
+            await self._release(live)
+            with contextlib.suppress(DomainError):
+                live.state.session = live.state.session.transition(SessionStatus.FAILED)
+            try:
+                await self._emit(Event(sid, "session.degraded", {"detail": str(exc)[:400]}))
+            except Exception:  # noqa: BLE001
+                logging.getLogger("app.session").warning(
+                    "could not journal the failure of session %s", sid, exc_info=True)
             raise
         return live.state.session
+
+    async def _release(self, live: Live) -> None:
+        """Give back a session's processes and private files. Best effort, and safe to call twice."""
+        sid = live.state.session.id
+        log = logging.getLogger("app.session")
+        if live.handle:
+            handle, live.handle = live.handle, None
+            try:
+                await self._rt.close(handle)
+            except Exception:  # noqa: BLE001
+                log.warning("could not close the agent of session %s", sid, exc_info=True)
+        try:
+            await self._tools.stop(sid)
+        except Exception:  # noqa: BLE001
+            log.warning("could not stop the tool server of session %s", sid, exc_info=True)
+        for key in ("token_file", "secret_dir"):
+            path = live.extra.pop(key, "")
+            if path:
+                shutil.rmtree(os.path.dirname(path) if key == "token_file" else path, ignore_errors=True)
 
     async def _resolve(self, model: str, user_id: str, *, session_id: str) -> ResolvedModel:
         """One path from an id to a `ResolvedModel`. Falls back to a static resolution in demo mode."""

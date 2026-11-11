@@ -119,6 +119,21 @@ def _model_error(exc: Exception) -> HTTPException:
     return map_error(exc)
 
 
+def plain_reason(exc: BaseException, limit: int = 300) -> str:
+    """An error as one short sentence a person can act on.
+
+    Drivers append to the same buffer on every failed call, so one wedged connection produced the same
+    sentence thirty times in a user's chat. Repeated lines collapse to one, and the length is bounded.
+    """
+    seen: list[str] = []
+    for line in str(exc).replace("\r", "\n").split("\n"):
+        line = line.strip()
+        if line and line not in seen:
+            seen.append(line)
+    text = "; ".join(seen) or type(exc).__name__
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
 def _user(request: Request) -> str:
     return request.state.user_id
 
@@ -204,7 +219,7 @@ async def create_session(request: Request, body: CreateSession) -> dict:
     except Exception as exc:  # noqa: BLE001 - provisioning failures are 503, never a 200
         # Log it: in a deployed app the only diagnostic channel is stdout.
         log.exception("session provisioning failed")
-        raise HTTPException(503, f"the agent did not start: {exc}") from exc
+        raise HTTPException(503, f"the agent did not start: {plain_reason(exc)}") from exc
     # Whether the agent may run notebooks (as the app) is decided once, by who this user is.
     if python_run_policy(request)["enabled"]:
         request.app.state.run_bridge.grant(s.id)
@@ -344,7 +359,7 @@ async def resume_session(request: Request, sid: str) -> dict:
     except DomainError as exc:
         raise HTTPException(409, str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(503, f"the agent could not restore this session: {exc}") from exc
+        raise HTTPException(503, f"the agent could not restore this session: {plain_reason(exc)}") from exc
     if python_run_policy(request)["enabled"]:
         request.app.state.run_bridge.grant(s.id)
     return _session_json(s, _orch(request))
@@ -494,7 +509,7 @@ async def fork_session(request: Request, sid: str, body: ForkBody) -> dict:
                                    title=f"{s.title} (fork)", user_token=_user_token(request),
                                    write_mode=s.write_mode)
     except Exception as exc:  # noqa: BLE001 - a failed fork is a 503, not a 500
-        raise HTTPException(503, f"the forked session did not start: {exc}") from exc
+        raise HTTPException(503, f"the forked session did not start: {plain_reason(exc)}") from exc
     # The prefix is COPIED, not referenced: a fork must survive the original being archived.
     for row in rows[: prefix[-1].seq]:
         try:

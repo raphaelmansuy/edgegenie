@@ -23,13 +23,14 @@ from .adapters.acp.runtime import AcpAgentRuntime
 from .adapters.databricks.catalog import CatalogBrowser
 from .adapters.databricks.serving import ServingBrowser
 from .adapters.databricks.workspace import WorkspaceBrowser
+from .adapters.durable.postgres import JournalUnavailable
 from .adapters.mcp.registry import NullToolRegistry, SubprocessToolRegistry
 from .adapters.memory.store import MemoryEventStore
 
 log = logging.getLogger("app.main")
 from .config import Settings
 from .config import settings as load_settings
-from .routers.api import router
+from .routers.api import plain_reason, router
 from .routers.infra import router as infra_router
 from .routers.jobs import router as jobs_router
 from .routers.llm import router as llm_router
@@ -159,6 +160,15 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
 
     app = FastAPI(title="OpenGenie", version="0.1.0", lifespan=lifespan)
     app.state.settings = cfg
+
+    @app.exception_handler(JournalUnavailable)
+    async def journal_unavailable(request: Request, exc: JournalUnavailable):
+        # Any route that writes the journal can find it unreachable. That is "try again", not a 500
+        # with a stack trace, and the body carries one clear sentence for the UI to show.
+        log.warning("journal unavailable on %s %s: %s", request.method, request.url.path, exc)
+        return JSONResponse(status_code=503, content={"detail": plain_reason(exc)},
+                            headers={"Retry-After": "2"})
+
     app.state.run_bridge = bridge
     app.state.store = store
     app.state.models = models
