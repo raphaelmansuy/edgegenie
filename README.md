@@ -2,15 +2,22 @@
 
 **The Databricks coding agent, on the model you choose.**
 
+**Website and documentation: <https://raphaelmansuy.github.io/opengenie/>** — the tour, the install
+guide, the evidence page and the design notes. The source is on
+[GitHub](https://github.com/raphaelmansuy/opengenie); the current release is
+[v1.0.0](https://github.com/raphaelmansuy/opengenie/releases/tag/v1.0.0).
+
 Genie Code is the best coding agent for data engineering because it can see your workspace: Unity
 Catalog, SQL warehouses, notebooks, jobs. What it does not let you do is choose the model, or control
 what the work costs. OpenGenie is an open-source Databricks App that gives a coding agent the same kind
 of workspace context and hands those two decisions back to you.
 
 [![Site](https://img.shields.io/badge/site-raphaelmansuy.github.io%2Fopengenie-4C6EF5?style=flat-square)](https://raphaelmansuy.github.io/opengenie/)
+[![Docs](https://img.shields.io/badge/docs-install%20%C2%B7%20tour%20%C2%B7%20evidence-4C6EF5?style=flat-square)](https://raphaelmansuy.github.io/opengenie/install/)
+[![Version](https://img.shields.io/badge/version-v1.0.0-37B24D?style=flat-square)](https://github.com/raphaelmansuy/opengenie/releases)
 [![Licence](https://img.shields.io/badge/licence-Apache--2.0-37B24D?style=flat-square)](LICENSE)
 [![Evidence](https://img.shields.io/badge/evidence-11%20graded%20tasks-E8590C?style=flat-square)](exams/results)
-[![Tests](https://img.shields.io/badge/tests-1291%20python%20%C2%B7%20951%20front--end%20%C2%B7%20162%20site%20views-37B24D?style=flat-square)](apps/coding-agent/tests)
+[![Tests](https://img.shields.io/badge/tests-1303%20python%20%C2%B7%20959%20front--end%20%C2%B7%20162%20site%20views-37B24D?style=flat-square)](apps/coding-agent/tests)
 
 <img src="specs/006-databricks/e2e/home/deployed-1440-home.png" width="1440"
      alt="The OpenGenie shell at 1440 px: sessions and files in the left rail, a notebook in the centre, and the assistant docked on the right, labelled with the notebook it is bound to.">
@@ -108,6 +115,7 @@ agent ran; or you want to read, change and self-host the code.
 | Deploy it | [**Install**](https://raphaelmansuy.github.io/opengenie/install/): what to change, Lakebase, then `make deploy` |
 | Try it without deploying | [**The tutorial**](docs/tutorial.md): about 30 minutes, from a notebook, no local shell |
 | Check the numbers | [**The evidence**](https://raphaelmansuy.github.io/opengenie/evidence/): every score with its fraction and caveat |
+| Track changes | [**Releases**](https://github.com/raphaelmansuy/opengenie/releases): what v1.0.0 contains, and what comes next |
 | Read the design | [001](specs/001-databricks-coding-agents/README.md) app · [005](specs/005-llm-models/README.md) models · [006](specs/006-databricks/README.md) Genie Code parity · [010](specs/010-long-running/README.md) durable sessions · [011](specs/011-ux-coding-mission/README.md) missions |
 | Read the architecture | [**Architecture**](docs/08-architecture.md) context, containers, deployment · [**Security**](docs/09-security.md) authn, authz, the fence · [**Data model**](docs/10-data-model.md) what is stored |
 
@@ -135,12 +143,20 @@ make -C apps/coding-agent deploy           # sync -> deploy -> verify the live U
 cd apps/coding-agent
 make setup && make dev                     # scripted agent on http://127.0.0.1:8062
 make dev-real                              # the real opencode agent and model on http://127.0.0.1:8071
-make check                                 # TypeScript types, 1291 Python tests and 951 front-end tests; no network
+make check                                 # TypeScript types, 1303 Python tests and 959 front-end tests; no network
 ```
 
 `make dev` replaces the model with a deterministic agent that plays scripted scenarios, which is how the
 interface is developed and tested. Both use your `databricks auth login` session, so the workspace browser
 shows your real files.
+
+### Which version is running
+
+The version lives in one file, [`apps/coding-agent/VERSION`](apps/coding-agent/VERSION), and every surface
+reads it from there: the top bar prints it beside the product name, the account menu names the commit the
+platform resolved, and `GET /api/version` answers the same facts over HTTP. A deployed app therefore
+states its own build, which is what `make -C apps/coding-agent verify` checks against this checkout.
+Releases are tagged from that file — see [Releases](https://github.com/raphaelmansuy/opengenie/releases).
 
 The site has its own gate. `python3 site/build.py && python3 site/check.py` builds and verifies every
 link, claim and image; `node tests/sites/e2e/site.e2e.mjs` drives every published page at six viewports
@@ -224,3 +240,10 @@ startup studio in Hong Kong, co-author of *The Definitive Guide to Data Integrat
 [LinkedIn](https://www.linkedin.com/in/raphaelmansuy/) · [GitHub](https://github.com/raphaelmansuy) ·
 [The book](https://www.oreilly.com/library/view/the-definitive-guide/9781837631919/) ·
 [About](https://raphaelmansuy.github.io/opengenie/about/)
+
+---
+
+**Site:** <https://raphaelmansuy.github.io/opengenie/> ·
+**Source:** <https://github.com/raphaelmansuy/opengenie> ·
+**Releases:** <https://github.com/raphaelmansuy/opengenie/releases> ·
+**Issues:** <https://github.com/raphaelmansuy/opengenie/issues>

@@ -81,7 +81,7 @@ flowchart TB
 
     subgraph C["the Databricks App — one uvicorn process"]
         direction TB
-        API["<b>HTTP + SSE API</b><br/>6 routers, 81 routes"]:::yellow
+        API["<b>HTTP + SSE API</b><br/>6 routers, 82 routes"]:::yellow
         subgraph PURE["domain · pure, no I/O"]
             direction LR
             SUP["<b>supervisor</b><br/>is this turn done?"]:::purple
@@ -133,7 +133,7 @@ flowchart TB
 | Container | Technology | One job | Where |
 |---|---|---|---|
 | Front end | React 19, TypeScript, CodeMirror 6, Vite | render, reduce the event stream, reconnect | `web/src/` |
-| API | FastAPI, 6 routers, 81 routes | validate, delegate, map a domain error to a status | `api/routers/` |
+| API | FastAPI, 6 routers, 82 routes | validate, delegate, map a domain error to a status | `api/routers/` |
 | Orchestrator | Python, async | own session and turn lifecycle | `api/services/orchestrator.py` |
 | Supervisor | Python, pure | decide whether a turn is finished | `api/domain/supervisor.py` |
 | Evidence rules | Python, pure | match a claim to a tool call that happened | `api/domain/evidence.py` |
@@ -204,7 +204,7 @@ flowchart LR
 
 | Layer | Count | May import | Must not contain |
 |---|---|---|---|
-| `api/routers/` | 6 files, 81 routes | services, domain, ports | a business rule; a vendor name |
+| `api/routers/` | 6 files, 82 routes | services, domain, ports | a business rule; a vendor name |
 | `api/services/` | 12 files | domain, ports | an HTTP status; a `databricks` import that could be an adapter |
 | `api/domain/` | 28 files | each other, ports | I/O of any kind — no clock, no network, no file || `api/ports/` | 1 file, 13 protocols | domain | an implementation |
 | `api/adapters/` | 45 files | domain, ports | anything from `routers/` or `services/` |
@@ -680,7 +680,7 @@ flowchart LR
 
 | Fact | Where | Why it matters |
 |---|---|---|
-| 68 test files, 951 assertions | `web/src/**/*.test.ts(x)` | the reducer is pure, so replay and reconnection are testable with recorded events |
+| 69 test files, 959 assertions | `web/src/**/*.test.ts(x)` | the reducer is pure, so replay and reconnection are testable with recorded events |
 | `domain/event-parity.json` | `web/src/domain/` | a Python test asserts the front end knows every event type the back end emits |
 | Routes are a hash grammar | `domain/route.ts` | the hash never reaches the server, so any host or proxy serves a deep link |
 | One shell, many document kinds | `App.tsx` | a notebook, a table, a job and a pipeline are tabs, not pages you navigate away from |

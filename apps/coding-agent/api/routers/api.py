@@ -1051,6 +1051,24 @@ async def health() -> dict:
     return {"ok": True}
 
 
+@router.get("/version")
+async def version_info(request: Request) -> dict:
+    """Which build is running, and where its documentation lives.
+
+    `/api/health` answers `{"ok": true}` for every build ever deployed, so it cannot tell a fresh
+    deployment from a stale one — and a stale one is exactly what `scripts/verify-deployed.sh` exists
+    to catch. This route is the fingerprint: a version read from the `VERSION` file that ships inside
+    the deployed tree, the commit the platform resolved (empty when there is none, never invented),
+    and the three links a reader wants next.
+
+    No identity is required beyond the proxy's own, and nothing here is secret: it is the same
+    information the page prints in its footer.
+    """
+    from .. import buildinfo
+
+    return buildinfo.BUILD.to_dict(extra={"agentMode": request.app.state.settings.agent_mode})
+
+
 @router.get("/ready")
 async def ready(request: Request) -> dict:
     try:

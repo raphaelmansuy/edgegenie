@@ -322,6 +322,11 @@ export const api = {
       body: JSON.stringify({ text, attachments: attachments.map(({ kind, ref, name }) => ({ kind, ref, name })) }) }),
   me: () => call<{ user: string; scratch: string; demo: boolean; workspace?: { host: string; orgId?: string };
     pythonRun?: import("../domain/cellrun").PythonPolicy }>("/api/me"),
+  /** Which build the SERVER is. Distinct from `version(path)`, which is an object's revision token.
+   *  `/api/health` answers the same for every build, so this is the only route that can tell a fresh
+   *  deployment from a stale one. */
+  build: () => call<{ version: string; commit: string; docs: string; source: string;
+    releases: string; agentMode?: string }>("/api/version"),
   object: (path: string) => call<WsObject>(`/api/workspace/object?path=${encodeURIComponent(path)}`),
   /** The version token only: one `get-status`, no content. Comparable with `WsObject.version`. */
   version: (path: string) => call<{ path: string; version: string; modifiedAt: number }>(`/api/workspace/version?path=${encodeURIComponent(path)}`),

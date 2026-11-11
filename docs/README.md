@@ -1,5 +1,8 @@
 # Using a coding agent instead of Databricks Genie Code
 
+> **Website:** <https://raphaelmansuy.github.io/opengenie/> · **Source:**
+> <https://github.com/raphaelmansuy/opengenie> · **Docs index:** [docs/README.md](README.md)
+>
 > **In one sentence:** you can get most of what Genie Code does by running an ordinary
 > coding agent (OpenCode or GitHub Copilot CLI) *inside* the Databricks shell, giving it the
 > `databricks` command-line tool, Databricks' official skills, and a few safety rules. We

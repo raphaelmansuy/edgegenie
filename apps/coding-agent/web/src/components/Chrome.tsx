@@ -7,6 +7,7 @@ import { ModelPicker } from "./ModelPicker";
 import { FolderPicker } from "./FolderPicker";
 import { LogoMark } from "./Logo";
 import { ModelFacts } from "./ModelFacts";
+import { DOCS_URL, versionLabel, versionTitle } from "../domain/version";
 import { ArrowUpRight, Bug, ChevronRight, Clock, Database, FileIcon, Layers, ListIcon, Monitor, Notebook, Play, Search, Sparkle, Table } from "./Icons";
 import type { RecentDoc } from "../domain/recent";
 
@@ -298,6 +299,13 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
               <dt>signed in</dt><dd>{user || "—"}</dd>
               <dt>agent writes</dt><dd><code>{folder || "choose a folder"}</code></dd>
               <dt>model</dt><dd>{model || "none chosen"}</dd>
+              {/* The version on the FIRST screen, not only in a menu: someone reporting a problem
+                  reads it here, and a reader deciding whether to trust the tour reads the same number. */}
+              <dt>version</dt>
+              <dd>
+                <a className="ext-link-text" href={DOCS_URL} target="_blank" rel="noopener noreferrer"
+                  title={versionTitle()}>{versionLabel()}</a>
+              </dd>
             </dl>
             <p className="home-fine">
               Ask for a change to an open notebook and OpenGenie edits it in place, then shows you the

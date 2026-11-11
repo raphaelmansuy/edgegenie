@@ -176,6 +176,43 @@ print("  \033[32mPASS\033[0m the state vocabulary is live: a running run reads r
       && pass=$((pass+1)) || fail=$((fail+1))
   fi
 
+  # -- 2c-bis. the app states its own version, and it is THE version ------------------------------
+  # `/api/health` is `{ok: true}` for every build ever deployed, so it cannot answer "is this the
+  # release I just shipped". `VERSION` is the file inside this checkout; the live app must name the same
+  # string. A mismatch is a stale deployment, and the message says so rather than "unexpected answer".
+  want_version="$(cat "$APP_DIR/VERSION" 2>/dev/null | tr -d '[:space:]')"
+  ver=$(curl -s --max-time 30 "$URL/api/version" "${H[@]}")
+  if printf '%s' "$ver" | grep -q '<!doctype html'; then
+    bad "/api/version fell through to the front end — the backend predates the version route"
+  elif [ -z "$want_version" ]; then
+    bad "apps/coding-agent/VERSION is missing or empty; nothing to compare the deployment with"
+  else
+    printf '%s' "$ver" | WANT="$want_version" python3 -c '
+import json, os, sys
+want = os.environ["WANT"]
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("  \033[31mFAIL\033[0m /api/version did not parse"); sys.exit(1)
+have = d.get("version")
+if have != want:
+    print(f"  \033[31mFAIL\033[0m the app reports v{have}, this checkout is v{want} — the deployment is stale")
+    sys.exit(1)
+# The commit is optional (a Workspace-folder deployment has no git), but it must be PRESENT as a key
+# so a client can read it without a guard, and it must never be the literal string "unknown".
+commit = d.get("commit")
+if commit == "unknown":
+    print("  \033[31mFAIL\033[0m the app reports its commit as unknown; empty is honest, \"unknown\" is not")
+    sys.exit(1)
+links = [d.get(k) for k in ("docs", "source", "releases")]
+if not all(isinstance(x, str) and x.startswith("http") for x in links):
+    print(f"  \033[31mFAIL\033[0m the version route does not carry the docs/source/releases links: {links}")
+    sys.exit(1)
+where = commit[:7] if commit else "no commit reported"
+print(f"  \033[32mPASS\033[0m the app answers v{have} ({where}) and links its docs, source and releases")' \
+      && pass=$((pass+1)) || fail=$((fail+1))
+  fi
+
   # -- 2d. there is NO write route for a job or a pipeline, by design -----------------------------
   # Every action goes through the agent so the write fence has one home (spec 014 [07 §5]). A POST here
   # answering anything but 404/405 means a second, un-fenced write path shipped.
@@ -223,6 +260,21 @@ for v in vis[:6]: print(f"        {v}")
       ok "the served bundle has the attach control ($bundle)"
     else
       bad "the served bundle has NO attach control ($bundle) — the front end was not rebuilt"
+    fi
+    # The version the browser will print. Compiled in from VERSION at build time, so a bundle that
+    # lacks the current version string is a bundle from before this release, however new its filename.
+    # The probe is the BARE number: the label is assembled at run time (`v${version}`), so minification
+    # leaves `1.0.0` in the bundle and never the literal `v1.0.0`. Measured on this build.
+    if [ -n "${want_version:-}" ] && grep -qF "$want_version" "$probe_dir/app.js"; then
+      ok "the served bundle carries the compiled version $want_version"
+    elif [ -n "${want_version:-}" ]; then
+      bad "the served bundle does not contain $want_version — it was built before this release"
+    fi
+    # ...and the documentation link, so a reader of the deployed page can find the site from it.
+    if grep -q 'raphaelmansuy.github.io/opengenie' "$probe_dir/app.js"; then
+      ok "the served bundle links the documentation site"
+    else
+      bad "the served bundle has no link to raphaelmansuy.github.io/opengenie"
     fi
   fi
 

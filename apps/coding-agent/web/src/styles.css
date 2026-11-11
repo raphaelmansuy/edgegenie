@@ -215,6 +215,21 @@ button { font: inherit; color: inherit; cursor: pointer; }
   border: 0; flex: none;
 }
 
+/* ---- the app's own version, beside its name ------------------------------------------------
+   A quiet, monospace label, not a badge: it must be findable when someone asks "what am I running"
+   and invisible when they are working. It inherits the bar's height, so it costs no layout.
+   Hidden below 620 px, where `.brand` already drops to the mark alone — one identity, not two. */
+.app-version {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.01em;
+  color: var(--ink-3); text-decoration: none; white-space: nowrap; flex: none;
+  padding: 2px 6px; border: 1px solid var(--line); border-radius: 999px;
+  transition: color var(--dur), border-color var(--dur), background var(--dur);
+}
+.app-version:hover, .app-version:focus-visible {
+  color: var(--blue-600); border-color: var(--blue-300); background: var(--blue-50);
+}
+@media (max-width: 620px) { .app-version { display: none; } }
+
 /* ---- edge handles: the way back to a hidden panel (007 ZN-7) ----
    Absolutely positioned in the centre pane's own padding, so a handle costs no layout and cannot
    push the code. They appear only while their panel is hidden, which is the moment they answer. */
@@ -2484,6 +2499,12 @@ h2.rail-group { margin: 0; text-transform: none; }
 .account-facts dt { color: var(--ink-3); }
 .account-facts dd { margin: 0; overflow-wrap: anywhere; }
 .account-facts code { font-family: var(--mono); font-size: 11.5px; }
+/* A version is read character by character, so it is monospace like a path — and the link carries the
+   only affordance, because the row already says "Version" on the left. */
+.version-link { font-family: var(--mono); font-size: 11.5px; }
+.version-note { color: var(--ink-3); font-size: 11px; }
+/* A menu item that is an anchor must look exactly like the buttons beside it: the two are one list. */
+a.account-item { text-decoration: none; color: var(--ink); }
 .copy-btn.quiet { color: var(--ink-3); }
 .copy-btn.quiet:hover { background: var(--surface-3); color: var(--ink); }
 .account-item { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 7px 8px;

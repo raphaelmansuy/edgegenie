@@ -65,6 +65,7 @@ import { searchRoot as computeSearchRoot } from "./domain/searchroot";
 import type { Attachment } from "./domain/events";
 import type { Suggestion } from "./domain/dock";
 import { useSessionStream } from "./hooks/useSessionStream";
+import { COMPILED, DOCS_URL, versionLabel, versionTitle, withServer, type BuildFacts } from "./domain/version";
 import { useRoute } from "./hooks/useRoute";
 import { EMPTY_ROUTE, linkTo, type Route } from "./domain/route";
 import { copyText } from "./domain/clipboard";
@@ -101,6 +102,9 @@ export function App() {
   const [scratch, setScratch] = useState("");
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [demo, setDemo] = useState(false);
+  /** Which build this page is. Starts from the compiled facts so the first paint already states an
+   *  honest version, then adopts the server's commit when `/api/version` answers. */
+  const [build, setBuild] = useState<BuildFacts>(COMPILED);
   const [active, setActive] = useState<string | null>(null);
   const [folder, setFolder] = useState("");
   const [model, setModel] = useState("");
@@ -252,8 +256,11 @@ export function App() {
 
 
   const refresh = useCallback(async () => {
-    const [s, m, me] = await Promise.all([
-      api.sessions(), api.models(), api.me().catch(() => ({ scratch: "", demo: false, user: "", workspace: undefined }))]);
+    const [s, m, me, build] = await Promise.all([
+      api.sessions(), api.models(), api.me().catch(() => ({ scratch: "", demo: false, user: "", workspace: undefined })),
+      // Not fatal when it fails: the bundle already knows its own version. A deployment that cannot
+      // answer /api/version is worth knowing about, but not worth an unusable page.
+      api.build().catch(() => null)]);
     setSessions(s.sessions);
     setSessionsLoaded(true);
     setCatalogue(m);
@@ -262,6 +269,7 @@ export function App() {
     setUser(me.user ?? "");
     setWorkspace(me.workspace?.host ? me.workspace : null);
     setDemo(Boolean(me.demo));
+    setBuild(withServer(COMPILED, build && { version: build.version, commit: build.commit }));
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -954,6 +962,16 @@ export function App() {
           <header className="topbar">
             <SkipLinks />
             <h1 className="brand"><LogoBadge size={21} tone="accent" /> <Wordmark /></h1>
+            {/* The version sits immediately after the name, as one unit with it, because "OpenGenie
+                v1.0.0" is a single statement. It is a LINK to the documentation site: the answer to
+                "which version is this" is nearly always "where are the notes for it". Outside
+                `.brand` and outside `.meta` (which clips its overflow), and hidden below 620 px where
+                the wordmark itself is hidden — the mark alone stays a mark. */}
+            <a className="app-version" href={DOCS_URL} target="_blank" rel="noopener noreferrer"
+              title={versionTitle(build)} aria-label={`OpenGenie ${versionLabel(build)} — documentation site`}
+              data-version={build.version}>
+              {versionLabel(build)}
+            </a>
             <span className="meta">
               {modelControl("chip")}
               {active && (
@@ -1000,6 +1018,7 @@ export function App() {
             </span>
             {/* Outside `.meta`: that cluster clips its overflow so it can shrink, and a popover inside it is cut off. */}
             <AccountMenu user={user} host={workspace?.host ?? null} folder={folder || scratch} demo={demo}
+              build={build}
               onProviders={() => setSettingsOpen(true)} onKeys={() => setKeysOpen(true)} />
           </header>
 

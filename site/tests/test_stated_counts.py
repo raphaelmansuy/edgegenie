@@ -2,7 +2,7 @@
 
 `site/facts()` already fills `{{models}}`, `{{tools}}` and `{{skills}}` into the site's own prose, so
 those cannot drift. But the architecture and security documents state counts *in sentences* —
-"6 routers, 81 routes", "13 protocols", "28 files in `domain/`", "27 event types". A count typed into
+"6 routers, 82 routes", "13 protocols", "28 files in `domain/`", "27 event types". A count typed into
 a sentence drifts the day someone adds a route, and nothing fails.
 
 This file is the mechanism that makes those sentences true or makes the build fail. It is deliberately
