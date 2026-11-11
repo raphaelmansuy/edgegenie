@@ -203,12 +203,12 @@ for (const width of [1600, 760]) {
 for (const width of [1600, 1180, 1024, 760]) {
   const p = await page(width);
   const triggers = await p.evaluate(() => [...document.querySelectorAll(".model-trigger")]
-    .filter((e) => e.getBoundingClientRect().width > 0).length);
+    .filter((e) => e.getBoundingClientRect().width > 0 && e.checkVisibility()).length);
   check(`7 a model control is on screen at ${width}`, triggers > 0, `${triggers} visible`);
   if (triggers > 0) {
     const box = await p.evaluate(() => {
       const el = [...document.querySelectorAll(".model-trigger")]
-        .find((e) => e.getBoundingClientRect().width > 0 && !e.disabled);
+        .find((e) => e.getBoundingClientRect().width > 0 && e.checkVisibility() && !e.disabled);
       if (!el) return null;
       const r = el.getBoundingClientRect();
       return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
