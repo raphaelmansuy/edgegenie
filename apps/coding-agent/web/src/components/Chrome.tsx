@@ -7,6 +7,7 @@ import { ModelPicker } from "./ModelPicker";
 import { FolderPicker } from "./FolderPicker";
 import { LogoMark } from "./Logo";
 import { ModelFacts } from "./ModelFacts";
+import { BudgetMeter } from "./Budget";
 import { DOCS_URL, versionLabel, versionTitle } from "../domain/version";
 import { ArrowUpRight, Bug, ChevronRight, Clock, Database, FileIcon, Layers, ListIcon, Monitor, Notebook, Play, Search, Sparkle, Table } from "./Icons";
 import type { RecentDoc } from "../domain/recent";
@@ -112,6 +113,10 @@ export function Inspector({ session, edge, onHide, className = "", activeId, onA
                 turns={session.turns.length} lastStatus={session.turns.at(-1)?.status}
                 onAddKey={onAddKey} />
             )}
+            {/* What this conversation has spent ([R-24]). The WRITE MODE chip is deliberately NOT here:
+                the inspector is closed by default, so a mode that matters only when a write is refused
+                belongs in the top bar where it is always on screen. One chip, one place. */}
+            {activeId && <BudgetMeter sessionId={activeId} />}
             <div className="fieldset">
               <legend>Session</legend>
               {activeId ? (

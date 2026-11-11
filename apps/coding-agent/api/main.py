@@ -98,7 +98,16 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
         SubprocessToolRegistry(
             # `python3` on a container's PATH is not the interpreter that has our dependencies (mcp).
             python=sys.executable if cfg.tool_server_python == "python3" else cfg.tool_server_python,
-            bridge=bridge)
+            bridge=bridge,
+            # User and workspace skills ([R-18]): the conventions Genie Code reads. The workspace path
+            # is fixed by the platform; the user path depends on who is signed in, so the tool server
+            # resolves it from the token's home when this is empty.
+            workspace_skills=os.environ.get("APP_SKILLS_WORKSPACE_DIR", "/Workspace/.assistant/skills"),
+            user_skills=os.environ.get("APP_SKILLS_USER_DIR", ""),
+            # The workspace's declarative hooks ([R-13]). Off unless an administrator supplies both the file
+            # and the switch that permits a `then: run` program.
+            hooks_file=os.environ.get("APP_HOOKS_FILE", ""),
+            hooks_allow_run=os.environ.get("APP_HOOKS_ALLOW_RUN", "0") == "1")
         if cfg.tool_mode == "subprocess"
         else NullToolRegistry()
     )
@@ -110,7 +119,8 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
                         credentials=llm.credentials if llm is not None else None,
                         store_llm=llm.store if llm is not None else None,
                         health=llm.health if llm is not None else None,
-                        max_run_seconds=cfg.session_max_run_seconds, max_concurrent=cfg.max_concurrent_agents)
+                        max_run_seconds=cfg.session_max_run_seconds, max_concurrent=cfg.max_concurrent_agents,
+                        max_turns=cfg.max_turns_per_session)
     # The app's own identity, so a session's tool server can call the Postgres API that a user token
     # can never call (spec 013 [RB-10]).
     from .adapters.databricks.sp_token import ServicePrincipalToken

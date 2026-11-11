@@ -160,6 +160,11 @@ export function missionView(s: SessionView, turn: Turn | undefined, conn: Stream
     plan: turn?.plan ?? [],
     planDone: turn?.plan?.filter((p) => p.status === "completed").length ?? 0,
     proof, proven: proof.filter((p) => p.verified).length,
+    /* What the turn could not prove. The mission header says "blocked" because of this list, so the
+       evidence panel must be able to show the same list — otherwise a reader sees "Blocked" above
+       "3 of 3 verified" and has no way to tell what is missing. Found by inspecting a screenshot. */
+    missing: turn?.blocked?.missing ?? [],
+    blockedReason: turn?.blocked?.reason ?? "",
     failedCalls: turn?.tools.filter((c) => toolState(c.status) === "error").length ?? 0,
     artifacts: turn ? artifactsOf([turn]) : [],
     model: turn?.model || s.model,

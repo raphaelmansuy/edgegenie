@@ -28,9 +28,7 @@ export type ClosedReason =
   /** 409: this tab's cursor is ahead of the journal. A retry from 0 is the correct recovery. */
   | "cursor-ahead"
   /** 422: the request is malformed. A retry would be identical. */
-  | "rejected"
-  /** No HTTP status at all and the browser is offline. Transient. */
-  | "offline";
+  | "rejected";
 
 export type StreamState =
   | { kind: "idle" }
@@ -113,7 +111,6 @@ const CLOSED_DETAIL: Record<ClosedReason, string> = {
   "not-found": "The server no longer has this session. It was archived or restarted.",
   "cursor-ahead": "This conversation moved on in another tab. Reopen it to catch up.",
   rejected: "The server refused the connection to this conversation.",
-  offline: "You are offline. The server keeps working; we will catch up when you are back.",
 };
 
 export function describe(s: StreamState): Description {

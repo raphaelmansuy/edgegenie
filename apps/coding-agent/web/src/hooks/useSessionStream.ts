@@ -106,6 +106,8 @@ function hydrate(id: string, d: Partial<SessionView> | undefined): SessionView {
     approvals: d?.approvals ?? [],
     scope: d?.scope,
     requiresResume: d?.requiresResume,
+    resumeReason: d?.resumeReason,
+    writeMode: d?.writeMode,
     execution: d?.execution,
     // Hydration is what a reload reads. Without the turns it is a session with no history, and every chip
     // the user sent is gone from the screen while the server still has it.

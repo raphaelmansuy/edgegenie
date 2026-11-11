@@ -31,8 +31,12 @@ from typing import Any
 from uuid import uuid4
 
 from ..adapters.acp.agent_config import AgentConfig, session_rules
+from .coalesce import Coalescer
+from .instructions import load as load_instructions, render as render_instructions
+from ..domain import budget, compaction, resume
 from ..domain import supervisor
 from ..domain.events import (
+    session_compacted,
     Event,
     approval_decided,
     document_saved,
@@ -121,13 +125,26 @@ class Live:
         ]
 
 
+
+_SCOPE_HEADING = "## This session's scope"
+
+
+def _without_scope(text: str) -> str:
+    """The configured context WITHOUT the scope block, which is regenerated per spawn."""
+    head = text.split(_SCOPE_HEADING, 1)[0]
+    return head.strip()
+
 class Orchestrator:
     def __init__(
         self, runtime: AgentRuntime, tools: ToolRegistry, store, models, demo: bool = False,
         *, resolver=None, credentials=None, store_llm=None, health=None, max_run_seconds=21600, max_concurrent=4,
+        max_turns: int = MAX_TURNS,
     ) -> None:
         self._slots = asyncio.Semaphore(max_concurrent)
         self._max_run_seconds = max_run_seconds
+        # `settings.max_turns_per_session` had no reader at all ([F-10], [R-11]): the limit was a
+        # constant, so an operator who set the variable changed nothing.
+        self._max_turns = int(max_turns)
         self._shutting_down = False
         self._rt = runtime
         self._tools = tools
@@ -177,16 +194,30 @@ class Orchestrator:
             # Permissions belong to the dead transport. They must be requested afresh after load.
             for aid in row.get("approvals", {}):
                 await self._emit(approval_decided(s.id, None, aid, "expired", "server"))
+            # What this restored session becomes ([R-10]). The decision is pure and lives in
+            # `domain/resume.py`: only a session whose turn was IN FLIGHT needs a human. Before this,
+            # every non-archived session became `blocked + requiresResume`, so an app redeploy turned
+            # every idle conversation into a "needs attention" banner — [F-9].
+            decision = resume.apply(resume.Snapshot(
+                status=s.status.value,
+                turn_statuses=tuple(t.status.value for t in turns),
+            ))
             interrupted = []
             for t in turns:
                 if t.status in (TurnStatus.RUNNING, TurnStatus.AUDITING, TurnStatus.QUEUED):
                     live.state.update(t.finish(TurnStatus.INTERRUPTED, error="Server restarted; review saved progress before continuing."))
                     interrupted.append(t)
-            live.state.session = updated(s, status=SessionStatus.BLOCKED, requires_resume=True)
+            live.state.session = updated(
+                s,
+                status=SessionStatus(decision["status"]),
+                requires_resume=decision["requires_resume"],
+                resume_reason=decision["resume_reason"],
+            )
             for t in interrupted:
                 await self._emit(turn_ended(s.id, t.id, "interrupted",
                     "Server restarted. Saved progress is available; no operation was automatically repeated."))
-            await self._emit(Event(s.id, "session.recovery_required", {"requiresResume": True}))
+            if decision["requires_resume"]:
+                await self._emit(Event(s.id, "session.recovery_required", {"requiresResume": True}))
 
     async def shutdown(self) -> None:
         self._shutting_down = True
@@ -450,11 +481,13 @@ class Orchestrator:
         schema: str | None,
         title: str = "New session",
         user_token: str | None = None,
+        write_mode: str = "fenced",
     ) -> Session:
         resolved = await self._resolve(model, user_id, session_id="")
         sid = uuid4().hex[:16]
         session = Session(id=sid, user_id=user_id, folder=folder, schema=schema,
-                          model=resolved.id.value, title=title, created_at=time.time())
+                          model=resolved.id.value, title=title, created_at=time.time(),
+                          write_mode=write_mode)
         live = Live(state=SessionState(session=session), workspace_folder=folder,
                     last_seen=time.time(), resolved=resolved)
         # The user's forwarded token: the agent and the tool server act as this user, not as the app.
@@ -526,7 +559,8 @@ class Orchestrator:
         live.mcp_url = await self._tools.start(s.id, live.workspace_folder, s.schema,
                                                live.extra.get("token_file"),
                                                live.extra.get("sp_token_file"),
-                                               ledger_dir)
+                                               ledger_dir,
+                                               write_mode=s.write_mode)
         live.tools = TOOL_COUNT_CORE if live.mcp_url else 0
 
         # 3. The agent process itself. It authenticates as the USER, and it receives exactly one
@@ -560,12 +594,46 @@ class Orchestrator:
                           live.handle.capabilities.version, live.handle.capabilities.raw))
 
     def _write_config(self, live: Live, cwd: str) -> AgentConfig:
-        """Write `opencode.json` + the working agreement for the resolved model."""
+        """Write `opencode.json` + the working agreement for the resolved model.
+
+        The configured context (`[R-17]`) is appended to `AGENTS.md` **before** the session's scope, so
+        the fence is the last thing the agent reads and the first thing it cannot override. The context is
+        read once at provision time and cached on `live.extra`, because reading three files per spawn for
+        a session that never changes them is work with no benefit.
+        """
         resolved = live.resolved or self._static(live.state.session.model)
         cfg = AgentConfig.from_resolved(resolved, host=os.environ.get("DATABRICKS_HOST", ""))
-        cfg.write(cwd, session_rules(live.workspace_folder, live.state.session.schema,
-                                     live.state.session.id))
+        scope = session_rules(live.workspace_folder, live.state.session.schema, live.state.session.id)
+        configured = live.extra.get("instructions_text", "")
+        rules = f"{configured}\n\n{scope}" if configured else scope
+        cfg.write(cwd, rules)
         return cfg
+
+    async def load_instructions(self, session_id: str, workspace, home: str) -> dict:
+        """Read the workspace's, the user's and the folder's instructions once. `[R-17]`.
+
+        Cached on the session: three file reads per SPAWN, not per turn, and a session's instructions do
+        not change mid-conversation. A file that could not be read is recorded on the session so the
+        transcript can say the agent did not see it — never dropped, because an agent answering as if it
+        had seen the team's rules is the failure this feature exists to prevent.
+
+        `home` is required rather than derived from the session's folder: they are different things (a
+        workspace folder is often `/Workspace/Users/me/proj`, and a home is `/Users/me`), and guessing one
+        from the other reads the wrong person's instructions when it guesses wrong.
+        """
+        live = self.get(session_id)
+        s = live.state.session
+        token = live.extra.get("user_token") or os.environ.get("DATABRICKS_TOKEN", "")
+        sources, missing = await load_instructions(workspace, folder=s.folder, home=home, token=token)
+        scope = session_rules(live.workspace_folder, s.schema, s.id)
+        merged = render_instructions(sources, missing, scope=scope)
+        # Only the SOURCES are stored; the scope is generated per spawn, so a fence change is never stale.
+        live.extra["instructions_text"] = _without_scope(merged.text)
+        live.extra["instructions_used"] = [{"kind": x.kind, "path": x.path, "author": x.author,
+                                            "truncated": x.truncated} for x in merged.used]
+        live.extra["instructions_missing"] = [{"kind": m.kind, "path": m.path, "reason": m.reason}
+                                              for m in merged.missing]
+        return {"used": live.extra["instructions_used"], "missing": live.extra["instructions_missing"]}
 
     async def _child_env(self, live: Live, user_token: str) -> dict[str, str]:
         """The child's environment: the workspace token, plus **exactly one** provider key.
@@ -856,8 +924,10 @@ class Orchestrator:
             raise DomainError("restore this session before sending a new message")
         if live.state.session.status not in (SessionStatus.READY, SessionStatus.STREAMING, SessionStatus.BLOCKED):
             raise DomainError("this session is not ready")
-        if len(live.state.turns) >= MAX_TURNS:
-            raise DomainError(f"this session reached its limit of {MAX_TURNS} turns")
+        if len(live.state.turns) >= self._max_turns:
+            raise DomainError(
+                f"this session reached its limit of {self._max_turns} turns. "
+                "Start a new conversation to continue.")
         if live.extra.get("stopping"):
             raise DomainError("the agent is stopping; wait before sending another message")
         self._write_token(live, user_token)
@@ -920,22 +990,78 @@ class Orchestrator:
         except Exception:  # noqa: BLE001 - recording provenance must not block a turn
             pass
 
+    async def compact(self, session_id: str, *, budget: int = 0, summary: str = "") -> dict:
+        """Summarise the middle of a conversation when it outgrows the window. `[R-11]`, `[F-10]`.
+
+        The PLAN is pure (`domain/compaction.py`); this only records it. `session.compacted` was one of
+        the 27 declared event types and emitted by nobody, so a long conversation had no way to shed
+        history — and at the window boundary the provider truncated, after which the supervisor reported
+        "requirements without verified evidence" for work that had been done.
+
+        `budget` is the context window minus what the next turn needs. `0` means "the model's declared
+        context", which is what a caller with no better number should pass.
+        """
+        live = self.get(session_id)
+        turns = [compaction.Turn(t.id, t.index, (t.input_tokens or 0) + (t.output_tokens or 0))
+                 for t in live.state.turns]
+        window = budget or (live.resolved.context if live.resolved else 0)
+        plan = compaction.plan(turns, budget=window)
+        if plan is None:
+            return {"changed": False, "reason": "nothing needs shedding"}
+        await self._emit(session_compacted(session_id, plan.to_event(), summary=summary))
+        # The record is the deliverable: the summary text itself is produced by the caller (a model call)
+        # and stored as a projection field by the API that owns the transcript. Recording first means a
+        # compaction is never silent, even if the summariser fails afterwards.
+        live.extra["compacted"] = plan.to_event()
+        return {"changed": True, **plan.to_event()}
+
     async def _interrupt_pending(self, live: Live, reason: str) -> None:
         for queued in list(live.state.turns):
             if queued.status is TurnStatus.QUEUED:
                 live.state.update(queued.finish(TurnStatus.INTERRUPTED, error=reason))
                 await self._emit(turn_ended(live.state.session.id, queued.id, "interrupted", reason))
 
+    def _budget_denial(self, live: Live) -> str:
+        """The sentence blocking this turn, or `""`. `[R-24]`.
+
+        Pure decision in `domain/budget.py`; this only reads the numbers the turn pins already record.
+        `limit: 0` (the default) means no ceiling, and returns `""` — an unlimited session behaves exactly
+        as it did before the budget existed.
+        """
+        limit = int(live.extra.get("budget_tokens", 0) or 0)
+        if limit <= 0:
+            return ""
+        usage = budget.Usage(
+            input=sum(t.input_tokens or 0 for t in live.state.turns),
+            output=sum(t.output_tokens or 0 for t in live.state.turns),
+            cached=sum(t.cached_tokens or 0 for t in live.state.turns),
+        )
+        decision = budget.decide(usage, limit=limit)
+        return "" if decision.allowed else decision.message
+
     async def _run_turn(self, live: Live, turn_id: str) -> None:
         if next(t for t in live.state.turns if t.id == turn_id).status is TurnStatus.CANCELLED:
             live.cancel = False
             live.extra["stopping"] = False
             return
+        # `[R-24]`: a turn that would cross the conversation's token budget is blocked BEFORE the model
+        # is called. Checked here rather than in `submit` because this is where the semaphore is taken —
+        # the moment the turn is really about to spend. A turn already running is never stopped: the cost
+        # is spent and stopping mid-answer loses work.
+        denial = self._budget_denial(live)
+        if denial:
+            turn = next(t for t in live.state.turns if t.id == turn_id)
+            live.state.update(turn.finish(TurnStatus.BLOCKED, error=denial))
+            await self._emit(turn_ended(live.state.session.id, turn_id, "blocked", denial))
+            await self._interrupt_pending(live, "Queued work was not started because the budget was reached.")
+            return
         try:
             async with self._slots:
                 expiry = live.extra.get("token_expires_at")
-                budget = min(self._max_run_seconds, max(0, expiry - time.time() - 15)) if expiry else self._max_run_seconds
-                async with asyncio.timeout(budget):
+                # Not `budget`: that name is the domain module now, and shadowing it here made the
+                # reference above resolve to an int inside this scope.
+                wall = min(self._max_run_seconds, max(0, expiry - time.time() - 15)) if expiry else self._max_run_seconds
+                async with asyncio.timeout(wall):
                     await self._execute_turn(live, turn_id)
         except TimeoutError:
             live.cancel = True
@@ -1034,37 +1160,51 @@ class Orchestrator:
         return out
 
     async def _drain(self, live: Live) -> tuple[dict, dict, str]:
-        """Consume one turn's events. Returns (end, usage, answer text)."""
+        """Consume one turn's events. Returns (end, usage, answer text).
+
+        Deltas pass through a `Coalescer` ([R-6], `[F-4]`): a 60 000-character answer arrives as roughly
+        15 000 `message.delta` events, and emitting each one meant 15 000 journal commits — each writing
+        the whole snapshot — plus 15 000 string rebuilds in the browser. The coalescer emits one event per
+        ~100 ms or ~2 KB, and **always** flushes before a non-delta event so a tool card can never appear
+        above the text that requested it ([E-15]).
+        """
         assert live.handle
         ended: dict = {"error": "no result"}
         usage: dict = {}
         parts: list[str] = []
-        async for item in self._rt.events(live.handle):
-            if live.cancel:  # set by /cancel while this turn was streaming
-                ended = {"stop": "cancelled"}
-                break
-            if isinstance(item, tuple):
-                kind, value = item
-                if kind == "end":
-                    ended, usage = {"stop": value.stop_reason}, value.usage
-                else:
-                    ended = {"error": str(value)}
-                break
-            if item.type == "approval.requested":
-                live.extra.setdefault("approvals", {})[item.payload["approvalId"]] = item.payload
-            await self._emit(item)
-            if item.type == "message.delta":
-                parts.append(item.payload.get("text", ""))
-            elif item.type == "tool_call.started":
-                live.record(item.payload["callId"], item.payload["name"], "running")
-            elif item.type == "tool_call.updated":
-                live.record(
-                    item.payload["callId"],
-                    "",
-                    item.payload["status"],
-                    item.payload.get("summary", ""),
-                    item.payload.get("args", ""),
-                )
+        coalescer = Coalescer(self._emit)
+        try:
+            async for item in self._rt.events(live.handle):
+                if live.cancel:  # set by /cancel while this turn was streaming
+                    ended = {"stop": "cancelled"}
+                    break
+                if isinstance(item, tuple):
+                    kind, value = item
+                    if kind == "end":
+                        ended, usage = {"stop": value.stop_reason}, value.usage
+                    else:
+                        ended = {"error": str(value)}
+                    break
+                if item.type == "approval.requested":
+                    live.extra.setdefault("approvals", {})[item.payload["approvalId"]] = item.payload
+                # A delta is buffered; anything else flushes pending text first, then goes through.
+                await coalescer.push(item)
+                if item.type == "message.delta":
+                    parts.append(item.payload.get("text", ""))
+                elif item.type == "tool_call.started":
+                    live.record(item.payload["callId"], item.payload["name"], "running")
+                elif item.type == "tool_call.updated":
+                    live.record(
+                        item.payload["callId"],
+                        "",
+                        item.payload["status"],
+                        item.payload.get("summary", ""),
+                        item.payload.get("args", ""),
+                    )
+        finally:
+            # The tail. A missing flush here is a lost last sentence, which is why it is in a `finally`
+            # and why the cancel and shutdown paths are separate tests ([R-6]).
+            await coalescer.flush()
         return ended, usage, "".join(parts)
 
     async def _settle(

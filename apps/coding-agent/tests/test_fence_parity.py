@@ -229,3 +229,104 @@ def test_the_scope_and_the_environment_describe_the_same_fence(tools, scope):
     derivations ever diverge, both sides 'work' and enforce different fences ([RB-5])."""
     assert tools.WRITE_PATHS == [scope.folder], (tools.WRITE_PATHS, scope.folder)
     assert tools.WRITE_SCHEMAS == [(scope.schema or "").lower()], (tools.WRITE_SCHEMAS, scope.schema)
+
+
+# -- the UNSET case: the one the table above never had -------------------------------------------
+# `[R-1]`, `[R-2]`. Every dimension of a fence can be unset, and until these rows existed the two
+# runtimes disagreed about what that means: the app answered ASK and the tool server answered *allow*.
+# Measured before the fix: `_check_path_scope("/Users/victim/x.py")` returned None (in scope) for a
+# session created with `folder="/"`, and `_check_sql_scope` returned None for any statement when no
+# schema was configured. A fence that opens when a field is omitted is not a fence.
+#
+# The table is the specification: row = (dimension, spelling of "unset"). Both sides must REFUSE.
+
+UNSET_FOLDERS = [None, "", " ", "/", "//", "///", " . ", "`/`"]
+UNSET_SCHEMAS = [None, "", " ", "sales", "main.", ".sales", "` `"]
+
+#: A path that must be refused, and a statement that must be refused, for every unset spelling.
+FOREIGN_PATH = "/Users/someone_else/agent_scratch/x.py"
+FOREIGN_SQL = "DROP TABLE main.production.sales"
+
+
+def _tools_with(paths: str, schemas: str):
+    """Load the tool server with a specific scope environment. A fresh module per case, because the
+    scope is read once at import (`WRITE_PATHS`/`WRITE_SCHEMAS` are module constants)."""
+    from api.domain.fence_rules import writable_folder, writable_schema
+
+    saved = dict(os.environ)
+    os.environ.update({
+        "NBMCP_ALLOW_WRITES": "1",
+        "NBMCP_WRITE_PATHS": paths,
+        "NBMCP_WRITE_SCHEMAS": schemas,
+        "NBMCP_WRITE_JOB_PREFIX": JOB,
+        "NBMCP_WRITE_INSTANCE_PREFIX": INSTANCE,
+        "NBMCP_WRITE_APP_PREFIX": APP,
+        "DATABRICKS_HOST": "https://example.invalid",
+        "DATABRICKS_TOKEN": "t",
+    })
+    try:
+        spec = importlib.util.spec_from_file_location("nbmcp_unset", SERVER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
+    # `registry.start` no longer builds these strings itself: it asks `fence_rules`. So the test drives
+    # the SAME derivation the app uses, which is the only way the row proves the real seam.
+    module.WRITE_PATHS = [p for p in writable_folder(paths).split(",") if p]
+    module.WRITE_SCHEMAS = [s for s in writable_schema(schemas).split(",") if s]
+    return module
+
+
+@pytest.mark.parametrize("folder", UNSET_FOLDERS)
+def test_an_unset_folder_refuses_every_path_on_both_sides(folder):
+    """`folder` unset in any spelling → the app ASKs and the tool server REFUSES the same path."""
+    scope = server_scope.Scope.for_session("abcdef12-0000", folder or "", None)
+    app_allows = _allows(server_scope.check_path(scope, FOREIGN_PATH).verdict)
+    tools = _tools_with(folder or "", "")
+    try:
+        tools._check_path_scope(FOREIGN_PATH)
+        tool_allows = True
+    except PermissionError:
+        tool_allows = False
+    assert not app_allows, f"the app allowed {FOREIGN_PATH} for folder={folder!r}"
+    assert not tool_allows, f"the tool server allowed {FOREIGN_PATH} for folder={folder!r}"
+
+
+@pytest.mark.parametrize("schema", UNSET_SCHEMAS)
+def test_an_unset_schema_refuses_every_write_on_both_sides(schema):
+    """`schema` unset (or unplaceable) → the app ASKs and the tool server REFUSES the same statement."""
+    scope = server_scope.Scope.for_session("abcdef12-0000", FOLDER, schema)
+    app_allows = _allows(server_scope.check_sql(scope, FOREIGN_SQL).verdict)
+    tools = _tools_with(FOLDER, schema or "")
+    tool_err = tools._check_sql_scope(FOREIGN_SQL)
+    assert not app_allows, f"the app allowed {FOREIGN_SQL} for schema={schema!r}"
+    assert tool_err, f"the tool server allowed {FOREIGN_SQL} for schema={schema!r}"
+
+
+def test_a_root_folder_never_becomes_a_wildcard_through_the_registry():
+    """The exact arithmetic that produced the wildcard: `"/".rstrip("/") + "/"` is `"/"`.
+
+    This asserts the DERIVATION, not a behaviour, because the bug lived in the derivation and the
+    behaviour was correct in the one place somebody looked.
+    """
+    from api.domain.fence_rules import writable_folder
+    from api.domain.scope import Scope
+
+    for spelling in ("/", "", "//", "   "):
+        assert writable_folder(spelling) == "", f"{spelling!r} produced a writable folder"
+        assert Scope.for_session("abcdef12", spelling, None).folder == ""
+    assert writable_folder("/Users/me/x") == "/Users/me/x/"
+
+
+def test_the_refusal_names_which_dimension_is_missing():
+    """A refusal that says "not allowed" without saying WHAT is unset is the least useful state in the
+    product. `[R-1]` requires the sentence to name the missing dimension and the remedy."""
+    from api.domain.fence_rules import refuse_reason
+
+    assert "schema" in refuse_reason("schema")
+    assert "folder" in refuse_reason("folder")
+    for dimension in ("schema", "folder"):
+        sentence = refuse_reason(dimension)
+        assert "write blocked" in sentence
+        assert "conversation" in sentence   # the remedy

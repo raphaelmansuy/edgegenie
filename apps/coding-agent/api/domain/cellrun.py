@@ -31,6 +31,9 @@ class RunState(str, Enum):
     RUNNING = "running"
     CANCELLED = "cancelled"
     REFUSED = "refused"      # we declined to run it at all, and said why
+    #: The warehouse reported a state this build does not know. Distinct from `failed` on purpose: the
+    #: engine never said it failed, so saying so would be a claim we cannot support ([R-29]).
+    UNRESOLVED = "unresolved"
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +148,11 @@ def result_from_statement(payload: dict[str, Any], *, waited: float) -> RunResul
             truncated=bool(total is not None and len(data) < int(total)),
             statement=statement, total_rows=int(total) if total is not None else len(data),
         )
-    if state in {"PENDING", "RUNNING"}:
+    if state in {"PENDING", "QUEUED", "RUNNING"}:
+        # `QUEUED` belongs here ([R-29], `[F-15]`). A statement spends real time queued on a busy
+        # warehouse — that is the normal case for a large query on a shared SQL endpoint — and it used
+        # to fall through to the failure branch, so the user saw a red failure whose "reason" was
+        # "the warehouse reported QUEUED": a state that means *not yet*.
         return RunResult(
             state=RunState.RUNNING, seconds=waited, statement=statement,
             error=(
@@ -156,10 +163,19 @@ def result_from_statement(payload: dict[str, Any], *, waited: float) -> RunResul
     if state == "CANCELED" or state == "CANCELLED":
         return RunResult(state=RunState.CANCELLED, seconds=waited, statement=statement,
                          error="cancelled before it finished")
-    message = ((status.get("error") or {}).get("message") or "").strip()
+    if state == "FAILED":
+        message = ((status.get("error") or {}).get("message") or "").strip()
+        return RunResult(
+            state=RunState.FAILED, seconds=waited, statement=statement,
+            error=message[:400] or "the warehouse reported FAILED without a message",
+        )
+    # A state this app does not know. NOT a failure: the engine never told us it failed, and reporting
+    # one is a claim we cannot support ([R-29]). `UNRESOLVED` says what is true — the outcome is not
+    # known to this build — and carries the platform's own word so a reader can look it up.
     return RunResult(
-        state=RunState.FAILED, seconds=waited, statement=statement,
-        error=message[:400] or f"the warehouse reported {state or 'an unknown state'}",
+        state=RunState.UNRESOLVED, seconds=waited, statement=statement,
+        error=(f"the warehouse reported {state or 'no state'}, which this version of the app does not "
+               "know. The statement may have run; check it in the SQL editor before retrying."),
     )
 
 

@@ -20,6 +20,7 @@ import { peekOf } from "./domain/peek";
 import { SessionPeek } from "./components/SessionPeek";
 import { AssistantDock, InlineApproval } from "./components/AssistantDock";
 import { ModelControl } from "./components/ModelControl";
+import { WriteModeChip } from "./components/Budget";
 import { ProviderSettings } from "./components/ProviderSettings";
 import { LayoutMenu } from "./components/LayoutMenu";
 import { Palette, PaletteActions } from "./components/Palette";
@@ -983,6 +984,11 @@ export function App() {
                     : peek.state === "failed" ? "stopped" : peek.state === "idle" ? "starting" : "ready"}
                 </button>
               )}
+              {/* The write mode lives HERE, not only in the inspector: the inspector is closed by default,
+                  so a chip in it is a chip nobody sees — and a read-only session is exactly the one where a
+                  plausible request will be refused, so it must be visible before the user tries. Found by
+                  inspecting the S6 screenshot, where the chip the assertion looked for was not on screen. */}
+              {active && <WriteModeChip mode={session.writeMode} onOpen={() => openInspector(true)} />}
               <button className="search-trigger" onClick={() => setPaletteOpen(true)}
                 aria-label={`Search or run a command (${display("mod+k")})`} title={`Search or run a command — ${display("mod+k")}`}>
                 <Search size={14} />

@@ -36,9 +36,15 @@ class MemoryEventStore(Broadcast):
         return rows[-1]["seq"] if rows else 0
 
     async def commit(self, event: Event, snapshot: dict) -> Event:
+        """Append the event AND write the projection. The cold path: a terminal event, an archive."""
         import copy
         self._snapshots[event.session_id] = copy.deepcopy(snapshot)
         return await self.append(event)
+
+    async def checkpoint(self, session_id: str, seq: int, body: dict) -> None:
+        """Rewrite the projection only, without appending. `[R-5]`."""
+        import copy
+        self._snapshots[session_id] = copy.deepcopy(body)
 
     async def snapshots(self) -> list[dict]:
         import copy

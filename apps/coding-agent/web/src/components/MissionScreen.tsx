@@ -176,6 +176,16 @@ export function MissionScreen({ session, conn, dockVisible, error, onOpen, onCon
                 <div className="mission-section-head"><h3 id="mission-evidence-heading"><Check size={15} /> Evidence</h3><span>{v.proof.length ? `${v.proven} of ${v.proof.length} verified` : "Not reported"}</span></div>
                 {v.proof.length ? v.proof.map((p, i) => <Proof key={`${turn?.id}:${i}`} proof={p} />)
                   : <p className="mission-empty">No verified tool evidence reported. A finished response alone does not verify the work.</p>}
+                {/* When the header says "blocked" because a requirement has no evidence, the panel must
+                    SAY which requirement, beside the rows. "3 of 3 verified" next to "Blocked" is two true
+                    statements about different things, and a reader cannot tell them apart — the picture
+                    contradicts the headline. `[R-31]`; found by inspecting this screenshot. */}
+                {v.state === "blocked" && v.missing?.length > 0 && (
+                  <p className="mission-evidence-gap">
+                    <strong>Not proven:</strong>{" "}
+                    {v.missing.map((m, i) => <span key={i}>{i ? "; " : ""}{m}</span>)}
+                  </p>
+                )}
               </section>
             </div>
             {ended && <MissionPlan view={v} />}

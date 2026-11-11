@@ -50,6 +50,7 @@ Tools
 from __future__ import annotations
 
 import base64
+import functools
 import json
 import os
 import re
@@ -95,11 +96,120 @@ _CORE = {
 
 
 def tool():
+    """Register a tool, and apply the write MODE at the boundary. `[R-9]`.
+
+    `ask` mode is handled HERE rather than at 16 call sites: a session that asks before changing
+    anything must not depend on each mutating tool remembering to check. The wrapper inspects the
+    arguments — every mutating tool in this server names its action in its first parameter — and returns
+    the structured needs-human payload instead of calling the tool.
+
+    The check is deliberately conservative: it fires only for a tool that MUTATES (`_MUTATING`), so a
+    read in `ask` mode is untouched.
+    """
     def deco(fn):
+        def wrapped(*args, **kwargs):
+            verdict = _hook_verdict(fn.__name__, args, kwargs)
+            if verdict is not None and verdict.outcome == "refuse":
+                # A hook is evaluated BEFORE the mode gate as well as before the call: a platform rule that
+                # forbids an operation must not be masked by a session that would have asked anyway.
+                raise PermissionError(f"refused by hook '{verdict.rule}': {verdict.say}")
+            if _mode_is_ask() and fn.__name__ in _MUTATING:
+                return _needs_human({
+                    "tool": fn.__name__,
+                    "arguments": _ask_arguments(fn, args, kwargs),
+                })
+            return fn(*args, **kwargs)
+
+        # `functools.wraps` keeps the name and docstring the MCP schema is built from; without it every
+        # tool would be registered as `wrapped` and the server would advertise sixteen copies of one name.
+        _ORIGINALS[fn.__name__] = fn
+        functools.update_wrapper(wrapped, fn)
         if PROFILE == "full" or fn.__name__ in _CORE:
-            return mcp.tool()(fn)
-        return fn
+            return mcp.tool()(wrapped)
+        return wrapped
     return deco
+
+
+#: The workspace's declarative rules ([R-13]). A YAML file the APP reads and passes by path, because the
+#: tool server must not go looking for policy of its own. Empty means "no rules", which is the default.
+HOOKS_FILE = os.environ.get("NBMCP_HOOKS_FILE", "")
+#: Whether `then: run` may execute a program. An administrator's decision ([E-16]); `0` by default.
+HOOKS_ALLOW_RUN = os.environ.get("NBMCP_HOOKS_ALLOW_RUN", "0") == "1"
+_HOOKS: list | None = None
+
+
+def _hooks():
+    """The parsed rules, once. A file that cannot be parsed is REPORTED and yields no rules.
+
+    Reported rather than swallowed: a platform team that wrote a rule and sees it silently do nothing will
+    conclude the feature is broken. The fence still stands — an unparseable hooks file must never weaken
+    the guarantee it sits beside.
+    """
+    global _HOOKS
+    if _HOOKS is not None:
+        return _HOOKS
+    _HOOKS = []
+    if not HOOKS_FILE or not os.path.exists(HOOKS_FILE):
+        return _HOOKS
+    try:
+        import yaml
+
+        from api.domain.hooks import parse  # noqa: F401 - only available in the app tree
+
+        with open(HOOKS_FILE, encoding="utf-8") as fh:
+            raw = yaml.safe_load(fh) or {}
+        _HOOKS = parse(raw.get("hooks") if isinstance(raw, dict) else raw)
+    except Exception as exc:  # noqa: BLE001 - a bad rule file must not stop the server
+        sys.stderr.write(f"hooks: could not load {HOOKS_FILE}: {type(exc).__name__}: {exc}\n")
+        _HOOKS = []
+    return _HOOKS
+
+
+def _hook_verdict(fn_name: str, args: tuple, kwargs: dict, phase: str = "before_tool"):
+    """Evaluate the workspace's rules for one call. Returns None when nothing matched."""
+    rules = _hooks()
+    if not rules:
+        return None
+    try:
+        import inspect
+
+        from api.domain.hooks import Call, evaluate
+
+        bound = inspect.signature(_ORIGINALS[fn_name]).bind_partial(*args, **kwargs)
+        call = Call(fn_name, dict(bound.arguments))
+        return evaluate(rules, call, phase=phase, allow_run=HOOKS_ALLOW_RUN)
+    except Exception as exc:  # noqa: BLE001 - a hook that cannot be evaluated must not decide
+        sys.stderr.write(f"hooks: could not evaluate {fn_name}: {exc}\n")
+        return None
+
+
+#: The undecorated function per tool name, so a hook can see the ARGUMENTS the caller passed rather than
+#: the wrapper's `*args`. Filled by `tool()`.
+_ORIGINALS: dict[str, object] = {}
+
+
+#: The tools that change something. Named once, so `ask` mode cannot miss one and a new mutating tool is
+#: a deliberate addition rather than a silent gap. Kept in step with the `_need_writes()` call sites by
+#: `tests/test_write_mode.py::test_every_mutating_tool_is_in_the_ask_set`.
+_MUTATING = frozenset({
+    "dbx_write_notebook", "dbx_write_file", "dbx_create_job", "dbx_run_job", "dbx_run_notebook",
+    "dbx_create_pipeline", "dbx_start_pipeline", "dbx_stop_pipeline", "dbx_pipeline_edit",
+    "dbx_lakebase_create", "dbx_lakebase_branch", "dbx_lakebase_database",
+    "dbx_lakebase_compute", "dbx_lakebase_sql", "dbx_create_app",
+})
+
+
+def _ask_arguments(fn, args, kwargs) -> dict:
+    """The arguments of a call, for the approval prompt. Best effort: a prompt with no arguments still
+    tells the reader which tool wants to act."""
+    try:
+        import inspect
+
+        bound = inspect.signature(fn).bind_partial(*args, **kwargs)
+        return {k: (v if isinstance(v, (str, int, float, bool, type(None))) else str(v)[:200])
+                for k, v in bound.arguments.items()}
+    except Exception:  # noqa: BLE001 - the prompt must not fail the call
+        return {}
 
 
 # --------------------------------------------------------------------------
@@ -277,11 +387,69 @@ def _client() -> httpx.Client:
 
 
 def _trim(payload: Any) -> str:
-    """Serialise and cap, so a wide catalog dump cannot blow the context."""
+    """Serialise and cap, so a wide catalog dump cannot blow the context.
+
+    Delegates to `api/domain/payload.py` when that module is importable (it is, in this tree), which
+    returns **valid JSON with an explicit window** instead of a byte-slice ([R-3]). The slice this
+    function used to perform produced unparseable output — measured: `json.loads` raised
+    `Invalid control character at char 6000` on a 200-table reply.
+
+    A deployment that ships the tool server without the `api/` package falls back to a *parseable*
+    summary, never to a slice: the one thing this function may not do is return invalid JSON.
+    """
+    if _PAYLOAD_RENDER is not None:
+        return _PAYLOAD_RENDER(payload, MAX_CHARS)
     text = json.dumps(payload, indent=2, default=str)
     if len(text) <= MAX_CHARS:
         return text
-    return text[:MAX_CHARS] + f"\n... [truncated, {len(text)} chars total]"
+    keys = list(payload)[:40] if isinstance(payload, dict) else []
+    return json.dumps({
+        "truncated": True,
+        "total_chars": len(text),
+        "keys": keys,
+        "note": "this result is too large to return whole; ask for one field or a smaller range",
+    }, indent=2, default=str)
+
+
+def _find_payload_module():
+    """Locate `api/domain/payload.py` relative to this file, for a server started by the app.
+
+    The tool server is a separate process ([RB-1]) and normally runs from the app tree, where
+    `tools/` and `api/` are siblings — so the search walks up from THIS file, never from the working
+    directory. A cwd-based search reported "not found" while sitting in the very directory that
+    contains the module, which is how a fallback silently replaces a feature.
+
+    When the module genuinely is absent (a standalone deployment of `tools/` alone), the caller gets the
+    parseable-summary fallback rather than an ImportError on every tool call.
+    """
+    import importlib.util
+    import sys as _sys
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    for parent in (here, os.path.dirname(here)):
+        candidate = os.path.join(parent, "api", "domain", "payload.py")
+        if not os.path.exists(candidate):
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("_og_payload", candidate)
+            module = importlib.util.module_from_spec(spec)
+            # Register BEFORE executing it. `@dataclass` resolves annotations through
+            # `sys.modules[cls.__module__]`, so a module loaded but not registered raises
+            # `AttributeError: 'NoneType' object has no attribute '__dict__'` — which the previous
+            # `except Exception` turned into a silent "no payload module", disabling the feature it had
+            # just found. That is a fallback hiding a bug, and it is why `except` here is narrow.
+            _sys.modules["_og_payload"] = module
+            spec.loader.exec_module(module)   # type: ignore[union-attr]
+            return module.render
+        except (OSError, ImportError, SyntaxError, AttributeError) as exc:  # noqa: PERF203
+            import logging
+            logging.getLogger("nbmcp").warning(
+                "payload window unavailable (%s); falling back to a parseable summary", exc)
+            return None
+    return None
+
+
+_PAYLOAD_RENDER = _find_payload_module()
 
 
 def _retry(fn, *, idempotent: bool):
@@ -341,11 +509,21 @@ def _patch(path: str, body: dict | None = None) -> Any:
     return _retry(go, idempotent=True)
 
 
-def _need_writes() -> None:
+def _need_writes(what: str = "change anything") -> None:
+    """The one gate every mutating tool passes through.
+
+    Two checks, in this order:
+      1. **the mode** (`[R-9]`): `read-only` refuses here, so a read-only session cannot mutate whatever
+         its scope is — and the refusal names the mode rather than the folder, which is the real reason;
+      2. **the operator switch**: `NBMCP_ALLOW_WRITES=1` must be set, which the app always does.
+
+    Every mutating tool calls this, so the mode is enforced once rather than 16 times.
+    """
     if not ALLOW_WRITES:
         raise PermissionError(
             "writes disabled; start the server with NBMCP_ALLOW_WRITES=1"
         )
+    _refuse_if_read_only(what)
 
 
 # Write scope: even with writes enabled, the server only lets an agent mutate
@@ -354,6 +532,63 @@ def _need_writes() -> None:
 #   NBMCP_WRITE_PATHS    comma list of  /Workspace/... or /Users/... prefixes
 WRITE_SCHEMAS = [s.strip().lower() for s in os.environ.get("NBMCP_WRITE_SCHEMAS", "").split(",") if s.strip()]
 WRITE_PATHS = [p.strip() for p in os.environ.get("NBMCP_WRITE_PATHS", "").split(",") if p.strip()]
+
+#: An empty allow-list is **no permission**, never a wildcard ([R-1]). This one predicate is the
+#: tool server's half of `api/domain/fence_rules.py`; the two run in different processes and cannot
+#: share a module, so `tests/test_fence_parity.py` holds both to one table of cases.
+#:
+#: The defect it closes: `if not WRITE_SCHEMAS: return None` below meant "no schema" read as
+#: "any schema", and `NBMCP_WRITE_PATHS="/"` (what the old registry produced for a session with no
+#: folder) made every absolute path a prefix match. Measured: `/Users/victim/x.py` was in scope.
+def _scope_unset(values: list[str]) -> bool:
+    """True when a parsed allow-list grants nothing.
+
+    A list of `[""]` or `["/"]` is as empty as `[]`: the first is what an unset variable parses to and
+    the second is a root, and a root is a wildcard. Both mean "no permission".
+    """
+    return not values or all(v.strip().strip("/") == "" for v in values)
+
+
+#: What this session may change ([R-9]). Read here, applied by `_check_write_mode` below.
+#:   read-only  every mutating tool refused, with the reason
+#:   fenced     mutations inside the fence execute      (the default, and today's intent)
+#:   ask        a mutation returns a needs-human result the app turns into an approval
+WRITE_MODE = os.environ.get("NBMCP_WRITE_MODE", "fenced").strip().lower() or "fenced"
+_READ_ONLY_ALIASES = {"read-only", "read_only", "readonly", "ro"}
+_ASK_ALIASES = {"ask", "approve", "approval"}
+
+
+def _mode_is_read_only() -> bool:
+    return WRITE_MODE in _READ_ONLY_ALIASES
+
+
+def _mode_is_ask() -> bool:
+    return WRITE_MODE in _ASK_ALIASES
+
+
+def _refuse_if_read_only(what: str) -> None:
+    """`read-only` refuses every mutation, and says which mode did it.
+
+    Applied at the top of each mutating tool, before the fence: a read-only session must not even reveal
+    whether a target would have been inside the fence, because the answer is the same either way and the
+    refusal should say the real reason.
+    """
+    if _mode_is_read_only():
+        raise PermissionError(
+            f"write blocked: this session is read-only, so it cannot {what}. "
+            "Start a conversation with a write mode to make changes.")
+
+
+def _needs_human(payload: dict) -> str:
+    """The structured 'ask a human' result `ask` mode returns instead of mutating.
+
+    The app turns this into an approval ([R-9]); the tool server cannot ask a human itself, so it returns
+    a value the caller can act on. `needsHuman: true` is the marker, and it is deliberately part of the
+    payload rather than an exception: an exception reads as a failure, and this is not one.
+    """
+    return _trim({"needsHuman": True, "mode": WRITE_MODE, **payload,
+                  "note": "This session asks before changing anything. Approve it to run this call."})
+
 
 _ID = r"`?[A-Za-z_][\w-]*`?"
 _NAME = rf"({_ID})(?:\.({_ID}))?(?:\.({_ID}))?"
@@ -373,9 +608,15 @@ _TARGETS = re.compile(
 
 
 def _check_sql_scope(sql: str) -> str | None:
-    """Return an error string if any write target is outside the write scope."""
-    if not WRITE_SCHEMAS:
-        return None
+    """Return an error string if any write target is outside the write scope.
+
+    **No writable schema means no write** ([R-1]). It used to mean "no restriction", because the guard
+    was `if not WRITE_SCHEMAS: return None` — so a session created without a schema could drop any table
+    the signed-in user could reach. The app's own rule said ASK for exactly this case; the two now agree.
+    """
+    if _scope_unset(WRITE_SCHEMAS):
+        return ("write blocked: this session has no writable schema, so it cannot change tables. "
+                "Choose a schema when you start a conversation.")
     targets = _TARGETS.findall(sql)
     if not targets:
         return "write blocked: could not identify a write target; use plain CREATE/INSERT/MERGE/ALTER statements"
@@ -417,9 +658,13 @@ def _check_path_scope(path: str) -> None:
     """Refuse a path outside the session's folder — and refuse a `..` escape inside it.
 
     A prefix test alone accepts `/fence/../elsewhere/x`, because the STRING starts with the fence.
-    The app's own `scope.check_path` normalises and rejects `..` (spec 013 [F4], [E-27]); this is the
-    tool server's half of the same rule, and before it was added the two disagreed on exactly that
-    case. `tests/test_tools_fence.py` holds both sides to one table.
+    The app's own `scope.check_path` normalises and rejects `..` (spec 013's own F4/E-27); this is the
+    tool server's half of the same rule, and `tests/test_tools_fence.py` holds both sides to one table.
+
+    **No writable folder means no write** ([R-1]). The guard used to be
+    `if WRITE_PATHS and not any(...)`, which for an empty list is no check at all — and the old registry
+    produced `["/"]` for a session with no folder, a prefix every path matches. Measured before the fix:
+    `/Users/victim/x.py` was accepted.
     """
     normalised = path.replace("\\", "/")
     while "//" in normalised:
@@ -427,7 +672,11 @@ def _check_path_scope(path: str) -> None:
     if ".." in normalised.split("/"):
         raise PermissionError(f"write blocked: {path} contains '..' and is not a real location "
                               f"inside {WRITE_PATHS}")
-    if WRITE_PATHS and not any(normalised.startswith(p) for p in WRITE_PATHS):
+    if _scope_unset(WRITE_PATHS):
+        raise PermissionError(
+            "write blocked: this session has no writable folder, so it cannot change files. "
+            "Choose a working folder when you start a conversation.")
+    if not any(normalised.startswith(p) for p in WRITE_PATHS):
         raise PermissionError(f"write blocked: {path} outside allowed paths {WRITE_PATHS}")
 
 
@@ -2315,8 +2564,10 @@ def dbx_lakebase_tables(project: str, branch: str = "production", schema: str = 
     The count is bounded: a table that takes longer than 5 s reports `>= 1000` rather than 0, because
     "could not count" and "empty" are different facts and a page must not confuse them
     (spec 013 [E-18]). At most `limit` tables are listed; `truncated` says whether more exist.
+
+    A READ: it lists tables and counts rows. It used to call `_need_writes()`, so a `read-only` session
+    could not count rows in a database it was allowed to read ([R-9], `[F-8]`).
     """
-    _need_writes()
     endpoint = _lakebase_endpoint(project, branch)
     me = _lakebase_connect_user(project, branch, _get("/api/2.0/preview/scim/v2/Me").get("userName"))
     _pg_identifier(schema, "schema")
@@ -2483,27 +2734,72 @@ def dbx_app_health(app: str, wait_seconds: int = 15) -> str:
 # skills (progressive disclosure: the index is cheap, a skill is read on demand)
 # --------------------------------------------------------------------------
 SKILLS_DIR = os.environ.get("NBMCP_SKILLS_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills"))
+#: User and workspace skills, appended to the built-in four. `[R-18]`, `[C15]`.
+#:
+#: Genie Code reads `~/.assistant/skills/` and `Workspace/.assistant/skills/`; this reads the same
+#: conventions, so a skill written for one is a skill for the other. Empty means "not configured", which
+#: is the normal case for a laptop.
+SKILLS_USER_DIR = os.environ.get("NBMCP_SKILLS_USER_DIR", "")
+SKILLS_WORKSPACE_DIR = os.environ.get("NBMCP_SKILLS_WORKSPACE_DIR", "")
+
+
+def _skill_roots() -> list[tuple[str, str]]:
+    """Every directory a skill may come from, with its SOURCE. Built-ins first so a workspace skill of
+    the same name shadows a built-in rather than the other way round: a team's rule should win over ours."""
+    roots = [("builtin", SKILLS_DIR), ("user", SKILLS_USER_DIR), ("workspace", SKILLS_WORKSPACE_DIR)]
+    return [(source, path) for source, path in roots if path]
+
+
+def _skill_index() -> dict[str, dict]:
+    """`name -> {title, source, path}` for every readable skill. Last root wins on a name collision,
+    which is why the order above is builtin -> user -> workspace."""
+    import glob
+
+    index: dict[str, dict] = {}
+    for source, root in _skill_roots():
+        for p in sorted(glob.glob(os.path.join(root, "*.md"))):
+            stem = os.path.splitext(os.path.basename(p))[0]
+            try:
+                with open(p, encoding="utf-8") as f:
+                    first = f.readline().strip().lstrip("# ").strip()
+            except (OSError, UnicodeDecodeError):
+                # An unreadable skill is skipped, not fatal: one bad file must not empty the index.
+                # `UnicodeDecodeError` is NOT an `OSError`, which is how a single non-UTF-8 file used to
+                # raise out of `dbx_skill()` and take every skill with it — measured by the test below.
+                continue
+            index[stem] = {"title": first, "source": source, "path": p}
+    return index
 
 
 @tool()
 def dbx_skill(name: str = "") -> str:
     """Read a how-to skill. Call with no name to list the skills (one line each),
     then call with a name BEFORE starting that kind of task. Skills hold exact
-    formats and workspace-specific facts that are easy to get wrong from memory."""
-    import glob
-    paths = sorted(glob.glob(os.path.join(SKILLS_DIR, "*.md")))
-    index = {}
-    for p in paths:
-        stem = os.path.splitext(os.path.basename(p))[0]
-        with open(p) as f:
-            first = f.readline().strip().lstrip("# ").strip()
-        index[stem] = first
+    formats and workspace-specific facts that are easy to get wrong from memory.
+
+    Three sources (`[R-18]`): the four built in, the user's (`~/.assistant/skills/`), and the
+    workspace's (`Workspace/.assistant/skills/`), each labelled. A workspace skill shadows a built-in of
+    the same name — a team's rule should win over ours.
+    """
+    index = _skill_index()
     if not name:
-        return _trim({"skills": index, "usage": "dbx_skill(name='<skill>')"})
-    if name not in index:
-        return _trim({"error": f"unknown skill '{name}'", "skills": index})
-    with open(os.path.join(SKILLS_DIR, name + ".md")) as f:
-        return f.read()
+        return _trim({
+            "skills": {k: v["title"] for k, v in index.items()},
+            "sources": {k: v["source"] for k, v in index.items()},
+            "usage": "dbx_skill(name='<skill>')",
+        })
+    entry = index.get(name)
+    if entry is None:
+        return _trim({"error": f"unknown skill '{name}'",
+                      "skills": {k: v["title"] for k, v in index.items()},
+                      "hint": "call dbx_skill() with no name to list them"})
+    try:
+        with open(entry["path"], encoding="utf-8") as f:
+            body = f.read()
+    except (OSError, UnicodeDecodeError) as exc:
+        return _trim({"error": f"skill '{name}' could not be read: {exc}", "source": entry["source"]})
+    # The source travels with the body, so a reader knows whether this is our advice or their team's.
+    return f"<!-- skill: {name} · source: {entry['source']} -->\n{body}"
 
 
 if __name__ == "__main__":

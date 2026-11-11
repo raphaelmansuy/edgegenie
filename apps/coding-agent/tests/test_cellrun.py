@@ -114,10 +114,37 @@ def test_an_empty_result_set_is_a_success_with_no_rows():
 
 
 def test_a_missing_state_does_not_crash_and_still_says_something():
+    """An unknown state is NOT a failure ([R-29], `[F-15]`).
+
+    The warehouse never said it failed, so reporting `FAILED` is a claim this app cannot support — and
+    it used to say exactly that, with `"the warehouse reported "` and nothing after it. `UNRESOLVED` is
+    the honest outcome, and the sentence names the state so a reader can look it up.
+    """
     p = {"statement": "select 1", "status": {}}
     r = result_from_statement(p, waited=0.1)
-    assert r.state is RunState.FAILED
+    assert r.state is RunState.UNRESOLVED
     assert r.error
+    assert "no state" in r.error
+
+
+def test_a_queued_statement_is_waiting_not_failed():
+    """`QUEUED` is a legitimate Statements-API state meaning *not yet*.
+
+    A large query on a shared endpoint spends real time queued. It fell through to the failure branch,
+    so the user saw a red failure whose reason was "the warehouse reported QUEUED" — the name of a
+    state that means the opposite ([F-15], `[R-29]`).
+    """
+    r = result_from_statement({"statement": "select 1", "status": {"state": "QUEUED"}}, waited=3.0)
+    assert r.state is RunState.RUNNING
+    assert "still running" in r.error
+
+
+def test_an_unknown_future_state_names_itself_and_is_not_a_failure():
+    r = result_from_statement({"statement": "select 1", "status": {"state": "SOMETHING_NEW"}},
+                              waited=1.0)
+    assert r.state is RunState.UNRESOLVED
+    assert "SOMETHING_NEW" in r.error
+    assert "may have run" in r.error
 
 
 # ---------------------------------------------------------------- timing

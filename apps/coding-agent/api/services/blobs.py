@@ -114,12 +114,40 @@ def _pdf_text(raw: bytes) -> str | None:
     return text if text.strip() else None
 
 
+class _SheetReader:
+    """A workbook, converted to CSV text. `[R-21]`.
+
+    The conversion is in `domain/sheet.py` (pure, no dependency); this is the adapter that turns a failure
+    into a sentence instead of an exception, because an attachment that cannot be read must not fail the
+    message.
+    """
+
+    async def read(self, row: BlobRow, raw: bytes, *, offset: int = 0,
+                   max_chars: int = 0, unseen: bool = False) -> tuple[str, str]:
+        from ..domain import sheet
+
+        text, note = sheet.as_text(raw)
+        if not text:
+            return (f"an attached spreadsheet ({row.original_name}, {rules.human_size(row.size)}) that "
+                    f"could not be read: {note}"), "the file is attached but its cells are not readable"
+        window = max_chars or DEFAULT_WINDOW
+        start = max(0, offset)
+        end = min(len(text), start + window)
+        body = text[start:end]
+        cuts = [note] if note else []
+        if end < len(text):
+            cuts.append(f"truncated: {len(text) - end} more characters")
+        return (f"an attached spreadsheet, converted to CSV ({row.original_name})\n\n{body}",
+                "; ".join(cuts))
+
+
 #: family -> reader. One entry per family that can be read at all, and the map is the extension point.
 READERS: dict[str, BlobReader] = {
     Family.TEXT.value: _TextReader(),
     Family.NOTEBOOK.value: _TextReader(),
     Family.IMAGE.value: _ManifestReader(),
     Family.PDF.value: _PdfReader(),
+    Family.SHEET.value: _SheetReader(),
 }
 
 

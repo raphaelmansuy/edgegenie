@@ -306,10 +306,17 @@ export const api = {
     "/api/llm/models/probe", { method: "POST", headers: json, body: JSON.stringify({ model }) }),
   refreshDiscovery: () => call<CatalogueResponse>("/api/llm/discovery/refresh", { method: "POST" }),
   modelFacts: (id: string) => call<ModelFacts>(`/api/sessions/${id}/model-facts`),
+  /** What this conversation may change ([R-9]) and what it spent ([R-24]). */
+  budget: (id: string) => call<import("../domain/budget").BudgetState>(`/api/sessions/${id}/budget`),
+  compact: (id: string) =>
+    call<Record<string, unknown>>(`/api/sessions/${id}/compact`, { method: "POST", headers: json }),
+  config: () =>
+    call<{ writeModes: { id: string; label: string; sentence: string; mutates: boolean }[];
+           defaultWriteMode: string }>("/api/config"),
   sessions: () => call<{ sessions: SessionSummary[] }>("/api/sessions"),
-  create: (folder: string, model?: string, schema?: string | null) =>
+  create: (folder: string, model?: string, schema?: string | null, writeMode?: string) =>
     call<SessionSummary>("/api/sessions", { method: "POST", headers: json,
-      body: JSON.stringify({ folder, model, schema: schema ?? null }) }),
+      body: JSON.stringify({ folder, model, schema: schema ?? null, writeMode: writeMode ?? null }) }),
   session: (id: string) => call<SessionView & { turns: any[]; scope: any; running: number | null }>(`/api/sessions/${id}`),
   resume: (id: string) => call<SessionSummary>(`/api/sessions/${id}/resume`, { method: "POST" }),
   archive: (id: string) => call<void>(`/api/sessions/${id}`, { method: "DELETE" }),

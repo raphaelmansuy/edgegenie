@@ -70,13 +70,24 @@ CHANGE_RE = re.compile(
 )
 
 
-#: A verb that names something a tool could prove. "Remember this prompt", "hello", "thanks" and
-#: "carry on" have none: demanding evidence for them turned a finished answer into a red "blocked".
+#: A verb that names something a tool could prove.
+#:
+#: The list is deliberately generous, because the cost of the two mistakes is not symmetric: a verb
+#: that is MISSING makes a real request count as conversation, so the turn completes with no evidence
+#: at all — the one failure the product claims does not happen. A verb that is present but does not
+#: apply costs one audit pass that finds nothing, which the supervisor then reports honestly.
+#:
+#: Measured gap this closed: `migrate`, `convert`, `export`, `upload` and `move` were absent, so
+#: "migrate the SQL dialects" was classified as conversation and finished `DONE` with zero tool calls.
 ACTION_RE = re.compile(
     r"\b(?:write|create|build|make|fix|run|execute|add|remove|update|delete|drop|rename|schedule|deploy|"
     r"optimi[sz]e|modify|insert|save|generate|rewrite|refactor|document|profile|query|select|join|aggregate|"
     r"plot|chart|list|find|search|check|verify|describe|explain|summari[sz]e|investigate|compare|compute|"
-    r"count|calculate|show|tell|why|how many|what|which)\b",
+    r"count|calculate|show|tell|why|how many|what|which|"
+    # The verbs that move data or code somewhere. Each one names work a tool does.
+    r"migrate|convert|export|import|upload|download|move|copy|clone|restore|backfill|refresh|truncate|"
+    r"grant|revoke|comment|catalog|partition|vacuum|analyze|sample|validate|test|assert|"
+    r"install|configure|connect|attach|detach|publish|release|rollback|revert|sync)\b",
     re.I,
 )
 

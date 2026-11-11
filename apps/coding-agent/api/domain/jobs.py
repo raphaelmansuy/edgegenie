@@ -203,23 +203,28 @@ def _looks_like_name(text: str) -> bool:
 def run_word(life_cycle: str | None, result: str | None = None) -> str:
     """The one word a page shows for a run.
 
-    `result_state` is the answer when it exists, because only it distinguishes a success from a failure
-    inside `TERMINATED`. It does not exist while a run is active, and reading it alone is how a page shows
-    nothing for the whole duration of a long run (spec 014 [E-10]).
+    **While the life cycle is active, the LIFE CYCLE decides** ([R-28], `[F-14]`). `result_state` is
+    documented as terminal-only, but the API does send it on `TERMINATING`, and reading it whenever it
+    is present produced 24 of 60 `ACTIVE × RESULT` combinations showing a finished word — `succeeded`,
+    `failed`, `timed out`, `canceled` — while `can_cancel()` was simultaneously true. A page then showed
+    a green "succeeded" *and* an enabled Cancel for one run.
+
+    Once the run is terminal, `result` is the answer, because only it distinguishes a success from a
+    failure inside `TERMINATED` (`SKIPPED` and `INTERNAL_ERROR` carry their own meaning).
 
     An unknown value comes back **verbatim, lowercased**. A state nobody has seen is a fact; a cheerful
     synonym for it is a guess.
     """
-    if result:
-        word = RUN_WORDS.get(result.upper())
-        if word:
-            return word
-        return str(result).lower()
-    if life_cycle:
-        word = RUN_WORDS.get(life_cycle.upper())
-        if word:
-            return word
-        return str(life_cycle).lower()
+    life = (life_cycle or "").upper()
+    res = (result or "").upper()
+    if life and life in ACTIVE:
+        # A live run: the life cycle is the only honest field. `result` may be stale, may be the
+        # previous attempt's, and may simply be early.
+        return RUN_WORDS.get(life) or life.lower()
+    if res:
+        return RUN_WORDS.get(res) or res.lower()
+    if life:
+        return RUN_WORDS.get(life) or life.lower()
     return "unknown"
 
 
@@ -271,8 +276,14 @@ def can_cancel(life_cycle: str | None) -> bool:
 
 
 def can_repair(result: str | None, life_cycle: str | None) -> bool:
-    """Repair re-runs failed tasks of a FINISHED run. `rerun_tasks` on a live run is a `400`."""
-    return is_terminal(life_cycle) and (result or "").upper() in ("FAILED", "TIMEDOUT")
+    """Repair re-runs failed tasks of a FINISHED run. `rerun_tasks` on a live run is a `400`.
+
+    Only `TERMINATED` qualifies ([E-26]). `SKIPPED` and `INTERNAL_ERROR` are terminal but the run never
+    started, so a Repair button beside them offers to re-run nothing — measured before this guard:
+    `SKIPPED + FAILED → can_repair == True`.
+    """
+    life = (life_cycle or "").upper()
+    return life == "TERMINATED" and (result or "").upper() in ("FAILED", "TIMEDOUT")
 
 
 # ---------------------------------------------------------------------------------------------

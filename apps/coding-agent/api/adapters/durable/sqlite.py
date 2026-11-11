@@ -77,9 +77,24 @@ class SqliteSessionStore(Broadcast):
         return stored
 
     async def append(self, event: Event) -> Event:
+        """Append one event. O(1): no snapshot is read or written ([R-5], `[F-4]`)."""
         db = self._connection()
-        row = db.execute("SELECT body FROM session_snapshot WHERE session_id=?", (event.session_id,)).fetchone()
-        return await self.commit(event, json.loads(row[0]) if row else {})
+        with db:
+            seq = db.execute("SELECT COALESCE(MAX(seq), 0)+1 FROM session_event WHERE session_id=?",
+                             (event.session_id,)).fetchone()[0]
+            stored = replace(event, seq=seq)
+            db.execute("INSERT INTO session_event VALUES (?, ?, ?)",
+                       (event.session_id, seq, json.dumps(stored.to_dict())))
+        self.publish(event.session_id, stored.to_dict())
+        return stored
+
+    async def checkpoint(self, session_id: str, seq: int, body: dict) -> None:
+        """Rewrite the projection only. `[R-5]`: a cache write, not a fact."""
+        db = self._connection()
+        with db:
+            db.execute(
+                "INSERT INTO session_snapshot VALUES (?, ?) ON CONFLICT(session_id) DO UPDATE SET body=excluded.body",
+                (session_id, json.dumps(body)))
 
     async def snapshots(self) -> list[dict]:
         return [json.loads(r[0]) for r in self._connection().execute("SELECT body FROM session_snapshot")]

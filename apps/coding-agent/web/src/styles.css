@@ -463,6 +463,18 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .tool .args { color: var(--ink-3); font-family: var(--mono); font-size: 11.5px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 .tool .time { color: var(--ink-3); font-size: 11.5px; font-variant-numeric: tabular-nums; flex: none; }
+/* A reply that is one page of a larger result ([R-3]). Deliberately a quiet chip and not a warning: a
+   page is normal for a big catalogue, and colouring it red would teach people to ignore red. */
+/* The requirements a blocked turn could not prove, shown BESIDE the verified rows so the reader is not
+   told "3 of 3 verified" and "Blocked" in the same breath without the missing list. */
+.mission-evidence-gap { margin: 10px 0 0; padding: 9px 11px; border-radius: 8px; font-size: 12.5px;
+  color: var(--ink-2); background: color-mix(in srgb, var(--warn, #B7791F) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn, #B7791F) 28%, transparent); }
+.mission-evidence-gap strong { color: var(--ink); }
+
+.tool .page-count { flex: none; font-size: 11px; padding: 1px 6px; border-radius: 999px;
+  background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line);
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tool .chev { color: var(--ink-3); font-size: 10px; transition: transform 0.15s; flex: none; }
 .tool[data-open="true"] .chev { transform: rotate(90deg); }
 .tool-body { border-top: 1px solid var(--line); padding: 10px 12px; background: var(--surface-2);
@@ -3547,3 +3559,23 @@ a.account-item { text-decoration: none; color: var(--ink); }
 .infra-page-refusal > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .infra-page-refusal strong { color: var(--ink); font-weight: 600; }
 .infra-page-refusal .btn { align-self: flex-start; }
+
+/* ---- phase 2 surfaces: write mode and budget ([R-9], [R-24]) ---------------------------------- */
+/* A read-only session is the mode in which a plausible request will be refused, so it is visible at a
+   glance rather than discovered by trying. `warn` is the only tone: a chip for the default mode would be
+   noise that hides the one that matters. */
+.pill.write-mode { margin: 6px 12px 0; font-size: 11px; }
+.pill.write-mode.warn { color: var(--warn-ink, #7A4A00); background: color-mix(in srgb, #B7791F 14%, transparent);
+  border: 1px solid color-mix(in srgb, #B7791F 32%, transparent); }
+
+.budget { margin: 10px 12px 4px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.budget-head { display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 11px; color: var(--ink-2); letter-spacing: .02em; text-transform: uppercase; }
+.budget-count { font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
+.budget-bar { height: 5px; margin: 6px 0 0; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.budget-bar > span { display: block; height: 100%; background: var(--ink-3); border-radius: 999px;
+  transition: width .25s ease; }
+.budget.warn .budget-bar > span { background: #B7791F; }
+.budget.bad  .budget-bar > span { background: var(--danger, #C0392B); }
+.budget-line { margin: 7px 0 0; font-size: 11.5px; color: var(--ink-2); line-height: 1.4; }
+.budget.bad .budget-line { color: var(--danger-ink, #A0301F); }

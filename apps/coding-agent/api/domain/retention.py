@@ -73,7 +73,19 @@ class Candidate:
 
 
 def retention(c: Candidate, *, now: float) -> Disposition:
-    """Keep or sweep one row. Total: every `state` gets an answer, and none of them raise."""
+    """Keep or sweep one row. Total: every `state` gets an answer, and none of them raise.
+
+    **The state is checked BEFORE the refcount**, and the order is the fix ([R-30], `[F-16]`). It used
+    to be the reverse, so a row whose state this policy does not understand reported
+    `KEPT_REFERENCED` whenever a turn also referenced it. Nothing was swept differently — both keep —
+    but this module's whole argument is that a destructive decision must be assertable *by why*
+    (`tests/test_blob_retention.py` asserts the reason, not a boolean), and a test for "an unknown
+    state is kept because its state is unknown" passed vacuously for every referenced row.
+    """
+    if c.state not in ("pending", "ready", "attached"):
+        # `swept`, or a state a newer version wrote. Both mean "leave it alone", and the reason must
+        # say so even when a turn also holds a reference.
+        return Disposition.KEPT_UNKNOWN_STATE
     if c.refcount > 0:
         return Disposition.KEPT_REFERENCED
     age = now - c.created_at
@@ -81,10 +93,7 @@ def retention(c: Candidate, *, now: float) -> Disposition:
         return Disposition.SWEEP_PENDING
     if c.state == "ready" and age > READY_TTL:
         return Disposition.SWEEP_READY
-    if c.state in ("pending", "ready", "attached"):
-        return Disposition.KEPT_FRESH
-    # `swept`, or a state a newer version wrote. Both mean "leave it alone".
-    return Disposition.KEPT_UNKNOWN_STATE
+    return Disposition.KEPT_FRESH
 
 
 def sweepable(candidates: list[Candidate], *, now: float) -> list[str]:

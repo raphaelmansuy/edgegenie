@@ -122,6 +122,10 @@ export interface SessionView {
   /** Human writes, in the same stream as the agent's tool calls (WR-4). */
   saves?: { path: string; size: number; by: string; at: string }[];
   requiresResume?: boolean;
+  /** Why this session needs a restore (`[R-10]`): `mid_turn` after a restart. Absent when it does not. */
+  resumeReason?: string;
+  /** What this conversation may change (`[R-9]`). Absent on an older snapshot means `fenced`. */
+  writeMode?: string;
   execution?: import("./mission").Execution;
   scope?: { folder: string; schema: string | null; jobPrefix: string; appPrefix: string };
 }

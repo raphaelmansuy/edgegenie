@@ -51,12 +51,17 @@ class Scope:
 
     @staticmethod
     def for_session(session_id: str, folder: str, schema: str | None) -> Scope:
+        """The fence for one conversation, derived through `fence_rules` so the empty case has ONE answer.
+
+        Before this, `"/".rstrip("/") + "/"` was `"/"` — a prefix every absolute path matches — and the
+        registry repeated the same arithmetic one layer down. `fence_rules.writable_folder` returns `""`
+        for a root or an absent folder, and `""` is what both sides read as "no writable folder".
+        """
+        from .fence_rules import writable_folder
+
         short = session_id[:8]
         return Scope(
-            # An empty folder stays empty. `"".rstrip("/") + "/"` is "/", which would make the
-            # scope look like a root folder rather than "no folder at all" — and a root folder is
-            # a wildcard, so the distinction matters for the fence.
-            folder=(folder.rstrip("/") + "/") if folder.strip("/") else "",
+            folder=writable_folder(folder),
             schema=schema,
             job_prefix=f"agent_{short}_",
             app_prefix=f"agent-{short}-",

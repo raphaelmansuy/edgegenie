@@ -154,7 +154,12 @@ describe("JobsPage", () => {
     mockFetch({ "/api/jobs/": jobPage() });
     render(<JobsPage doc={jobDoc} />);
     const runNow = await screen.findByRole("button", { name: /Run now/ });
-    expect(runNow.getAttribute("title")).toContain("1 m 42 s");
+    /* Wait for the TITLE, not for the button. The button renders as soon as the page mounts and its
+       `title` is filled once the run block arrives, so `findByRole` returned a button whose title was
+       still the fallback — which is the front-end flake recorded in `01-method-and-evidence.md` §1.2. It
+       failed roughly one run in five under load and never in isolation. One assertion on the attribute
+       the test is actually about removes the race rather than re-running until it passes. */
+    await waitFor(() => expect(runNow.getAttribute("title")).toContain("1 m 42 s"));
   });
 });
 

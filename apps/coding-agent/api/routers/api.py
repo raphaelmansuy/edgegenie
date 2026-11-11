@@ -17,7 +17,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..adapters.databricks.http import normalize_host
-from ..domain import approval, scope as scope_mod, version
+from ..domain import approval, budget, journal_ops, scope as scope_mod, version, write_mode
 from ..domain.llm import ModelError
 from ..domain import context as ctx
 from ..domain import events
@@ -40,6 +40,8 @@ class CreateSession(BaseModel):
     schema_: str | None = Field(default=None, alias="schema")
     model: str | None = None
     title: str = "New session"
+    #: What this conversation may change ([R-9]). Absent means `fenced`, which is today's behaviour.
+    writeMode: str | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -68,6 +70,9 @@ def _session_json(s: Session, orch: Orchestrator | None = None) -> dict[str, Any
         "model": s.model,
         "status": s.status.value,
         "tools": s.tools,
+        # What this conversation may change ([R-9]), and why it needs a restore if it does ([R-10]).
+        "writeMode": s.write_mode,
+        **({"resumeReason": s.resume_reason} if s.resume_reason else {}),
         "agent": s.agent,
         "agentVersion": s.agent_version,
         "requiresResume": s.requires_resume,
@@ -189,7 +194,8 @@ async def create_session(request: Request, body: CreateSession) -> dict:
     model = body.model or _default_model(request)
     try:
         s = await _orch(request).create(_user(request), body.folder, model, body.schema_, body.title,
-                                        user_token=_user_token(request))
+                                        user_token=_user_token(request),
+                                        write_mode=write_mode.parse(body.writeMode).value)
     except ModelError as exc:
         # A model the catalogue refuses is the caller's problem and has its own status and sentence.
         raise _model_error(exc) from exc
@@ -202,6 +208,13 @@ async def create_session(request: Request, body: CreateSession) -> dict:
     # Whether the agent may run notebooks (as the app) is decided once, by who this user is.
     if python_run_policy(request)["enabled"]:
         request.app.state.run_bridge.grant(s.id)
+    # The workspace's, the user's and the folder's instructions ([R-17]). Best effort: a read that fails
+    # is recorded on the session (`instructions.missing`) and the conversation still starts, because a
+    # missing conventions file is not a reason to refuse to work.
+    try:
+        await _orch(request).load_instructions(s.id, request.app.state.workspace, _home(request))
+    except Exception:  # noqa: BLE001 - never fail a session over its instructions
+        log.debug("could not load configured instructions for %s", s.id, exc_info=True)
     return _session_json(s, _orch(request))
 
 
@@ -409,6 +422,174 @@ async def stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
     )
+
+
+
+
+# -- search and fork: the journal is an ordered log, so both are cheap -----------------------------
+class ForkBody(BaseModel):
+    """Fork a conversation at a turn. `[R-16]`."""
+    turnId: str = Field(min_length=1, max_length=64)
+
+
+@router.get("/search")
+async def search_journal(request: Request, q: str, limit: int = 30) -> dict:
+    """Search inside conversations, across every session this user can see. `[R-15]`.
+
+    Over the COMMITTED events, which means a redacted secret cannot be found: the redaction happened before
+    the commit, and a search that could undo it would undo the reason it exists ([E-19]).
+    """
+    if not q.strip():
+        return {"hits": [], "more": False, "query": q}
+    orch = _orch(request)
+    store = request.app.state.store
+    limit = max(1, min(limit, 100))
+    hits: list[dict] = []
+    more = False
+    for session in orch.sessions_for(_user(request)):
+        rows = await store.since(session.id, 0, 2000)
+        events = [journal_ops.Event(
+            seq=int(r.get("seq", 0)), type=str(r.get("type", "")),
+            turn_id=str(r.get("turnId") or ""), text=_event_text(r)) for r in rows]
+        found, extra = journal_ops.search(events, q, session_id=session.id, limit=limit)
+        more = more or extra
+        hits += [{"sessionId": h.session_id, "turnId": h.turn_id, "seq": h.seq,
+                  "snippet": h.snippet, "kind": h.kind, "title": session.title} for h in found]
+    hits.sort(key=lambda h: h["seq"], reverse=True)
+    return {"hits": hits[:limit], "more": more or len(hits) > limit, "query": q}
+
+
+def _event_text(row: dict) -> str:
+    """The words an event carries, for search. Not the whole payload: an argument blob is not a sentence."""
+    payload = row.get("payload") or {}
+    for key in ("text", "prompt", "reason", "summary", "detail"):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
+@router.post("/sessions/{sid}/fork", status_code=201)
+async def fork_session(request: Request, sid: str, body: ForkBody) -> dict:
+    """Fork a conversation at a turn. `[R-16]`.
+
+    The new session keeps the prefix of the journal up to that turn's completion and nothing else, so a
+    user branching to try a different ending still sees the ending they had. The fence, the model and the
+    folder are inherited — a fork is the same work continued, not a new conversation.
+    """
+    orch = _orch(request)
+    try:
+        live = orch.get(sid)
+    except KeyError:
+        raise HTTPException(404, "no such session") from None
+    rows = await request.app.state.store.since(sid, 0, 2000)
+    events = [journal_ops.Event(seq=int(r.get("seq", 0)), type=str(r.get("type", "")),
+                                turn_id=str(r.get("turnId") or ""), text=_event_text(r)) for r in rows]
+    prefix = journal_ops.fork_prefix(events, turn_id=body.turnId)
+    if prefix is None:
+        raise HTTPException(422, f"turn {body.turnId} never finished, so it cannot be forked from")
+    s = live.state.session
+    try:
+        forked = await orch.create(_user(request), s.folder, s.model, s.schema,
+                                   title=f"{s.title} (fork)", user_token=_user_token(request),
+                                   write_mode=s.write_mode)
+    except Exception as exc:  # noqa: BLE001 - a failed fork is a 503, not a 500
+        raise HTTPException(503, f"the forked session did not start: {exc}") from exc
+    # The prefix is COPIED, not referenced: a fork must survive the original being archived.
+    for row in rows[: prefix[-1].seq]:
+        try:
+            await _replay(request, forked.id, row)
+        except Exception:  # noqa: BLE001 - one event that cannot be replayed must not lose the fork
+            log.debug("fork: could not replay seq %s", row.get("seq"), exc_info=True)
+    return {"session": _session_json(forked, orch), "copied": prefix[-1].seq,
+            "from": sid, "turnId": body.turnId}
+
+
+async def _replay(request: Request, session_id: str, row: dict) -> None:
+    """Append one committed event to another session, keeping its type and payload."""
+    from ..domain.events import Event as DomainEvent
+
+    payload = dict(row.get("payload") or {})
+    payload.pop("seq", None)
+    await request.app.state.store.append(
+        DomainEvent(session_id, str(row.get("type", "session.checkpoint")), payload,
+                    turn_id=row.get("turnId") or None))
+
+
+
+@router.get("/docs/search")
+async def docs_search(q: str, limit: int = 5) -> dict:
+    """Search the product's own documentation, with citations. `[R-20]`.
+
+    Genie Code shows a *Searched documentation* step and can cite sources; this had no corpus at all, so an
+    answer about how this app works could not be checked. The corpus is this repository's `docs/` and
+    `specs/`, which is versioned with the code it describes — so a citation points at a file the same
+    commit guarantees.
+    """
+    from ..services import docsearch
+
+    return {"hits": [{"path": h.path, "title": h.title, "url": h.url, "score": h.score,
+                      "excerpt": h.excerpt} for h in docsearch.search(q, limit=max(1, min(limit, 20)))],
+            "query": q}
+
+
+# -- budget and compaction -------------------------------------------------------------------------
+@router.get("/sessions/{sid}/budget")
+async def session_budget(request: Request, sid: str) -> dict:
+    """What this conversation has spent, and whether the next turn may start. `[R-24]`.
+
+    Tokens, not money: a token count is a fact the turn pins record, and a dollar figure depends on a
+    price list this app does not own. `limit: 0` means no ceiling, which is the default.
+    """
+    orch = _orch(request)
+    try:
+        live = orch.get(sid)
+    except KeyError:
+        raise HTTPException(404, "no such session") from None
+    usage = budget.Usage(
+        input=sum(t.input_tokens or 0 for t in live.state.turns),
+        output=sum(t.output_tokens or 0 for t in live.state.turns),
+        cached=sum(t.cached_tokens or 0 for t in live.state.turns),
+        turns=len(live.state.turns),
+    )
+    limit = int(getattr(live.state.session, "budget_tokens", 0) or 0)
+    d = budget.decide(usage, limit=limit)
+    return {
+        "used": d.used, "limit": d.limit, "fraction": round(d.fraction, 3),
+        "allowed": d.allowed, "verdict": d.verdict.value,
+        "sentence": budget.sentence(d), "message": d.message,
+        "turns": usage.turns, "input": usage.input, "output": usage.output, "cached": usage.cached,
+    }
+
+
+@router.post("/sessions/{sid}/compact")
+async def session_compact(request: Request, sid: str) -> dict:
+    """Summarise the middle of a long conversation. `[R-11]`.
+
+    Returns what was planned and, when nothing needed shedding, says so rather than reporting a silent
+    success. The event `session.compacted` is committed, so the transcript records the decision.
+    """
+    orch = _orch(request)
+    try:
+        return await orch.compact(sid)
+    except KeyError:
+        raise HTTPException(404, "no such session") from None
+
+
+@router.get("/config")
+async def config_surface(request: Request) -> dict:
+    """The vocabulary a client must not re-invent: the write modes, and what each one means. `[R-9]`.
+
+    One endpoint rather than duplicated strings in the picker, the header and the fence probe — the same
+    argument `domain/commands.ts` makes for slash commands.
+    """
+    return {
+        "writeModes": [
+            {"id": m.value, "label": m.label, "sentence": m.sentence, "mutates": m.mutates}
+            for m in write_mode.WriteMode
+        ],
+        "defaultWriteMode": write_mode.DEFAULT.value,
+    }
 
 
 # -- workspace tree ----------------------------------------------------------

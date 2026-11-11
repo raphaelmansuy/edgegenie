@@ -117,3 +117,42 @@ describe("mission projection — spec 011", () => {
     expect(missionView(sessionOf({ ...t, seconds: 4.2 }), { ...t, seconds: 4.2 }, { kind: "live" }).seconds).toBe(4.2);
   });
 });
+
+describe("a blocked turn explains itself beside its evidence", () => {
+  /* Found by inspecting a screenshot: the header said "Blocked — requirements without verified
+     evidence" while the Evidence panel said "3 of 3 verified". Both were true of different things and a
+     reader had no way to tell them apart, so the picture contradicted the headline. */
+  const blocked = {
+    ...newTurn("b1", 1),
+    status: "blocked" as const,
+    answer: "I did what I could.",
+    blocked: {
+      reason: "requirements without verified evidence",
+      missing: ["list the tables", "prove the count"],
+      attempted: [],
+    },
+    evidence: [{ requirement: "create the notebook", toolCallId: "c1", tool: "dbx_write_notebook",
+                 summary: "wrote it", verified: true }],
+    tools: [{ callId: "c1", name: "dbx_write_notebook", status: "completed" }],
+  };
+
+  it("exposes the missing requirements so the panel can name them", () => {
+    const v = missionView(sessionOf(blocked), blocked, { kind: "live" });
+    expect(v.state).toBe("blocked");
+    expect(v.missing).toEqual(["list the tables", "prove the count"]);
+    expect(v.proven).toBe(1);            // genuinely verified…
+    expect(v.missing.length).toBeGreaterThan(0);  // …and genuinely incomplete. Both, together.
+  });
+
+  it("carries the agent's own reason, not a paraphrase", () => {
+    const v = missionView(sessionOf(blocked), blocked, { kind: "live" });
+    expect(v.blockedReason).toBe("requirements without verified evidence");
+  });
+
+  it("is empty for a turn that is not blocked, so the panel renders nothing extra", () => {
+    const done = { ...newTurn("d1", 1), status: "completed" as const, answer: "ok" };
+    const v = missionView(sessionOf(done), done, { kind: "live" });
+    expect(v.missing).toEqual([]);
+    expect(v.blockedReason).toBe("");
+  });
+});

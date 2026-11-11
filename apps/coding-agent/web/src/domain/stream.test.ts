@@ -125,8 +125,31 @@ describe("describe: the only place a stream state becomes words", () => {
   });
 
   it("gives each closed reason its own sentence, because they need different next steps", () => {
-    const reasons = ["not-found", "cursor-ahead", "rejected", "offline"] as const;
+    const reasons = ["not-found", "cursor-ahead", "rejected"] as const;
     const details = reasons.map((r) => describeState({ kind: "closed", reason: r }).detail);
     expect(new Set(details).size).toBe(reasons.length);
+  });
+
+  it("declares no state the machine cannot produce, so the union is not a wish list", () => {
+    // `closed: "offline"` used to be declared here with its own copy, and `afterFailure` could never
+    // return it — offline always yields `reconnecting`, deliberately ([F-13], [R-27]). A declared member
+    // nothing produces makes `describe`'s exhaustive switch look total over an impossible state, and
+    // makes a reader believe offline is handled by the closed branch.
+    const statuses: (number | null)[] = [null, 200, 401, 403, 404, 409, 422, 500, 503, 0];
+    const reachable = new Set<string>();
+    const queue: StreamState[] = [{ kind: "idle" }];
+    const key = (s: StreamState) => s.kind + ("reason" in s ? `:${s.reason}` : "");
+    while (queue.length) {
+      const s = queue.shift()!;
+      if (reachable.has(key(s))) continue;
+      reachable.add(key(s));
+      const next: StreamState[] = [afterOpen(), afterRetry(), afterSwitch()];
+      for (const st of statuses) for (const online of [true, false]) next.push(afterFailure(st, 1, online));
+      for (const n of next) if (!reachable.has(key(n))) queue.push(n);
+    }
+    expect([...reachable].sort()).toEqual([
+      "closed:cursor-ahead", "closed:not-found", "closed:rejected",
+      "connecting", "idle", "live", "reconnecting",
+    ]);
   });
 });
