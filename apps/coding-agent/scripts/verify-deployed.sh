@@ -243,6 +243,26 @@ print(f"  \033[32mPASS\033[0m {len(av)} models all declare seesImages; {len(vis)
 for v in vis[:6]: print(f"        {v}")
 ' && pass=$((pass+1)) || fail=$((fail+1))
 
+  # -- 3b. the routes this assessment added, and the words that exist only in the new code ---------
+  # A deploy that prints SUCCEEDED while serving the previous commit is the failure this whole script
+  # exists for — and it HAPPENED on this deployment: the app reported commit 2063af3 while HEAD was
+  # 19c471d. So these probe for the new surface by name, and a 404 means the backend is old.
+  for route in /api/config /api/docs/search?q=fence; do
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$URL$route" "${H[@]}")
+    case "$code" in
+      200) ok "GET $route answers 200 — the new backend is live" ;;
+      401|403) ok "GET $route answers $code before reaching a handler (the proxy wall)" ;;
+      404) bad "GET $route is 404 — this deployment is serving a backend WITHOUT the new routes" ;;
+      *) bad "GET $route answered $code" ;;
+    esac
+  done
+  # The write-mode vocabulary exists only in the new code. Its presence in the response proves the
+  # module loaded, not merely that a route matched a prefix.
+  cfg=$(curl -s --max-time 20 "$URL/api/config" "${H[@]}")
+  printf '%s' "$cfg" | grep -q '"writeModes"' \
+    && ok "the deployed backend publishes the three write modes" \
+    || bad "the deployed backend does not publish writeModes — old code"
+
   # -- 4. the bundle in the browser is the current one -------------------------------------------
   # A string that exists only in the shipped front end. Written to FILES, not held in shell
   # variables: `printf '%s' "$js" | grep -q` on a 500 KB string gives a FALSE NEGATIVE (grep exits on

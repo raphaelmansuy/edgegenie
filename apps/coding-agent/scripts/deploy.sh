@@ -93,7 +93,11 @@ print(next((a["name"] for a in apps if (a.get("compute_status") or {}).get("stat
   state="$(databricks apps get "$stopped" -o json | python3 -c 'import json,sys;print((json.load(sys.stdin).get("compute_status") or {}).get("state",""))')"
   [ "$state" = "STOPPED" ] && die "'$stopped' still reports STOPPED after a start request; compute is not available"
   echo "  compute is available ('$stopped' is now $state)"
-  databricks apps stop "$stopped" >/dev/null 2>&1 && echo "  stopped '$stopped' again to avoid spending the allowance"
+  # DO NOT stop it again. The deploy in step 6 requires the app to be RUNNING — measured: this probe
+  # used to stop the app "to avoid spending the allowance", and the very next step failed with
+  # `Cannot deploy app as it is not in RUNNING state`. The allowance is spent by the deploy that
+  # follows a second later, so stopping here saved nothing and broke the deploy.
+  echo "  leaving it running: the deploy in step 6 needs it RUNNING"
 }
 
 # ---------------------------------------------------------------- the one app body
