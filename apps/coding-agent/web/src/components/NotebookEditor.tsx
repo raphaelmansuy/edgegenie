@@ -58,6 +58,8 @@ interface Props {
   /** Run one cell. Absent when the document cannot be run (spec 006 X1). */
   onRunCell?: (cell: Cell, index: number) => void;
   onClearRun?: (cell: Cell) => void;
+  /** A result table was switched to a chart, or the chart changed. */
+  onRunView?: (cell: Cell, table: number, view: import("../domain/chart").TableView) => void;
   /** The cell a link named (1-based). It is scrolled to and marked; keyboard focus is left alone. */
   linkedCell?: number | null;
   /** 1-based cells another writer just changed: marked until the user dismisses the banner. */
@@ -81,7 +83,7 @@ interface Props {
 }
 
 export function NotebookEditor({
-  cells, language, theme, readOnly = false, onChange, onAskCell, onPrompt, onSave, runs, onRunCell, onClearRun,
+  cells, language, theme, readOnly = false, onChange, onAskCell, onPrompt, onSave, runs, onRunCell, onClearRun, onRunView,
   linkedCell = null, changedCells, onCopyCellLink, python, viewKey, reveal,
   onRunCells, onClearOutputs, onStopRun, batch = null,
 }: Props) {
@@ -460,6 +462,7 @@ export function NotebookEditor({
             }
           }}
           onClearRun={() => onClearRun?.(cell)}
+          onRunView={onRunView ? (table, view) => onRunView(cell, table, view) : undefined}
           onCopyLink={onCopyCellLink ? () => onCopyCellLink(i + 1) : undefined}
           python={python}
         />
@@ -513,6 +516,7 @@ interface CellProps {
   belowEnabled: boolean;
   onSelectClick: (e: React.MouseEvent) => void;
   onClearRun: () => void;
+  onRunView?: (table: number, view: import("../domain/chart").TableView) => void;
   onCopyLink?: () => void;
   python?: PythonPolicy;
 }
@@ -712,7 +716,7 @@ function CellBlock(p: CellProps) {
         )}
         {p.run && !collapsed && (
           <div className="cell-output-wrap">
-            <CellOutput run={p.run} onClear={p.onClearRun} folded={p.outputHidden} onToggleFold={p.onToggleOutput}
+            <CellOutput run={p.run} onClear={p.onClearRun} onView={p.onRunView} folded={p.outputHidden} onToggleFold={p.onToggleOutput}
               onFix={p.onFix && p.run.error ? () => p.onFix?.(p.run?.error ?? "") : undefined} />
           </div>
         )}

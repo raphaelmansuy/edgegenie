@@ -113,6 +113,15 @@ class Settings(BaseSettings):
     #: (APP_LLM_ADMINS). Off switch for an owner who does not want user code to run under the app's
     #: identity at all. SQL cells are unaffected: they run as the signed-in user.
     python_run: bool = True
+    #: A persistent Python session (one serverless job that stays up, so variables survive between cells)
+    #: or only one-shot runs. "auto" tries a session and falls back, in words, when one cannot start.
+    python_session: str = "auto"
+    #: Where a session's commands and results are exchanged: a Unity Catalog volume the app's service
+    #: principal can read and write.
+    session_volume: str = "/Volumes/workspace/agent_scratch/kernel_sessions"
+    session_idle_seconds: int = Field(default=1200, ge=60, le=14400)
+    session_max_per_user: int = Field(default=2, ge=1, le=10)
+    session_max_total: int = Field(default=3, ge=1, le=50)
     #: Where the app's tool servers reach the app itself. Empty = loopback on the app's own port.
     internal_url: str = ""
 

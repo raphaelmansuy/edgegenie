@@ -17,7 +17,12 @@ import { Markdown } from "./Markdown";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import { askFence, saveDocument, type SaveResult } from "../api/save";
-import { runAffordance, runPlan, type CellRun } from "../domain/cellrun";
+import { runAffordance, runPlan, segments, type CellRun } from "../domain/cellrun";
+import { fallbackNotice, NO_SESSION, replacedNotice, withNotice, type SessionStatus } from "../domain/session";
+import type { TableView } from "../domain/chart";
+import * as widgetsDomain from "../domain/widgets";
+import { WidgetBar } from "./WidgetBar";
+import { completeRun, recallRuns, rememberRuns, restore as restoreRuns, snapshot as snapshotRuns, type StoredRun } from "../domain/runstore";
 import { usePythonPolicy } from "../hooks/usePythonPolicy";
 import { NotebookBar } from "./NotebookBar";
 import { checkCells, parseCells, serializeCells, type Cell } from "../domain/notebook";
@@ -115,6 +120,11 @@ export function EditorSurface({
    *  arrives: the first render has no data (the load is async), so seeding in `useState` would pin
    *  the editor to an empty document forever. */
   const [liveCells, setLiveCells] = useState<Cell[]>([]);
+  /** The widgets: what the session declared, and the values the person has chosen. Kept per notebook. */
+  const [widgets, setWidgets] = useState<widgetsDomain.WidgetState>(() => widgetsDomain.load(target.path));
+  const widgetsRef = useRef(widgets);
+  widgetsRef.current = widgets;
+  useEffect(() => { widgetsDomain.save(target.path, widgets); }, [target.path, widgets]);
   const seeded = useRef(false);
   /** The text this buffer is showing, as we last accepted it from above. An incoming `source` that
    *  equals it is not a change, so adopting it must not mark the document dirty. */
@@ -124,8 +134,13 @@ export function EditorSurface({
     if (seeded.current) return;
     seeded.current = true;
     accepted.current = source;
-    setLiveCells(parseCells(source, target.language));
-  }, [source, target.kind, target.language]);
+    const seededCells = parseCells(source, target.language);
+    setLiveCells(seededCells);
+    // Results kept from the last time this notebook was open (a tab switch, a reload). Matched to the
+    // cells by their code, so a result never lands on a cell it did not come from.
+    const kept = recallRuns(target.path);
+    if (kept) setRuns(restoreRuns(seededCells, kept));
+  }, [source, target.kind, target.language, target.path]);
 
   /* After a save, the parent reloads and hands us new `source`. That is not an edit, so it must not
      mark the document dirty — but the old value of `source` is gone by then, so a byte comparison
@@ -255,7 +270,29 @@ export function EditorSurface({
     accepted.current = "";
     setLiveCells([]);
     setRuns({});
+    setSession(NO_SESSION);
+    setFallback(null);
   }, [target.path]);
+  /* Keep the results with the notebook so leaving it does not lose them. The write is debounced (a
+     result can carry megabytes of plots) and flushed when the notebook is left, because the last
+     result is the one a user most wants back. */
+  const pendingRuns = useRef<{ path: string; entries: StoredRun[] } | null>(null);
+  const flushRuns = useCallback(() => {
+    const p = pendingRuns.current;
+    pendingRuns.current = null;
+    if (p) rememberRuns(p.path, p.entries);
+  }, []);
+  useEffect(() => {
+    if (target.kind !== "notebook" || !seeded.current || liveCells.length === 0) return;
+    if (pendingRuns.current && pendingRuns.current.path !== target.path) flushRuns();
+    pendingRuns.current = { path: target.path, entries: snapshotRuns(liveCells, runs) };
+    const t = window.setTimeout(flushRuns, 400);
+    return () => window.clearTimeout(t);
+  }, [runs, liveCells, target.kind, target.path, flushRuns]);
+  /** Whether this surface is still on screen. A run outlives the tab it was started from; its result
+   *  is then kept with the notebook instead of being handed to a component that is gone. */
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; flushRuns(); }; }, [flushRuns]);
   const saveTimer = useRef<number | undefined>(undefined);
   /** A real lock, not a state read: two key events in one tick both see the old `saving` value. */
   const inFlight = useRef(false);
@@ -415,9 +452,26 @@ export function EditorSurface({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const python = usePythonPolicy();
+  const policy = usePythonPolicy();
+  /* A session keeps variables between cells. When the server cannot give one (no volume, no quota), the
+     cell runs as a one-shot and `fallback` says why, for as long as this notebook is open or until
+     Restart session: that mode forgets variables between runs, so it is shown, never silent. */
+  const [fallback, setFallback] = useState<string | null>(null);
+  const fallbackRef = useRef<string | null>(null);
+  fallbackRef.current = fallback;
+  const [session, setSession] = useState<SessionStatus>(NO_SESSION);
+  const python = useMemo(() => (policy.session && fallback ? { ...policy, session: false } : policy), [policy, fallback]);
+  const sessionOn = Boolean(python.enabled && python.session);
   /** Whatever stops a Python run between polls: Stop in the notebook bar. */
   const stopAll = useRef(false);
+
+  /** A run that finishes after the notebook was left: its result goes to the store, under the code that
+   *  was run, so it is there when the notebook is opened again. */
+  const keepIfLeft = useCallback((cellId: string, run: CellRun) => {
+    if (alive.current) return;
+    const cell = liveCells.find((c) => c.id === cellId);
+    if (cell) completeRun(target.path, cell.source, run);
+  }, [liveCells, target.path]);
 
   /** Python cells, together: ONE serverless job as the app, so the cells share variables and the cold
    *  start is paid once. `targets` are the cells whose output is wanted; the Python above the last of
@@ -440,37 +494,108 @@ export function EditorSurface({
       const out = ids.map((id) => results[String(liveCells.findIndex((c) => c.id === id))]
         ?? failed("the run ended without a result for this cell"));
       setRuns((r) => ({ ...r, ...Object.fromEntries(ids.map((id, n) => [id, out[n]])) }));
+      ids.forEach((id, n) => keepIfLeft(id, out[n]));
       return out;
     } catch (e) {
       const why = failed(e instanceof Error ? e.message : "the request did not reach the app");
       setRuns((r) => ({ ...r, ...Object.fromEntries(ids.map((id) => [id, why])) }));
+      ids.forEach((id) => keepIfLeft(id, why));
       return ids.map(() => why);
     } finally {
       ids.forEach((id) => running.current.delete(id));
     }
-  }, [liveCells, target.language]);
+  }, [liveCells, target.language, keepIfLeft]);
+
+  const widgetItems = useMemo(() => widgetsDomain.barItems(widgets.declared, liveCells), [widgets.declared, liveCells]);
+
+  /** One Python cell, in the notebook's session. If the server cannot give a session the cell runs as a
+   *  one-shot instead, and its output says so. */
+  const runInSession = useCallback(async (cell: Cell): Promise<CellRun | null> => {
+    const key = cell.id;
+    const where = "Serverless session · as the app";
+    if (fallbackRef.current) return (await runPython([cell]))[0] ?? null;
+    running.current.add(key);
+    setRuns((r) => ({ ...r, [key]: { state: "running", seconds: 0, error: "starting…", warehouse: where } }));
+    let unavailable: string | undefined;
+    try {
+      const index = Math.max(0, liveCells.findIndex((c) => c.id === key));
+      const got = await api.runSessionCell(target.path, cell.language || target.language, cell.source, index, {
+        widgets: widgetsDomain.valuesForSession(widgetsRef.current.declared, widgetsRef.current.values),
+        stop: () => stopAll.current,
+        onSession: setSession,
+        onProgress: (p) => setRuns((r) => (r[key]?.state === "running"
+          ? { ...r, [key]: { state: "running", seconds: p.seconds, error: `${p.stage}… ${Math.round(p.seconds)}s`,
+                             outputs: p.outputs, warehouse: where } } : r)),
+      });
+      if (got.unavailable) {
+        unavailable = got.unavailable;
+      } else {
+        let result = got.result as CellRun;
+        if (result.widgets !== undefined) {
+          const reported = result.widgets;
+          setWidgets((w) => widgetsDomain.applyReport(w, reported));
+        }
+        const { widgets: _reported, ...kept } = result;     // the declarations belong to the bar, not to the cell's result
+        result = kept;
+        if (got.replaced) result = withNotice(result, replacedNotice(got.replaced));
+        setRuns((r) => ({ ...r, [key]: result }));
+        keepIfLeft(key, result);
+        return result;
+      }
+    } catch (e) {
+      const failed: CellRun = { state: "failed", seconds: 0, warehouse: where,
+        error: e instanceof Error ? e.message : "the request did not reach the app" };
+      setRuns((r) => ({ ...r, [key]: failed }));
+      keepIfLeft(key, failed);
+      return failed;
+    } finally {
+      running.current.delete(key);
+    }
+    // No session: say why, once, and run the cell the other way.
+    setFallback(unavailable ?? "a session could not be started");
+    fallbackRef.current = unavailable ?? "a session could not be started";
+    const [res] = await runPython([cell]);
+    if (!res) return null;
+    const noted = withNotice(res, fallbackNotice(unavailable ?? "a session could not be started"));
+    setRuns((r) => ({ ...r, [key]: noted }));
+    keepIfLeft(key, noted);
+    return noted;
+  }, [liveCells, target.path, target.language, runPython, keepIfLeft]);
 
   /** Run one cell. The result is a value, so every outcome renders from one place. */
-  const runCell = useCallback(async (cell: Cell): Promise<CellRun | null> => {
+  const runCell = useCallback(async (cell: Cell, fresh = true): Promise<CellRun | null> => {
     if (running.current.has(cell.id)) return null;
     const how = runAffordance(cell.kind === "markdown" ? "markdown" : cell.language || target.language, cell.source, python);
-    if (how.engine === "python") { stopAll.current = false; return (await runPython([cell]))[0] ?? null; }
+    // A single run starts with a clean Stop. Inside a batch the batch owns it: resetting here would
+    // swallow a Stop pressed while the previous cell was finishing.
+    if (fresh) stopAll.current = false;
+    if (how.engine === "python") {
+      if (sessionOn) return await runInSession(cell);
+      return (await runPython([cell]))[0] ?? null;
+    }
     running.current.add(cell.id);
     const key = cell.id;
     setRuns((r) => ({ ...r, [key]: { state: "running", seconds: 0 } }));
     try {
-      const result = await api.runCell(cell.language || target.language, cell.source);
+      const result = await api.runCell(cell.language || target.language, cell.source, {
+        params: widgetsDomain.paramsFor(cell.source, widgetItems, widgetsRef.current.values),
+        stop: () => stopAll.current,
+        onStage: (stage, seconds) => setRuns((r) => (r[key]?.state === "running"
+          ? { ...r, [key]: { state: "running", seconds, error: `${stage}… ${Math.round(seconds)}s` } } : r)),
+      });
       setRuns((r) => ({ ...r, [key]: result }));
+      keepIfLeft(key, result);
       return result;
     } catch (e) {
       const failed: CellRun = { state: "failed", seconds: 0,
         error: e instanceof Error ? e.message : "the request did not reach the app" };
       setRuns((r) => ({ ...r, [key]: failed }));
+      keepIfLeft(key, failed);
       return failed;
     } finally {
       running.current.delete(cell.id);
     }
-  }, [target.language, python, runPython]);
+  }, [target.language, python, runPython, runInSession, sessionOn, keepIfLeft, widgetItems]);
 
   /* Run a list of cells, in order, stopping at the first failure. Sequential on purpose: a later cell
      may read what an earlier one made, and a failure that is not the first one is noise. `stopAll`
@@ -492,35 +617,72 @@ export function EditorSurface({
       return next;
     });
     try {
-      const pyIds = ids.filter((id) => {
-        const cell = snapshot.find((c) => c.id === id);
-        if (!cell) return false;
-        return runAffordance(cell.kind === "markdown" ? "markdown" : cell.language || target.language, cell.source, python).engine === "python";
-      });
-      // The Python cells are one job, started now and read at the end, while the SQL cells run in
-      // order on the warehouse. They are different engines, so neither waits for the other; SQL still
-      // stops at its first failure, and a Python failure is reported on its own cell.
-      const pythonRun = pyIds.length ? runPython(snapshot.filter((c) => pyIds.includes(c.id))) : Promise.resolve([]);
-      for (const id of ids) {
-        if (stopAll.current) break;
-        if (pyIds.includes(id)) continue;
-        const cell = snapshot.find((c) => c.id === id);
-        if (!cell) continue;
-        const result = await runCell(cell);
-        if (result && result.state !== "succeeded") break;
+      // Top to bottom, one stretch of the same engine at a time (`segments`): a SQL cell may read what a
+      // Python cell above it wrote, so neither engine runs beside the other. Python is one job per
+      // stretch (the cold start is paid per job); SQL runs a cell at a time. The first failure stops
+      // everything below it, as Databricks' Run all does.
+      if (sessionOn) {
+        // One session: each cell runs where it is, in order, on its own engine. Nothing is re-run to
+        // rebuild variables, so a Python cell below a SQL cell is just the next cell.
+        for (const id of ids) {
+          if (stopAll.current) break;
+          const cell = snapshot.find((c) => c.id === id);
+          if (!cell) continue;
+          const result = await runCell(cell, false);
+          if (result && result.state !== "succeeded") break;
+        }
+        return;
       }
-      await pythonRun;
+      for (const seg of segments(snapshot, ids, python, target.language)) {
+        if (stopAll.current) break;
+        if (seg.engine === "python") {
+          const results = await runPython(snapshot.filter((c) => seg.ids.includes(c.id)));
+          if (results.some((r) => r.state !== "succeeded")) break;
+          continue;
+        }
+        let stopped = false;
+        for (const id of seg.ids) {
+          if (stopAll.current) { stopped = true; break; }
+          const cell = snapshot.find((c) => c.id === id);
+          if (!cell) continue;
+          const result = await runCell(cell, false);
+          if (result && result.state !== "succeeded") { stopped = true; break; }
+        }
+        if (stopped) break;
+      }
     } finally {
       setRunningAll(false);
       setBatch(null);
     }
-  }, [liveCells, runCell, runPython, runningAll, python, target.language]);
+  }, [liveCells, runCell, runPython, runningAll, python, sessionOn, target.language]);
   const runAll = useCallback(async () => {
     const ids = runPlan(liveCells, python).runnable;
     await runIds(ids, true);
   }, [liveCells, python, runIds]);
 
+  /* While a notebook with Python is open, ask the app how its session is. Asking is also how the app
+     knows someone is still here: the session is kept for a few minutes after the last ask, then ends. */
+  const wantsSession = target.kind === "notebook" && python.enabled && Boolean(python.session) && plan.python.length > 0;
+  useEffect(() => {
+    if (!wantsSession) return;
+    let live = true;
+    const ask = () => { api.sessionStatus(target.path).then((s) => { if (live) setSession(s); }).catch(() => {}); };
+    ask();
+    const t = window.setInterval(ask, 30_000);
+    return () => { live = false; window.clearInterval(t); };
+  }, [wantsSession, target.path]);
+  const restartSession = useCallback(() => {
+    setFallback(null);
+    api.stopSession(target.path).then(setSession).catch(() => setSession(NO_SESSION));
+  }, [target.path]);
+  const stopSession = useCallback(() => {
+    api.stopSession(target.path).then(setSession).catch(() => {});
+  }, [target.path]);
+
   const clearAllRuns = useCallback(() => setRuns({}), []);
+  const setRunView = useCallback((cell: Cell, table: number, view: TableView) => {
+    setRuns((r) => (r[cell.id] ? { ...r, [cell.id]: { ...r[cell.id], views: { ...r[cell.id].views, [String(table)]: view } } } : r));
+  }, []);
   const clearRun = useCallback((cell: Cell) => {
     setRuns((r) => {
       const next = { ...r };
@@ -674,7 +836,14 @@ export function EditorSurface({
           are serialized once, on save, by the same pure module the tests cover. */}
       {target.kind === "notebook" && !readOnly && liveCells.length > 0 && (
         <NotebookBar plan={plan} runs={runs} runningAll={runningAll} batch={batch}
+          session={policy.session ? { status: session, fallback, onRestart: restartSession, onStop: stopSession } : undefined}
           onRunAll={() => void runAll()} onStop={() => { stopAll.current = true; }} onClear={clearAllRuns} />
+      )}
+
+      {target.kind === "notebook" && !readOnly && (
+        <WidgetBar items={widgetItems} values={widgets.values}
+          onChange={(name, value) => setWidgets((w) => widgetsDomain.setValue(w, name, value))}
+          onReset={() => setWidgets(widgetsDomain.resetValues)} />
       )}
 
       {target.kind === "notebook" ? (
@@ -720,6 +889,7 @@ export function EditorSurface({
           onStopRun={() => { stopAll.current = true; }}
           batch={batch}
           onClearRun={clearRun}
+          onRunView={setRunView}
         />
       ) : isMarkdown && preview ? (
         <div className="md-preview" aria-label={`${target.name}, rendered`}>

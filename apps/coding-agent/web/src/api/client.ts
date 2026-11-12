@@ -358,9 +358,75 @@ export const api = {
   permissions: (path: string) => call<{ path: string; entries: { who: string; principal: string; permission: string; inherited: boolean }[] }>(
     `/api/workspace/permissions?path=${encodeURIComponent(path)}`),
   /** Execute one cell (SQL only). Returns a run state plus either data or a reason. */
-  runCell: (language: string, source: string) =>
-    call<import("../domain/cellrun").CellRun>("/api/notebook/run-cell", { method: "POST", headers: json,
-      body: JSON.stringify({ language, source }) }),
+  /**
+   * Run a SQL cell on a warehouse, as the signed-in user. A statement can run for minutes, so this starts
+   * it and polls (the Apps proxy cuts a long request), and resolves with the one result. `stop` is asked
+   * between polls and cancels the statement on the warehouse.
+   */
+  runCell: async (
+    language: string, source: string,
+    hooks: { onStage?: (stage: string, seconds: number) => void; stop?: () => boolean; params?: Record<string, string> } = {},
+  ): Promise<import("../domain/cellrun").CellRun> => {
+    type Run = import("../domain/cellrun").CellRun;
+    type Poll = { state: "running" | "done"; stage?: string; seconds: number; result?: Run };
+    const started = await call<{ handle?: string; result?: Run }>(
+      "/api/notebook/sql-runs", { method: "POST", headers: json, body: JSON.stringify({ language, source, params: hooks.params ?? {} }) });
+    if (!started.handle) return started.result ?? { state: "failed", seconds: 0, error: "the app returned no result" };
+    const url = `/api/notebook/sql-runs/${started.handle}`;
+    const deadline = Date.now() + 12 * 60_000;
+    let cancelled = false;
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 800));
+      if (!cancelled && hooks.stop?.()) { cancelled = true; await call(url, { method: "DELETE" }).catch(() => {}); }
+      const poll = await call<Poll>(url);
+      if (poll.state === "done" && poll.result) return poll.result;
+      hooks.onStage?.(poll.stage ?? "running", poll.seconds);
+      if (Date.now() > deadline) throw new Error("the query is taking longer than 12 minutes; it was left running on the warehouse");
+    }
+  },
+  /**
+   * Run one Python cell in the notebook's session (variables stay between cells). Starts it, then polls.
+   * Resolves with the result, or `unavailable` (why a session cannot be used: the caller runs the cell
+   * as a one-shot). `onProgress` sees what the cell has printed so far; `stop` is asked between polls and
+   * interrupts the cell once.
+   */
+  runSessionCell: async (
+    path: string, language: string, source: string, index: number,
+    hooks: {
+      /** Widget values to run with, by name. */
+      widgets?: Record<string, string>;
+      onProgress?: (p: { stage: string; seconds: number; outputs: import("../domain/cellrun").Output[] }) => void;
+      onSession?: (s: import("../domain/session").SessionStatus) => void;
+      stop?: () => boolean;
+    } = {},
+  ): Promise<{ result?: import("../domain/cellrun").CellRun; unavailable?: string; replaced?: string }> => {
+    type Run = import("../domain/cellrun").CellRun;
+    type Sess = import("../domain/session").SessionStatus;
+    const started = await call<{ handle?: string; unavailable?: string; refused?: Run; replaced?: string; session?: Sess }>(
+      "/api/notebook/kernels/run", { method: "POST", headers: json, body: JSON.stringify({ path, language, source, index, widgets: hooks.widgets ?? {} }) });
+    if (started.unavailable) return { unavailable: started.unavailable };
+    if (started.session) hooks.onSession?.(started.session);
+    if (!started.handle) {
+      return { result: started.refused ?? { state: "failed", seconds: 0, error: "the app returned no result" } };
+    }
+    const url = `/api/notebook/kernels/runs/${started.handle}`;
+    const deadline = Date.now() + 5 * 3600_000;
+    let interrupted = false;
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 800));
+      if (!interrupted && hooks.stop?.()) { interrupted = true; await call(url, { method: "DELETE" }).catch(() => {}); }
+      const poll = await call<{ state: "running" | "done"; stage?: string; seconds: number; outputs?: import("../domain/cellrun").Output[];
+        result?: Run; session?: Sess }>(url);
+      if (poll.session) hooks.onSession?.(poll.session);
+      if (poll.state === "done" && poll.result) return { result: poll.result, replaced: started.replaced };
+      hooks.onProgress?.({ stage: poll.stage ?? "running", seconds: poll.seconds, outputs: poll.outputs ?? [] });
+      if (Date.now() > deadline) throw new Error("the cell has been running for more than 5 hours; it was left running in its session");
+    }
+  },
+  sessionStatus: (path: string) =>
+    call<import("../domain/session").SessionStatus>(`/api/notebook/kernels?path=${encodeURIComponent(path)}`),
+  stopSession: (path: string) =>
+    call<import("../domain/session").SessionStatus>(`/api/notebook/kernels?path=${encodeURIComponent(path)}`, { method: "DELETE" }),
   /**
    * Run Python cells on serverless compute AS THE APP (administrators only; the server decides).
    * `show` are the cells (0-based) whose output is wanted; the Python cells above the last of them run
