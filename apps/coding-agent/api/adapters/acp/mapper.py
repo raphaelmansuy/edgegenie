@@ -77,6 +77,22 @@ def _summarise(value: Any, limit: int = 140) -> str:
 MAX_COLS, MAX_ROWS = 24, 60
 
 
+def _proof_of(content: Any) -> dict | None:
+    import json
+
+    try:
+        data = json.loads(_text_of(content))
+    except (ValueError, TypeError):
+        data = content if isinstance(content, dict) else {}
+    proof = data.get("proof") if isinstance(data, dict) else None
+    if not isinstance(proof, dict) or proof.get("kind") not in {"sql-query", "sql-run"}:
+        return None
+    # Copy only receipt metadata, never source, bindings, arbitrary tool text or result rows.
+    keys = {"kind", "action", "draftId", "version", "sourceHash", "state", "runId",
+            "statementId", "warehouseId", "resultAvailable", "rowCount", "cancelRequested"}
+    return {k: v for k, v in proof.items() if k in keys and isinstance(v, (str, int, bool))}
+
+
 def _table_of(content: Any) -> dict | None:
     """A tool result that is a query answer (`{"columns": [...], "rows": [[...]]}`) becomes a grid.
 
@@ -149,6 +165,7 @@ def from_update(sid: str, tid: str | None, update: dict) -> list[Event]:
                 err,
                 args,
                 _table_of(update.get("content")) if not err else None,
+                _proof_of(update.get("content")) if not err else None,
             )
         ]
     if kind == "plan":

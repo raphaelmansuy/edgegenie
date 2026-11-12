@@ -36,6 +36,9 @@ env:
   # Durable session history shares Lakebase; never falls back to container memory.
   - name: APP_SESSION_USE_LAKEBASE
     value: "true"
+  # User-authenticated, read-only SQL; encrypted intents share the existing Lakebase journal.
+  - name: APP_SQL_RUN
+    value: "true"
   - name: APP_LLM_ADMINS
     value: raphael.mansuy@gmail.com
   # The key-encryption key for stored provider keys. It is an app RESOURCE (a Databricks secret), so a

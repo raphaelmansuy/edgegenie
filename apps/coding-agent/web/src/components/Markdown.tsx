@@ -11,7 +11,7 @@ import { memo, useContext, useMemo, type ReactNode } from "react";
 import { splitStashed, stashMath, type MathSpan } from "../domain/math";
 import { Math as MathNode } from "./Math";
 import { splitPaths, workspaceUrl, type Workspace } from "../domain/links";
-import { WorkspaceLinks } from "./DocContext";
+import { WorkspaceLinks, OpenSqlQuery } from "./DocContext";
 import { CopyButton } from "./CopyButton";
 
 /** A workspace path becomes a link to that object in Databricks; anything else stays text. */
@@ -69,6 +69,7 @@ function inline(text: string, keyBase: string, ws: Workspace | null = null): Rea
 /** Renders a markdown subset. Any HTML in the input is displayed as text, never executed. */
 function MarkdownView({ text, streaming = false }: { text: string; streaming?: boolean }) {
   const ws = useContext(WorkspaceLinks);
+  const openSql = useContext(OpenSqlQuery);
   /* One stash for the whole document: offsets stay consistent and a fence's `$` is already excluded by
      `findMath`, so the markdown pass below never sees a delimiter. */
   const { prose, spans } = useMemo(() => stashMath(text), [text]);
@@ -96,6 +97,7 @@ function MarkdownView({ text, streaming = false }: { text: string; streaming?: b
         <figure key={`k${key++}`} className="codeblock">
           <figcaption>
             <span className="codeblock-lang">{fence[1] || "code"}</span>
+            {fence[1].toLowerCase() === "sql" && openSql && <button className="sql-promote-button" disabled={streaming} title={streaming?"Wait for the SQL proposal to finish":undefined} onClick={() => openSql(code)}>Open as query</button>}
             <CopyButton text={code} label="Copy" title="Copy this code" />
           </figcaption>
           <pre><code>{code}</code></pre>

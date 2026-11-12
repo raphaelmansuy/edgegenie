@@ -2222,7 +2222,22 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
   flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
   padding: 10px 12px 6px; display: flex; flex-direction: column; gap: 10px;
   overscroll-behavior: contain;
+  /* The dock decides when to follow the tail (domain/follow.ts). Browser scroll anchoring would adjust
+     scrollTop on its own as a turn re-renders above the viewport, and that reads as the reader leaving. */
+  overflow-anchor: none;
 }
+/* The log is a tab stop and the target of a click on the panel's dead space (spec 012): its ring is
+   inset, because the pane clips an outset one. */
+.dock-body:focus-visible { outline: 2px solid var(--blue-600); outline-offset: -2px; }
+/* Sticky inside the scroller: it rides the bottom edge of the log while the reader is up in history. */
+.dock-jump {
+  position: sticky; bottom: 4px; align-self: center; flex: none; margin-top: auto;
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: 999px;
+  border: 1px solid var(--blue-300); background: var(--blue-50); color: var(--blue-600);
+  font-size: 11.5px; font-weight: 600; cursor: pointer; box-shadow: var(--shadow-lg);
+}
+.dock-jump:hover { background: var(--surface); }
+.dock-jump:focus-visible { outline: 2px solid var(--blue-600); outline-offset: 2px; }
 /* A turn in a 380 px column: the same components, tighter type. The transcript's 28 px padding would
    leave 320 px of text, which is where markdown starts reflowing on every token. */
 .dock-body .turn { max-width: none; margin: 0; padding: 0 0 6px; }

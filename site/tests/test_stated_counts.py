@@ -173,11 +173,16 @@ def test_schema_table_count():
     llm = len(re.findall(r"CREATE TABLE IF NOT EXISTS llm\.", sql))
     agent = len(re.findall(r"CREATE TABLE IF NOT EXISTS agent\.", sql))
     data = DATA.read_text(encoding="utf-8")
-    assert agent == 2, f"the agent schema should hold 2 tables, found {agent}"
-    assert "Two tables" in data, "docs/10 no longer says the agent schema is two tables"
+    assert agent == 4, f"the agent schema should hold 4 tables, found {agent}"
+    assert "Four tables" in data, "docs/10 must describe the session and SQL tables"
+    assert set(re.findall(r"CREATE TABLE IF NOT EXISTS agent\.(\w+)", sql)) == {
+        "session_snapshot", "session_event", "sql_item", "sql_operation",
+    }
+    assert llm == 9, f"the llm schema should hold 9 tables, found {llm}"
     assert f"Nine tables in `llm`" in data or "Nine tables" in data, (
         f"the llm schema has {llm} tables; docs/10 must state that count")
-    assert count_migrations() == 4, f"{count_migrations()} migrations; docs/10 lists four"
+    assert count_migrations() == 5, f"{count_migrations()} migrations; docs/10 lists five"
+    assert "005_sql_journal.sql" in data, "docs/10 must include the SQL journal migration"
 
 
 @case

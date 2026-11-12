@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-KINDS = ("notebook", "file", "folder", "table", "cell", "blob")
+KINDS = ("notebook", "file", "folder", "table", "cell", "blob", "query", "query-draft")
 MAX_ATTACHMENTS = 6
 MAX_CHARS_EACH = 6_000
 MAX_CHARS_TOTAL = 16_000
@@ -80,7 +80,13 @@ def parse(raw: list[dict] | None) -> list[Attachment]:
         ref = str(item.get("ref", "")).strip()
         if kind not in KINDS:
             raise ContextError(f"unknown attachment kind: {kind!r}")
-        if kind == "blob":
+        if kind in ("query", "query-draft"):
+            from .sqlquery import SqlError, native_id
+            try:
+                native_id(ref)
+            except SqlError as exc:
+                raise ContextError(exc.message) from exc
+        elif kind == "blob":
             if not _BLOB_ID.match(ref):
                 raise ContextError(f"not a blob id: {ref!r}")
         elif kind == "table":

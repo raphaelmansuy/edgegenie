@@ -229,6 +229,8 @@ export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, o
       }
     },
     getCaret: () => view?.state.selection.main.head ?? 0,
+    getSelection: () => ({ start: view?.state.selection.main.from ?? 0, end: view?.state.selection.main.to ?? 0,
+      multiple: (view?.state.selection.ranges.length ?? 0) > 1 }),
     onCaret(cb) { caretCbs.push(cb); },
     blur() { view?.contentDOM.blur(); },
     destroy() {

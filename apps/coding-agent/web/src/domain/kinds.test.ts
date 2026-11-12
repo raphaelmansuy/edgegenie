@@ -1,4 +1,4 @@
-/** The eight document kinds: one identity, one route, one action set, one dock, one reducer.
+/** The ten document kinds: one identity, one route, one action set, one dock, one reducer.
  *
  *  Spec 014's [UI-1] requires that adding a kind is a compiler-guided change. That is only true if a test
  *  proves each register was extended, because `Record<DocKind, …>` names two of them and the rest are
@@ -27,15 +27,17 @@ const SAMPLE: Record<DocKind, string> = {
   job: JOB_ID,
   pipeline: PIPE_ID,
   run: RUN_ID,
+  query: "00000000-0000-4000-8000-000000000001",
+  "query-draft": "00000000-0000-4000-8000-000000000002",
 };
 
 const KINDS = Object.keys(SAMPLE) as DocKind[];
 
 
 describe("every kind is registered everywhere", () => {
-  it("has exactly eight kinds, so a ninth is a deliberate edit to this list", () => {
+  it("registers all ten kinds across routes, actions and bindings", () => {
     expect(KINDS.sort()).toEqual(
-      ["app", "file", "job", "lakebase", "notebook", "pipeline", "run", "table"]);
+      ["app", "file", "job", "lakebase", "notebook", "pipeline", "query", "query-draft", "run", "table"]);
   });
 
   it.each(KINDS)("%s has an action set (possibly empty, never missing)", (kind) => {
@@ -67,11 +69,11 @@ describe("every kind is registered everywhere", () => {
 
 
 describe("attachment rules", () => {
-  it("only a notebook, a file and a table ride along with a message", () => {
+  it("only content documents ride along with a message", () => {
     // A job, a run, a pipeline, a project and an app are management objects: the server has no resolver
     // that could re-read one with the user's token (013's [UI-5], extended by 014).
     for (const kind of KINDS) {
-      const expected = ["notebook", "file", "table"].includes(kind);
+      const expected = ["notebook", "file", "table", "query", "query-draft"].includes(kind);
       expect(canAttach(kind)).toBe(expected);
       expect(asAttachment(makeDoc(kind, SAMPLE[kind])) !== null).toBe(expected);
     }

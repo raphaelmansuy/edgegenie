@@ -10,8 +10,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from .evidence import Requirement, ToolCall, dedupe, gaps, limit_to, needs_evidence, parse_evidence_block, verify
+from .evidence import (
+    Requirement,
+    ToolCall,
+    dedupe,
+    gaps,
+    is_constraint,
+    limit_to,
+    needs_evidence,
+    parse_evidence_block,
+    successful_call,
+    verify,
+)
 from .evidence_map import derive
+from .query_intent import query_goals
 
 
 class Verdict(str, Enum):
@@ -30,6 +42,7 @@ class State:
     audits: int = 0
     #: The user only asked about attached context: an answer is the deliverable, no tool needed.
     read_only: bool = False
+    query_target: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,7 +99,12 @@ def decide(state: State) -> Decision:
             return Decision(Verdict.CONTINUE, ACT_PROMPT if not calls else CONTINUE_PROMPT)
         return Decision(Verdict.BLOCKED, "the agent stopped without an answer", ("no final answer",))
 
-    rows = limit_to(state.requirements, dedupe(verify(parse_evidence_block(answer), calls)))
+    claimed = parse_evidence_block(answer)
+    if state.query_target:
+        # Prohibitions have no positive tool receipt. Do not turn an honored "do not run"
+        # into a misleading unverified action in the SQL evidence panel.
+        claimed = [r for r in claimed if not is_constraint(str(r.get("requirement", "")))]
+    rows = limit_to(state.requirements, dedupe(verify(claimed, calls)))
     missing = gaps(state.requirements, rows)
     lower = answer.lower()
     admits = any(cue in lower for cue in _BLOCKED_CUES)
@@ -98,6 +116,23 @@ def decide(state: State) -> Decision:
             tuple(missing) or ("unknown",),
             tuple(r.to_dict() for r in rows),
         )
+    if state.query_target and not state.read_only:
+        requested = " ".join(r.text for r in state.requirements)
+        edit, run = query_goals(requested)
+        receipts = [c for c in calls if successful_call(c) and (c.proof or {}).get("draftId") == state.query_target]
+        updates = [c for c in receipts if c.name.endswith("dbx_update_query") and (c.proof or {}).get("action") == "updated"]
+        runs = [c for c in receipts if c.name.endswith(("dbx_run_query", "dbx_query_run_status")) and (c.proof or {}).get("kind") == "sql-run"]
+        if edit and updates:
+            runs = [c for c in runs if c.proof["sourceHash"] == updates[-1].proof["sourceHash"]]
+        missing_query = (["Update the attached SQL draft in the editor"] if edit and not updates else [])
+        if run and not runs:
+            missing_query.append("Observe successful execution of the same attached SQL source revision")
+        if missing_query:
+            return Decision(Verdict.AUDIT if state.audits < MAX_AUDITS else Verdict.BLOCKED,
+                "Use dbx_read_query and dbx_update_query for the attached editor draft. For requested execution, "
+                "use dbx_run_query and poll dbx_query_run_status for that same source hash. Generic SQL results "
+                "or a code block do not prove an editor change. Never resubmit an unknown outcome.",
+                tuple(missing_query), tuple(r.to_dict() for r in rows))
     if not missing or (state.read_only and not admits):
         return Decision(Verdict.DONE, evidence=tuple(r.to_dict() for r in rows))
     if not any(needs_evidence(r.text) for r in state.requirements):

@@ -184,6 +184,10 @@ class PostgresSessionStore(Broadcast):
             raise
 
     # -- the journal ---------------------------------------------------------------
+    async def run_operation(self, operation, *, retry: bool = False):
+        """Shared persistence seam: retain cancellation, reconnect and owner-lock guarantees."""
+        return await self._run(operation, retry=retry)
+
     async def snapshots(self) -> list[dict]:
         async def op(conn):
             async with conn.cursor() as cur:

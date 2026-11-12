@@ -10,21 +10,20 @@
 export interface RecentDoc {
   path: string;
   name: string;
-  /** The eight document kinds. A project, an app, a job, a pipeline and a run are "recently looked at"
-   *  too (spec 013 [UI-1], spec 014 [UI-1]). */
-  kind: "notebook" | "file" | "table" | "lakebase" | "app" | "job" | "pipeline" | "run";
+  kind: import("./docs").DocKind;
 }
 
 const KEY = "coding-agent:recent-docs:v1";
 const MAX = 6;
-let loaded = false;
+let loadedKey = "";
 let memory: RecentDoc[] = [];
 
-function load(): void {
-  if (loaded) return;
-  loaded = true;
+function load(scope = ""): void {
+  const key = scope ? `${KEY}:${encodeURIComponent(scope)}` : KEY;
+  if (loadedKey === key) return;
+  loadedKey = key;
   try {
-    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(KEY) : null;
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
     const parsed = raw ? (JSON.parse(raw) as unknown) : [];
     memory = Array.isArray(parsed) ? parsed.filter(valid).slice(0, MAX) : [];
   } catch { memory = []; }
@@ -32,32 +31,32 @@ function load(): void {
 
 function valid(v: unknown): v is RecentDoc {
   const d = v as RecentDoc;
-  const kinds = ["notebook", "file", "table", "lakebase", "app", "job", "pipeline", "run"];
+  const kinds = ["notebook", "file", "table", "lakebase", "app", "job", "pipeline", "run", "query", "query-draft"];
   return !!d && typeof d.path === "string" && d.path.length > 0
     && typeof d.name === "string" && kinds.includes(d.kind);
 }
 
 function save(): void {
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(KEY, JSON.stringify(memory));
+    if (typeof localStorage !== "undefined") localStorage.setItem(loadedKey, JSON.stringify(memory));
   } catch { /* private mode: the list still works for this page */ }
 }
 
-export function recentDocs(): RecentDoc[] {
-  load();
+export function recentDocs(scope = ""): RecentDoc[] {
+  load(scope);
   return [...memory];
 }
 
 /** Put a document at the front, once. Returns the new list, so a caller can render without a re-read. */
-export function rememberDoc(doc: RecentDoc): RecentDoc[] {
-  load();
+export function rememberDoc(doc: RecentDoc, scope = ""): RecentDoc[] {
+  load(scope);
   memory = [doc, ...memory.filter((d) => !(d.path === doc.path && d.kind === doc.kind))].slice(0, MAX);
   save();
   return [...memory];
 }
 
-export function forgetDocs(): void {
-  load();
+export function forgetDocs(scope = ""): void {
+  load(scope);
   memory = [];
   save();
 }

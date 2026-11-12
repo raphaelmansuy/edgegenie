@@ -20,13 +20,14 @@
  * route (the tests hold that), and anything unrecognised parses to the empty route rather than
  * throwing: a stale link must open the app, not a blank page.
  */
-export type DocRouteKind = "notebook" | "file" | "table" | "lakebase" | "app" | "job" | "pipeline" | "run";
+export type DocRouteKind = "notebook" | "file" | "table" | "lakebase" | "app" | "job" | "pipeline" | "run" | "query" | "query-draft";
 
 // A numeric id and a pipeline UUID are told apart by the same two predicates the pages use, so a link is
 // parsed by the rule the page applies rather than by a second grammar (spec 014 [UI-7]).
 import { asId, isPipelineId } from "./jobs";
 
 export interface Route {
+  sql?: "queries";
   doc: { kind: DocRouteKind; ref: string; name?: string } | null;
   /** 1-based cell number within `doc`. */
   cell: number | null;
@@ -41,6 +42,7 @@ const encodePath = (p: string) => p.replace(/^\/+/, "").split("/").map(encodeSeg
 const decodeSegment = (s: string) => { try { return decodeURIComponent(s); } catch { return s; } };
 
 export function formatRoute(r: Route): string {
+  if (r.sql) return "#/queries";
   if (r.settings) return `#/settings/${r.settings}`;
   if (r.doc) {
     const { kind, ref } = r.doc;
@@ -61,6 +63,9 @@ export function parseRoute(hash: string): Route {
   const parts = pathPart.replace(/^\/+/, "").split("/");
   const head = parts[0];
   const rest = parts.slice(1);
+  if (head === "queries" && rest.length === 0) return { ...EMPTY_ROUTE, sql: "queries" };
+  if ((head === "query" || head === "query-draft") && rest.length === 1 && /^[0-9a-f-]{36}$/i.test(rest[0]))
+    return { ...EMPTY_ROUTE, doc: { kind: head, ref: rest[0].toLowerCase() } };
   if (head === "settings") {
     return { ...EMPTY_ROUTE, settings: rest[0] === "models" ? "models" : "providers" };
   }

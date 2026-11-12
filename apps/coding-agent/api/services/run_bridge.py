@@ -40,4 +40,5 @@ class RunBridge:
     def env_for(self, session_id: str) -> dict[str, str]:
         """What the session's tool server needs to ask. The key is useless without the grant."""
         return {"NBMCP_RUN_URL": f"{self.url}/internal/run-notebook",
+                "NBMCP_QUERY_URL": f"{self.url}/internal/query",
                 "NBMCP_RUN_SESSION": session_id, "NBMCP_RUN_KEY": self.key_for(session_id)}

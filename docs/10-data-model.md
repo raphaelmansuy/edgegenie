@@ -2,11 +2,11 @@
 
 # 10 · The data model
 
-OpenGenie stores what **happened**, never what was **said about the data**. This page describes the
+OpenGenie stores session history, query source and execution metadata. This page describes the
 two schemas it owns, the invariants in the DDL, and why each row exists.
 
-> **In one sentence.** Two Postgres schemas — `agent` for what a conversation did, `llm` for what
-> the app may call — plus three kinds of files addressed by opaque ids. Every table is forward-only
+> **In one sentence.** Two Postgres schemas — `agent` for session and SQL journals, `llm` for what
+> the app may call — plus three kinds of files addressed by opaque ids. Migrations are forward-only
 > and idempotent, because a Databricks App can restart a container mid-deploy.
 
 ---
@@ -18,9 +18,11 @@ two schemas it owns, the invariants in the DDL, and why each row exists.
 flowchart LR
     subgraph PG["Lakebase / Postgres"]
         direction TB
-        subgraph AG["schema agent — what a conversation did"]
+        subgraph AG["schema agent — session and SQL journals"]
             S1[("session_snapshot")]:::blue
             S2[("session_event")]:::blue
+            Q1[("sql_item · encrypted bodies")]:::purple
+            Q2[("sql_operation · replay keys")]:::blue
         end
         subgraph LL["schema llm — what the app may call"]
             direction TB
@@ -64,14 +66,29 @@ flowchart LR
 
 ---
 
-## 2 · The `agent` schema — the session journal
+## 2 · The `agent` schema — session and SQL journals
 
-Two tables. That is the whole durable session model, and it is deliberately tiny.
+Four tables: two for durable sessions and two for owner-scoped SQL drafts, run intents and
+idempotency records. SQL storage shares the existing Postgres connection coordinator.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#E8F0FE','primaryTextColor':'#1F2937','primaryBorderColor':'#A8C0E8','lineColor':'#94A3B8'}}}%%
 erDiagram
     SESSION_SNAPSHOT ||--o{ SESSION_EVENT : "owns an ordered history"
+    SQL_ITEM {
+        text scope PK "workspace and user boundary"
+        text kind PK "draft, run or create intent"
+        text id PK
+        bigint version "compare-and-swap revision"
+        bytea body "authenticated encrypted payload"
+    }
+    SQL_OPERATION {
+        text scope PK
+        text key PK "idempotency key"
+        text fingerprint "rejects changed request replay"
+        text id "reserved item identifier"
+        text kind
+    }
 
     SESSION_SNAPSHOT {
         text   session_id PK "one row per conversation"
@@ -89,6 +106,14 @@ erDiagram
 |---|---|---|
 | `agent.session_snapshot` | **one row per session** | the whole `Live` projection — session, turns, calls, approvals, agent cwd — so a restart restores state without replaying a single tool call |
 | `agent.session_event` | **one row per event per session** | the transcript, the replay source for `/stream`, and the audit trail |
+| `agent.sql_item` | **one row per scope, kind and item id** | encrypted draft source or run metadata, with a version for atomic conflict detection |
+| `agent.sql_operation` | **one row per scope and idempotency key** | reserves an operation once and rejects replay with a different fingerprint |
+
+The SQL payload is authenticated against its scope, kind and id before decoding. Draft updates
+compare the expected version in the same transaction as the write. Run reservation applies
+per-source, per-user and global active-run limits before contacting Databricks. An ambiguous
+submission remains unresolved rather than being submitted again automatically. SQL result rows
+and parameter values are not persisted in this journal; bounded results are fetched from Databricks.
 
 ### The snapshot is a whitelist, not a dump
 
@@ -136,7 +161,7 @@ spells `OPENGENI`. A second server cannot take the journal, and losing the conne
 rather than reconnecting a stale worker behind a replacement owner's back. This is a deliberate
 single-active-server design, and it is why the app runs one uvicorn worker.
 
-### The event vocabulary: 27 types, in one place
+### The event vocabulary: 28 types, in one place
 
 `domain/events.py` defines the whole language. Nothing else may invent an event type, and the front
 end must know every one.
@@ -146,6 +171,7 @@ end must know every one.
 | session | `session.created`, `session.ready`, `session.degraded`, `session.archived`, `session.recovery_required`, `session.checkpoint`, `session.compacted` |
 | turn | `turn.started`, `turn.queued`, `turn.completed`, `turn.blocked`, `turn.cancelled`, `turn.interrupted`, `turn.failed`, `turn.retrying`, `turn.auditing` |
 | streaming | `thought.delta`, `message.delta`, `tool_call.started`, `tool_call.updated`, `plan.updated`, `usage.updated` |
+| SQL editor | `sql.changed` |
 | governance | `approval.requested`, `approval.decided`, `evidence.proposed`, `document.saved`, `blob.attached` |
 
 A Python test asserts `EVENT_TYPES` matches `web/src/domain/events.ts`, and the parity file
@@ -372,6 +398,7 @@ conversation* make it?" — a weaker question than authorisation and deliberatel
 002_llm_setting.sql     one key/value table, with a secret tripwire
 003_llm_model_vision.sql  sees_images, default false
 004_session_journal.sql   schema agent: snapshot + event
+005_sql_journal.sql       schema agent: encrypted SQL items + operation replay keys
 ```
 
 | Rule | Why |
@@ -398,11 +425,12 @@ This is the shortest path to understanding the privacy posture.
 | the bytes of an attachment in the journal | an event body | the event carries `{kind, ref, name}`; a replay costs nothing and the bytes live in one place |
 | a demo hint in the user's prompt | `turn.prompt` | `DEMO_MARKER` is stripped, so a scripted scenario never becomes the user's words |
 | the agent's own session history | our journal | `session/load` replays it, and the adapter consumes that replay so yesterday's tool results are not attributed to today's turn |
-| the data in your tables | anywhere | the app reads it, shows a bounded preview, and stores the *reference* |
+| full warehouse result sets | the SQL journal | runs retain metadata and a statement reference; the editor fetches a bounded preview |
+| SQL parameter values | the SQL journal | bindings are supplied for the individual execution |
 
-The last one has a corollary worth stating: **the app stores what happened, not the data.** A
-transcript is a record of calls and results, and a result is truncated to a token budget before it
-is stored.
+SQL source is stored encrypted. Agent transcripts can contain bounded tool results, truncated
+to a token budget before storage; the absence of SQL result rows from the SQL journal does not
+mean that transcripts never contain data.
 
 ---
 
@@ -418,6 +446,9 @@ is stored.
 | blob bytes, unreferenced | 24 h if it was uploaded and never sent; 1 h if it never finished uploading | `_blob_sweep_loop` every `APP_BLOB_SWEEP_SECONDS` | not recoverable, by design |
 | blob bytes, referenced by a turn | forever — a chip points at them | never | — |
 | token files | the session's life | `archive()` deletes the directory | re-minted from the forwarded token |
+| SQL draft access | 7 days since last update | SQL service checks; no physical purge implemented | expired drafts cannot be reopened |
+| SQL run source text | 7 days since run creation | omitted from public run metadata after expiry; no physical purge implemented | run metadata remains available |
+| SQL idempotency replay | 1 day | replay age check; no physical purge implemented | a fresh action needs a fresh key |
 | health rows | all | nothing (the query reads the latest) | — |
 | discovery runs | all | nothing (the query reads the last 20) | — |
 

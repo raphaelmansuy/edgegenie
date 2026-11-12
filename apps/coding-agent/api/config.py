@@ -104,6 +104,11 @@ class Settings(BaseSettings):
     session_db_path: str = ""
     session_database_url: str = ""
     session_use_lakebase: bool = False
+    # SQL is opt-in for live execution/creation until workspace interoperability is qualified.
+    sql_run: bool = False
+    sql_create: bool = False
+    sql_db_path: str = ""
+    sql_key: str = ""
     session_max_run_seconds: int = Field(default=21600, ge=1, le=604800)
     demo_event_delay: float = Field(default=0, ge=0, le=5)
 

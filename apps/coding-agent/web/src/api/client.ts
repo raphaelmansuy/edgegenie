@@ -235,7 +235,7 @@ export interface RunActionsView {
   repair: boolean;
 }
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
+export async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, init);
   if (!r.ok) {
     let detail = r.statusText;

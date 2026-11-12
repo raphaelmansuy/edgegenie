@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Copy the TRACKED files of this app into the Workspace folder the Databricks App deploys from.
+# Copy tracked and unignored new app files into the deployment's Workspace folder.
 #
-#   scripts/sync-app-source.sh [workspace-path]
+#   scripts/sync-app-source.sh [workspace-path] [--dry-run]
 #
 # Why this exists: `databricks apps deploy` ships whatever is in
 # /Workspace/Users/<me>/coding-agent — a Workspace folder, not a git checkout (the app has no git
@@ -10,8 +10,8 @@
 # backend had no `POST /api/blobs`, no `/sessions/{id}/events`, and no `seesImages` field — three
 # commits of work absent from a "successful" deployment, and the UI showed none of the attach feature.
 #
-# The unit is `git ls-files`: 375 files. `import-dir .` walked node_modules (126 MB) and the venv (190 MB)
-# and had to be killed. Tracked files are exactly what the build needs — it installs its own dependencies.
+# `git ls-files` keeps ignored node_modules, environments and credentials out of the upload.
+# Include unignored new files as well: deploying a dirty checkout must not omit new imported modules.
 set -euo pipefail
 
 HOST="${DATABRICKS_HOST:?set DATABRICKS_HOST}"
@@ -24,15 +24,20 @@ trap 'rm -rf "$STAGE"' EXIT
 
 export DATABRICKS_HOST="$HOST"
 
-echo "staging tracked files from $APP_DIR"
+echo "staging tracked and unignored new files from $APP_DIR"
 cd "$REPO"
 # Relative to the repo root, so this works from any checkout location.
-git ls-files apps/coding-agent | while IFS= read -r f; do
+git ls-files --cached --others --exclude-standard -z -- apps/coding-agent | while IFS= read -r -d '' f; do
   rel="${f#apps/coding-agent/}"
   mkdir -p "$STAGE/$(dirname "$rel")"
   cp "$REPO/$f" "$STAGE/$rel"
 done
 echo "  $(find "$STAGE" -type f | wc -l | tr -d ' ') files"
+
+if [ "${2:-}" = "--dry-run" ]; then
+  echo "  source staging verified; no workspace upload or deployment performed"
+  exit 0
+fi
 
 echo "uploading to $DEST"
 # `--overwrite` replaces what changed and leaves the rest; `import-dir` creates directories as needed.

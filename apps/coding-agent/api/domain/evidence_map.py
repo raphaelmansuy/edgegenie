@@ -30,27 +30,30 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from .evidence import receipt_summary, successful_call
+
 #: Requirement verbs → the tool families that can prove them. Ordered: the first match wins, so a
 #: specific mapping (`notebook` + `write`) beats a general one.
 #:
 #: Each entry is (requirement pattern, tool pattern, the class of work it proves). The class is what the
 #: evidence row reports, so a derived row is honest about being derived.
 _MAP: tuple[tuple[re.Pattern[str], re.Pattern[str], str], ...] = (
+    (re.compile(r"\b(cancel|stop)\b", re.I), re.compile(r"query_run_status$"), "canceled"),
     # writing or creating something
-    (re.compile(r"\b(write|create|build|make|rewrite|refactor|save|generate|add)\b", re.I),
-     re.compile(r"(write_notebook|write_file|create_job|create_pipeline|create_app|lakebase_create)$"),
+    (re.compile(r"\b(write|create|build|make|rewrite|refactor|save|generate|add|fix|update|modify|optimi[sz]e|replace|edit|change)\b", re.I),
+     re.compile(r"(write_notebook|write_file|create_job|create_pipeline|create_app|lakebase_create|update_query)$"),
      "wrote"),
     # running or executing something
     (re.compile(r"\b(run|execute|trigger|start|schedule|deploy)\b", re.I),
-     re.compile(r"(run_sql|run_notebook|run_job|start_pipeline|job_run_status|lakebase_sql)$"),
+     re.compile(r"(run_sql|run_notebook|run_job|start_pipeline|job_run_status|lakebase_sql|run_query|query_run_status)$"),
      "ran"),
     # checking or verifying
     (re.compile(r"\b(check|verify|confirm|describe|inspect|profile)\b", re.I),
-     re.compile(r"(describe_table|list_tables|sample_rows|grep_notebook|read_notebook|job_failure_context)$"),
+     re.compile(r"(describe_table|list_tables|sample_rows|grep_notebook|read_notebook|job_failure_context|read_query|query_run_status)$"),
      "checked"),
     # querying or aggregating
     (re.compile(r"\b(query|select|join|aggregate|count|calculate|compute|investigate|find|search)\b", re.I),
-     re.compile(r"(run_sql|search_tables|list_tables|sample_rows|table_lineage|lakebase_sql)$"),
+     re.compile(r"(run_sql|search_tables|list_tables|sample_rows|table_lineage|lakebase_sql|run_query|query_run_status|read_query)$"),
      "queried"),
 )
 
@@ -99,12 +102,12 @@ def derive(requirements, calls, *, already: set[str]) -> list[Derived]:
         if text in already:
             continue
         for call in calls:
-            if call.call_id in used or call.status != "completed":
+            if call.call_id in used or not successful_call(call, text):
                 continue
             work = _tool_matches(text, call.name)
             if work is None:
                 continue
-            out.append(Derived(text, call.name, call.call_id, call.summary or "", work))
+            out.append(Derived(text, call.name, call.call_id, receipt_summary(call), work))
             used.add(call.call_id)
             break
     return out

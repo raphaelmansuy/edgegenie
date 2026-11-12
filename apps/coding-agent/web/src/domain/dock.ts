@@ -78,6 +78,11 @@ export function suggestionsFor(focus: Focus): Suggestion[] {
       { label: "Start a scratch notebook", prompt: "Create a notebook in my working folder that I can experiment in." },
     ];
   }
+  if (doc.kind === "query" || doc.kind === "query-draft") return [
+    { label: "Explain this query", prompt: "Explain the attached SQL query, its grain, joins, parameters and assumptions. Do not execute or change it." },
+    { label: "Review the SQL", prompt: "Review the attached SQL for correctness. Describe real table schemas before making claims about columns or joins. Propose changes only; do not save or execute." },
+    { label: "Suggest an optimization", prompt: "Suggest a SQL optimization, state its assumptions and return a SQL code block for review. Do not execute or save it." },
+  ];
   const n = focus.cell;
   if (doc.kind === "table") {
     return [

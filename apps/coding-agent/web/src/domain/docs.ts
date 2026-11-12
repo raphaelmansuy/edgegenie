@@ -7,7 +7,7 @@ import { asId } from "./jobs";
  *  and `run` are viewers of infrastructure the agent built (spec 013 [UI-1], spec 014 [UI-1]). Adding a
  *  member here is what makes the compiler point at every place that must handle it — the tab icon, the
  *  actions map, the palette group, the `@` hint, the route grammar. */
-export type DocKind = "notebook" | "file" | "table" | "lakebase" | "app" | "job" | "pipeline" | "run";
+export type DocKind = "notebook" | "file" | "table" | "lakebase" | "app" | "job" | "pipeline" | "run" | "query" | "query-draft";
 export interface Doc { id: string; kind: DocKind; ref: string; name: string; rev: number }
 
 /** One path, two spellings, one object.
@@ -87,8 +87,8 @@ export const asAttachment = (d: Doc): Attachment | null => {
 };
 
 /** Whether a kind can ride along with a message. One predicate, used by the composer and the chip. */
-export const canAttach = (kind: DocKind): kind is "notebook" | "file" | "table" =>
-  kind === "notebook" || kind === "file" || kind === "table";
+export const canAttach = (kind: DocKind): kind is "notebook" | "file" | "table" | "query" | "query-draft" =>
+  kind === "notebook" || kind === "file" || kind === "table" || kind === "query" || kind === "query-draft";
 
 /** Opening a list entry (workspace node kinds) as a document. Folders are not documents. */
 export function docForNode(kind: string, path: string): Doc | null {
@@ -284,6 +284,8 @@ export const ACTIONS_FOR: Record<DocKind, Action[]> = {
   notebook: ["explain", "fix", "document", "optimize"],
   file: ["explain"],
   table: ["profile", "query"],
+  query: ["explain"],
+  "query-draft": ["explain"],
   // A project, an app, a job, a pipeline and a run are read-only viewers of something the agent built, so
   // there is no quick action that changes them. An empty list is the honest answer: a button that cannot
   // act is the inert control spec 011 [N5] removed. The dock's SUGGESTIONS for these kinds are about

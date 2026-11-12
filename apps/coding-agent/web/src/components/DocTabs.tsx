@@ -1,7 +1,8 @@
 /** Ordered document navigation. App owns identity/binding; this strip owns geometry and gestures. */
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { createElement, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronLeft, ChevronRight, CloseIcon, FileIcon, More, Notebook, Table } from "./Icons";
+import { ChevronDown, ChevronLeft, ChevronRight, CloseIcon, FileIcon, More } from "./Icons";
+import { KIND_ICON } from "./AssetIcon";
 import { docTabId } from "../domain/tabs";
 import { display } from "../domain/keys";
 import { useTabDrag } from "../hooks/useTabDrag";
@@ -16,7 +17,7 @@ interface Props {
   onReopen: () => void;
   canReopen: boolean;
 }
-const tabIcon = (kind: string) => kind === "table" ? <Table size={14} /> : kind === "file" ? <FileIcon size={14} /> : <Notebook size={14} />;
+const tabIcon = (kind: string) => createElement(KIND_ICON[kind] ?? FileIcon, { size: 14 });
 
 export function DocTabs({ docs, active, dirtyIds, onSelect, onClose, onCloseMany, onMove, onReopen, canReopen }: Props) {
   const strip = useRef<HTMLDivElement>(null);

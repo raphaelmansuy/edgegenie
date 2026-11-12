@@ -149,6 +149,7 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
             await orch.shutdown()
+            app.state.sql.store.close()
             if hasattr(store, "close"):
                 result = store.close()
                 if inspect.isawaitable(result):
@@ -224,6 +225,26 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
     app.state.jobs = JobsBrowser(os.environ.get("DATABRICKS_HOST", ""), provider(sp))
     app.state.pipelines = PipelinesBrowser(os.environ.get("DATABRICKS_HOST", ""), provider(sp))
     app.state.dev_token = os.environ.get("APP_DEV_TOKEN") or os.environ.get("DATABRICKS_TOKEN")
+    from .adapters.databricks.http import DbxHttp, normalize_host
+    from .adapters.databricks.queries import DatabricksQueries, DemoQueries
+    from .adapters.durable.query_sqlite import SqliteQueryStore
+    from .services.sql_service import SqlService
+    from .routers.sql import SqlBodyLimit, router as sql_router
+
+    sql_path = cfg.sql_db_path or (cfg.session_db_path + ".sql" if cfg.session_db_path else "")
+    if (not sql_path and (cfg.session_database_url or cfg.session_use_lakebase)
+            and (cfg.sql_key or cfg.llm_kek or cfg.sql_run)):
+        from .adapters.durable.query_postgres import PostgresQueryStore
+
+        sql_store = PostgresQueryStore(store.run_operation, cfg.sql_key, cfg.llm_kek)
+    else:
+        sql_store = SqliteQueryStore(sql_path, cfg.sql_key, cfg.production)
+    app.state.sql_workspace = normalize_host(os.environ.get("DATABRICKS_HOST", "")) or "local-demo"
+    sql_provider = (DemoQueries(sql_store) if cfg.agent_mode == "fake" and not os.environ.get("DATABRICKS_HOST")
+                    else DatabricksQueries(DbxHttp(app.state.sql_workspace, lambda: None, max_response_bytes=8*1024*1024), cfg.sql_create))
+    app.state.sql = SqlService(sql_provider, sql_store, create_enabled=cfg.sql_create, run_enabled=cfg.sql_run)
+    orch.attach_sql(app.state.sql, app.state.sql_workspace)
+    app.include_router(sql_router)
 
     # Bytes the user hands us (spec 009). A directory in dev, memory in tests; the port makes a third
     # implementation additive rather than a migration ([BLB-5]).
@@ -302,10 +323,14 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
                 return JSONResponse({"detail": "no such session"}, status_code=404)
         return await call_next(request)
 
+    app.add_middleware(SqlBodyLimit)
     app.include_router(router)
     app.include_router(llm_router)
     app.include_router(llm_admin_router)
     app.include_router(internal_router)
+    from .routers.sql_agent import router as sql_agent_router
+
+    app.include_router(sql_agent_router)
     app.include_router(infra_router)
     app.include_router(jobs_router)
 

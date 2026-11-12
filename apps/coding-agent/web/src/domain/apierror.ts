@@ -18,5 +18,7 @@ export function errorText(body: unknown, fallback: string): string {
   }
   const nested = (detail as { detail?: unknown } | undefined)?.detail;
   if (typeof nested === "string" && nested.trim()) return nested;
+  const message = (detail as { message?: unknown } | undefined)?.message;
+  if (typeof message === "string" && message.trim()) return message;
   return fallback;
 }
