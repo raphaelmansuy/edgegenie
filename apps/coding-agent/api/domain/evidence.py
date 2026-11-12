@@ -230,6 +230,19 @@ def verify(claimed: list[dict], calls: list[ToolCall]) -> list[EvidenceRow]:
             match = next(
                 (c for c in candidates if successful_call(c, str(claim.get("requirement", "")))), candidates[0] if candidates else None
             )
+        # Submission and terminal observation are different calls for the SAME native run.
+        # Cite its actual terminal observation instead of leaving a proven run marked unverified
+        # because the model named the earlier PENDING submission in its evidence table.
+        requirement = str(claim.get("requirement", ""))
+        if match and (match.proof or {}).get("kind") == "sql-run" and not successful_call(match, requirement):
+            p = match.proof
+            terminal = next((c for c in reversed(calls) if c.name.endswith(("dbx_run_query", "dbx_query_run_status"))
+                            and (c.proof or {}).get("runId") == p.get("runId")
+                            and p.get("runId") and all((c.proof or {}).get(k) == p.get(k) for k in ("draftId", "sourceHash"))
+                            and (not p.get("statementId") or (c.proof or {}).get("statementId") == p["statementId"])
+                            and successful_call(c, requirement)), None)
+            if terminal:
+                match = terminal
         rows.append(
             EvidenceRow(
                 requirement=str(claim.get("requirement") or claim.get("text") or "")[:200],

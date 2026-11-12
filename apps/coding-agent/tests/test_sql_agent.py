@@ -338,3 +338,24 @@ def test_honored_query_constraints_are_not_reported_as_missing_tool_evidence():
     )
     assert decision.verdict == Verdict.DONE
     assert len(decision.evidence) == 1 and decision.evidence[0]["verified"]
+
+
+def test_pending_submission_evidence_links_to_the_same_runs_actual_terminal_receipt():
+    p = proof()
+    submit = ToolCall(
+        "submit", "db_dbx_run_query", "completed", proof={**p, "state": "pending", "resultAvailable": False}
+    )
+    status = ToolCall("status", "db_dbx_query_run_status", "completed", proof=p)
+    claim = [{"requirement": "Run the query", "tool": submit.name, "callId": submit.call_id}]
+    row = verify(claim, [submit, status])[0]
+    assert row.verified and row.tool_call_id == "status" and row.tool_name == status.name
+    assert "succeeded" in row.result_summary
+    assert not verify(claim, [submit, replace(status, name="db_dbx_read_notebook")])[0].verified
+    for bad in [
+        {"runId": str(uuid4())},
+        {"sourceHash": digest("SELECT 2")},
+        {"draftId": str(uuid4())},
+        {"state": "canceled"},
+        {"statementId": str(uuid4())},
+    ]:
+        assert not verify(claim, [submit, replace(status, proof={**p, **bad})])[0].verified
