@@ -77,6 +77,36 @@ if missing:
 print("  \033[32mPASS\033[0m all %d user scopes are effective" % len(os.environ["REQUIRED"].split()))' \
   && pass=$((pass+1)) || fail=$((fail+1))
 
+# -- 0b. the volume a Python session exchanges its files through ---------------------------------
+# The app can write those files but cannot create the volume, and cannot grant itself anything, so a
+# missing grant is a session that cannot start. The app falls back to one-shot runs in words, which is
+# why this is not a crash: it is a capability that is silently absent unless somebody checks for it.
+SESSION_VOLUME="${DEPLOY_SESSION_VOLUME:-/Volumes/workspace/agent_scratch/kernel_sessions}"
+# `/Volumes/a/b/c` is the path; the Unity Catalog permissions API wants `a.b.c`.
+SESSION_VOLUME_NAME="$(printf '%s' "${SESSION_VOLUME#/Volumes/}" | tr '/' '.')"
+SP_ID="$(printf '%s' "$APP_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("service_principal_client_id",""))')"
+VOL_PERMS="$(databricks api get "/api/2.1/unity-catalog/permissions/volume/$SESSION_VOLUME_NAME" \
+  -o json 2>/dev/null || true)"
+if [ -z "$VOL_PERMS" ]; then
+  info "could not read the grants on $SESSION_VOLUME (this identity may not administer it)"
+else
+  printf '%s' "$VOL_PERMS" | SP_ID="$SP_ID" python3 -c '
+import json, os, sys
+sp = os.environ["SP_ID"]
+held = set()
+for a in (json.load(sys.stdin).get("privilege_assignments") or []):
+    if a.get("principal") == sp:
+        held |= set(a.get("privileges") or [])
+want = {"READ_VOLUME", "WRITE_VOLUME"}
+missing = sorted(want - held)
+if missing:
+    print("  \033[31mFAIL\033[0m the app service principal lacks " + ", ".join(missing)
+          + " on the session volume — a Python session cannot start")
+    sys.exit(1)
+print("  \033[32mPASS\033[0m the app service principal can read and write the session volume")' \
+    && pass=$((pass+1)) || { fail=$((fail+1)); info "  fix: scripts/provision-session-volume.sh ${APP_ENV_NAME:-prod}"; }
+fi
+
 printf '%s' "$APP_JSON" | python3 -c '
 import json,sys
 have = {r.get("name") for r in (json.load(sys.stdin).get("resources") or [])}
@@ -211,6 +241,25 @@ if not all(isinstance(x, str) and x.startswith("http") for x in links):
 where = commit[:7] if commit else "no commit reported"
 print(f"  \033[32mPASS\033[0m the app answers v{have} ({where}) and links its docs, source and releases")' \
       && pass=$((pass+1)) || fail=$((fail+1))
+  fi
+
+  # -- 2c-ter. the notebook session route exists, and the app says whether it is on ---------------
+  # The Python session is the feature of 1.1.0: a route a stale deployment does not have. A 404 here
+  # means the backend predates sessions. The answer is read too, because "switched off" and "not
+  # deployed" are different facts and only one of them is a failure.
+  ks=$(curl -s --max-time 30 "$URL/api/notebook/kernels?path=/probe/version-check" "${H[@]}")
+  if printf '%s' "$ks" | grep -q '<!doctype html'; then
+    bad '/api/notebook/kernels fell through to the front end — the backend predates Python sessions'
+  elif printf '%s' "$ks" | grep -q '"state"'; then
+    state=$(printf '%s' "$ks" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("state",""))' 2>/dev/null)
+    case "$state" in
+      off) info "the session route is live but sessions are switched off (APP_PYTHON_SESSION=off)" ;;
+      *) ok "the notebook session route is live (state: $state)" ;;
+    esac
+  elif printf '%s' "$ks" | grep -q '"detail"'; then
+    info "the session route answered $(printf '%s' "$ks" | head -c 120) — not an administrator for this build"
+  else
+    bad "GET /api/notebook/kernels gave an unexpected answer: $(printf '%s' "$ks" | head -c 160)"
   fi
 
   # -- 2d. there is NO write route for a job or a pipeline, by design -----------------------------

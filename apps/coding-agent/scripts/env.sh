@@ -75,6 +75,13 @@ export DEPLOY_LAKEBASE_BRANCH="${DEPLOY_LAKEBASE_BRANCH:-production}"
 export DEPLOY_LAKEBASE_ENDPOINT="projects/${DEPLOY_LAKEBASE_PROJECT}/branches/${DEPLOY_LAKEBASE_BRANCH}/endpoints/primary"
 export DEPLOY_SECRET_SCOPE="${DEPLOY_SECRET_SCOPE:-coding-agent-llm}"
 
+# Where a Python session exchanges its commands and results: a Unity Catalog volume the app's service
+# principal can read and write. Declared here for the same reason as the scope list below — the script
+# that PROVISIONS it (provision-session-volume.sh) and the app's own setting must name the same path,
+# and app.yaml is where the app reads it. A volume cannot be created by the app, so its absence is a
+# provisioning step and not a runtime fallback.
+export DEPLOY_SESSION_VOLUME="${DEPLOY_SESSION_VOLUME:-/Volumes/workspace/agent_scratch/kernel_sessions}"
+
 # The user-authorization scopes the app must hold, in ONE place.
 #
 # `apps update` is a FULL REPLACEMENT: a call that omits a scope clears it, and the Files and Catalog

@@ -63,10 +63,16 @@ shows this fault.
 
 ## What the app's service principal needs
 
-- Read and write on the volume `/Volumes/workspace/agent_scratch/kernel_sessions`
+- `scripts/provision-session-volume.sh` creates the volume and grants the rest. It runs as step 6 of
+  `make deploy`. The grants are USE_CATALOG on the catalog, USE_SCHEMA on the schema, and
+  READ_VOLUME + WRITE_VOLUME on `/Volumes/workspace/agent_scratch/kernel_sessions`
   (`APP_SESSION_VOLUME`).
 - `APP_PYTHON_SESSION=auto` (the default). `off` keeps one-shot runs only.
 - The other limits: `APP_SESSION_IDLE_SECONDS`, `APP_SESSION_MAX_PER_USER`, `APP_SESSION_MAX_TOTAL`.
+
+The app writes a session's files with the Files API, but it cannot create the volume and cannot
+grant itself anything. So the volume is a deploy step, and `verify-deployed.sh` checks the grant: a
+missing volume is a session that never starts, which the app reports in words and falls back from.
 
 A 403 "resolving file endpoints" warning from the SDK is harmless: it uses the default endpoints.
 

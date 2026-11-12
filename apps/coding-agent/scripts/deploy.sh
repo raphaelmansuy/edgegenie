@@ -196,9 +196,19 @@ provision_lakebase() {
   "$HERE/provision-lakebase.sh" "$ENV_NAME" || die "Lakebase provisioning failed; the app would crash at boot"
 }
 
+# ---------------------------------------------------------------- session volume
+provision_session_volume() {
+  say "6/8 Session volume (the app's read and write on it)"
+  # A Python session keeps its variables in a process, and that process is driven through files in this
+  # volume. The app can WRITE those files but cannot create the volume, and cannot grant itself
+  # anything: an unprovisioned volume is a session that cannot start, which the app reports in words and
+  # falls back from. Provisioning it here is what makes the fallback the exception.
+  "$HERE/provision-session-volume.sh" "$ENV_NAME" || die "the session volume is not provisioned"
+}
+
 # ---------------------------------------------------------------- deploy
 deploy() {
-  say "6/8 Deploy"
+  say "7/8 Deploy"
   local out
   if [ "$DEPLOY_SOURCE" = "git" ]; then
     # Build from the COMMITTED tree on the remote branch. The commit is reported so a deployment can
@@ -254,7 +264,7 @@ print((dp.get("status") or {}).get("state",""), (d.get("app_status") or {}).get(
 
 # ---------------------------------------------------------------- verify
 verify() {
-  say "7/8 Verify the deployment"
+  say "8/8 Verify the deployment"
   local rc=0
   check_database_health || rc=1
   "$HERE/verify-deployed.sh" || rc=1
@@ -337,5 +347,5 @@ sys.exit(0)'
 
 case "$ACTION" in
   verify) verify ;;
-  *) preflight; check_quota; create_app; grant_scopes; provision_lakebase; deploy; verify ;;
+  *) preflight; check_quota; create_app; grant_scopes; provision_lakebase; provision_session_volume; deploy; verify ;;
 esac
