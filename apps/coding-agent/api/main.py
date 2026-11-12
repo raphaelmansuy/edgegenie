@@ -232,7 +232,13 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
     from .routers.sql import SqlBodyLimit, router as sql_router
 
     sql_path = cfg.sql_db_path or (cfg.session_db_path + ".sql" if cfg.session_db_path else "")
-    sql_store = SqliteQueryStore(sql_path, cfg.sql_key, cfg.production)
+    if (not sql_path and (cfg.session_database_url or cfg.session_use_lakebase)
+            and (cfg.sql_key or cfg.llm_kek or cfg.sql_run)):
+        from .adapters.durable.query_postgres import PostgresQueryStore
+
+        sql_store = PostgresQueryStore(store.run_operation, cfg.sql_key, cfg.llm_kek)
+    else:
+        sql_store = SqliteQueryStore(sql_path, cfg.sql_key, cfg.production)
     app.state.sql_workspace = normalize_host(os.environ.get("DATABRICKS_HOST", "")) or "local-demo"
     sql_provider = (DemoQueries(sql_store) if cfg.agent_mode == "fake" and not os.environ.get("DATABRICKS_HOST")
                     else DatabricksQueries(DbxHttp(app.state.sql_workspace, lambda: None, max_response_bytes=8*1024*1024), cfg.sql_create))

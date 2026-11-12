@@ -22,7 +22,7 @@ MIGRATIONS = Path(__file__).resolve().parent / "migrations"
 #: The highest migration this build understands. A database ABOVE this is refused (`SchemaAhead`) rather
 #: than run against a schema the code does not know — the guard that makes a rollback safe.
 #:   1 llm schema · 2 llm setting · 3 llm_model.sees_images (spec 009 [D7])
-EXPECTED_VERSION = 4
+EXPECTED_VERSION = 5
 
 
 class SchemaAhead(RuntimeError):
