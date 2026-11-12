@@ -186,7 +186,18 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
     from .services.pyrun_service import PythonRuns
 
     # Built here, authenticated lazily: a demo that never runs a Python cell never needs SDK auth.
-    app.state.pyruns = PythonRuns(ServerlessRunner())
+    runner = ServerlessRunner()
+    app.state.pyruns = PythonRuns(runner)
+    from .adapters.databricks.session_store import VolumeStore
+    from .services.kernel_service import KernelSessions, Policy
+
+    cfg = app.state.settings
+    app.state.kernels = KernelSessions(runner, VolumeStore(), Policy(
+        volume=cfg.session_volume, idle_seconds=cfg.session_idle_seconds,
+        max_per_user=cfg.session_max_per_user, max_total=cfg.session_max_total))
+    from .services.sql_run_service import SqlRuns
+
+    app.state.sqlruns = SqlRuns(app.state.catalog)
     app.state.serving = ServingBrowser(
         os.environ.get("DATABRICKS_HOST", ""),
         lambda: os.environ.get("DATABRICKS_TOKEN") or None,

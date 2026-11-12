@@ -2395,6 +2395,7 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
 .cell-state.tone-muted { color: var(--ink-3); }
 .cell-output-when { font-variant-numeric: tabular-nums; flex: none; }
 .cell-output-where { flex: 0 1 auto; min-width: 4em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.85; }
+.cell-output-by { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.85; }
 .cell-output-spacer { flex: 1; min-width: 4px; }
 .cell-output-act {
   width: 20px; height: 20px; display: grid; place-items: center; border: 0; border-radius: 4px;
@@ -2405,6 +2406,9 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
 
 .cell-output-msg {
   margin: 0; padding: 8px 10px; font-size: 12px; line-height: 1.45;
+  /* An engine error carries line and position pointers on their own lines; collapsing them hides
+     where the statement went wrong. */
+  white-space: pre-wrap;
   font-family: var(--mono); color: var(--pink-700); word-break: break-word;
   border-left: 2px solid var(--pink-300);
 }
@@ -2416,6 +2420,15 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
 .cell-output-grid { max-height: 320px; overflow: auto; overscroll-behavior: contain; border-radius: 0; }
 .cell-output-grid .grid { border: 0; }
 .cell-output-empty { text-align: center; color: var(--ink-3); font-style: italic; }
+/* Numbers line up on the right, as in Databricks; the type glyph says what the column holds. */
+.cell-output-grid table.grid th.is-num, .cell-output-grid table.grid td.is-num { text-align: right; font-variant-numeric: tabular-nums; }
+.cell-type { display: inline-block; margin-right: 5px; padding: 0 3px; border-radius: 3px; font-size: 9.5px; font-weight: 600;
+  line-height: 14px; letter-spacing: 0.02em; color: var(--ink-3); background: var(--surface-2); border: 1px solid var(--line); }
+.cell-null { color: var(--ink-3); font-style: italic; }
+.cell-output-note { margin: 0; padding: 6px 10px; font-size: 12px; color: var(--ink-3); border-top: 1px solid var(--line); background: var(--surface-2); }
+/* HTML output sits in its own frame: white, because the page inside was written for a white page. */
+.cell-output-html { border-top: 1px solid var(--line); background: #fff; }
+.cell-output-html iframe { display: block; width: 100%; border: 0; background: #fff; }
 
 /* A search that takes seconds must say so, with the query and a clock. Anonymous skeleton bars for
    four seconds read as "broken"; the sentence and the tick read as "working". */
@@ -2728,6 +2741,9 @@ a.account-item { text-decoration: none; color: var(--ink); }
 .cell-output-text { margin: 0; padding: 8px 12px; font: 12.5px/1.5 var(--mono);
   white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; color: var(--ink);
   border-top: 1px solid var(--line); }
+.cell-output-text.is-stderr { background: color-mix(in srgb, var(--pink-100) 55%, var(--surface)); color: var(--ink-2); }
+.cell-output-text.is-notice { font-style: italic; color: var(--ink-3); background: var(--surface-2); }
+.cell-output-text + .cell-output-text { border-top-style: dashed; }
 /* Matplotlib (and friends) under the cell — Databricks/Jupyter inline figure: full width, natural
    height, download on hover in the corner. */
 .cell-output-images {
@@ -3579,3 +3595,110 @@ a.account-item { text-decoration: none; color: var(--ink); }
 .budget.bad  .budget-bar > span { background: var(--danger, #C0392B); }
 .budget-line { margin: 7px 0 0; font-size: 11.5px; color: var(--ink-2); line-height: 1.4; }
 .budget.bad .budget-line { color: var(--danger-ink, #A0301F); }
+
+/* The notebook's Python session chip, and the menu under it. */
+.nb-session { position: relative; display: inline-flex; flex: none; }
+.nb-session-chip { cursor: pointer; font: inherit; font-size: 12px; }
+.nb-session-chip:focus-visible { outline: 2px solid var(--focus, var(--ink-2)); outline-offset: 2px; }
+.nb-session-chip.is-ok .nb-bar-dot { background: var(--green-700); border-color: var(--green-700); }
+.nb-session-chip.is-busy .nb-bar-dot { background: var(--yellow-800); border-color: var(--yellow-800); animation: pulse 1.2s ease-in-out infinite; }
+.nb-session-chip.is-warn { border-color: var(--pink-300); color: var(--pink-700); }
+.nb-session-chip.is-warn .nb-bar-dot { background: var(--pink-700); border-color: var(--pink-700); }
+.nb-session-pop {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: var(--z-modal, 20);
+  display: flex; flex-direction: column; gap: 4px; width: min(300px, calc(100vw - 24px)); padding: 10px;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: var(--shadow-lg);
+}
+.nb-session-note { margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: var(--ink-2); white-space: normal; }
+.nb-session-pop .btn { justify-content: flex-start; }
+@media (prefers-reduced-motion: reduce) { .nb-session-chip.is-busy .nb-bar-dot { animation: none; } }
+.cell-output-md { padding: 6px 12px; font-size: 13px; }
+
+/* Nested and long values in a result table. */
+.cell-value { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; max-width: 100%; }
+.cell-value.is-nested .cell-value-text, .cell-value-full { font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; }
+.cell-value-full { margin: 0; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; flex: 1 1 100%; }
+.cell-value-act { border: 0; background: none; padding: 0; font: inherit; font-size: 11px; color: var(--accent, #2a5bd7); cursor: pointer; }
+.cell-value-act:hover { text-decoration: underline; }
+.cell-value-act:focus-visible { outline: 2px solid var(--focus, var(--ink-2)); outline-offset: 2px; border-radius: 2px; }
+
+/* Charts. Eight series colours that read on both themes; marks are fill/stroke from the series class. */
+:root { --chart-c0: #3b6fd4; --chart-c1: #e07a1f; --chart-c2: #2f9e6b; --chart-c3: #c2417a; --chart-c4: #7a5bd1; --chart-c5: #b09a1c; --chart-c6: #1f9bb0; --chart-c7: #8a8f98; }
+.chart { padding: 8px 12px 10px; }
+.chart-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 8px; font-size: 12px; color: var(--ink-2); }
+.chart-tools label { display: inline-flex; align-items: center; gap: 6px; }
+.chart-tools select { font: inherit; font-size: 12px; padding: 2px 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); max-width: 160px; }
+.chart-svg { display: block; width: 100%; max-height: 340px; }
+.chart-grid { stroke: var(--line); stroke-width: 1; }
+.chart-axis { stroke: var(--line-strong); stroke-width: 1; }
+.chart-tick { font-size: 11px; fill: var(--ink-3); }
+.chart-bar, .chart-slice { stroke: var(--surface); stroke-width: 1; }
+.chart-line { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.chart-area { stroke: none; opacity: 0.18; }
+.chart-dot { stroke: var(--surface); stroke-width: 1; }
+.chart-c0.chart-bar, .chart-c0.chart-dot, .chart-c0.chart-slice, .chart-c0.chart-area, .chart-c0.chart-key { fill: var(--chart-c0); background: var(--chart-c0); }
+.chart-c1.chart-bar, .chart-c1.chart-dot, .chart-c1.chart-slice, .chart-c1.chart-area, .chart-c1.chart-key { fill: var(--chart-c1); background: var(--chart-c1); }
+.chart-c2.chart-bar, .chart-c2.chart-dot, .chart-c2.chart-slice, .chart-c2.chart-area, .chart-c2.chart-key { fill: var(--chart-c2); background: var(--chart-c2); }
+.chart-c3.chart-bar, .chart-c3.chart-dot, .chart-c3.chart-slice, .chart-c3.chart-area, .chart-c3.chart-key { fill: var(--chart-c3); background: var(--chart-c3); }
+.chart-c4.chart-bar, .chart-c4.chart-dot, .chart-c4.chart-slice, .chart-c4.chart-area, .chart-c4.chart-key { fill: var(--chart-c4); background: var(--chart-c4); }
+.chart-c5.chart-bar, .chart-c5.chart-dot, .chart-c5.chart-slice, .chart-c5.chart-area, .chart-c5.chart-key { fill: var(--chart-c5); background: var(--chart-c5); }
+.chart-c6.chart-bar, .chart-c6.chart-dot, .chart-c6.chart-slice, .chart-c6.chart-area, .chart-c6.chart-key { fill: var(--chart-c6); background: var(--chart-c6); }
+.chart-c7.chart-bar, .chart-c7.chart-dot, .chart-c7.chart-slice, .chart-c7.chart-area, .chart-c7.chart-key { fill: var(--chart-c7); background: var(--chart-c7); }
+.chart-c0.chart-line { stroke: var(--chart-c0); } .chart-c1.chart-line { stroke: var(--chart-c1); } .chart-c2.chart-line { stroke: var(--chart-c2); }
+.chart-c3.chart-line { stroke: var(--chart-c3); } .chart-c4.chart-line { stroke: var(--chart-c4); } .chart-c5.chart-line { stroke: var(--chart-c5); }
+.chart-c6.chart-line { stroke: var(--chart-c6); } .chart-c7.chart-line { stroke: var(--chart-c7); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; list-style: none; margin: 6px 0 0; padding: 0; font-size: 12px; color: var(--ink-2); }
+.chart-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.chart-key { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.chart-detail { color: var(--ink-3); }
+.cell-view-switch { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+.cell-view-switch button { border: 0; background: var(--surface); color: var(--ink-2); font: inherit; font-size: 11px; padding: 2px 8px; cursor: pointer; }
+.cell-view-switch button[aria-pressed="true"] { background: var(--ink-2); color: var(--surface); }
+.cell-view-switch button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Charts. Eight series colours that read on both themes; marks are fill/stroke from the series class. */
+:root { --chart-c0: #3b6fd4; --chart-c1: #e07a1f; --chart-c2: #2f9e6b; --chart-c3: #c2417a; --chart-c4: #7a5bd1; --chart-c5: #b09a1c; --chart-c6: #1f9bb0; --chart-c7: #8a8f98; }
+.chart { padding: 8px 12px 10px; }
+.chart-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 8px; font-size: 12px; color: var(--ink-2); }
+.chart-tools label { display: inline-flex; align-items: center; gap: 6px; }
+.chart-tools select { font: inherit; font-size: 12px; padding: 2px 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); max-width: 160px; }
+.chart-svg { display: block; width: 100%; max-height: 340px; }
+.chart-grid { stroke: var(--line); stroke-width: 1; }
+.chart-axis { stroke: var(--line-strong); stroke-width: 1; }
+.chart-tick { font-size: 11px; fill: var(--ink-3); }
+.chart-bar, .chart-slice { stroke: var(--surface); stroke-width: 1; }
+.chart-line { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.chart-area { stroke: none; opacity: 0.18; }
+.chart-dot { stroke: var(--surface); stroke-width: 1; }
+.chart-c0.chart-bar, .chart-c0.chart-dot, .chart-c0.chart-slice, .chart-c0.chart-area, .chart-c0.chart-key { fill: var(--chart-c0); background: var(--chart-c0); }
+.chart-c1.chart-bar, .chart-c1.chart-dot, .chart-c1.chart-slice, .chart-c1.chart-area, .chart-c1.chart-key { fill: var(--chart-c1); background: var(--chart-c1); }
+.chart-c2.chart-bar, .chart-c2.chart-dot, .chart-c2.chart-slice, .chart-c2.chart-area, .chart-c2.chart-key { fill: var(--chart-c2); background: var(--chart-c2); }
+.chart-c3.chart-bar, .chart-c3.chart-dot, .chart-c3.chart-slice, .chart-c3.chart-area, .chart-c3.chart-key { fill: var(--chart-c3); background: var(--chart-c3); }
+.chart-c4.chart-bar, .chart-c4.chart-dot, .chart-c4.chart-slice, .chart-c4.chart-area, .chart-c4.chart-key { fill: var(--chart-c4); background: var(--chart-c4); }
+.chart-c5.chart-bar, .chart-c5.chart-dot, .chart-c5.chart-slice, .chart-c5.chart-area, .chart-c5.chart-key { fill: var(--chart-c5); background: var(--chart-c5); }
+.chart-c6.chart-bar, .chart-c6.chart-dot, .chart-c6.chart-slice, .chart-c6.chart-area, .chart-c6.chart-key { fill: var(--chart-c6); background: var(--chart-c6); }
+.chart-c7.chart-bar, .chart-c7.chart-dot, .chart-c7.chart-slice, .chart-c7.chart-area, .chart-c7.chart-key { fill: var(--chart-c7); background: var(--chart-c7); }
+.chart-c0.chart-line { stroke: var(--chart-c0); } .chart-c1.chart-line { stroke: var(--chart-c1); } .chart-c2.chart-line { stroke: var(--chart-c2); }
+.chart-c3.chart-line { stroke: var(--chart-c3); } .chart-c4.chart-line { stroke: var(--chart-c4); } .chart-c5.chart-line { stroke: var(--chart-c5); }
+.chart-c6.chart-line { stroke: var(--chart-c6); } .chart-c7.chart-line { stroke: var(--chart-c7); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; list-style: none; margin: 6px 0 0; padding: 0; font-size: 12px; color: var(--ink-2); }
+.chart-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.chart-key { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.chart-detail { color: var(--ink-3); }
+.cell-view-switch { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+.cell-view-switch button { border: 0; background: var(--surface); color: var(--ink-2); font: inherit; font-size: 11px; padding: 2px 8px; cursor: pointer; }
+.cell-view-switch button[aria-pressed="true"] { background: var(--ink-2); color: var(--surface); }
+.cell-view-switch button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Widget bar. */
+.widget-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 16px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2, var(--surface)); }
+.widget-fields { display: flex; flex-wrap: wrap; gap: 8px 14px; min-width: 0; }
+.widget-field { display: inline-flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--ink-3); min-width: 0; }
+.widget-field input[type="text"], .widget-field select { font: inherit; font-size: 12px; color: var(--ink); padding: 3px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); min-width: 120px; max-width: 220px; }
+.widget-field input:focus-visible, .widget-field select:focus-visible { outline: 2px solid var(--focus, var(--ink-2)); outline-offset: 1px; }
+.widget-hint { font-style: normal; opacity: 0.8; }
+.widget-multi { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--ink); }
+.widget-multi label { display: inline-flex; align-items: center; gap: 4px; }
+.widget-note { font-size: 11px; color: var(--ink-3); margin-left: auto; align-self: center; }
+.widget-reset { font: inherit; font-size: 11px; padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink-2); cursor: pointer; }
+.widget-reset:disabled { opacity: 0.45; cursor: default; }

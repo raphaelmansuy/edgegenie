@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import hashlib
 import json
 import logging
 import os
+import re
 from contextlib import contextmanager
 from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ..adapters.databricks.http import normalize_host
 from ..domain import approval, budget, journal_ops, scope as scope_mod, version, write_mode
@@ -1115,46 +1115,64 @@ async def catalog_preview(request: Request, name: str) -> dict:
         return await request.app.state.catalog.preview(name, _user_token(request))
 
 
+_WIDGET_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+
+
+def _widget_values(values: dict[str, str], *, marker: bool = False) -> dict[str, str]:
+    """Widget values from a browser. A value that is huge is refused, not written into a command file or sent to
+    a warehouse; a name that is to be a SQL marker must be one (a Python widget's name may be anything short)."""
+    for name, value in values.items():
+        if marker and not _WIDGET_NAME.match(name):
+            raise ValueError(f"{name!r} is not a SQL parameter name (letters, digits and _, not starting with a digit)")
+        if not name or len(name) > 64:
+            raise ValueError("a widget name is 1 to 64 characters")
+        if len(value) > 2000:
+            raise ValueError(f"the value of widget {name} is longer than 2,000 characters")
+    return values
+
+
 class RunCell(BaseModel):
     """A cell to execute. The text is the cell's source, which the client already holds."""
 
     language: str = Field(default="sql", max_length=24)
     source: str = Field(min_length=1, max_length=200_000)
+    #: Widget values by name, for the `:name` markers in a SQL cell.
+    params: dict[str, str] = Field(default_factory=dict, max_length=64)
+
+    @field_validator("params")
+    @classmethod
+    def _params(cls, v: dict[str, str]) -> dict[str, str]:
+        return _widget_values(v, marker=True)
 
 
-@router.post("/notebook/run-cell")
-async def notebook_run_cell(request: Request, body: RunCell) -> dict:
-    """Run one cell and return its result (spec 006 X1–X4).
+@router.post("/notebook/sql-runs")
+async def sql_run_start(request: Request, body: RunCell) -> dict:
+    """Start a SQL cell on a warehouse, as the signed-in user; returns a handle to poll (spec 006 X1–X4).
 
-    Deliberately narrow: **SQL only**, on a SQL warehouse, as the signed-in user. A Python cell needs
-    a cluster and a runtime this app does not own, and offering a control that cannot run would be the
-    inert-button bug again (00 P4, NB-2). The refusal is a *state with a reason*, not an error, so the
-    UI can say what would work instead.
+    Deliberately narrow: **SQL only**. A Python cell needs compute this endpoint does not own, and
+    offering a control that cannot run would be the inert-button bug again (00 P4, NB-2). A refusal is
+    a *state with a reason*, not an error, so the UI can say what would work instead. The answer is
+    `{"result": ...}` when it is already known, else `{"handle": ...}` to poll.
     """
-    from ..domain import cellrun
+    return await request.app.state.sqlruns.start(
+        _who_ran(request), _user_token(request), body.language, body.source, body.params)
 
-    ok, why = cellrun.is_runnable(body.language, body.source)
-    if not ok:
-        return cellrun.refused(why).to_dict()
-    _, statement = cellrun.without_skip(body.source)
-    clock = cellrun.Clock()
-    started = clock.start()
+
+@router.get("/notebook/sql-runs/{handle}")
+async def sql_run_poll(request: Request, handle: str) -> dict:
     try:
-        payload, warehouse = await request.app.state.catalog.run_sql(
-            statement, _user_token(request), limit=cellrun.MAX_ROWS,
-            wait_seconds=cellrun.MAX_WAIT_SECONDS)
-    except PermissionError as exc:
-        return cellrun.refused(str(exc)).to_dict()
+        return await request.app.state.sqlruns.poll(_who_ran(request), handle)
     except LookupError as exc:
-        return cellrun.refused(str(exc)).to_dict()
-    except RuntimeError as exc:
-        log.warning("cell run failed: %s", exc)
-        return cellrun.RunResult(state=cellrun.RunState.FAILED,
-                                 error=str(exc)[:400]).to_dict()
-    result = cellrun.result_from_statement(payload, waited=round(clock.since(started), 2))
-    # The warehouse is the adapter's knowledge, not the domain's: attach it here rather than teaching
-    # `result_from_statement` about a second parameter it would only ever pass through.
-    return dataclasses.replace(result, warehouse=warehouse).to_dict()
+        raise HTTPException(404, str(exc)) from exc
+
+
+@router.delete("/notebook/sql-runs/{handle}")
+async def sql_run_cancel(request: Request, handle: str) -> dict:
+    try:
+        await request.app.state.sqlruns.cancel(_who_ran(request), handle, _user_token(request))
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"cancelled": True}
 
 
 # -- Python cells, on serverless compute, as the app -------------------------
@@ -1170,7 +1188,9 @@ def python_run_policy(request: Request) -> dict:
         return {"enabled": False,
                 "reason": "Python cells run as the app's service principal, not as you, so only the app's "
                           "administrators can run them. Ask the agent to run it, or ask an administrator."}
-    return {"enabled": True, "reason": "Runs on serverless compute as the app, not as you."}
+    session = request.app.state.settings.python_session.strip().lower() != "off"
+    return {"enabled": True, "session": session,
+            "reason": "Runs on serverless compute as the app, not as you."}
 
 
 class PyCellIn(BaseModel):
@@ -1239,6 +1259,118 @@ async def python_run_cancel(request: Request, handle: str) -> dict:
     except LookupError as exc:
         raise HTTPException(404, str(exc)) from exc
     return {"cancelled": True}
+
+
+# -- Python sessions: one serverless job that stays up between cells -------------
+# (Routed as /notebook/kernels: a path with `/sessions/<x>` is an agent session to the ownership
+# middleware in main.py, and a notebook's kernel is not one.)
+class SessionRunIn(BaseModel):
+    """One cell, for the notebook's session. `path` names the notebook: there is one session per user
+    and notebook. `index` is the cell's position, so a traceback can say which cell."""
+
+    path: str = Field(min_length=1, max_length=2000)
+    language: str = Field(default="python", max_length=24)
+    source: str = Field(default="", max_length=200_000)
+    index: int | None = Field(default=None, ge=0, le=100_000)
+    #: The widget values to run with, by name.
+    widgets: dict[str, str] = Field(default_factory=dict, max_length=64)
+
+    @field_validator("widgets")
+    @classmethod
+    def _widgets(cls, v: dict[str, str]) -> dict[str, str]:
+        return _widget_values(v)
+
+
+def _kernels(request: Request):
+    policy = python_run_policy(request)
+    if not policy["enabled"]:
+        raise HTTPException(403, policy["reason"])
+    return request.app.state.kernels, policy
+
+
+def _run_expander(request: Request):
+    """`%run`, read with the signed-in user's token: they can run what they can read, and the app never
+    runs code it fetched with its own authority."""
+    from ..domain import kernel as kernel_domain
+    from ..domain import run_magic
+
+    token = _user_token(request)
+    browser = _browser(request)
+
+    async def read(path: str):
+        obj = await browser.read(path, token)
+        if obj.kind != "notebook":
+            raise ValueError("it is a file, not a notebook")
+        if obj.truncated or any(c.truncated for c in obj.cells):
+            raise ValueError("it is too large to run whole, and half of a notebook is not run")
+        return obj.cells
+
+    async def expand(notebook: str, ref: str):
+        try:
+            return await run_magic.expand(read, notebook, ref)
+        except run_magic.RunMagicError as exc:
+            return kernel_domain.Refusal(str(exc))
+
+    return expand
+
+
+@router.post("/notebook/kernels/run")
+async def session_run(request: Request, body: SessionRunIn) -> dict:
+    """Send a cell to the notebook's session, starting it if needed. Administrators only.
+
+    A session that cannot be used answers `{"unavailable": why}` (not an error): the client then runs the
+    cell the one-shot way and says why, so a missing volume costs fidelity, not the feature.
+    """
+    from ..services.kernel_service import Unavailable
+
+    kernels, policy = _kernels(request)
+    if not policy.get("session", True):
+        return {"unavailable": "persistent sessions are switched off for this app (APP_PYTHON_SESSION=off)"}
+    try:
+        return await kernels.run(_who_ran(request), body.path, body.language, body.source, index=body.index,
+                                 expand=_run_expander(request), widgets=body.widgets)
+    except Unavailable as exc:
+        return {"unavailable": str(exc)}
+    except Exception as exc:  # noqa: BLE001 - the platform's own words are the useful part
+        log.warning("session run could not start: %s", exc)
+        return {"unavailable": f"the session could not be used: {str(exc)[:300]}"}
+
+
+@router.get("/notebook/kernels/runs/{handle}")
+async def session_poll(request: Request, handle: str) -> dict:
+    kernels, _ = _kernels(request)
+    try:
+        return await kernels.poll(_who_ran(request), handle)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        log.warning("session poll failed: %s", exc)
+        raise HTTPException(502, f"could not read the run: {str(exc)[:400]}") from exc
+
+
+@router.delete("/notebook/kernels/runs/{handle}")
+async def session_interrupt(request: Request, handle: str) -> dict:
+    kernels, _ = _kernels(request)
+    try:
+        return await kernels.interrupt(_who_ran(request), handle)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@router.get("/notebook/kernels")
+async def session_status(request: Request, path: str) -> dict:
+    """The notebook's session, for the chip. Asking also keeps the session's lease fresh."""
+    kernels, policy = _kernels(request)
+    if not policy.get("session", True):
+        return {"state": "off"}
+    return await kernels.status(_who_ran(request), path)
+
+
+@router.delete("/notebook/kernels")
+async def session_stop(request: Request, path: str) -> dict:
+    """End the notebook's session. The next cell starts a new one (this is also how Restart works)."""
+    kernels, _ = _kernels(request)
+    return await kernels.stop(_who_ran(request), path)
 
 
 # -- misc --------------------------------------------------------------------

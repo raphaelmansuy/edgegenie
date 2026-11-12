@@ -20,6 +20,8 @@ apps/coding-agent/web/node_modules/
 apps/coding-agent/web/dist/
 # tsc's incremental state: a build artifact that churns on every compile and conflicts on merge.
 apps/coding-agent/web/tsconfig.tsbuildinfo
+# vitest's json report, written by the test runner
+apps/coding-agent/web/.vitest/
 apps/coding-agent/web/shots/
 __pycache__/
 .pytest_cache/

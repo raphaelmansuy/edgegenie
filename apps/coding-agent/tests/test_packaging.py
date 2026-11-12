@@ -42,6 +42,10 @@ def test_every_runtime_import_is_declared():
         for py in root.rglob("*.py"):
             if ".venv" in py.parts or "__pycache__" in py.parts:
                 continue
+            # `kernel_runtime.py` is the code that runs on the compute, shipped as text. Its optional
+            # imports (matplotlib) are the compute's, not the app's.
+            if py.name == "kernel_runtime.py":
+                continue
             # Parse actual imports. Notebook runner templates are string data executed remotely,
             # and optional serverless packages inside them are not app runtime dependencies.
             for node in ast.walk(ast.parse(py.read_text())):
