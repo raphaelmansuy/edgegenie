@@ -81,7 +81,7 @@ flowchart TB
 
     subgraph C["the Databricks App — one uvicorn process"]
         direction TB
-        API["<b>HTTP + SSE API</b><br/>6 routers, 95 routes"]:::yellow
+        API["<b>HTTP + SSE API</b><br/>8 routers, 109 routes"]:::yellow
         subgraph PURE["domain · pure, no I/O"]
             direction LR
             SUP["<b>supervisor</b><br/>is this turn done?"]:::purple
@@ -133,14 +133,14 @@ flowchart TB
 | Container | Technology | One job | Where |
 |---|---|---|---|
 | Front end | React 19, TypeScript, CodeMirror 6, Vite | render, reduce the event stream, reconnect | `web/src/` |
-| API | FastAPI, 6 routers, 95 routes | validate, delegate, map a domain error to a status | `api/routers/` |
+| API | FastAPI, 8 routers, 109 routes | validate, delegate, map a domain error to a status | `api/routers/` |
 | Orchestrator | Python, async | own session and turn lifecycle | `api/services/orchestrator.py` |
 | Supervisor | Python, pure | decide whether a turn is finished | `api/domain/supervisor.py` |
 | Evidence rules | Python, pure | match a claim to a tool call that happened | `api/domain/evidence.py` |
 | Write fence | Python, pure | classify every write target | `api/domain/scope.py` |
 | Model resolver | Python | one id → one endpoint, one limit, one key | `api/services/model_resolver.py` |
 | Agent | `opencode acp`, Node | think, call tools, write, retry | a child process |
-| Tool server | Python + MCP SDK, 41 tools | the only hands the agent has | `tools/databricks_notebook_mcp.py` |
+| Tool server | Python + MCP SDK, 45 tools | the only hands the agent has | `tools/databricks_notebook_mcp.py` |
 
 **Two rules the arrows encode, and that the rest of this page keeps returning to.**
 
@@ -204,10 +204,11 @@ flowchart LR
 
 | Layer | Count | May import | Must not contain |
 |---|---|---|---|
-| `api/routers/` | 6 files, 95 routes | services, domain, ports | a business rule; a vendor name |
-| `api/services/` | 17 files | domain, ports | an HTTP status; a `databricks` import that could be an adapter |
-| `api/domain/` | 43 files | each other, ports | I/O of any kind — no clock, no network, no file || `api/ports/` | 1 file, 13 protocols | domain | an implementation |
-| `api/adapters/` | 47 files | domain, ports | anything from `routers/` or `services/` |
+| `api/routers/` | 8 files, 109 routes | services, domain, ports | a business rule; a vendor name |
+| `api/services/` | 18 files | domain, ports | an HTTP status; a `databricks` import that could be an adapter |
+| `api/domain/` | 46 files | each other, ports | I/O of any kind — no clock, no network, no file |
+| `api/ports/` | 1 file, 13 protocols | domain | an implementation |
+| `api/adapters/` | 50 files | domain, ports | anything from `routers/` or `services/` |
 
 The payoff is measurable. `domain/scope.py` decides where a write may land and has no `import
 httpx`; `domain/supervisor.py` decides whether a turn is done and never calls a model. Both are
@@ -288,7 +289,7 @@ flowchart TB
 | Live **sessions** (and therefore processes) | 8 kept, then idle ones reaped | `APP_REAP_KEEP_MINIMUM` | the 9th idle session is archived: its agent and tool server stop, its journal stays |
 | Turns per session | 200 | `MAX_TURNS` | the session refuses a new message and says so |
 | Wall clock per turn | 6 h, or the token's own expiry minus 15 s | `APP_SESSION_MAX_RUN_SECONDS` | the turn is marked `interrupted`, the session becomes `blocked` and offers resume |
-| Tool budget advertised | 28 of 41 | `NBMCP_PROFILE=core` | the other 13 exist in `full`; the `core` set is a tested budget, not a preference |
+| Tool budget advertised | 32 of 45 | `NBMCP_PROFILE=core` | the other 13 exist in `full`; the `core` set is a tested budget, not a preference |
 | Attachment size | 8 MB each, 24 MB per message, 6 files | `domain/blob.py` | refused with a sentence naming the limit and the observed value |
 
 > **A distinction worth knowing.** `APP_MAX_CONCURRENT_AGENTS` limits *turns running at once*, not
@@ -533,7 +534,7 @@ than per request.
 
 ---
 
-## 9 · The tool server: 41 tools, 28 advertised
+## 9 · The tool server: 45 tools, 32 advertised
 
 The agent's only hands. One process per session, started with the session's scope in its
 environment and reachable only on loopback.
@@ -541,14 +542,14 @@ environment and reachable only on loopback.
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#E8F0FE','primaryTextColor':'#1F2937','primaryBorderColor':'#A8C0E8','lineColor':'#94A3B8','clusterBkg':'#F8FAFC','clusterBorder':'#CBD5E1'}}}%%
 flowchart LR
-    subgraph CORE["core · 28 tools · the set a session gets"]
+    subgraph CORE["core · 32 tools · the set a session gets"]
         direction TB
-        r["read and query<br/>Unity Catalog list · describe · search<br/>SQL run_sql"]:::green
+        r["read and query<br/>Unity Catalog list · describe · search<br/>SQL run_sql · attached query read/update/run/status"]:::green
         n["notebooks<br/>read · grep · write · run · status"]:::green
         j["jobs and pipelines<br/>list · create · run · status · failure context<br/>create pipeline · start · stop"]:::yellow
         l["Lakebase and Apps<br/>create · status · branch · sql<br/>create app · app health"]:::purple
     end
-    S["dbx_skill<br/>4 playbooks"]:::pink
+    S["dbx_skill<br/>5 playbooks"]:::pink
     FULL["full · 13 more<br/>catalogues · schemas · warehouses<br/>lineage · grants · sample rows<br/>pipeline edit · list pipelines<br/>lakebase list · database · role<br/>compute · tables"]:::blue
 
     CORE -.->|"NBMCP_PROFILE=full<br/>adds, never replaces"| FULL
@@ -561,7 +562,7 @@ flowchart LR
     classDef blue fill:#E8F0FE,stroke:#A8C0E8,color:#1F2937
 ```
 
-**Why 28 and not 41.** An agent advertises every MCP tool on every request and pays for it in
+**The 32-tool budget.** An agent advertises every MCP tool on every request and pays for it in
 tokens. The `core` set is a *budget*: `tests/test_tools_fence.py` fails if `_CORE` grows without a
 recorded decision, and a second test fails if the number the UI shows (`TOOL_COUNT_CORE`) disagrees
 with the server's own set. That second test exists because the label once said 19 while the set had
@@ -579,6 +580,7 @@ NBMCP_SESSION_LEDGER       one JSONL file this session appends to
 NBMCP_TOKEN_FILE           the user's token, re-read on every call
 NBMCP_SP_TOKEN_FILE        the app's own token, for the one API a user token cannot call
 NBMCP_RUN_*                the per-session bridge key (see below)
+NBMCP_QUERY_URL            the turn-bound SQL editor bridge
 ```
 
 The scope is read from the environment **by the app**, not decided by the agent. That is what makes
@@ -590,6 +592,11 @@ compute scope, so a tool cannot submit a notebook run as the user. The app *can*
 serverless compute as its own service principal. `services/run_bridge.py` lets the tool ask the app,
 on `/internal/`, with `HMAC(secret, session_id)`. The key opens exactly one session's door, and the
 endpoint additionally checks that this session's user is an administrator.
+
+The SQL editor bridge uses the signed-in user for execution. Its key is bound to the accepted
+turn and attached draft. Read, compare-and-swap update, run and status all use the same SQL
+service as the editor; a `sql.changed` event refreshes a clean editor and preserves conflicting
+human edits. A successful run is evidence only for the source version and hash actually executed.
 
 ---
 
@@ -663,7 +670,7 @@ flowchart LR
     subgraph SHELL["the shell"]
         direction TB
         RAIL["left rail<br/>sessions · files · catalogue"]:::yellow
-        TABS["document tabs<br/>notebook · file · table · job · pipeline"]:::yellow
+        TABS["document tabs<br/>SQL query · notebook · file · table · job · pipeline"]:::yellow
         DOCK["assistant dock<br/>transcript · approvals · model"]:::yellow
         MISSION["mission view<br/>objective · plan · proof"]:::yellow
     end
@@ -680,7 +687,7 @@ flowchart LR
 
 | Fact | Where | Why it matters |
 |---|---|---|
-| 80 test files, 1193 test cases | `web/src/**/*.test.ts(x)` | the reducer is pure, so replay and reconnection are testable with recorded events |
+| 84 test files, 1233 test cases | `web/src/**/*.test.ts(x)` | the reducer is pure, so replay and reconnection are testable with recorded events |
 | `domain/event-parity.json` | `web/src/domain/` | a Python test asserts the front end knows every event type the back end emits |
 | Routes are a hash grammar | `domain/route.ts` | the hash never reaches the server, so any host or proxy serves a deep link |
 | One shell, many document kinds | `App.tsx` | a notebook, a table, a job and a pipeline are tabs, not pages you navigate away from |

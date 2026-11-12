@@ -17,7 +17,7 @@ of workspace context and hands those two decisions back to you.
 [![Version](https://img.shields.io/badge/version-v1.1.0-37B24D?style=flat-square)](https://github.com/raphaelmansuy/opengenie/releases)
 [![Licence](https://img.shields.io/badge/licence-Apache--2.0-37B24D?style=flat-square)](LICENSE)
 [![Evidence](https://img.shields.io/badge/evidence-11%20graded%20tasks-E8590C?style=flat-square)](exams/results)
-[![Tests](https://img.shields.io/badge/tests-1883%20python%20%C2%B7%201193%20front--end%20%C2%B7%20180%20site%20views-37B24D?style=flat-square)](apps/coding-agent/tests)
+[![Tests](https://img.shields.io/badge/tests-2061%20python%20%C2%B7%201233%20front--end%20%C2%B7%20180%20site%20views-37B24D?style=flat-square)](apps/coding-agent/tests)
 
 <img src="specs/006-databricks/e2e/home/deployed-1440-home.png" width="1440"
      alt="The OpenGenie shell at 1440 px: sessions and files in the left rail, a notebook in the centre, and the assistant docked on the right, labelled with the notebook it is bound to.">
@@ -60,10 +60,11 @@ locally, it acts as the owner of the token you give it.
 | Notebooks | reads, searches, writes and runs notebooks; reports the first failing cell | `dbx_read_notebook`, `dbx_grep_notebook`, `dbx_write_notebook`, `dbx_run_notebook` |
 | Jobs | creates and runs jobs under the session prefix, checks the latest run succeeded | `dbx_create_job`, `dbx_run_job`, `dbx_job_run_status` |
 | Lakebase and Apps | creates a Lakebase instance, runs SQL on it, scaffolds a Databricks App | `dbx_lakebase_*`, `dbx_create_app` |
-| Skills | four playbooks: notebook authoring, ETL pipelines, Lakebase, Databricks Apps | `dbx_skill` |
+| SQL editor | reads, updates and runs the attached query draft; retrieves the same execution in the editor | `dbx_read_query`, `dbx_update_query`, `dbx_run_query`, `dbx_query_run_status` |
+| Skills | five playbooks: SQL queries, notebook authoring, ETL pipelines, Lakebase, Databricks Apps | `dbx_skill` |
 
-That is the 28-tool `core` profile the app starts. The server
-([`tools/databricks_notebook_mcp.py`](apps/coding-agent/tools/databricks_notebook_mcp.py)) has 41;
+That is the 32-tool `core` profile the app starts. The server
+([`tools/databricks_notebook_mcp.py`](apps/coding-agent/tools/databricks_notebook_mcp.py)) has 45;
 the `full` profile adds catalogue and schema listings, lineage, grants, pipelines and warehouses.
 
 ## Three rules the server enforces
@@ -143,7 +144,7 @@ make -C apps/coding-agent deploy           # sync -> deploy -> verify the live U
 cd apps/coding-agent
 make setup && make dev                     # scripted agent on http://127.0.0.1:8062
 make dev-real                              # the real opencode agent and model on http://127.0.0.1:8071
-make check                                 # TypeScript types, 1883 Python tests and 1193 front-end tests; no network
+make check                                 # TypeScript types, 2061 Python tests and 1233 front-end tests; no network
 ```
 
 `make dev` replaces the model with a deterministic agent that plays scripted scenarios, which is how the
@@ -196,7 +197,7 @@ python3 site/build.py && python3 site/check.py   # rebuild the site; fails if a 
 apps/coding-agent/   the application: FastAPI, React 19 + CodeMirror 6, opencode over ACP
   api/               domain (pure rules), ports, adapters, routers, services
   web/src/           the front end and its tests
-  tools/             the MCP tool server (41 tools, 28 in the core profile) and its skills
+  tools/             the MCP tool server (45 tools, 32 in the core profile) and its skills
   seed/              the model catalogue the app ships with
 exams/               the exam harness: 11 graded missions and every saved run
 docs/                tutorial, big picture, setup, safety, results, decision guide
