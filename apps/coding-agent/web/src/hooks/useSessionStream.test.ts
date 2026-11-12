@@ -30,11 +30,13 @@ it.each(["completed", "blocked"])("retains replayed mission details when metadat
     emit(3, "message.delta", { text: "Saved result" });
     emit(4, "turn.auditing", { pass: 2 });
     emit(5, `turn.${status}`, { seconds: 7.5, reason: "Permission denied", missing: ["USE SCHEMA"] });
+    emit(6, "sql.changed", { draftId: "draft", version: 3, runId: "run" });
   });
   await waitFor(() => expect(result.current.session.turns[0]?.plan).toHaveLength(1));
   await act(async () => resolveDetail({ id: "s", title: "Report", status: "ready", folder: "/Shared", model: "future/model",
     turns: [{ id: "t", index: 1, status, prompt: "Build report", model: "recorded/model" }] } as Awaited<ReturnType<typeof api.session>>));
   const turn = result.current.session.turns[0];
+  expect(result.current.session.sqlChanges?.draft).toEqual({version:3,runId:"run",seq:6});
   expect(turn.plan).toEqual([{ content: "Inspect schema", status: "completed" }]);
   expect(turn.answer).toBe("Saved result"); expect(turn.auditPasses).toBe(2);
   if (status === "completed") expect(turn.seconds).toBe(7.5);
