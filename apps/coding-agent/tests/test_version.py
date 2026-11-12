@@ -37,7 +37,7 @@ def test_the_version_file_exists_and_is_semver():
     assert re.match(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$", text), (
         f"VERSION holds {text!r}, which is not a semantic version"
     )
-    assert text == "1.2.0-rc.3", f"VERSION moved to {text}; update the tag and the release notes with it"
+    assert text == "1.2.0-rc.4", f"VERSION moved to {text}; update the tag and the release notes with it"
 
 
 def test_the_python_package_version_is_the_file():
