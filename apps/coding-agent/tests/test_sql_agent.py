@@ -327,3 +327,14 @@ def test_successful_result_preview_preserves_the_run_receipt_and_nulls():
     out = _run_result(row)
     assert out["finished"] and out["proof"]["resultAvailable"]
     assert out["rows"] == [["42", None]] and not out["previewTruncated"]
+
+
+def test_honored_query_constraints_are_not_reported_as_missing_tool_evidence():
+    p = proof("sql-query", action="updated", version=3)
+    update = ToolCall("u", "db_dbx_update_query", "completed", proof=p)
+    answer = "| requirement | tool | summary |\n| --- | --- | --- |\n| Replace the query | db_dbx_update_query | updated |\n| Do not run it | N/A | respected |"
+    decision = decide(
+        State([Requirement("Replace the query")], [update], answer, query_target=p["draftId"])
+    )
+    assert decision.verdict == Verdict.DONE
+    assert len(decision.evidence) == 1 and decision.evidence[0]["verified"]

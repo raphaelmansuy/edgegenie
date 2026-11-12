@@ -15,6 +15,7 @@ from .evidence import (
     ToolCall,
     dedupe,
     gaps,
+    is_constraint,
     limit_to,
     needs_evidence,
     parse_evidence_block,
@@ -98,7 +99,12 @@ def decide(state: State) -> Decision:
             return Decision(Verdict.CONTINUE, ACT_PROMPT if not calls else CONTINUE_PROMPT)
         return Decision(Verdict.BLOCKED, "the agent stopped without an answer", ("no final answer",))
 
-    rows = limit_to(state.requirements, dedupe(verify(parse_evidence_block(answer), calls)))
+    claimed = parse_evidence_block(answer)
+    if state.query_target:
+        # Prohibitions have no positive tool receipt. Do not turn an honored "do not run"
+        # into a misleading unverified action in the SQL evidence panel.
+        claimed = [r for r in claimed if not is_constraint(str(r.get("requirement", "")))]
+    rows = limit_to(state.requirements, dedupe(verify(claimed, calls)))
     missing = gaps(state.requirements, rows)
     lower = answer.lower()
     admits = any(cue in lower for cue in _BLOCKED_CUES)
