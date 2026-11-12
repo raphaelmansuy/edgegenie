@@ -178,3 +178,9 @@ a hard check that aborts the run if the server does not answer. It is listed wit
 validity incidents in [06](06-results-and-lessons.md#validity-incidents-we-found-in-our-own-work).
 
 Next: [05 The exam suite](05-exam-suite.md).
+
+**The fence described here is the exam harness's.** The shipped application enforces the same rules
+in `api/domain/scope.py` and `apps/coding-agent/tools/databricks_notebook_mcp.py`, and it adds two
+things this study did not have: a per-session tool server started with one scope, and an approval
+token for a human write. Read [09 Security](09-security.md) for the application's model, including
+the ten gaps that remain.

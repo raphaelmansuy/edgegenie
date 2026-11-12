@@ -77,6 +77,19 @@ class Settings(BaseSettings):
     llm_anthropic_base_url: str = ""
     #: `dev` / `production`. A production app refuses a development KEK (R-5).
     app_env: str = "dev"
+
+    #: Cross-origin origins, comma-separated. **Empty means no cross-origin grant at all**, which is
+    #: correct for a deployment: uvicorn serves the built front end, so the browser is same-origin.
+    #: Only a separate dev server needs this (`http://localhost:5173`). It is not a wildcard by
+    #: default, because a wildcard on an app authenticated by a proxy lets any page a user visits
+    #: call this API.
+    cors_origins: str = ""
+
+    #: How often the attachment sweeper runs. The *rules* are in `domain/retention.py` (one hour for a
+    #: blob that never finished uploading, a day for one that was uploaded and never sent, never for
+    #: one a turn references); this is only how often the rule is applied. 0 disables it, which is
+    #: what a store that expires on its own wants.
+    blob_sweep_seconds: int = Field(default=60, ge=0, le=86400)
     #: Demo mode only: add the seed catalogue to `allowed_models`, so the picker's groups, states and
     #: limit evidence can be exercised (and screenshotted) without a workspace. The e2e suite sets it.
     llm_demo_seed: bool = False
@@ -105,6 +118,15 @@ class Settings(BaseSettings):
     #: (APP_LLM_ADMINS). Off switch for an owner who does not want user code to run under the app's
     #: identity at all. SQL cells are unaffected: they run as the signed-in user.
     python_run: bool = True
+    #: A persistent Python session (one serverless job that stays up, so variables survive between cells)
+    #: or only one-shot runs. "auto" tries a session and falls back, in words, when one cannot start.
+    python_session: str = "auto"
+    #: Where a session's commands and results are exchanged: a Unity Catalog volume the app's service
+    #: principal can read and write.
+    session_volume: str = "/Volumes/workspace/agent_scratch/kernel_sessions"
+    session_idle_seconds: int = Field(default=1200, ge=60, le=14400)
+    session_max_per_user: int = Field(default=2, ge=1, le=10)
+    session_max_total: int = Field(default=3, ge=1, le=50)
     #: Where the app's tool servers reach the app itself. Empty = loopback on the app's own port.
     internal_url: str = ""
 

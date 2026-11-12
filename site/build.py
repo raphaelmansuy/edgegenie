@@ -40,6 +40,10 @@ SITE_URL = "https://raphaelmansuy.github.io/opengenie/"
 REPO = "https://github.com/raphaelmansuy/opengenie"
 LICENCE = "Apache-2.0"
 
+#: The app's version, read from the file the deployed app reads. One source: if the site and the app
+#: disagreed about which release this is, one of them would be describing code it does not serve.
+VERSION_FILE = HERE.parent / "apps" / "coding-agent" / "VERSION"
+
 #: Screenshots the content references, by source path. Copied, never committed twice: 286 PNGs already
 #: exist in this repository and a second copy would be a second thing to keep in step ([D1]).
 SHOTS: dict[str, str] = {
@@ -288,6 +292,15 @@ def header(route: str, *, prefix: str, nav_key: str) -> str:
 </header>"""
 
 
+def app_version() -> str:
+    """`1.0.0`, or `unknown`. Never a guess: a site that invents a release number is a site that lies."""
+    try:
+        text = VERSION_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "unknown"
+    return text if re.match(r"^\d+\.\d+\.\d+", text) else "unknown"
+
+
 def footer(*, prefix: str, commit: str, built: str) -> str:
     pages_links = "".join(f'<a href="{prefix}{esc(r.path)}">{esc(r.label)}</a>' for r in pages.ROUTES)
     return f"""<footer class="site-foot">
@@ -296,7 +309,8 @@ def footer(*, prefix: str, commit: str, built: str) -> str:
       <div class="foot-brand"><span class="mark">{MARK}</span><strong>OpenGenie</strong></div>
       <p>A Databricks App that hosts a coding agent: the model you choose, writes fenced to a folder you
       name, and proof before it says done.</p>
-      <p>{LICENCE} · built {esc(built)} from <code>{esc(commit)}</code></p>
+      <p>{LICENCE} · <a href="{REPO}/releases/tag/v{esc(app_version())}">v{esc(app_version())}</a>
+      · built {esc(built)} from <code>{esc(commit)}</code></p>
     </div>
     <div><p class="foot-title">Pages</p>{pages_links}</div>
     <div>

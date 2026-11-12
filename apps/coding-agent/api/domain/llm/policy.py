@@ -42,7 +42,7 @@ class Decision:
 
     def raise_if_denied(self, spec: ModelSpec) -> None:
         """Turn the decision into the typed error the route maps to a status."""
-        from .errors import ModelError, NoCredential, NotSelectable, ProviderUnhealthy
+        from .errors import NoCredential, NotSelectable, ProviderUnhealthy
 
         if self.allowed:
             return

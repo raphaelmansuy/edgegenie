@@ -149,7 +149,7 @@ Review any skill you install for similar routing before you turn the agent loose
 
 ### Our own four skills
 
-We also wrote four short skills ([`mcp/skills/`](../mcp/skills/)): `notebook-authoring`,
+We also wrote four short skills ([`apps/coding-agent/tools/skills/`](../apps/coding-agent/tools/skills/)): `notebook-authoring`,
 `etl-pipelines`, `lakebase-postgres`, `databricks-apps`. They are served by the `dbx_skill` tool of
 the MCP server. **Honest caveat:** we wrote them *after* seeing failures on exams M1 to M8, so
 those eight exams are no longer a fair test of them. That is why three held-out exams exist
@@ -158,8 +158,9 @@ those eight exams are no longer a fair test of them. That is why three held-out 
 ## Layer C · Our MCP server
 
 An **MCP server** lets a program offer tools to an agent in a standard way. Ours is a single
-Python file, [`mcp/databricks_notebook_mcp.py`](../mcp/databricks_notebook_mcp.py). The tools
-below are the "core" set the agent sees (19 of 26; the rest are read-only extras).
+Python file, [`apps/coding-agent/tools/databricks_notebook_mcp.py`](../apps/coding-agent/tools/databricks_notebook_mcp.py). The tools
+below are the "core" set the agent sees (28 of 41; the rest are read-only extras, plus pipeline
+editing and the four Lakebase lookups).
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#E8F0FE','primaryTextColor':'#1F2937','primaryBorderColor':'#A8C0E8','lineColor':'#94A3B8','clusterBkg':'#F8FAFC','clusterBorder':'#CBD5E1'}}}%%

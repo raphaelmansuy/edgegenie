@@ -17,7 +17,7 @@ from ....domain.llm import CredentialKind, CredentialParsed, ProviderKind, valid
 from ....domain.redact import redact
 from ....ports import CredentialRef, Secret
 from ..store.pg import PgRegistryStore
-from .envelope import Sealed, Tampered, open_sealed, seal
+from .envelope import Tampered, open_sealed, seal
 from .kek import KekError, KekProvider
 from .memory import VaultRefused
 

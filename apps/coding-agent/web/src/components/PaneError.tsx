@@ -15,6 +15,14 @@ export function PaneError({ message, onRetry, indent = 0 }: {
       <div className="pane-error-text">
         <strong>{e.title}</strong>
         <span>{e.detail}</span>
+        {/* An action that resolves the cause, before any retry. A stale sign-in cannot be retried
+            away — the token is already minted — so a retry button would be the dead end this spec
+            keeps removing (spec 013 [UI-6], [E-1]). */}
+        {e.action && (
+          <a className="btn sm" href={e.action.href} style={{ alignSelf: "flex-start" }}>
+            {e.action.label}
+          </a>
+        )}
         {onRetry && e.retryable && (
           <button className="btn sm ghost" onClick={onRetry}><Refresh size={12} /> Try again</button>
         )}

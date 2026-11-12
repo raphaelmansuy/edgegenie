@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from ..domain.events import Event
-from ..domain.llm import ModelId, ModelSpec, ProviderKind, ResolvedModel
+from ..domain.llm import ModelSpec, ProviderKind, ResolvedModel
 
 
 @dataclass(slots=True)
@@ -82,7 +82,7 @@ class ToolRegistry(Protocol):
     """Starts the per-session tool server and reports its URL and tool count."""
 
     async def start(self, session_id: str, folder: str, schema: str | None,
-                    token_file: str | None = None) -> str: ...
+                    token_file: str | None = None, sp_token_file: str | None = None) -> str: ...
     async def stop(self, session_id: str) -> None: ...
     async def health(self, url: str) -> int: ...
 

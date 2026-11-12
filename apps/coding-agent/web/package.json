@@ -1,7 +1,17 @@
 {
   "name": "coding-agent-web",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
+  "homepage": "https://raphaelmansuy.github.io/opengenie/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raphaelmansuy/opengenie.git",
+    "directory": "apps/coding-agent/web"
+  },
+  "bugs": {
+    "url": "https://github.com/raphaelmansuy/opengenie/issues"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -32,7 +42,10 @@
     "e2e:ux": "node scripts/ui-refinement-e2e.mjs",
     "e2e:sql": "node scripts/sql-query-e2e.mjs",
     "e2e:mission": "node scripts/mission-e2e.mjs",
-    "verify:spec-011": "node scripts/verify-spec-links.mjs ../../../specs/011-ux-coding-mission && node scripts/verify-spec-ascii.mjs ../../../specs/011-ux-coding-mission && node scripts/verify-mission-wireframes.mjs"
+    "verify:spec-011": "node scripts/verify-spec-links.mjs ../../../specs/011-ux-coding-mission && node scripts/verify-spec-ascii.mjs ../../../specs/011-ux-coding-mission && node scripts/verify-mission-wireframes.mjs",
+    "e2e:infra": "node scripts/lakebase-e2e.mjs",
+    "e2e:jobs": "node scripts/jobs-e2e.mjs",
+    "verify:spec-014": "node scripts/verify-spec-links.mjs ../../../specs/014-jobs-pipelines && node scripts/verify-spec-ascii.mjs ../../../specs/014-jobs-pipelines"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",

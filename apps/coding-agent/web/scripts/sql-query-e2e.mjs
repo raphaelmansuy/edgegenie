@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { localApp } from './mission-test-server.mjs';
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const evidence = resolve(web, '../../../specs/013-sql-query-support/e2e');
+const evidence = process.env.SQL_E2E_EVIDENCE_DIR || resolve(web, '../../../specs/013-sql-query-support/e2e');
 const shots = resolve(evidence, 'screenshots');
 const captureScreenshots=process.env.SQL_E2E_CAPTURE!=='0';
 mkdirSync(shots, { recursive: true });

@@ -7,7 +7,10 @@ import { ModelPicker } from "./ModelPicker";
 import { FolderPicker } from "./FolderPicker";
 import { LogoMark } from "./Logo";
 import { ModelFacts } from "./ModelFacts";
-import { ArrowUpRight, Bug, ChevronRight, Clock, Database, FileIcon, ListIcon, Notebook, Search, Sparkle, Table } from "./Icons";
+import { BudgetMeter } from "./Budget";
+import { DOCS_URL, versionLabel, versionTitle } from "../domain/version";
+import { ArrowUpRight, Bug, ChevronRight, Clock, Database, FileIcon, Layers, ListIcon, Monitor, Notebook, Play, Search, Sparkle, Table } from "./Icons";
+import type { RecentDoc } from "../domain/recent";
 
 export function ApprovalSheet({ approval, sessionId, onDecided }: {
   approval: Approval; sessionId: string; onDecided: () => void;
@@ -110,6 +113,10 @@ export function Inspector({ session, edge, onHide, className = "", activeId, onA
                 turns={session.turns.length} lastStatus={session.turns.at(-1)?.status}
                 onAddKey={onAddKey} />
             )}
+            {/* What this conversation has spent ([R-24]). The WRITE MODE chip is deliberately NOT here:
+                the inspector is closed by default, so a mode that matters only when a write is refused
+                belongs in the top bar where it is always on screen. One chip, one place. */}
+            {activeId && <BudgetMeter sessionId={activeId} />}
             <div className="fieldset">
               <legend>Session</legend>
               {activeId ? (
@@ -173,7 +180,9 @@ const CARDS = [
     scenario: "slow",
     prompt: "Create a job that recomputes daily revenue at 06:00 after a dependency task, run it once, and prove the run succeeded." },
   { icon: Database, fg: "var(--teal-700)", bg: "var(--teal-100)", t: "Lakebase and an app", d: "Postgres, then a small web page",
-    scenario: "notebook",
+    // The card's own scenario, so the demo shows the seven-step scaffold it promises (spec 013
+    // [SCF-3]). It said "notebook" until the S6 screenshot showed the card building a taxi notebook.
+    scenario: "lakebase",
     prompt: "Create a Lakebase database with one table and a small app that reads it. Show me the connection details." },
   { icon: ListIcon, fg: "var(--purple-700)", bg: "var(--purple-100)", t: "Document tables", d: "Comments grounded in real values",
     scenario: "injection",
@@ -197,10 +206,12 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
   onStart: (prompt: string) => Promise<void>;
   /** Who is signed in, so the screen can say whose workspace this is. */
   user?: string;
-  /** Notebooks and tables that already exist, so the first screen is a way IN rather than only a way
-   *  to start: the most common task is "change something I already have". */
-  recent?: { name: string; path: string; kind: import("../domain/docs").DocKind }[];
-  onOpenRecent?: (path: string, kind: import("../domain/docs").DocKind) => void;
+  /** Notebooks, tables and the objects the agent built, so the first screen is a way IN rather than only
+   *  a way to start: the most common task is "change something I already have". The kind is `RecentDoc`'s
+   *  own union, imported rather than restated — a second copy of it silently stopped three kinds from
+   *  reaching this screen when spec 014 added them. */
+  recent?: RecentDoc[];
+  onOpenRecent?: (path: string, kind: RecentDoc["kind"]) => void;
   onOpenSearch?: () => void;
   onNewSql?: () => void;
   onOpenQueries?: () => void;
@@ -282,7 +293,7 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
                   <li key={`${r.kind}:${r.path}`}>
                     <button className="home-recent-item" onClick={() => onOpenRecent?.(r.path, r.kind)} title={r.path}>
                       <span className={`home-recent-ico is-${r.kind}`} aria-hidden>
-                        {r.kind === "table" ? <Table size={12} /> : r.kind === "notebook" ? <Notebook size={12} /> : <FileIcon size={12} />}
+                        {r.kind === "table" ? <Table size={12} /> : r.kind === "notebook" ? <Notebook size={12} /> : r.kind === "lakebase" ? <Database size={12} /> : r.kind === "app" ? <Monitor size={12} /> : r.kind === "job" ? <Play size={12} /> : r.kind === "pipeline" ? <Layers size={12} /> : r.kind === "run" ? <Clock size={12} /> : <FileIcon size={12} />}
                       </span>
                       <span className="home-recent-name">{r.name}</span>
                       <ArrowUpRight size={12} className="home-recent-go" />
@@ -299,6 +310,13 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
               <dt>signed in</dt><dd>{user || "—"}</dd>
               <dt>agent writes</dt><dd><code>{folder || "choose a folder"}</code></dd>
               <dt>model</dt><dd>{model || "none chosen"}</dd>
+              {/* The version on the FIRST screen, not only in a menu: someone reporting a problem
+                  reads it here, and a reader deciding whether to trust the tour reads the same number. */}
+              <dt>version</dt>
+              <dd>
+                <a className="ext-link-text" href={DOCS_URL} target="_blank" rel="noopener noreferrer"
+                  title={versionTitle()}>{versionLabel()}</a>
+              </dd>
             </dl>
             <p className="home-fine">
               Ask for a change to an open notebook and OpenGenie edits it in place, then shows you the

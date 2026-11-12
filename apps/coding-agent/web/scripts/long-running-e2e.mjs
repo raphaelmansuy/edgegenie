@@ -97,12 +97,13 @@ try {
   await shot(page, '01-server-running-light'); note('Server-owned work and a usable return link');
 
   await context.setOffline(true);
-  await expect(page.getByText('You’re offline', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Stop work', exact: true })).toBeDisabled();
-  await expect(page.locator('.composer .btn.stop:visible')).toBeDisabled();
-  await shot(page, '02-offline'); note('Offline is observation loss; mutation controls disabled');
+  // Offline is observation loss, not work loss (specs/012 [F2], [F3]): the screen says it is
+  // reconnecting, and Stop stays available because stopping is a POST that does not use the stream.
+  await expect(page.getByText('Reconnecting to your session', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Stop work', exact: true })).toBeEnabled();
+  await shot(page, '02-offline'); note('Offline is observation loss; the screen says it is reconnecting and Stop stays available');
   await context.setOffline(false);
-  await expect(page.getByText('You’re offline', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Reconnecting to your session', { exact: true })).toHaveCount(0);
   await shot(page, '03-reconnected'); note('Reconnect catches up without replacing the task');
 
   await context.close(); // every viewer is gone; Node HTTP polling is not an SSE subscriber

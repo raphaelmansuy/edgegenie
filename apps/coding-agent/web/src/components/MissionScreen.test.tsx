@@ -8,7 +8,7 @@ const accomplished: Turn = { ...newTurn("old", 1, "Build the monthly report", "p
   evidence: [{ requirement: "Write report", toolCallId: "c1", tool: "write_notebook", summary: "Saved", verified: true }] };
 const current = newTurn("current", 2, "Check the revenue pipeline", "current/model");
 const base: SessionView = { ...emptySession("s"), status: "streaming", folder: "/Shared", turns: [accomplished, current] };
-const props = { conn: "live", dockVisible: true, onOpen: vi.fn(), onConversation: vi.fn(), onStop: vi.fn(), onRestore: vi.fn() };
+const props = { conn: { kind: "live" } as const, dockVisible: true, onOpen: vi.fn(), onConversation: vi.fn(), onStop: vi.fn(), onRestore: vi.fn() };
 
 describe("MissionScreen", () => {
   it("navigates last achieved and current without sending or losing the history pin on updates", () => {
@@ -52,9 +52,13 @@ describe("MissionScreen", () => {
   it("keeps empty and offline states useful and mutations disabled", () => {
     const { rerender } = render(<MissionScreen {...props} session={{ ...base, turns: [] }} />);
     expect(screen.getByRole("combobox", { name: "Choose mission" })).toBeDisabled();
-    rerender(<MissionScreen {...props} dockVisible={false} conn="lost" session={base} />);
+    rerender(<MissionScreen {...props} dockVisible={false} conn={{ kind: "reconnecting", attempt: 1, nextInMs: 1000 }} session={base} />);
     expect(screen.getByText(/Updates paused/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Stop work" })).toBeDisabled();
+    /* `Stop work` stays ENABLED while reconnecting. It used to be disabled here, which was the
+       defect: stopping is a POST and does not travel over the event stream, so a dropped stream is
+       not a reason to refuse it — and the user who most wants to stop work is the one whose stream
+       just died (specs/012 [F3]). */
+    expect(screen.getByRole("button", { name: "Stop work" })).toBeEnabled();
   });
   it("keeps full multiline objectives and large answers readable", () => {
     const t = { ...accomplished, prompt: "Long request ".repeat(20) + "\nsecond line", answer: "x".repeat(40_001) };

@@ -15,8 +15,10 @@ import time
 import uuid
 from pathlib import Path
 
+from ...domain import retention
+from ...domain.retention import PENDING_TTL, READY_TTL
 from ...ports import BlobRow
-from .memory import PENDING_TTL, READY_TTL, _as_dict
+from .memory import _as_dict
 
 
 class FileBlobStore:
@@ -161,20 +163,25 @@ class FileBlobStore:
         return len(self._refs.get(blob_id, ()))
 
     async def sweep(self, now: float) -> dict[str, int]:
-        pending, ready = 0, 0
+        """Delete what `domain/retention.py` says may go. One rule, two stores.
+
+        The old body branched on `row.state == "pending"`, which **could never happen**: `put()`
+        writes `state="ready"` and only `mark_attached` changes it, to `"attached"`. So a blob uploaded
+        before its session existed — stored under `pending:<user>` — was swept on the *ready* TTL and
+        reported in the `ready` bucket. The distinction the code wanted is the session key, not the
+        state, and the rule now lives in one place so it cannot be re-derived wrongly per store.
+        """
+        report = {"pending": 0, "ready": 0}
         for blob_id, row in list(self._rows.items()):
-            if row.state == "swept" or self._refs.get(blob_id):
+            decision = retention.retention(
+                retention.candidate(row, self._refs.get(blob_id, ())), now=now)
+            if not retention.is_sweep(decision):
                 continue
-            age = now - row.created_at
-            if row.state == "pending" and age > PENDING_TTL:
-                self._sweep_one(blob_id)
-                pending += 1
-            elif row.state == "ready" and age > READY_TTL:
-                self._sweep_one(blob_id)
-                ready += 1
-        if pending or ready:
+            self._sweep_one(blob_id)
+            report["pending" if decision is retention.Disposition.SWEEP_PENDING else "ready"] += 1
+        if any(report.values()):
             self._save()
-        return {"pending": pending, "ready": ready}
+        return report
 
     def _sweep_one(self, blob_id: str) -> None:
         row = self._rows.pop(blob_id, None)

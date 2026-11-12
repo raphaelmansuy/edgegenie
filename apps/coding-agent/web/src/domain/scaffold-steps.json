@@ -1,0 +1,90 @@
+{
+  "_note": [
+    "The scaffold's steps, defined ONCE. `api/domain/scaffold.py` and `web/src/domain/scaffold.ts`",
+    "both read this file, because the server computes the plan from observed tool calls (so a model",
+    "cannot promote a step) and the UI recomputes it from the same events to render live (so a step",
+    "does not wait for a round trip). Adding a step is an edit here plus a type error in each",
+    "language — the mechanism that keeps 'one rule, two runtimes' true instead of aspirational",
+    "(spec 013 [SCF-1], [07 §2.1]).",
+    "",
+    "`proof` names the field in the tool's result that IS the evidence. A call that completed but did",
+    "not return that field does not prove the step ([E-9])."
+  ],
+  "steps": [
+    {
+      "key": "project",
+      "label": "Create the database",
+      "detail": "A Lakebase project, with its production branch",
+      "tools": [
+        "dbx_lakebase_create"
+      ],
+      "proof": "project",
+      "why": "everything else needs a project to live in"
+    },
+    {
+      "key": "branch",
+      "label": "Make a branch",
+      "detail": "A copy-on-write branch, so production is never written to",
+      "tools": [
+        "dbx_lakebase_branch"
+      ],
+      "proof": "branch",
+      "why": "a scaffold is a test, and a test does not run on the user's live data"
+    },
+    {
+      "key": "table",
+      "label": "Create the table",
+      "detail": "A schema and a table, with a row count read back",
+      "tools": [
+        "dbx_lakebase_sql",
+        "dbx_lakebase_tables"
+      ],
+      "proof": "rows",
+      "alt_proof": [
+        "tables",
+        "row_count"
+      ],
+      "why": "'created a table' is a claim; a row count is a fact"
+    },
+    {
+      "key": "resource",
+      "label": "Attach the database to the app",
+      "detail": "A postgres resource, so the platform injects PGHOST and creates the role",
+      "tools": [
+        "dbx_create_app"
+      ],
+      "proof": "resources",
+      "why": "an app without the resource starts and cannot connect ([F6])"
+    },
+    {
+      "key": "files",
+      "label": "Write the app's files",
+      "detail": "app.yaml, requirements.txt and the app itself",
+      "tools": [
+        "dbx_write_file"
+      ],
+      "proof": "bytes",
+      "why": "a deployment with no app.yaml has nothing to run"
+    },
+    {
+      "key": "deploy",
+      "label": "Deploy",
+      "detail": "A deployment the platform accepted",
+      "tools": [
+        "dbx_create_app"
+      ],
+      "proof": "deploy_http_status",
+      "why": "the deployment is what makes the app reachable"
+    },
+    {
+      "key": "verify",
+      "label": "Prove it answers",
+      "detail": "An HTTP status from the app's own URL",
+      "tools": [
+        "dbx_app_health"
+      ],
+      "proof": "status",
+      "why": "'deployed' means the process started, not that the app works ([AP-3])"
+    }
+  ]
+}

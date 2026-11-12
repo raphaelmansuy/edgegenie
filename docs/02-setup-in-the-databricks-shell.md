@@ -35,7 +35,7 @@ flowchart TB
 | 1 Get a shell from a notebook | Yes | [`docs/e2e/17_notebook_launcher.txt`](e2e/17_notebook_launcher.txt) |
 | 1 Get a shell from the *web terminal* | **No** | Not tested. Treat as likely but unproven |
 | 2 to 7 inside the sandbox | Yes | Every exam run in [06](06-results-and-lessons.md) did exactly this |
-| 8 MCP server | Yes | [`mcp/test_mcp_v2.py`](../mcp/test_mcp_v2.py) and all V2 to V4 runs |
+| 8 MCP server | Yes | [`mcp/test_mcp_v2.py`](../mcp/test_mcp_v2.py) (a conformance suite kept from the study; the server it tests now lives at `apps/coding-agent/tools/`) and all V2 to V4 runs |
 | 9 Copilot CLI | See [06](06-results-and-lessons.md#github-copilot-cli) | Run through the same harness |
 
 ## What you need before you start
@@ -235,7 +235,7 @@ This is the path the [tutorial](tutorial.md) uses, with screenshots and real out
 ## Step 8 (optional) · Add the MCP server
 
 An **MCP server** is a small program that gives the agent extra tools. Ours,
-[`mcp/databricks_notebook_mcp.py`](../mcp/databricks_notebook_mcp.py), adds Databricks-aware tools
+[`apps/coding-agent/tools/databricks_notebook_mcp.py`](../apps/coding-agent/tools/databricks_notebook_mcp.py), adds Databricks-aware tools
 such as "write this notebook from a list of cells", "run it and return the real error", and
 "create a job with dependencies". Its most important property is **a fence on writes**: it
 only lets the agent write to one scratch schema, one workspace folder and names with a given
@@ -245,7 +245,7 @@ prefix. See [03](03-toolbox-cli-skills-mcp.md#layer-c--our-mcp-server) and [04](
 NBMCP_TRANSPORT=http NBMCP_PORT=8801 NBMCP_HOST=127.0.0.1 NBMCP_ALLOW_WRITES=1 \
 NBMCP_WRITE_SCHEMAS="workspace.my_scratch" NBMCP_WRITE_PATHS="/Users/me/agent_work/" \
 NBMCP_WRITE_JOB_PREFIX="agent_" NBMCP_WRITE_INSTANCE_PREFIX="agent-" NBMCP_PROFILE=core \
-NBMCP_SKILLS_DIR=/tmp/skills nohup ~/pyenv/bin/python mcp/databricks_notebook_mcp.py > nbmcp.log 2>&1 &
+NBMCP_SKILLS_DIR=/tmp/skills nohup ~/pyenv/bin/python apps/coding-agent/tools/databricks_notebook_mcp.py > nbmcp.log 2>&1 &
 ```
 
 Then add to `opencode.json`:

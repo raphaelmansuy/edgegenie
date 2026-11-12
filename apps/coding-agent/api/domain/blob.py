@@ -52,6 +52,10 @@ class Family(str, Enum):
     TEXT = "text"
     NOTEBOOK = "notebook"
     PDF = "pdf"
+    #: A spreadsheet. `[R-21]`: Genie Code takes `.xlsx`/`.xls` and this did not, so a user with a
+    #: workbook had to export it first. It is its own family because it needs a CONVERSION (to CSV text)
+    #: rather than a decode, and because the conversion has a shape a reader should be told about.
+    SHEET = "sheet"
     OTHER = "other"
 
 
@@ -139,11 +143,27 @@ def detect_mime(raw: bytes) -> str | None:
     return None
 
 
-def _family_of(mime: str, name: str) -> Family:
+def _is_xlsx(raw: bytes) -> bool:
+    """A real `.xlsx`, by content: a ZIP whose central directory names the spreadsheet parts.
+
+    Not by extension. `[R-21]` admits spreadsheets, and a `.xlsx` is a ZIP — the same bytes a `.docx` or
+    an `.ipynb` starts with — so the archive's own file names are the only honest test. `xl/workbook.xml`
+    is present in every workbook and absent from every notebook, which is why it is the marker.
+    """
+    if not raw.startswith(b"PK\x03\x04"):
+        return False
+    # The central directory lists every member name in plain text; searching the raw bytes for one
+    # unambiguous marker is enough and costs no decompression.
+    return b"xl/workbook.xml" in raw or b"xl/worksheets/" in raw
+
+
+def _family_of(mime: str, name: str, raw: bytes = b"") -> Family:
     if mime.startswith("image/"):
         return Family.IMAGE
     if mime == "application/pdf":
         return Family.PDF
+    if _is_xlsx(raw):
+        return Family.SHEET
     if mime == "application/zip" and name.lower().endswith(".ipynb"):
         return Family.NOTEBOOK
     if mime.startswith("text/") or mime in _TEXTUAL:
@@ -235,6 +255,9 @@ CAPABILITY: tuple[Capability, ...] = (
                describe="text, CSV, code"),
     Capability(Family.NOTEBOOK, needs_vision=False, accept=(".ipynb",), describe="notebooks"),
     Capability(Family.PDF, needs_vision=True, accept=(".pdf",), describe="PDFs"),
+    # A workbook is converted to CSV text at resolution time, so it needs no vision and its size is
+    # bounded by the converter, not by the model. `[R-21]`.
+    Capability(Family.SHEET, needs_vision=False, accept=(".xlsx", ".xls"), describe="spreadsheets"),
 )
 
 #: The `accept` attribute for the file input, generated from the table above rather than typed twice.
@@ -286,7 +309,7 @@ def validate(name: str, raw: bytes, declared: str = "", *, model_sees_images: bo
 
     # 5. the declaration must not contradict the bytes ACROSS families. Inside one family (a JPEG named
     #    .png) the detected type wins silently, because the reader produces the same answer either way.
-    family = _family_of(detected, stored)
+    family = _family_of(detected, stored, raw)
     if declared and not _compatible(declared, detected, family):
         raise BlobRefusal("mismatch", say("mismatch", name=shown, detected=detected, declared=declared))
 

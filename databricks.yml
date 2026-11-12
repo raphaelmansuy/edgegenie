@@ -1,11 +1,33 @@
 # Databricks Asset Bundle for the coding-agent app (spec 001).
 #
-# IMPORTANT: this file deliberately has no `targets.<name>.workspace.host`.
-# The CLI resolves a target's host *before* it reads DATABRICKS_HOST, so any ${...} in that field
-# makes every `databricks` command run from this repository fail with
-#     parse "https://${var...}": invalid character "{" in host name
-# which is how this was discovered. Authenticate with DATABRICKS_HOST (or a profile) instead, and
-# override the host per environment with --var when you use a bundle target.
+# TWO TARGETS, TWO WORKSPACES, TWO DIFFERENT TRANSPORTS. Read this before editing it.
+#
+#   dev   dbc-cb61f1e1-bd8e   deployment workspace. Apps here deploy from GIT ONLY:
+#                             `apps create` refuses without `git_repository`, and `apps deploy`
+#                             refuses a Workspace path ("Apps in this workspace can only be deployed
+#                             from Git"). So this target declares a git repository and the app is
+#                             built from a COMMITTED tree — an uncommitted change is not deployed.
+#
+#   prod  dbc-1e111e44-3334   the live instance. Apps here accept a Workspace folder, and this app
+#                             has always deployed from /Workspace/.../coding-agent. That mechanism
+#                             is unchanged: no git repository is declared for this target, and
+#                             `scripts/deploy.sh prod` syncs the folder before deploying.
+#
+# The transport is therefore a property of the TARGET, not a matter of taste, and it is the only
+# thing about the two deployments that differs.
+#
+# IMPORTANT: this file deliberately does NOT set `targets.<name>.workspace.host`. Two measured
+# reasons, both expensive:
+#
+#   1. The CLI resolves a target's host *before* it reads DATABRICKS_HOST, so ANY ${...} in that
+#      field makes every `databricks` command run from this repository fail with
+#         parse "https://${var...}": invalid character "{" in host name
+#   2. Even a LITERAL host there silently overrides DATABRICKS_HOST. Measured: with a target host
+#      set and DATABRICKS_HOST=https://invalid.example.com, `databricks apps list` still answered
+#      from the target's workspace. An operator who exports the wrong host would deploy to the
+#      right one and never know — so the host lives in scripts/env.sh, which asserts the identity.
+#
+# Authenticate with DATABRICKS_HOST + DATABRICKS_TOKEN (or a profile) and choose the target.
 bundle:
   name: databricks-coding-agents
 
@@ -32,6 +54,15 @@ resources:
         - catalog.catalogs:read
         - catalog.schemas:read
         - catalog.tables:read
+        # Spec 013: the Data tab reads Lakebase projects and Databricks Apps, so the app needs the
+        # scopes those APIs require. Without them every read answers 403 with a sentence the app
+        # reports honestly (ScopeMissing) but cannot fix. Keep this list in step with
+        # apps/coding-agent/scripts/env.sh DEPLOY_REQUIRED_SCOPES: the deploy grants it, the
+        # verification checks it, and they must not drift.
+        - postgres
+        - apps
+        - catalog.schemas:read
+        - catalog.tables:read
       # Secret RESOURCES, never secret values. The JSON key lives in the Databricks secret scope
       # `coding-agent-llm` and is injected at runtime via app.yaml `valueFrom`. `apps update` is a
       # full replacement: sending this list without `user_api_scopes` drops every scope.
@@ -48,6 +79,18 @@ resources:
             permission: READ
 
 targets:
+  # The development workspace. Identical to prod except for the deployment transport, which its
+  # platform forces to be git.
   dev:
     default: true
+    resources:
+      apps:
+        coding-agent:
+          git_repository:
+            provider: gitHub
+            url: https://github.com/raphaelmansuy/opengenie
+
+  # The live workspace. No git repository: it deploys from the synced Workspace folder, exactly as
+  # it always has. Adding one here would change how production deploys, which is not a side effect
+  # a dev bring-up is allowed to have.
   prod: {}

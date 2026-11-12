@@ -10,7 +10,8 @@ from __future__ import annotations
 import pytest
 
 from api.domain.cellrun import (
-    Clock, RunResult, RunState, is_runnable, refused, result_from_statement, without_skip,
+    Clock, MAX_ERROR_CHARS, RunResult, RunState, is_runnable, refused, result_from_statement,
+    split_statements, sql_statement, without_skip,
 )
 
 
@@ -73,11 +74,13 @@ def test_a_successful_select_carries_columns_rows_and_timing():
     assert d["statement"] == "select 1"
 
 
-def test_nulls_become_empty_cells_rather_than_the_word_none():
+def test_nulls_stay_null_and_an_empty_string_stays_empty():
+    """NULL and '' are different values; Databricks draws the first as an italic `null`. Turning both
+    into "" made them indistinguishable, and "None" would be a string that was never in the data."""
     p = payload("SUCCEEDED")
-    p["result"]["data_array"] = [[None, "x"]]
+    p["result"]["data_array"] = [[None, "x"], ["", "y"]]
     r = result_from_statement(p, waited=0.1)
-    assert r.rows == [["", "x"]]
+    assert r.rows == [[None, "x"], ["", "y"]]
 
 
 def test_a_truncated_result_says_so():
@@ -114,10 +117,37 @@ def test_an_empty_result_set_is_a_success_with_no_rows():
 
 
 def test_a_missing_state_does_not_crash_and_still_says_something():
+    """An unknown state is NOT a failure ([R-29], `[F-15]`).
+
+    The warehouse never said it failed, so reporting `FAILED` is a claim this app cannot support — and
+    it used to say exactly that, with `"the warehouse reported "` and nothing after it. `UNRESOLVED` is
+    the honest outcome, and the sentence names the state so a reader can look it up.
+    """
     p = {"statement": "select 1", "status": {}}
     r = result_from_statement(p, waited=0.1)
-    assert r.state is RunState.FAILED
+    assert r.state is RunState.UNRESOLVED
     assert r.error
+    assert "no state" in r.error
+
+
+def test_a_queued_statement_is_waiting_not_failed():
+    """`QUEUED` is a legitimate Statements-API state meaning *not yet*.
+
+    A large query on a shared endpoint spends real time queued. It fell through to the failure branch,
+    so the user saw a red failure whose reason was "the warehouse reported QUEUED" — the name of a
+    state that means the opposite ([F-15], `[R-29]`).
+    """
+    r = result_from_statement({"statement": "select 1", "status": {"state": "QUEUED"}}, waited=3.0)
+    assert r.state is RunState.RUNNING
+    assert "still running" in r.error
+
+
+def test_an_unknown_future_state_names_itself_and_is_not_a_failure():
+    r = result_from_statement({"statement": "select 1", "status": {"state": "SOMETHING_NEW"}},
+                              waited=1.0)
+    assert r.state is RunState.UNRESOLVED
+    assert "SOMETHING_NEW" in r.error
+    assert "may have run" in r.error
 
 
 # ---------------------------------------------------------------- timing
@@ -134,3 +164,120 @@ def test_a_run_serialises_without_optional_noise():
     d = r.to_dict()
     assert d == {"state": "succeeded", "seconds": 0.5, "columns": ["a"], "rows": [["1"]],
                  "truncated": False, "totalRows": 1}
+
+
+# ---------------------------------------------------------------- what is sent to the warehouse
+
+def test_a_sql_magic_line_is_not_sent_to_the_warehouse():
+    """`%sql` marks the cell, it is not SQL: sent as-is the engine fails with a syntax error at `%sql`."""
+    assert sql_statement("%sql\nselect 1") == "select 1"
+    assert sql_statement("%sql select 1") == "select 1"
+    assert sql_statement("%SQL\n  select 1  ") == "select 1"
+    assert sql_statement("select 1") == "select 1"
+    assert sql_statement("%skip\n%sql\nselect 1") == "select 1"
+
+
+def test_a_cell_with_several_statements_is_split_at_top_level_semicolons():
+    assert split_statements("select 1; select 2;") == ["select 1", "select 2"]
+    assert split_statements("create table t(a int);\ninsert into t values (1);\nselect * from t") == [
+        "create table t(a int)", "insert into t values (1)", "select * from t"]
+
+
+def test_a_semicolon_in_a_string_a_name_or_a_comment_is_not_a_separator():
+    assert split_statements("select 'a;b'; select 2") == ["select 'a;b'", "select 2"]
+    assert split_statements('select "a;b" as x') == ['select "a;b" as x']
+    assert split_statements("select `a;b` from t; select 2") == ["select `a;b` from t", "select 2"]
+    assert split_statements("select 1 -- not; a split\n; select 2") == ["select 1 -- not; a split", "select 2"]
+    assert split_statements("select /* a; b */ 1; select 2") == ["select /* a; b */ 1", "select 2"]
+    assert split_statements(r"select 'it\'s; fine'; select 2") == [r"select 'it\'s; fine'", "select 2"]
+
+
+def test_pieces_with_only_comments_or_blanks_are_dropped():
+    assert split_statements("-- nothing\n;;  ;\n/* x */") == []
+    assert split_statements("") == []
+
+
+def test_a_sql_script_is_one_statement_because_its_body_has_its_own_semicolons():
+    script = "BEGIN\n  DECLARE x INT; SET x = 1; SELECT x;\nEND"
+    assert split_statements(script) == [script]
+
+
+# ---------------------------------------------------------------- what is shown
+
+def test_a_statement_with_no_result_set_says_ok():
+    r = result_from_statement({"statement": "create table t(a int)", "status": {"state": "SUCCEEDED"}}, waited=0.4)
+    assert r.state is RunState.SUCCEEDED and r.output == "OK"
+    assert r.to_dict()["output"] == "OK"
+
+
+def test_a_select_does_not_say_ok():
+    assert result_from_statement(payload("SUCCEEDED"), waited=0.1).output == ""
+
+
+def test_column_types_travel_with_the_result():
+    p = payload("SUCCEEDED")
+    p["manifest"]["schema"]["columns"] = [{"name": "a", "type_name": "INT"}, {"name": "b", "type_name": "STRING"}]
+    r = result_from_statement(p, waited=0.1)
+    assert r.types == ["int", "string"]
+    assert r.to_dict()["types"] == ["int", "string"]
+
+
+def test_no_types_reported_means_no_types_key():
+    assert "types" not in result_from_statement(payload("SUCCEEDED"), waited=0.1).to_dict()
+
+
+def test_the_engines_truncated_flag_is_honoured_even_without_a_total():
+    p = payload("SUCCEEDED", total=1)
+    p["manifest"]["truncated"] = True
+    assert result_from_statement(p, waited=0.1).truncated
+
+
+def test_a_long_engine_error_keeps_its_pointers():
+    msg = "[PARSE_SYNTAX_ERROR] Syntax error at or near 'x'. SQLSTATE: 42601\n" + "line 3, pos 14 " * 100
+    r = result_from_statement(payload("FAILED", error=msg), waited=0.1)
+    assert len(r.error) > 400 and len(r.error) <= MAX_ERROR_CHARS
+    assert "\n" in r.error and "line 3, pos 14" in r.error
+
+
+def test_finished_at_and_who_ran_it_are_in_the_dict_only_when_known():
+    r = RunResult(state=RunState.SUCCEEDED, seconds=1, finished_at="2026-11-12T00:00:00+00:00", ran_by="a@x")
+    d = r.to_dict()
+    assert d["finishedAt"] == "2026-11-12T00:00:00+00:00" and d["ranBy"] == "a@x"
+    assert "finishedAt" not in RunResult(state=RunState.SUCCEEDED).to_dict()
+
+
+# -- nested values: the type text travels with the result, only when it is needed ----------------------
+
+def _typed(cols):
+    return {"status": {"state": "SUCCEEDED"}, "statement": "select 1",
+            "manifest": {"schema": {"columns": [{"name": n, "type_name": t, "type_text": tt} for n, t, tt in cols]}},
+            "result": {"data_array": [["[\"1\",\"2\"]", "x"]], "row_count": 1}}
+
+
+def test_a_nested_column_sends_its_full_type_text():
+    r = result_from_statement(_typed([("a", "ARRAY", "ARRAY<INT>"), ("s", "STRING", "STRING")]), waited=0.1)
+    assert r.types == ["array", "string"]
+    assert r.to_dict()["typeTexts"] == ["ARRAY<INT>", "STRING"]
+
+
+def test_a_result_with_no_nested_column_does_not_carry_type_texts():
+    r = result_from_statement(_typed([("a", "INT", "INT"), ("s", "STRING", "STRING")]), waited=0.1)
+    assert "typeTexts" not in r.to_dict()
+
+
+# -- :name markers -------------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("sql,names", [
+    ("select :a, :b, :a", ["a", "b"]),
+    ("select a::int, raw:field from t", []),                      # a cast and a JSON path are not parameters
+    ("select ':no', \":no\", `:no`, 'it''s :no', :yes", ["yes"]),   # strings and quoted names
+    ("-- :no\nselect :yes /* :no */, :yes2", ["yes", "yes2"]),       # comments
+    ("select 'a\\' :no', :ok", ["ok"]),                              # an escaped quote does not end the string
+    ("where d = :start_date and e = :_x1", ["start_date", "_x1"]),
+    ("select 1:2, :1", []),                                        # not names
+    ("select :", []),
+    ("select 'open :no", []),                                      # an unterminated string swallows the rest
+])
+def test_sql_parameters(sql, names):
+    from api.domain.cellrun import sql_params
+    assert sql_params(sql) == names

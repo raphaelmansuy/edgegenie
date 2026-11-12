@@ -31,8 +31,12 @@ from typing import Any
 from uuid import uuid4
 
 from ..adapters.acp.agent_config import AgentConfig, session_rules
+from .coalesce import Coalescer
+from .instructions import load as load_instructions, render as render_instructions
+from ..domain import budget, compaction, resume
 from ..domain import supervisor
 from ..domain.events import (
+    session_compacted,
     Event,
     approval_decided,
     document_saved,
@@ -62,11 +66,18 @@ from ..domain.session import (
 from ..ports import AgentRuntime, RuntimeHandle, SessionSpec, ToolRegistry
 
 MAX_TURNS = 200
-TOOL_COUNT_CORE = 19
+#: How many tools the `core` profile advertises, for the UI's "N tools" badge. It is NOT the authority
+#: on the budget: `NBMCP_PROFILE=core` selects the set, and `tests/test_tools_fence.py` holds it to 28
+#: (spec 014 [TOOL-1]). This number is a label that must match, and a test asserts it does.
+TOOL_COUNT_CORE = 28
 #: The folder the agent may write to, handed to the child so it can name real paths. A reference
 #: agent's scenarios record `/Users/you/…` as a placeholder; without this it reported a path that
 #: does not exist and every demo turn opened a 404.
 FENCE_ENV = "APP_WORKSPACE_FOLDER"
+#: Where each session's ledger of created pipelines lives. Beside the blob store, because it has the same
+#: durability requirement: a session that resumes must still be able to stop what it made (spec 014
+#: [RB-3]). The app owns the directory; the tool server only appends to its own file.
+LEDGER_ENV = "APP_SESSION_LEDGER_DIR"
 
 
 @dataclass
@@ -114,13 +125,26 @@ class Live:
         ]
 
 
+
+_SCOPE_HEADING = "## This session's scope"
+
+
+def _without_scope(text: str) -> str:
+    """The configured context WITHOUT the scope block, which is regenerated per spawn."""
+    head = text.split(_SCOPE_HEADING, 1)[0]
+    return head.strip()
+
 class Orchestrator:
     def __init__(
         self, runtime: AgentRuntime, tools: ToolRegistry, store, models, demo: bool = False,
         *, resolver=None, credentials=None, store_llm=None, health=None, max_run_seconds=21600, max_concurrent=4,
+        max_turns: int = MAX_TURNS,
     ) -> None:
         self._slots = asyncio.Semaphore(max_concurrent)
         self._max_run_seconds = max_run_seconds
+        # `settings.max_turns_per_session` had no reader at all ([F-10], [R-11]): the limit was a
+        # constant, so an operator who set the variable changed nothing.
+        self._max_turns = int(max_turns)
         self._shutting_down = False
         self._rt = runtime
         self._tools = tools
@@ -170,16 +194,30 @@ class Orchestrator:
             # Permissions belong to the dead transport. They must be requested afresh after load.
             for aid in row.get("approvals", {}):
                 await self._emit(approval_decided(s.id, None, aid, "expired", "server"))
+            # What this restored session becomes ([R-10]). The decision is pure and lives in
+            # `domain/resume.py`: only a session whose turn was IN FLIGHT needs a human. Before this,
+            # every non-archived session became `blocked + requiresResume`, so an app redeploy turned
+            # every idle conversation into a "needs attention" banner — [F-9].
+            decision = resume.apply(resume.Snapshot(
+                status=s.status.value,
+                turn_statuses=tuple(t.status.value for t in turns),
+            ))
             interrupted = []
             for t in turns:
                 if t.status in (TurnStatus.RUNNING, TurnStatus.AUDITING, TurnStatus.QUEUED):
                     live.state.update(t.finish(TurnStatus.INTERRUPTED, error="Server restarted; review saved progress before continuing."))
                     interrupted.append(t)
-            live.state.session = updated(s, status=SessionStatus.BLOCKED, requires_resume=True)
+            live.state.session = updated(
+                s,
+                status=SessionStatus(decision["status"]),
+                requires_resume=decision["requires_resume"],
+                resume_reason=decision["resume_reason"],
+            )
             for t in interrupted:
                 await self._emit(turn_ended(s.id, t.id, "interrupted",
                     "Server restarted. Saved progress is available; no operation was automatically repeated."))
-            await self._emit(Event(s.id, "session.recovery_required", {"requiresResume": True}))
+            if decision["requires_resume"]:
+                await self._emit(Event(s.id, "session.recovery_required", {"requiresResume": True}))
 
     async def shutdown(self) -> None:
         self._shutting_down = True
@@ -304,38 +342,103 @@ class Orchestrator:
             for sid, live in self._live.items()
         ]
 
-    async def reap_idle(self, now: float | None = None) -> list[str]:
+    async def reap_idle(self, now: float | None = None, policy=None) -> list[str]:
         """Archive sessions the policy says are finished with. Returns the ids reaped.
 
         This is what calls `archive()`. It existed but was never called, so every session a user
         opened held a subprocess for the life of the server.
+
+        `policy` is injectable for the same reason `reapable` takes one: the default keeps eight
+        sessions, so a test with one session can never reap anything and a test of "does reaping
+        work" passes while reaping nothing.
+
+        **The decision is re-checked under the session's lock.** `idle_candidates` reads a snapshot,
+        and everything after it awaits: a `submit` that lands in that gap would start a turn on a
+        session this pass has already decided to tear down, and the teardown would cancel it. So the
+        lock a submission takes is the lock a reap takes, and the candidate is re-read inside it. A
+        session that became busy in the gap is skipped rather than archived.
         """
         from ..domain.reaper import Policy, reapable
         now = now if now is not None else time.time()
-        policy = Policy()
+        policy = policy or Policy()
         reaped: list[str] = []
         # The cap counts sessions still *open*, and archiving one must reduce that count — otherwise
         # a single pass reaps everything: the guard `live_count > keep_minimum` stayed true for every
         # candidate because nothing decremented it. Observed live with keep_minimum=2: all 8 archived.
         open_now = sum(1 for c in self.idle_candidates(now) if c.status != "archived")
-        for c in self.idle_candidates(now):
-            if reapable(c, now=now, live_count=open_now, policy=policy) is None:
+        for candidate in self.idle_candidates(now):
+            if reapable(candidate, now=now, live_count=open_now, policy=policy) is not None:
+                continue
+            live = self._live.get(candidate.session_id)
+            if live is None:
+                continue
+            async with live.lock:
+                # Re-read inside the lock: this is the re-check the docstring promises.
+                if live.state.running() is not None or self.watchers(candidate.session_id):
+                    continue
+                if live.state.session.status is SessionStatus.ARCHIVED:
+                    continue
                 if self._store.durable:
-                    live = self.get(c.session_id)
                     if live.state.session.requires_resume:
                         continue
                     if live.handle:
                         live.extra["agent_session_id"] = live.handle.session_id
                         await self._rt.close(live.handle)
                         live.handle = None
-                    await self._tools.stop(c.session_id)
+                    await self._tools.stop(candidate.session_id)
                     live.state.session = updated(live.state.session, requires_resume=True)
-                    await self._emit(Event(c.session_id, "session.recovery_required", {"requiresResume": True}))
+                    await self._emit(Event(candidate.session_id, "session.recovery_required",
+                                           {"requiresResume": True}))
                 else:
-                    await self.archive(c.session_id)
-                reaped.append(c.session_id)
-                open_now -= 1
+                    await self.archive(candidate.session_id)
+            reaped.append(candidate.session_id)
+            open_now -= 1
         return reaped
+
+    def projection_candidates(self) -> list:
+        """The in-memory projections, with the fields the eviction policy needs.
+
+        Separate from `idle_candidates` because the two ask different questions of different sets:
+        the reaper considers *open* sessions and decides whether to stop their processes, while
+        eviction considers *archived* ones and decides whether their projection may leave memory.
+        """
+        from ..domain.projection import Candidate as ProjectionCandidate
+        return [
+            ProjectionCandidate(
+                session_id=sid,
+                status=live.state.session.status.value,
+                last_seen=live.last_seen or 0.0,
+                watchers=self.watchers(sid),
+                busy=live.state.running() is not None or (live.task is not None and not live.task.done()),
+            )
+            for sid, live in self._live.items()
+        ]
+
+    def evict_archived(self, now: float | None = None, *, grace_seconds: float | None = None) -> list[str]:
+        """Drop archived projections from memory. The journal is untouched.
+
+        Nothing used to remove an entry from `_live`, so a long-lived server grew by one conversation's
+        worth of memory per conversation. This is the fix, and it is deliberately *not* a size cap: a
+        cap would delete a projection a request is about to read and make behaviour depend on how many
+        sessions happened to be open. `domain/projection.py` holds the rule; this only obeys it.
+
+        Evicting is a cache miss, never data loss: `agent.session_snapshot` and `agent.session_event`
+        stay, and `restore()` rebuilds the projection on the next boot.
+        """
+        from ..domain.projection import evictable
+        now = now if now is not None else time.time()
+        kwargs = {} if grace_seconds is None else {"grace_seconds": grace_seconds}
+        gone: list[str] = []
+        for sid in evictable(self.projection_candidates(), now=now, **kwargs):
+            live = self._live.get(sid)
+            if live is None:
+                continue
+            # A last look under the door: a stream could have connected since the snapshot.
+            if self.watchers(sid) or (live.task is not None and not live.task.done()):
+                continue
+            self._live.pop(sid, None)
+            gone.append(sid)
+        return gone
 
     def scope(self, session_id: str) -> Scope:
         s = self.get(session_id).state.session
@@ -378,24 +481,60 @@ class Orchestrator:
         schema: str | None,
         title: str = "New session",
         user_token: str | None = None,
+        write_mode: str = "fenced",
     ) -> Session:
         resolved = await self._resolve(model, user_id, session_id="")
         sid = uuid4().hex[:16]
         session = Session(id=sid, user_id=user_id, folder=folder, schema=schema,
-                          model=resolved.id.value, title=title, created_at=time.time())
+                          model=resolved.id.value, title=title, created_at=time.time(),
+                          write_mode=write_mode)
         live = Live(state=SessionState(session=session), workspace_folder=folder,
                     last_seen=time.time(), resolved=resolved)
         # The user's forwarded token: the agent and the tool server act as this user, not as the app.
         live.extra["user_token"] = user_token
         self._live[sid] = live
-        await self._emit(session_created(sid, folder, resolved.id.value, schema))
+        try:
+            await self._emit(session_created(sid, folder, resolved.id.value, schema))
+        except BaseException:
+            # Never journaled means it does not exist: a listed session the journal has no record of
+            # would vanish at the next restart, and the caller was told it failed.
+            self._live.pop(sid, None)
+            raise
         try:
             await self._provision(live)
         except Exception as exc:  # noqa: BLE001 - a failed provision is a visible state, not a crash
-            live.state.session = live.state.session.transition(SessionStatus.FAILED)
-            await self._emit(Event(sid, "session.degraded", {"detail": str(exc)[:400]}))
+            # Release what the attempt acquired BEFORE recording it: the tool server and the agent are
+            # processes, and `resume()` already stops them on failure. Then record the failure, but never
+            # let the recording hide the failure it records.
+            await self._release(live)
+            with contextlib.suppress(DomainError):
+                live.state.session = live.state.session.transition(SessionStatus.FAILED)
+            try:
+                await self._emit(Event(sid, "session.degraded", {"detail": str(exc)[:400]}))
+            except Exception:  # noqa: BLE001
+                logging.getLogger("app.session").warning(
+                    "could not journal the failure of session %s", sid, exc_info=True)
             raise
         return live.state.session
+
+    async def _release(self, live: Live) -> None:
+        """Give back a session's processes and private files. Best effort, and safe to call twice."""
+        sid = live.state.session.id
+        log = logging.getLogger("app.session")
+        if live.handle:
+            handle, live.handle = live.handle, None
+            try:
+                await self._rt.close(handle)
+            except Exception:  # noqa: BLE001
+                log.warning("could not close the agent of session %s", sid, exc_info=True)
+        try:
+            await self._tools.stop(sid)
+        except Exception:  # noqa: BLE001
+            log.warning("could not stop the tool server of session %s", sid, exc_info=True)
+        for key in ("token_file", "secret_dir"):
+            path = live.extra.pop(key, "")
+            if path:
+                shutil.rmtree(os.path.dirname(path) if key == "token_file" else path, ignore_errors=True)
 
     async def _resolve(self, model: str, user_id: str, *, session_id: str) -> ResolvedModel:
         """One path from an id to a `ResolvedModel`. Falls back to a static resolution in demo mode."""
@@ -449,8 +588,13 @@ class Orchestrator:
         #    token from a private file (not the agent's cwd) that every turn refreshes.
         user_token = live.extra.get("user_token") or os.environ.get("DATABRICKS_TOKEN", "")
         self._write_token(live, user_token)
+        ledger_dir = os.environ.get(LEDGER_ENV) or os.path.join(tempfile.gettempdir(),
+                                                               "agent-ledgers")
         live.mcp_url = await self._tools.start(s.id, live.workspace_folder, s.schema,
-                                               live.extra.get("token_file"))
+                                               live.extra.get("token_file"),
+                                               live.extra.get("sp_token_file"),
+                                               ledger_dir,
+                                               write_mode=s.write_mode)
         live.tools = TOOL_COUNT_CORE if live.mcp_url else 0
 
         # 3. The agent process itself. It authenticates as the USER, and it receives exactly one
@@ -484,12 +628,46 @@ class Orchestrator:
                           live.handle.capabilities.version, live.handle.capabilities.raw))
 
     def _write_config(self, live: Live, cwd: str) -> AgentConfig:
-        """Write `opencode.json` + the working agreement for the resolved model."""
+        """Write `opencode.json` + the working agreement for the resolved model.
+
+        The configured context (`[R-17]`) is appended to `AGENTS.md` **before** the session's scope, so
+        the fence is the last thing the agent reads and the first thing it cannot override. The context is
+        read once at provision time and cached on `live.extra`, because reading three files per spawn for
+        a session that never changes them is work with no benefit.
+        """
         resolved = live.resolved or self._static(live.state.session.model)
         cfg = AgentConfig.from_resolved(resolved, host=os.environ.get("DATABRICKS_HOST", ""))
-        cfg.write(cwd, session_rules(live.workspace_folder, live.state.session.schema,
-                                     live.state.session.id))
+        scope = session_rules(live.workspace_folder, live.state.session.schema, live.state.session.id)
+        configured = live.extra.get("instructions_text", "")
+        rules = f"{configured}\n\n{scope}" if configured else scope
+        cfg.write(cwd, rules)
         return cfg
+
+    async def load_instructions(self, session_id: str, workspace, home: str) -> dict:
+        """Read the workspace's, the user's and the folder's instructions once. `[R-17]`.
+
+        Cached on the session: three file reads per SPAWN, not per turn, and a session's instructions do
+        not change mid-conversation. A file that could not be read is recorded on the session so the
+        transcript can say the agent did not see it — never dropped, because an agent answering as if it
+        had seen the team's rules is the failure this feature exists to prevent.
+
+        `home` is required rather than derived from the session's folder: they are different things (a
+        workspace folder is often `/Workspace/Users/me/proj`, and a home is `/Users/me`), and guessing one
+        from the other reads the wrong person's instructions when it guesses wrong.
+        """
+        live = self.get(session_id)
+        s = live.state.session
+        token = live.extra.get("user_token") or os.environ.get("DATABRICKS_TOKEN", "")
+        sources, missing = await load_instructions(workspace, folder=s.folder, home=home, token=token)
+        scope = session_rules(live.workspace_folder, s.schema, s.id)
+        merged = render_instructions(sources, missing, scope=scope)
+        # Only the SOURCES are stored; the scope is generated per spawn, so a fence change is never stale.
+        live.extra["instructions_text"] = _without_scope(merged.text)
+        live.extra["instructions_used"] = [{"kind": x.kind, "path": x.path, "author": x.author,
+                                            "truncated": x.truncated} for x in merged.used]
+        live.extra["instructions_missing"] = [{"kind": m.kind, "path": m.path, "reason": m.reason}
+                                              for m in merged.missing]
+        return {"used": live.extra["instructions_used"], "missing": live.extra["instructions_missing"]}
 
     async def _child_env(self, live: Live, user_token: str) -> dict[str, str]:
         """The child's environment: the workspace token, plus **exactly one** provider key.
@@ -539,9 +717,13 @@ class Orchestrator:
             out[var] = path
         return out
 
-    @staticmethod
-    def _write_token(live: Live, token: str | None) -> None:
-        """Keep the tool server's credential current. A forwarded user token lasts about an hour."""
+    def _write_token(self, live: Live, token: str | None) -> None:
+        """Keep the tool server's credentials current. A forwarded user token lasts about an hour.
+
+        An instance method, not a static one, because it also writes the app's own service-principal
+        token: `postgres` cannot be called as the user (spec 013 [RB-10]), so the Lakebase tools need
+        a second credential beside the user's.
+        """
         if not token:
             return
         live.extra["user_token"] = token
@@ -559,6 +741,32 @@ class Orchestrator:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as fh:
             fh.write(token)
+
+        # A SECOND token, for the one API the user's token can never call.
+        #
+        # `[RB-10]`: `postgres` is "always bound to the SP, not OBO", so `/api/2.0/postgres` refuses a
+        # forwarded user token however many scopes the app declares. The tool server's Lakebase tools
+        # therefore need the app's own identity, and they read it from this file. Written beside the
+        # user token, same 0600 file, and only when this process HAS a service principal — on a laptop
+        # there is none and the tools fall back to the user token as before.
+        sp = getattr(self, "_sp_token", None)
+        if sp is not None and sp.available():
+            try:
+                sp_path = os.path.join(os.path.dirname(path), "sp-token")
+                fd = os.open(sp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w") as fh:
+                    fh.write(sp.get())
+                live.extra["sp_token_file"] = sp_path
+            except Exception as exc:      # noqa: BLE001 - the tools degrade to the user token, as on a laptop
+                # Degrading is correct; degrading SILENTLY is not. A missing token file makes every
+                # `/api/2.0/postgres` call answer 403, which reads as a permissions problem on the
+                # user's project — three layers away from this line. `warning`, not `debug`, so the
+                # app's own log answers "why is the Data tab refused" in one line.
+                logging.getLogger("app.session").warning(
+                    "no service-principal token for this session's tool server: %s", exc)
+        elif sp is not None:
+            logging.getLogger("app.session").debug(
+                "this process has no service principal; Lakebase tools use the user token")
 
     async def model_options(self, session_id: str) -> dict:
         live = self.get(session_id)
@@ -654,6 +862,17 @@ class Orchestrator:
         secret_dir = live.extra.get("secret_dir")
         if secret_dir:       # the provider key files; same rule: only our own mkdtemp folder
             shutil.rmtree(secret_dir, ignore_errors=True)
+        # The attachments this conversation held. Archiving is the user's "delete", so the bytes go
+        # with it: leaving them would mean a deleted conversation left its screenshots on disk with
+        # no chip to reach them, which is the leak the sweeper's reference rule cannot see (a
+        # reference protects a blob only while a turn holds it, and `delete_session` is the other
+        # half). Best-effort: a store without blob deletion must not fail an archive.
+        if self._blobs is not None:
+            try:
+                await self._blobs.store.delete_session(session_id)
+            except Exception:  # noqa: BLE001 - a store that cannot delete must not block teardown
+                logging.getLogger("app.session").warning(
+                    "could not delete the attachments of session %s", session_id, exc_info=True)
         await self._emit(Event(session_id, "session.archived", {}))
 
     async def cancel(self, session_id: str) -> None:
@@ -702,6 +921,20 @@ class Orchestrator:
         self.get(session_id)          # KeyError if there is no such session
         await self._emit(document_saved(session_id, path, size, by=by))
 
+    async def record_blob_attached(self, session_id: str, _name: str, payload: dict) -> None:
+        """Put an attachment into the session's event stream.
+
+        `blob.attached` was in the event vocabulary and emitted by nobody: `BlobService` takes an
+        `emit` callback and `build()` constructed it without one, so an attachment left a row and a
+        file and no record. A transcript could show a chip whose provenance the journal never had.
+
+        A blob uploaded before its session exists lives under `pending:<user>` and has no session to
+        record against — `get` raises `KeyError` and the caller logs it. Its event belongs to the turn
+        that adopts it, which is where the chip appears.
+        """
+        self.get(session_id)          # KeyError when this blob has no session yet
+        await self._emit(Event(session_id, "blob.attached", dict(payload)))
+
     # -- turns ----------------------------------------------------------------
     async def submit(self, session_id: str, text: str, context: str = "",
                      attachments: list[dict] | None = None, user_token: str | None = None,
@@ -725,8 +958,10 @@ class Orchestrator:
             raise DomainError("restore this session before sending a new message")
         if live.state.session.status not in (SessionStatus.READY, SessionStatus.STREAMING, SessionStatus.BLOCKED):
             raise DomainError("this session is not ready")
-        if len(live.state.turns) >= MAX_TURNS:
-            raise DomainError(f"this session reached its limit of {MAX_TURNS} turns")
+        if len(live.state.turns) >= self._max_turns:
+            raise DomainError(
+                f"this session reached its limit of {self._max_turns} turns. "
+                "Start a new conversation to continue.")
         if live.extra.get("stopping"):
             raise DomainError("the agent is stopping; wait before sending another message")
         self._write_token(live, user_token)
@@ -789,22 +1024,78 @@ class Orchestrator:
         except Exception:  # noqa: BLE001 - recording provenance must not block a turn
             pass
 
+    async def compact(self, session_id: str, *, budget: int = 0, summary: str = "") -> dict:
+        """Summarise the middle of a conversation when it outgrows the window. `[R-11]`, `[F-10]`.
+
+        The PLAN is pure (`domain/compaction.py`); this only records it. `session.compacted` was one of
+        the 27 declared event types and emitted by nobody, so a long conversation had no way to shed
+        history — and at the window boundary the provider truncated, after which the supervisor reported
+        "requirements without verified evidence" for work that had been done.
+
+        `budget` is the context window minus what the next turn needs. `0` means "the model's declared
+        context", which is what a caller with no better number should pass.
+        """
+        live = self.get(session_id)
+        turns = [compaction.Turn(t.id, t.index, (t.input_tokens or 0) + (t.output_tokens or 0))
+                 for t in live.state.turns]
+        window = budget or (live.resolved.context if live.resolved else 0)
+        plan = compaction.plan(turns, budget=window)
+        if plan is None:
+            return {"changed": False, "reason": "nothing needs shedding"}
+        await self._emit(session_compacted(session_id, plan.to_event(), summary=summary))
+        # The record is the deliverable: the summary text itself is produced by the caller (a model call)
+        # and stored as a projection field by the API that owns the transcript. Recording first means a
+        # compaction is never silent, even if the summariser fails afterwards.
+        live.extra["compacted"] = plan.to_event()
+        return {"changed": True, **plan.to_event()}
+
     async def _interrupt_pending(self, live: Live, reason: str) -> None:
         for queued in list(live.state.turns):
             if queued.status is TurnStatus.QUEUED:
                 live.state.update(queued.finish(TurnStatus.INTERRUPTED, error=reason))
                 await self._emit(turn_ended(live.state.session.id, queued.id, "interrupted", reason))
 
+    def _budget_denial(self, live: Live) -> str:
+        """The sentence blocking this turn, or `""`. `[R-24]`.
+
+        Pure decision in `domain/budget.py`; this only reads the numbers the turn pins already record.
+        `limit: 0` (the default) means no ceiling, and returns `""` — an unlimited session behaves exactly
+        as it did before the budget existed.
+        """
+        limit = int(live.extra.get("budget_tokens", 0) or 0)
+        if limit <= 0:
+            return ""
+        usage = budget.Usage(
+            input=sum(t.input_tokens or 0 for t in live.state.turns),
+            output=sum(t.output_tokens or 0 for t in live.state.turns),
+            cached=sum(t.cached_tokens or 0 for t in live.state.turns),
+        )
+        decision = budget.decide(usage, limit=limit)
+        return "" if decision.allowed else decision.message
+
     async def _run_turn(self, live: Live, turn_id: str) -> None:
         if next(t for t in live.state.turns if t.id == turn_id).status is TurnStatus.CANCELLED:
             live.cancel = False
             live.extra["stopping"] = False
             return
+        # `[R-24]`: a turn that would cross the conversation's token budget is blocked BEFORE the model
+        # is called. Checked here rather than in `submit` because this is where the semaphore is taken —
+        # the moment the turn is really about to spend. A turn already running is never stopped: the cost
+        # is spent and stopping mid-answer loses work.
+        denial = self._budget_denial(live)
+        if denial:
+            turn = next(t for t in live.state.turns if t.id == turn_id)
+            live.state.update(turn.finish(TurnStatus.BLOCKED, error=denial))
+            await self._emit(turn_ended(live.state.session.id, turn_id, "blocked", denial))
+            await self._interrupt_pending(live, "Queued work was not started because the budget was reached.")
+            return
         try:
             async with self._slots:
                 expiry = live.extra.get("token_expires_at")
-                budget = min(self._max_run_seconds, max(0, expiry - time.time() - 15)) if expiry else self._max_run_seconds
-                async with asyncio.timeout(budget):
+                # Not `budget`: that name is the domain module now, and shadowing it here made the
+                # reference above resolve to an int inside this scope.
+                wall = min(self._max_run_seconds, max(0, expiry - time.time() - 15)) if expiry else self._max_run_seconds
+                async with asyncio.timeout(wall):
                     await self._execute_turn(live, turn_id)
         except TimeoutError:
             live.cancel = True
@@ -903,37 +1194,51 @@ class Orchestrator:
         return out
 
     async def _drain(self, live: Live) -> tuple[dict, dict, str]:
-        """Consume one turn's events. Returns (end, usage, answer text)."""
+        """Consume one turn's events. Returns (end, usage, answer text).
+
+        Deltas pass through a `Coalescer` ([R-6], `[F-4]`): a 60 000-character answer arrives as roughly
+        15 000 `message.delta` events, and emitting each one meant 15 000 journal commits — each writing
+        the whole snapshot — plus 15 000 string rebuilds in the browser. The coalescer emits one event per
+        ~100 ms or ~2 KB, and **always** flushes before a non-delta event so a tool card can never appear
+        above the text that requested it ([E-15]).
+        """
         assert live.handle
         ended: dict = {"error": "no result"}
         usage: dict = {}
         parts: list[str] = []
-        async for item in self._rt.events(live.handle):
-            if live.cancel:  # set by /cancel while this turn was streaming
-                ended = {"stop": "cancelled"}
-                break
-            if isinstance(item, tuple):
-                kind, value = item
-                if kind == "end":
-                    ended, usage = {"stop": value.stop_reason}, value.usage
-                else:
-                    ended = {"error": str(value)}
-                break
-            if item.type == "approval.requested":
-                live.extra.setdefault("approvals", {})[item.payload["approvalId"]] = item.payload
-            await self._emit(item)
-            if item.type == "message.delta":
-                parts.append(item.payload.get("text", ""))
-            elif item.type == "tool_call.started":
-                live.record(item.payload["callId"], item.payload["name"], "running")
-            elif item.type == "tool_call.updated":
-                live.record(
-                    item.payload["callId"],
-                    "",
-                    item.payload["status"],
-                    item.payload.get("summary", ""),
-                    item.payload.get("args", ""),
-                )
+        coalescer = Coalescer(self._emit)
+        try:
+            async for item in self._rt.events(live.handle):
+                if live.cancel:  # set by /cancel while this turn was streaming
+                    ended = {"stop": "cancelled"}
+                    break
+                if isinstance(item, tuple):
+                    kind, value = item
+                    if kind == "end":
+                        ended, usage = {"stop": value.stop_reason}, value.usage
+                    else:
+                        ended = {"error": str(value)}
+                    break
+                if item.type == "approval.requested":
+                    live.extra.setdefault("approvals", {})[item.payload["approvalId"]] = item.payload
+                # A delta is buffered; anything else flushes pending text first, then goes through.
+                await coalescer.push(item)
+                if item.type == "message.delta":
+                    parts.append(item.payload.get("text", ""))
+                elif item.type == "tool_call.started":
+                    live.record(item.payload["callId"], item.payload["name"], "running")
+                elif item.type == "tool_call.updated":
+                    live.record(
+                        item.payload["callId"],
+                        "",
+                        item.payload["status"],
+                        item.payload.get("summary", ""),
+                        item.payload.get("args", ""),
+                    )
+        finally:
+            # The tail. A missing flush here is a lost last sentence, which is why it is in a `finally`
+            # and why the cancel and shutdown paths are separate tests ([R-6]).
+            await coalescer.flush()
         return ended, usage, "".join(parts)
 
     async def _settle(

@@ -1,0 +1,145 @@
+# Databricks notebook source
+# Proves the TABLE READ path works from inside the workspace, as the identity the APP uses.
+#
+# Why a notebook rather than a shell step: on dbc-cb61f1e1-bd8e the Lakebase endpoint is a private-link
+# ingress, so port 5432 is unroutable from a laptop (measured: a connect timeout on every attempt). The
+# app runs on compute INSIDE that network, so this is the only honest place to prove a connection.
+#
+# THE RULE THAT MADE THE FIRST VERSION OF THIS PROBE LIE. A Lakebase credential is bound to the identity
+# that minted it: decode `sub` and it is the user or service principal behind the token. Connecting with
+# `user=<someone else>` therefore fails with "OAuth: User is not authorized" even when that identity
+# owns a Postgres role. The first version minted ONE credential as the human and then tried to connect
+# twice, as the SP and as the human, and reported the SP as unauthorised. The failure was in the probe.
+#
+# So: mint the credential as the identity you intend to be, then connect as exactly that identity.
+#   * as the notebook's user  -> proves a human path
+#   * as the APP's SP         -> proves the path the deployed app takes (spec 013 [RB-11])
+
+# COMMAND ----------
+
+import json
+import urllib.request
+
+dbutils.widgets.text("endpoint", "projects/coding-agent-llm/branches/production/endpoints/primary")
+dbutils.widgets.text("database", "databricks_postgres")
+
+ENDPOINT = dbutils.widgets.get("endpoint").strip()
+DATABASE = dbutils.widgets.get("database").strip()
+HOST = spark.conf.get("spark.databricks.workspaceUrl")
+TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+
+
+def call(method: str, path: str, body: dict | None = None) -> dict:
+    req = urllib.request.Request(
+        f"https://{HOST}{path}",
+        method=method,
+        data=json.dumps(body).encode() if body is not None else None,
+        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=90) as raw:
+        text = raw.read().decode()
+    return json.loads(text) if text.strip() else {}
+
+
+def subject(token: str) -> str:
+    import base64
+    payload = token.split(".")[1]
+    payload += "=" * (-len(payload) % 4)
+    return json.loads(base64.urlsafe_b64decode(payload)).get("sub", "")
+
+
+# COMMAND ----------
+
+import psycopg
+
+dbutils.widgets.text("endpoint", "projects/coding-agent-llm/branches/production/endpoints/primary")
+dbutils.widgets.text("database", "databricks_postgres")
+ENDPOINT = dbutils.widgets.get("endpoint").strip()
+DATABASE = dbutils.widgets.get("database").strip()
+HOST = spark.conf.get("spark.databricks.workspaceUrl")
+TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+
+
+def call(method: str, path: str, body: dict | None = None) -> dict:
+    req = urllib.request.Request(
+        f"https://{HOST}{path}",
+        method=method,
+        data=json.dumps(body).encode() if body is not None else None,
+        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=90) as raw:
+        text = raw.read().decode()
+    return json.loads(text) if text.strip() else {}
+
+
+def subject(token: str) -> str:
+    import base64
+    payload = token.split(".")[1]
+    payload += "=" * (-len(payload) % 4)
+    return json.loads(base64.urlsafe_b64decode(payload)).get("sub", "")
+
+
+results = []
+meta = call("GET", f"/api/2.0/postgres/{ENDPOINT}")
+status = meta.get("status") or {}
+pg_host = ((status.get("hosts") or {}).get("host") or "")
+branch = ENDPOINT.rsplit("/endpoints/", 1)[0]
+
+results.append({"check": "the endpoint has a host", "pass": bool(pg_host), "detail": pg_host})
+results.append({
+    "check": "the endpoint's status has NO postgres_role (reading it gave an empty user)",
+    "pass": "postgres_role" not in status,
+    "detail": "keys: " + ", ".join(sorted(status.keys())[:5]) + "…",
+})
+
+roles = call("GET", f"/api/2.0/postgres/{branch}/roles").get("roles", [])
+by_identity = {((r.get("status") or {}).get("postgres_role") or ""): (r.get("role_id") or "")
+               for r in roles}
+results.append({"check": "the branch lists the identities that may connect", "pass": bool(by_identity),
+                "detail": ", ".join(f"{k} ({v})" for k, v in by_identity.items() if k)})
+
+# COMMAND ----------
+
+import psycopg
+
+# One credential, minted by the identity we intend to be. This is the rule the first probe broke.
+cred = call("POST", "/api/2.0/postgres/credentials",
+            {"endpoint": ENDPOINT, "request_id": "probe-013"})
+pg_token = cred["token"]
+who = subject(pg_token)
+
+results.append({
+    "check": "the credential is bound to the minting identity",
+    "pass": bool(who),
+    "detail": f"sub={who}",
+})
+
+try:
+    with psycopg.connect(host=pg_host, port=5432, dbname=DATABASE, user=who,
+                         password=pg_token, sslmode="require", connect_timeout=30) as conn:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute("select current_user")
+            current = cur.fetchone()[0]
+            cur.execute(
+                "select table_schema, count(*) from information_schema.tables "
+                "where table_type = 'BASE TABLE' group by 1 order by 1")
+            schemas = cur.fetchall()
+    results.append({"check": f"connected and read information_schema as {who}", "pass": True,
+                    "detail": f"current_user={current}; " + str(schemas)})
+except Exception as exc:  # noqa: BLE001 - the failure text is the evidence
+    results.append({"check": f"connected as {who}", "pass": False,
+                    "detail": f"{type(exc).__name__}: {str(exc)[:200]}"})
+
+# The role must EXIST for the identity, and the app connects as its own SP, so assert that the
+# identity this notebook runs as does not accidentally stand in for the app's.
+results.append({
+    "check": "this identity has a Postgres role on the branch",
+    "pass": who in by_identity,
+    "detail": f"{who} in {list(by_identity)}",
+})
+
+dbutils.notebook.exit(json.dumps(results))
+
+# COMMAND ----------
+

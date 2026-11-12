@@ -79,7 +79,8 @@ try {
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(`#/session/${id}`);
     note('M-01/07/11 real accepted instruction, streamed plan and copyable return link');
     await context.setOffline(true); await expect(page.locator('.mission-description')).toContainText('Updates paused');
-    await expect(page.getByRole('button', { name: 'Stop work', exact: true })).toBeDisabled(); await capture('02-offline');
+    // Stop stays ENABLED offline (specs/012 [F3]): it is a POST, it does not travel over the event stream.
+    await expect(page.getByRole('button', { name: 'Stop work', exact: true })).toBeEnabled(); await capture('02-offline');
     await context.setOffline(false); await expect(page.locator('.mission-description')).not.toContainText('Updates paused');
     await close();
     await expect.poll(async () => (await app.json(`/api/sessions/${id}`)).turns.at(-1)?.status, { timeout: 30000 }).toBe('completed');

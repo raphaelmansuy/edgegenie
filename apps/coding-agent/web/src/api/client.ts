@@ -61,6 +61,179 @@ export interface SaveCredentialResult {
 }
 
 import { errorText } from "../domain/apierror";
+import type { AppHealth, AppView } from "../domain/app";
+import type { LakebasePageData } from "../domain/lakebase";
+
+/** A Lakebase project's ref contains slashes; each segment is encoded and the slashes are kept, which
+ *  is how the server's `{ref:path}` route reads it. */
+const encodePath = (ref: string) =>
+  ref.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+
+/** A project as the API actually describes it: no state, because a project has none. */
+export interface LakebaseProject {
+  ref: string; name: string; displayName: string;
+  pgVersion?: number; owner?: string;
+}
+export interface LakebaseBranch { ref: string; name: string; isDefault: boolean; state: string; project?: string }
+export type { LakebasePageData, AppView, AppHealth };
+
+// -- jobs, runs and pipelines (spec 014) -------------------------------------------------------
+// The shapes the adapter produces. Every field a page shows is here, and every block may arrive as
+// `{error}` instead of data — the contract `Block` renders ([UI-3]).
+export interface Schedule { cron: string; timezone: string; paused: boolean }
+
+export interface JobTask {
+  task_key: string;
+  depends_on: string[];
+  notebook_path?: string;
+  python_file?: string;
+  sql_file?: string;
+  pipeline_id?: string;
+  job_id?: string;
+  timeout_seconds?: number;
+  max_retries?: number;
+}
+
+export interface RunRow {
+  run_id: number | null;
+  job_id?: number | null;
+  lifeCycle: string;
+  result: string | null;
+  word: string;
+  tone: "good" | "busy" | "bad" | "quiet";
+  startTime: number | null;
+  endTime: number | null;
+  duration: string;
+  active: boolean;
+  cancel: boolean;
+  repair: boolean;
+  message?: string;
+  url?: string;
+}
+
+export interface TaskRun {
+  taskKey: string;
+  taskRunId: number | null;
+  lifeCycle: string;
+  result: string | null;
+  word: string;
+  tone: "good" | "busy" | "bad" | "quiet";
+  duration: string;
+  message?: string;
+}
+
+export interface RunOutput { taskKey?: string; error: string; traceTail?: string }
+
+export interface JobRow {
+  job_id: number | null;
+  name: string;
+  owner: string;
+  schedule: Schedule | null;
+  paused: boolean;
+}
+
+export interface JobFacts {
+  job_id: number;
+  name: string;
+  owner: string;
+  created: number | null;
+  schedule: Schedule | null;
+  tasks: JobTask[];
+  queueing: boolean;
+  timeoutSeconds: number;
+  maxRetries: number;
+  tags: Record<string, string>;
+  performanceTarget: string;
+}
+
+export type MaybeError<T> = T | { error: string };
+
+export interface JobPageData {
+  job: MaybeError<JobFacts>;
+  runs: MaybeError<RunRow[]>;
+  latestRun: MaybeError<RunRow & { tasks?: TaskRun[]; output?: RunOutput; trigger?: string }> | null;
+  levels: string[][];
+  graphProblem: string | null;
+  summary: string;
+  identity: string;
+}
+
+export interface RunPageData extends RunRow {
+  tasks: TaskRun[];
+  output?: RunOutput;
+  trigger?: string;
+  /** The job's name, so a pasted run link carries context and not only an id ([RUN-1]). */
+  jobName?: string;
+}
+
+export interface PipelineRow {
+  pipeline_id: string;
+  name: string;
+  state: string;
+  word: string;
+  tone: "good" | "busy" | "bad" | "quiet";
+  lastUpdate: { update_id: string; state: string; creationTime?: number } | null;
+  catalog: string;
+  creator: string;
+}
+
+export interface PipelineUpdate {
+  updateId: string;
+  state: string;
+  word: string;
+  tone: "good" | "busy" | "bad" | "quiet";
+  creationTime: number | null;
+  fullRefresh: boolean;
+  cause: string;
+  active: boolean;
+}
+
+export interface PipelineEvent {
+  level: "ERROR" | "WARN" | "INFO" | string;
+  message: string;
+  timestamp: number | null;
+  stackTrace: string;
+}
+
+export interface PipelineLibrary { kind: string; path: string }
+
+export interface PipelineFacts {
+  pipeline_id: string;
+  name: string;
+  state: string;
+  catalog: string;
+  schema: string;
+  serverless: boolean;
+  edition: string;
+  channel: string;
+  continuous: boolean;
+  development: boolean;
+  libraries: PipelineLibrary[];
+  creator: string;
+  storage: string;
+}
+
+export interface PipelinePageData {
+  pipeline: MaybeError<PipelineFacts>;
+  updates: MaybeError<PipelineUpdate[]>;
+  lastUpdate: MaybeError<PipelineUpdate> | null;
+  events: MaybeError<PipelineEvent[]>;
+  word: string;
+  tone: "good" | "busy" | "bad" | "quiet";
+  activeUpdate: PipelineUpdate | null;
+  identity: string;
+}
+
+export interface LedgerRow { kind: string; id: string; name: string; created: string; session: string }
+
+export interface RunActionsView {
+  word: string;
+  tone: "good" | "busy" | "bad" | "quiet";
+  active: boolean;
+  terminal: boolean;
+  cancel: boolean;
+  repair: boolean;
+}
 
 export async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, init);
@@ -133,10 +306,17 @@ export const api = {
     "/api/llm/models/probe", { method: "POST", headers: json, body: JSON.stringify({ model }) }),
   refreshDiscovery: () => call<CatalogueResponse>("/api/llm/discovery/refresh", { method: "POST" }),
   modelFacts: (id: string) => call<ModelFacts>(`/api/sessions/${id}/model-facts`),
+  /** What this conversation may change ([R-9]) and what it spent ([R-24]). */
+  budget: (id: string) => call<import("../domain/budget").BudgetState>(`/api/sessions/${id}/budget`),
+  compact: (id: string) =>
+    call<Record<string, unknown>>(`/api/sessions/${id}/compact`, { method: "POST", headers: json }),
+  config: () =>
+    call<{ writeModes: { id: string; label: string; sentence: string; mutates: boolean }[];
+           defaultWriteMode: string }>("/api/config"),
   sessions: () => call<{ sessions: SessionSummary[] }>("/api/sessions"),
-  create: (folder: string, model?: string, schema?: string | null) =>
+  create: (folder: string, model?: string, schema?: string | null, writeMode?: string) =>
     call<SessionSummary>("/api/sessions", { method: "POST", headers: json,
-      body: JSON.stringify({ folder, model, schema: schema ?? null }) }),
+      body: JSON.stringify({ folder, model, schema: schema ?? null, writeMode: writeMode ?? null }) }),
   session: (id: string) => call<SessionView & { turns: any[]; scope: any; running: number | null }>(`/api/sessions/${id}`),
   resume: (id: string) => call<SessionSummary>(`/api/sessions/${id}/resume`, { method: "POST" }),
   archive: (id: string) => call<void>(`/api/sessions/${id}`, { method: "DELETE" }),
@@ -149,6 +329,11 @@ export const api = {
       body: JSON.stringify({ text, attachments: attachments.map(({ kind, ref, name }) => ({ kind, ref, name })) }) }),
   me: () => call<{ user: string; scratch: string; demo: boolean; workspace?: { host: string; orgId?: string };
     pythonRun?: import("../domain/cellrun").PythonPolicy }>("/api/me"),
+  /** Which build the SERVER is. Distinct from `version(path)`, which is an object's revision token.
+   *  `/api/health` answers the same for every build, so this is the only route that can tell a fresh
+   *  deployment from a stale one. */
+  build: () => call<{ version: string; commit: string; docs: string; source: string;
+    releases: string; agentMode?: string }>("/api/version"),
   object: (path: string) => call<WsObject>(`/api/workspace/object?path=${encodeURIComponent(path)}`),
   /** The version token only: one `get-status`, no content. Comparable with `WsObject.version`. */
   version: (path: string) => call<{ path: string; version: string; modifiedAt: number }>(`/api/workspace/version?path=${encodeURIComponent(path)}`),
@@ -173,9 +358,75 @@ export const api = {
   permissions: (path: string) => call<{ path: string; entries: { who: string; principal: string; permission: string; inherited: boolean }[] }>(
     `/api/workspace/permissions?path=${encodeURIComponent(path)}`),
   /** Execute one cell (SQL only). Returns a run state plus either data or a reason. */
-  runCell: (language: string, source: string) =>
-    call<import("../domain/cellrun").CellRun>("/api/notebook/run-cell", { method: "POST", headers: json,
-      body: JSON.stringify({ language, source }) }),
+  /**
+   * Run a SQL cell on a warehouse, as the signed-in user. A statement can run for minutes, so this starts
+   * it and polls (the Apps proxy cuts a long request), and resolves with the one result. `stop` is asked
+   * between polls and cancels the statement on the warehouse.
+   */
+  runCell: async (
+    language: string, source: string,
+    hooks: { onStage?: (stage: string, seconds: number) => void; stop?: () => boolean; params?: Record<string, string> } = {},
+  ): Promise<import("../domain/cellrun").CellRun> => {
+    type Run = import("../domain/cellrun").CellRun;
+    type Poll = { state: "running" | "done"; stage?: string; seconds: number; result?: Run };
+    const started = await call<{ handle?: string; result?: Run }>(
+      "/api/notebook/sql-runs", { method: "POST", headers: json, body: JSON.stringify({ language, source, params: hooks.params ?? {} }) });
+    if (!started.handle) return started.result ?? { state: "failed", seconds: 0, error: "the app returned no result" };
+    const url = `/api/notebook/sql-runs/${started.handle}`;
+    const deadline = Date.now() + 12 * 60_000;
+    let cancelled = false;
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 800));
+      if (!cancelled && hooks.stop?.()) { cancelled = true; await call(url, { method: "DELETE" }).catch(() => {}); }
+      const poll = await call<Poll>(url);
+      if (poll.state === "done" && poll.result) return poll.result;
+      hooks.onStage?.(poll.stage ?? "running", poll.seconds);
+      if (Date.now() > deadline) throw new Error("the query is taking longer than 12 minutes; it was left running on the warehouse");
+    }
+  },
+  /**
+   * Run one Python cell in the notebook's session (variables stay between cells). Starts it, then polls.
+   * Resolves with the result, or `unavailable` (why a session cannot be used: the caller runs the cell
+   * as a one-shot). `onProgress` sees what the cell has printed so far; `stop` is asked between polls and
+   * interrupts the cell once.
+   */
+  runSessionCell: async (
+    path: string, language: string, source: string, index: number,
+    hooks: {
+      /** Widget values to run with, by name. */
+      widgets?: Record<string, string>;
+      onProgress?: (p: { stage: string; seconds: number; outputs: import("../domain/cellrun").Output[] }) => void;
+      onSession?: (s: import("../domain/session").SessionStatus) => void;
+      stop?: () => boolean;
+    } = {},
+  ): Promise<{ result?: import("../domain/cellrun").CellRun; unavailable?: string; replaced?: string }> => {
+    type Run = import("../domain/cellrun").CellRun;
+    type Sess = import("../domain/session").SessionStatus;
+    const started = await call<{ handle?: string; unavailable?: string; refused?: Run; replaced?: string; session?: Sess }>(
+      "/api/notebook/kernels/run", { method: "POST", headers: json, body: JSON.stringify({ path, language, source, index, widgets: hooks.widgets ?? {} }) });
+    if (started.unavailable) return { unavailable: started.unavailable };
+    if (started.session) hooks.onSession?.(started.session);
+    if (!started.handle) {
+      return { result: started.refused ?? { state: "failed", seconds: 0, error: "the app returned no result" } };
+    }
+    const url = `/api/notebook/kernels/runs/${started.handle}`;
+    const deadline = Date.now() + 5 * 3600_000;
+    let interrupted = false;
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 800));
+      if (!interrupted && hooks.stop?.()) { interrupted = true; await call(url, { method: "DELETE" }).catch(() => {}); }
+      const poll = await call<{ state: "running" | "done"; stage?: string; seconds: number; outputs?: import("../domain/cellrun").Output[];
+        result?: Run; session?: Sess }>(url);
+      if (poll.session) hooks.onSession?.(poll.session);
+      if (poll.state === "done" && poll.result) return { result: poll.result, replaced: started.replaced };
+      hooks.onProgress?.({ stage: poll.stage ?? "running", seconds: poll.seconds, outputs: poll.outputs ?? [] });
+      if (Date.now() > deadline) throw new Error("the cell has been running for more than 5 hours; it was left running in its session");
+    }
+  },
+  sessionStatus: (path: string) =>
+    call<import("../domain/session").SessionStatus>(`/api/notebook/kernels?path=${encodeURIComponent(path)}`),
+  stopSession: (path: string) =>
+    call<import("../domain/session").SessionStatus>(`/api/notebook/kernels?path=${encodeURIComponent(path)}`, { method: "DELETE" }),
   /**
    * Run Python cells on serverless compute AS THE APP (administrators only; the server decides).
    * `show` are the cells (0-based) whose output is wanted; the Python cells above the last of them run
@@ -229,4 +480,42 @@ export const api = {
   setModel: (id: string, model: string) =>
     call<{ current: string; available: string[]; restartRequired?: boolean }>(
       `/api/sessions/${id}/model`, { method: "POST", headers: json, body: JSON.stringify({ model }) }),
+
+  // -- Lakebase and Databricks Apps (spec 013) ------------------------------------------------
+  // One call per object: a project page asks for the whole page and receives four independent
+  // blocks, any of which may be `{error}` instead of data ([UI-3], [E-11]).
+  lakebaseProjects: () => call<{ items: LakebaseProject[] }>("/api/lakebase/projects"),
+  lakebaseProject: (ref: string, branch = "production") =>
+    call<LakebasePageData>(`/api/lakebase/projects/${encodePath(ref)}?branch=${encodeURIComponent(branch)}`),
+  lakebaseBranches: (ref: string) =>
+    call<{ items: LakebaseBranch[] }>(`/api/lakebase/projects/${encodePath(ref)}/branches`),
+  lakebaseTables: (ref: string, branch: string, database: string, schema: string) =>
+    call<{ schema: string; tables: string[]; truncated: boolean }>(
+      `/api/lakebase/projects/${encodePath(ref)}/tables?branch=${encodeURIComponent(branch)}`
+      + `&database=${encodeURIComponent(database)}&schema=${encodeURIComponent(schema)}`),
+  refreshLakebase: (ref: string) =>
+    call<{ refreshed: boolean }>(`/api/lakebase/projects/${encodePath(ref)}/refresh`, { method: "POST" }),
+  apps: (lakebase = "") => call<{ items: AppView[] }>(`/api/apps${lakebase ? `?lakebase=${encodeURIComponent(lakebase)}` : ""}`),
+  app: (name: string, health = true) => call<AppView>(`/api/apps/${encodeURIComponent(name)}?health=${health}`),
+  appHealth: (name: string, fresh = false) =>
+    call<AppHealth>(`/api/apps/${encodeURIComponent(name)}/health?fresh=${fresh}`),
+
+  // -- jobs, runs and pipelines (spec 014) -----------------------------------------------------
+  // There is NO write call here, and that is a decision rather than an omission: every action (run,
+  // resume, cancel, repair, start, stop) goes through the agent, so the write fence has one home
+  // ([07 §5]). `test_infra_routes.py` asserts the route table has no POST for these prefixes.
+  jobs: (limit = 25) => call<{ items: JobRow[]; identity: string }>(`/api/jobs?limit=${limit}`),
+  job: (id: string | number) => call<JobPageData>(`/api/jobs/${encodeURIComponent(String(id))}`),
+  run: (id: string | number) => call<RunPageData>(`/api/runs/${encodeURIComponent(String(id))}`),
+  pipelines: (limit = 25) =>
+    call<{ items: PipelineRow[]; identity: string }>(`/api/pipelines?limit=${limit}`),
+  pipeline: (id: string, events = 20) =>
+    call<PipelinePageData>(`/api/pipelines/${encodeURIComponent(id)}?events=${events}`),
+  pipelineEvents: (id: string, limit = 20) =>
+    call<{ items: PipelineEvent[] }>(`/api/pipelines/${encodeURIComponent(id)}/events?limit=${limit}`),
+  /** What this conversation created, so a page only offers the controls it may use ([TOOL-6]). */
+  ledger: () => call<{ items: LedgerRow[] }>("/api/infra/ledger"),
+  /** Which controls belong on screen for a run's state, answered by the domain module. */
+  runActions: (lifeCycle: string, result = "") =>
+    call<RunActionsView>(`/api/infra/run-actions?life_cycle=${encodeURIComponent(lifeCycle)}&result=${encodeURIComponent(result)}`),
 };

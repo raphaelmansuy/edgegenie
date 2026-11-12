@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Conformance test for mcp/databricks_notebook_mcp.py.
+"""Conformance test for the Databricks tool server.
 
 Boots the server over stdio exactly as an agent would, lists tools, then calls
 each of them against the live workspace and records PASS/FAIL.
@@ -20,7 +20,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVER = ROOT / "mcp" / "databricks_notebook_mcp.py"
+SERVER = ROOT / "apps" / "coding-agent" / "tools" / "databricks_notebook_mcp.py"
 
 
 def token() -> str:

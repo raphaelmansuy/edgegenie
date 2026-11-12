@@ -26,6 +26,7 @@ import { peekOf } from "./domain/peek";
 import { SessionPeek } from "./components/SessionPeek";
 import { AssistantDock, InlineApproval } from "./components/AssistantDock";
 import { ModelControl } from "./components/ModelControl";
+import { WriteModeChip } from "./components/Budget";
 import { ProviderSettings } from "./components/ProviderSettings";
 import { LayoutMenu } from "./components/LayoutMenu";
 import { Palette, PaletteActions } from "./components/Palette";
@@ -35,6 +36,12 @@ import { SessionList } from "./components/SessionList";
 import { AccountMenu } from "./components/AccountMenu";
 import { ShortcutSheet } from "./components/ShortcutSheet";
 import { CatalogTree } from "./components/CatalogTree";
+import { DataTree } from "./components/DataTree";
+import { AppPage } from "./components/AppPage";
+import { LakebasePage } from "./components/LakebasePage";
+import { JobsPage } from "./components/JobsPage";
+import { RunsPage } from "./components/RunsPage";
+import { PipelinePage } from "./components/PipelinePage";
 import { FilesPane } from "./components/FilesPane";
 import { Composer } from "./components/Composer";
 import { OpenDoc, WorkspaceLinks } from "./components/DocContext";
@@ -53,21 +60,37 @@ import {
 import { ALL_FOUR_MIN, bounds, columns, drawerWidth, modeFor, takesColumn, type RailTab } from "./domain/layout";
 import { resolvePanels } from "./domain/panels";
 import {
-  ACTIONS, asAttachment, docForNode, makeDoc, tablesWritten, touched, type Action, type Doc,
+  ACTIONS, ACTIONS_FOR, asAttachment, canAttach, docForNode, docFromOpenEvent, isRunObject,
+  makeDoc, OPEN_EVENTS, tablesWritten, touched,
+  type Action, type Doc, type DocKind,
 } from "./domain/docs";
 import { focusFor, NO_FOCUS, sameFocus, withCell, withoutDoc, type Focus } from "./domain/focus";
+import { canDecide, canSend } from "./domain/compose";
+import { escapeTarget } from "./domain/keys";
+import { useScrollHandoff } from "./hooks/useScrollHandoff";
 import { attachmentsFor, autoAttachment } from "./domain/binding";
 import { searchRoot as computeSearchRoot } from "./domain/searchroot";
 import type { Attachment } from "./domain/events";
 import type { Suggestion } from "./domain/dock";
 import { useSessionStream } from "./hooks/useSessionStream";
+import { COMPILED, DOCS_URL, versionLabel, versionTitle, withServer, type BuildFacts } from "./domain/version";
 import { useRoute } from "./hooks/useRoute";
 import { EMPTY_ROUTE, linkTo, type Route } from "./domain/route";
 import { copyText } from "./domain/clipboard";
 import { readWorkingSet, saveWorkingSet } from "./domain/workingset";
 import { afterClose, docTabId, moveTab } from "./domain/tabs";
 
-type Rail = "sessions" | "files" | "catalog";
+type Rail = "sessions" | "files" | "catalog" | "data";
+/** One label per rail tab, so the strip, the palette and the tests cannot disagree ([UI-2]). */
+const RAIL_LABEL: Record<Rail, string> = {
+  sessions: "Sessions", files: "Files", catalog: "Catalog", data: "Data",
+};
+/** The palette's group for each kind of open document. One map, so a new kind cannot be filed under
+ *  the wrong heading (spec 013 [UI-5], spec 014 [UI-2]). */
+const KIND_GROUP: Record<DocKind, string> = {
+  notebook: "Files", file: "Files", table: "Tables", lakebase: "Lakebase", app: "Apps",
+  job: "Jobs", pipeline: "Pipelines", run: "Runs", query: "Queries", "query-draft": "Queries",
+};
 const CHAT = "chat";
 const SQL_LIBRARY = "sql-library";
 
@@ -89,6 +112,9 @@ export function App() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const workspaceScope = user ? `${window.location.origin}|${workspace?.host ?? ""}|${user}` : null;
   const [demo, setDemo] = useState(false);
+  /** Which build this page is. Starts from the compiled facts so the first paint already states an
+   *  honest version, then adopts the server's commit when `/api/version` answers. */
+  const [build, setBuild] = useState<BuildFacts>(COMPILED);
   const [active, setActive] = useState<string | null>(null);
   const [folder, setFolder] = useState("");
   const [model, setModel] = useState("");
@@ -120,6 +146,27 @@ export function App() {
     const open = () => setKeysOpen(true);
     window.addEventListener("opengenie:shortcuts", open); // OPEN_SHORTCUTS in domain/cellkeys.ts
     return () => window.removeEventListener("opengenie:shortcuts", open);
+  }, []);
+
+  /* Cross-page links. A read-only page cannot navigate the shell by itself, so it dispatches an event and
+   * the shell opens the document — through `docFromOpenEvent`, the one mapping, so the listener is three
+   * lines and its test calls the same function.
+   *
+   * These listeners are the OTHER HALF of two `dispatchEvent` calls that had NO listener at all:
+   * `opengenie:open-lakebase` (013's AppPage) and `opengenie:open-job` (014's RunsPage). A control that
+   * dispatches into the void is the inert control spec 011 [N5] removed — and a screenshot shows a button,
+   * so only a test finds it.
+   *
+   * `openDocRef` because the listener is registered once and must call the CURRENT `openDoc`. */
+  const openDocRef = useRef<(d: Doc) => void>(() => {});
+  useEffect(() => {
+    const names = Object.keys(OPEN_EVENTS);
+    const listener = (e: Event) => {
+      const doc = docFromOpenEvent(e.type, (e as CustomEvent<string>).detail);
+      if (doc) openDocRef.current(doc);
+    };
+    for (const name of names) window.addEventListener(name, listener);
+    return () => { for (const name of names) window.removeEventListener(name, listener); };
   }, []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"providers" | "models">("providers");
@@ -213,7 +260,7 @@ export function App() {
   const composerBox = useRef<HTMLTextAreaElement | null>(null);
   const dockComposer = useRef<HTMLTextAreaElement | null>(null);
 
-  const { session, conn, error, send, stop, restore, setSession } = useSessionStream(active);
+  const { session, conn, error, send, stop, restore, retry: retryConnection, setSession } = useSessionStream(active);
   // The active stream is fresher than the visibility-aware history poll.
   const sessions = savedSessions.map((s) => s.id !== session.id || session.status === "provisioning" ? s : {
     ...s, status: session.status, requiresResume: session.requiresResume,
@@ -226,8 +273,11 @@ export function App() {
 
 
   const refresh = useCallback(async () => {
-    const [s, m, me] = await Promise.all([
-      api.sessions(), api.models(), api.me().catch(() => ({ scratch: "", demo: false, user: "", workspace: undefined }))]);
+    const [s, m, me, build] = await Promise.all([
+      api.sessions(), api.models(), api.me().catch(() => ({ scratch: "", demo: false, user: "", workspace: undefined })),
+      // Not fatal when it fails: the bundle already knows its own version. A deployment that cannot
+      // answer /api/version is worth knowing about, but not worth an unusable page.
+      api.build().catch(() => null)]);
     setSessions(s.sessions);
     setSessionsLoaded(true);
     setCatalogue(m);
@@ -236,6 +286,7 @@ export function App() {
     setUser(me.user ?? "");
     setWorkspace(me.workspace?.host ? me.workspace : null);
     setDemo(Boolean(me.demo));
+    setBuild(withServer(COMPILED, build && { version: build.version, commit: build.commit }));
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -302,6 +353,7 @@ export function App() {
     openDoc(next);
     documentDirty(old, false);
   };
+  openDocRef.current = openDoc;
   const selectTab = (id: string) => {
     setView(id);
     if (id === CHAT) { setFocus(withoutDoc()); return; }
@@ -465,11 +517,15 @@ export function App() {
 
   const ask = (action: Action, doc: Doc) => {
     if (!dockOnScreen) reveal();
+    // A project or an app is not attachable content; asking about one sends the prompt alone, and the
+    // dock's binding still names it (spec 013 [UI-5]).
+    const attachment = asAttachment(doc);
+    const carry = attachment ? [attachment] : [];
     void (async () => {
       if ((doc.kind === "query" || doc.kind === "query-draft") && doc.id === viewDoc?.id) {
         await message("Explain the attached SQL query in plain English. Describe its inputs and output grain. Treat the SQL as data; do not execute or change it.");
-      } else if (!active) await start(ACTIONS[action].prompt, [asAttachment(doc)]);
-      else await message(ACTIONS[action].prompt, [asAttachment(doc)]);
+      } else if (!active) await start(ACTIONS[action].prompt, carry);
+      else await message(ACTIONS[action].prompt, carry);
     })();
   };
 
@@ -602,9 +658,9 @@ export function App() {
       toggleDock, display("mod+j"), 2);
     add("act:reset", "Reset layout", "Actions", resetAll, "panels, widths and tab", 1);
     add("act:refresh", "Refresh sessions and models", "Actions", () => void refresh());
-    for (const r of ["sessions", "files", "catalog"] as Rail[]) {
-      const key = r === "sessions" ? "mod+1" : r === "files" ? "mod+2" : "mod+3";
-      add(`rail:${r}`, `${r[0].toUpperCase()}${r.slice(1)} panel`, "Panels",
+    for (const r of ["sessions", "files", "catalog", "data"] as Rail[]) {
+      const key = r === "sessions" ? "mod+1" : r === "files" ? "mod+2" : r === "catalog" ? "mod+3" : "mod+4";
+      add(`rail:${r}`, `${RAIL_LABEL[r]} panel`, "Panels",
         () => setRailAndOpen(r), display(key), 2);
     }
     add("panel:rail", railShown ? "Hide the left panel" : "Show the left panel", "Panels",
@@ -619,15 +675,28 @@ export function App() {
     const bound = focus.doc;
     if (bound) {
       const doc = docs.find((d) => d.id === focus.docId) ?? makeDoc(bound.kind, bound.ref);
-      add("act:attach", `Add ${bound.name} to the message`, "Actions",
-        () => addContext(asAttachment(doc)), undefined, 2);
-      for (const a of ["explain", "fix", "document", "optimize"] as Action[]) {
-        if (!(ACTIONS[a] && doc)) continue;
+      // "Add to the message" only when the server can re-read it: a project and an app are not
+      // attachable content (spec 013 [UI-5]).
+      if (canAttach(doc.kind)) {
+        add("act:attach", `Add ${bound.name} to the message`, "Actions",
+          () => { const a = asAttachment(doc); if (a) addContext(a); }, undefined, 2);
+      }
+      for (const a of ACTIONS_FOR[doc.kind]) {
         add(`act:${a}:${doc.id}`, `${ACTIONS[a].label} ${bound.name}`, "Actions", () => ask(a, doc), a, 3);
       }
     }
     for (const d of docs) {
-      add(`doc:${d.id}`, d.name, d.kind === "table" ? "Tables" : "Files", () => selectTab(d.id), d.ref, 1);
+      add(`doc:${d.id}`, d.name, KIND_GROUP[d.kind], () => selectTab(d.id), d.ref, 1);
+    }
+    // A job, a pipeline and a project the agent built are findable by name even when their tab is closed.
+    // A palette that could only find OPEN documents made "the job you just made" unreachable by its own
+    // name — the gap scene S9 found, and the same class as 013's `@`-mention list (spec 014 [UI-5]).
+    for (const item of recent) {
+      if (!isRunObject(item.kind) && item.kind !== "lakebase" && item.kind !== "app") continue;
+      if (docs.some((d) => d.id === makeDoc(item.kind, item.path, item.name).id)) continue;
+      const doc = makeDoc(item.kind, item.path, item.name);
+      add(`recent:${doc.id}`, doc.name, KIND_GROUP[item.kind],
+        () => openDoc(doc), doc.ref, 2);
     }
     for (const s of sessions.slice(0, 40)) {
       const title = s.title === "New session" ? s.id.slice(0, 8) : s.title;
@@ -638,10 +707,14 @@ export function App() {
       });
     }
     return items;
-  }, [docs, sessions, railShown, inspShown, newSession, refresh, focus, addContext, ask, openRail,
+  }, [docs, sessions, recent, railShown, inspShown, newSession, refresh, focus, addContext, ask, openRail,
       openInspector, resetAll, toggleDock, dockShown, closedCount, reopenDocument]);
 
   const busy = session.status === "streaming";
+  /* ONE answer to "may this be sent", shared by both composers and by the approval buttons.
+     It cannot see the connection: losing the stream means the answer will not ARRIVE yet, not that
+     the question is refused (specs/012 01 §P1). This replaces three expressions that disagreed. */
+  const sendDecision = canSend({ status: session.status, requiresResume: session.requiresResume });
   /** Drawn as a column, or as the right-hand drawer. Never "on" and invisible.
    *
    *  In focus only the work and the conversation are drawn, so the inspector is not a column there
@@ -683,6 +756,7 @@ export function App() {
       railSessions: go("sessions"),
       railFiles: go("files"),
       railCatalog: go("catalog"),
+      railData: go("data"),
       cycleTheme: theme.cycle,
       toggleRail: () => openRail(!railDrawn),
       /* ONE implementation, shared with the toolbar button and the palette: a chord that sets the
@@ -697,22 +771,38 @@ export function App() {
         closeDoc(view);
         return true;
       },
-      /* Escape, in one ordered meaning (007 KB-8): unwinds the topmost transient. Stop-the-agent is
-         the composer's own affordance and is handled there, next to the button that shows it. */
+      /* Escape, resolved by the ONE function that documents its order (specs/012 [KB-A]).
+       *
+       * This replaces a chain of five `if`s. That chain happened to be right, and it was unverifiable:
+       * its behaviour was a function of a `useMemo` dependency list that includes `layout`, `mode` and
+       * `narrow`, so Escape's precedence varied with window width and no test covered the wiring.
+       * `escapeTarget()` was exported, documented, unit-tested and cited by a comment in
+       * `useHotkeys` — and called only from its own tests (specs/012 [F4]).
+       *
+       * A `switch` over the union is exhaustive: adding an `EscapeTarget` is now a compile error
+       * rather than a silent fall-through. */
       stop: () => {
-        if (settingsOpen) { setSettingsOpen(false); return true; }
-        if (paletteOpen || keysOpen) { setPaletteOpen(false); setKeysOpen(false); return true; }
-        /* Escape dismisses a TRANSIENT overlay, never a panel that has a column. The dock used to answer
-           to the raw flag, so with focus anywhere in a dock that was a column (the focus form at
-           860–1135 px, or any width after ⌘J) Escape hid the conversation — in the middle of a run. */
-        if (panels.escape === "dock") { setDockDrawer(false); toggle("assistant", false); return true; }
-        if (inspectorDrawer) { toggle("inspector", false); return true; }
-        if (panels.escape === "rail") {
-          setDrawer(null);
-          toggle("rail", false);
-          return true;
+        const target = escapeTarget({
+          dialog: settingsOpen || paletteOpen || keysOpen,
+          popover: modelOpen > 0,
+          drawer: panels.escape === "dock" || inspectorDrawer || panels.escape === "rail",
+          editing: false,
+          running: session.status === "streaming",
+          composerFocused: document.activeElement === dockComposer.current
+            || document.activeElement === composerBox.current,
+        });
+        switch (target) {
+          case "dialog": setSettingsOpen(false); setPaletteOpen(false); setKeysOpen(false); return true;
+          case "popover": setModelOpen(0); return true;
+          case "drawer":
+            if (panels.escape === "dock") { setDockDrawer(false); toggle("assistant", false); }
+            else if (inspectorDrawer) { toggle("inspector", false); }
+            else { setDrawer(null); toggle("rail", false); }
+            return true;
+          case "edit": return false;                  // the editor owns its own Escape
+          case "stop-agent": void stop(); return true;
+          case "nothing": return false;               // never steal the browser's meaning [KB-D]
         }
-        return false;
       },
     };
   }, [docs, view, paletteOpen, keysOpen, settingsOpen, newSession, focusComposer, panels.escape, inspectorDrawer,
@@ -726,6 +816,9 @@ export function App() {
     running: () => Boolean(session.status === "streaming"),
   }), [settingsOpen, paletteOpen, keysOpen, session.status]);
   useHotkeys(handlers, hotkeyContext);
+  /* One delegated wheel listener: a contained scroller hands its remainder to the nearest scrollable
+     ancestor, so a wheel at the edge of a cell's output keeps reading (specs/012 [SC-1]). */
+  useScrollHandoff();
   /* A write that did not land in the document on screen. The centre must say so: a screen that does
      not change while the dock reports a write reads as "the refresh is broken" (it happened on the
      deployed app, with the agent correctly writing a copy outside the repo). */
@@ -758,7 +851,7 @@ export function App() {
   const viewerActions = useMemo(() => ({
     onDirtyChange: documentDirty,
     onAsk: ask,
-    onAttach: (d: Doc) => addContext(asAttachment(d)),
+    onAttach: (d: Doc) => { const a = asAttachment(d); if (a) addContext(a); },
     onAskCell: (d: Doc, cell: number) => focusCell(d, cell),
     onPromptCell: promptCell,
     onCopyLink: (d: Doc, cell?: number) =>
@@ -804,12 +897,12 @@ export function App() {
         <button className="btn ghost" aria-label="New SQL query" title="New SQL query" onClick={() => void openSql()}>+</button>
       </div>
       <div className="rail-tabs" role="tablist" aria-label="Navigator">
-        {(["sessions", "files", "catalog"] as RailTab[]).map((r) => (
+        {(["sessions", "files", "catalog", "data"] as RailTab[]).map((r) => (
           <button key={r} id={`rail-tab-${r}`} className="rail-tab" role="tab" aria-selected={rail === r}
             aria-controls={`rail-panel-${r}`} tabIndex={rail === r ? 0 : -1}
             onClick={() => setRail(r)}
             onKeyDown={(e) => {
-              const order = ["sessions", "files", "catalog"] as RailTab[];
+              const order = ["sessions", "files", "catalog", "data"] as RailTab[];
               const at = order.indexOf(rail);
               if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
                 e.preventDefault();
@@ -818,7 +911,7 @@ export function App() {
                 requestAnimationFrame(() => document.getElementById(`rail-tab-${next}`)?.focus());
               }
             }}>
-            {r === "sessions" ? "Sessions" : r === "files" ? "Files" : "Catalog"}
+            {RAIL_LABEL[r]}
           </button>
         ))}
       </div>
@@ -844,6 +937,11 @@ export function App() {
             <CatalogTree selected={selectedRef} onAttach={addContext} onOpenTable={(ref) => openDoc(makeDoc("table", ref))} />
           </div>
         )}
+        {rail === "data" && (
+          <div className="rail-tree">
+            <DataTree selected={viewDoc?.id ?? null} onOpen={openDoc} />
+          </div>
+        )}
       </div>
     </>
   );
@@ -856,6 +954,7 @@ export function App() {
       running={busy}
       conn={conn}
       error={error}
+      onRetryConnection={retryConnection}
       onSend={(text, mine) => message(text, mine)}
       onStop={stop}
       onRestore={restore}
@@ -912,6 +1011,16 @@ export function App() {
           <header className="topbar">
             <SkipLinks />
             <h1 className="brand"><LogoBadge size={21} tone="accent" /> <Wordmark /></h1>
+            {/* The version sits immediately after the name, as one unit with it, because "OpenGenie
+                v1.0.0" is a single statement. It is a LINK to the documentation site: the answer to
+                "which version is this" is nearly always "where are the notes for it". Outside
+                `.brand` and outside `.meta` (which clips its overflow), and hidden below 620 px where
+                the wordmark itself is hidden — the mark alone stays a mark. */}
+            <a className="app-version" href={DOCS_URL} target="_blank" rel="noopener noreferrer"
+              title={versionTitle(build)} aria-label={`OpenGenie ${versionLabel(build)} — documentation site`}
+              data-version={build.version}>
+              {versionLabel(build)}
+            </a>
             <span className="meta">
               {modelControl("chip")}
               {active && (
@@ -923,6 +1032,11 @@ export function App() {
                     : peek.state === "failed" ? "stopped" : peek.state === "idle" ? "starting" : "ready"}
                 </button>
               )}
+              {/* The write mode lives HERE, not only in the inspector: the inspector is closed by default,
+                  so a chip in it is a chip nobody sees — and a read-only session is exactly the one where a
+                  plausible request will be refused, so it must be visible before the user tries. Found by
+                  inspecting the S6 screenshot, where the chip the assertion looked for was not on screen. */}
+              {active && <WriteModeChip mode={session.writeMode} onOpen={() => openInspector(true)} />}
               <button className="search-trigger" onClick={() => setPaletteOpen(true)}
                 aria-label={`Search or run a command (${display("mod+k")})`} title={`Search or run a command — ${display("mod+k")}`}>
                 <Search size={14} />
@@ -958,6 +1072,7 @@ export function App() {
             </span>
             {/* Outside `.meta`: that cluster clips its overflow so it can shrink, and a popover inside it is cut off. */}
             <AccountMenu user={user} host={workspace?.host ?? null} folder={folder || scratch} demo={demo}
+              build={build}
               onProviders={() => setSettingsOpen(true)} onKeys={() => setKeysOpen(true)} />
           </header>
 
@@ -1012,7 +1127,21 @@ export function App() {
                     onAttach={a => { addContext(a); reveal(); }} />
                   : viewDoc.kind === "table"
                   ? <TableViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
-                  : <NotebookViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
+                  : viewDoc.kind === "lakebase"
+                    ? <LakebasePage key={viewDoc.id} doc={viewDoc} workspace={workspace} />
+                    : viewDoc.kind === "app"
+                      ? <AppPage key={viewDoc.id} doc={viewDoc} workspace={workspace}
+                          onAsk={(prompt) => void start(prompt, [])} />
+                      : viewDoc.kind === "job"
+                        ? <JobsPage key={viewDoc.id} doc={viewDoc}
+                            onAsk={(prompt) => void start(prompt, [])} />
+                        : viewDoc.kind === "run"
+                          ? <RunsPage key={viewDoc.id} doc={viewDoc}
+                              onAsk={(prompt) => void start(prompt, [])} />
+                          : viewDoc.kind === "pipeline"
+                            ? <PipelinePage key={viewDoc.id} doc={viewDoc}
+                                onAsk={(prompt) => void start(prompt, [])} />
+                            : <NotebookViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
               ) : active ? (
                 <MissionScreen key={active} session={session} conn={conn} dockVisible={dockOnScreen} error={error}
                   onOpen={openDoc} onConversation={() => { reveal(); requestAnimationFrame(() => dockComposer.current?.focus()); }}
@@ -1053,11 +1182,13 @@ export function App() {
                   )}
                 </p>
               )}
-              {pending && <InlineApproval approval={pending} disabled={conn !== "live"}
+              {/* Approvals need a WRITABLE session, not a live stream: deciding one is a POST.
+                  `conn !== "live"` here was specs/012 [F3] — the control disabled by the symptom. */}
+              {pending && <InlineApproval approval={pending} disabled={!canDecide({ status: session.status, requiresResume: session.requiresResume })}
                 onDecide={(a, outcome) => decide(a.approvalId, outcome)} />}
               <Composer compact
                 inputRef={composerBox}
-                disabled={session.status === "archived" || session.requiresResume || conn !== "live" && Boolean(active)} busy={busy} onSend={message} onStop={stop}
+                blockedReason={sendDecision.canSend ? null : sendDecision.reason} busy={busy} onSend={message} onStop={stop}
                 attachments={attachments} auto={viewDoc ? asAttachment(viewDoc) : null}
                 onAdd={addContext} onRemove={(a) => setAttachments((cur) => cur.filter((x) => x !== a))}
                 openDocs={docs}

@@ -186,3 +186,127 @@ describe("Python cells: offered only when the server says the user may run them"
     expect(summary({ state: "succeeded", seconds: 1.2, images: ["a", "b"] })).toBe("2 plots · 1.2s");
   });
 });
+
+import { drawn, numericColumns, outputsOf, truncationNote, typeGlyph, whenRan } from "./cellrun";
+
+describe("ordered outputs", () => {
+  const table = (rows: string[][], extra = {}) => ({ type: "table" as const, columns: ["a"], rows, ...extra });
+
+  it("draws a Python cell's outputs in the order it produced them", () => {
+    const run: CellRun = { state: "succeeded", seconds: 1, outputs: [
+      { type: "text", stream: "stdout", text: "one\n" }, table([["1"]]),
+      { type: "text", stream: "stderr", text: "warn\n" }, table([["2"]]),
+    ] };
+    expect(outputsOf(run).map((o) => o.type)).toEqual(["text", "table", "text", "table"]);
+    expect(drawn(run)).toHaveLength(4);
+  });
+  it("draws a SQL run's flat fields as text, plots, then the table", () => {
+    const run: CellRun = { state: "succeeded", seconds: 1, output: "OK", images: ["x"], columns: ["a"], rows: [["1"]] };
+    expect(outputsOf(run).map((o) => o.type)).toEqual(["text", "image", "table"]);
+  });
+  it("draws nothing while the run is still going", () => {
+    expect(drawn({ state: "running", seconds: 0, output: "partial" })).toEqual([]);
+  });
+  it("keeps what a failed cell produced before it failed", () => {
+    const run: CellRun = { state: "failed", seconds: 1, error: "boom",
+      outputs: [{ type: "text", stream: "stdout", text: "before\n" }] };
+    expect(drawn(run)).toHaveLength(1);
+    expect(showsOutput(run)).toBe(true);
+  });
+  it("counts tables and plots from the ordered outputs", () => {
+    const one: CellRun = { state: "succeeded", seconds: 0.2, outputs: [table([["1"], ["2"]])] };
+    expect(summary(one)).toBe("2 rows · 200ms");
+    const two: CellRun = { state: "succeeded", seconds: 2, outputs: [table([["1"]]), table([["1"]]), { type: "image", png: "a" }] };
+    expect(summary(two)).toBe("2 tables · 1 plot · 2.0s");
+    expect(showsTable(two)).toBe(true);
+    expect(showsImages(two)).toBe(true);
+  });
+  it("says how many rows were cut from a truncated table", () => {
+    const rows = Array.from({ length: 1000 }, (_, i) => [String(i)]);
+    expect(summary({ state: "succeeded", seconds: 1, outputs: [table(rows, { truncated: true })] }))
+      .toBe("1,000 rows (first 1,000 shown) · 1.0s");
+  });
+});
+
+describe("the sentence under a table that was cut", () => {
+  it("names the cap, and the total when the engine said it", () => {
+    expect(truncationNote(1000)).toBe("Showing the first 1,000 rows");
+    expect(truncationNote(1000, 25_000)).toBe("Showing the first 1,000 of 25,000 rows");
+    expect(truncationNote(1000, 900)).toBe("Showing the first 1,000 rows");
+  });
+});
+
+describe("whenRan — who and when, as Databricks prints under a command", () => {
+  const ran: CellRun = { state: "succeeded", seconds: 1, ranBy: "a@x.com", finishedAt: "2026-11-12T00:02:11+00:00" };
+  const now = new Date("2026-11-12T05:00:00Z");
+  it("says the time only when it was today", () => {
+    expect(whenRan(ran, now, "UTC")).toBe("by a@x.com at 12:02:11 AM");
+  });
+  it("says the date when it was another day", () => {
+    expect(whenRan(ran, new Date("2026-11-14T05:00:00Z"), "UTC")).toBe("by a@x.com on 2026-11-12 at 12:02:11 AM");
+  });
+  it("says what it knows and nothing more", () => {
+    expect(whenRan({ state: "succeeded", seconds: 1, ranBy: "a@x.com" }, now)).toBe("by a@x.com");
+    expect(whenRan({ state: "succeeded", seconds: 1, finishedAt: "not a date" }, now)).toBe("");
+    expect(whenRan(undefined)).toBe("");
+  });
+  it("says nothing while it is running", () => {
+    expect(whenRan({ ...ran, state: "running" }, now)).toBe("");
+  });
+});
+
+describe("numeric columns — the engine's type decides, not the look of the text", () => {
+  it("right-aligns number types and not a text column of digits", () => {
+    const rows = [["1", "10001"], ["2", "94105"]];
+    expect(numericColumns(["id", "zip"], rows, ["int", "string"])).toEqual([true, false]);
+    expect(numericColumns(["a"], [["1.5"]], ["decimal"])).toEqual([true]);
+  });
+  it("falls back to the text only when no type came back, and only if every cell looks numeric", () => {
+    expect(numericColumns(["a", "b"], [["1", "x"], ["2", "3"]])).toEqual([true, false]);
+    expect(numericColumns(["a"], [[null], [""]])).toEqual([false]);
+    expect(numericColumns(["a"], [["1"], [null], ["3"]])).toEqual([true]);
+  });
+  it("marks the header with a glyph for the type", () => {
+    expect(typeGlyph("bigint")).toBe("123");
+    expect(typeGlyph("string")).toBe("abc");
+    expect(typeGlyph("timestamp_ntz")).toBe("date");
+    expect(typeGlyph("struct")).toBe("");
+    expect(typeGlyph(undefined)).toBe("");
+  });
+});
+
+import { segments } from "./cellrun";
+
+describe("Run all goes top to bottom, one engine at a time", () => {
+  const allowed = { enabled: true, reason: "" };
+  const cell = (id: string, language: string, source = "x") => ({ id, kind: "code", language, source });
+
+  it("keeps a notebook's Python together as one job when no SQL sits between", () => {
+    const cells = [cell("a", "python"), cell("b", "python"), cell("c", "sql", "select 1"), cell("d", "sql", "select 2")];
+    const ids = runPlan(cells, allowed).runnable;
+    expect(segments(cells, ids, allowed)).toEqual([
+      { engine: "python", ids: ["a", "b"] }, { engine: "sql", ids: ["c", "d"] }]);
+    expect(runPlan(cells, allowed).blocks).toBe(1);
+  });
+  it("splits at the SQL cell between two Python cells, so the SQL cell cannot race the Python above it", () => {
+    const cells = [cell("a", "python"), cell("b", "sql", "select 1"), cell("c", "python")];
+    expect(segments(cells, ["a", "b", "c"], allowed).map((s) => s.engine)).toEqual(["python", "sql", "python"]);
+    const plan = runPlan(cells, allowed);
+    expect(plan.blocks).toBe(2);
+    expect(runAllLabel(plan, {}, false)).toBe("3 cells can run · Python runs in 2 jobs, SQL is in between");
+  });
+  it("puts the cells in notebook order whatever order the ids arrive in", () => {
+    const cells = [cell("a", "sql", "select 1"), cell("b", "python"), cell("c", "sql", "select 2")];
+    expect(segments(cells, ["c", "a", "b"], allowed).map((s) => s.ids)).toEqual([["a"], ["b"], ["c"]]);
+  });
+  it("leaves out cells that cannot run, markdown and cells the caller did not ask for", () => {
+    const cells = [cell("a", "python"), { id: "m", kind: "markdown", language: "markdown", source: "# hi" },
+      cell("s", "scala"), cell("b", "python")];
+    expect(segments(cells, ["a", "m", "s", "b"], allowed)).toEqual([{ engine: "python", ids: ["a", "b"] }]);
+    expect(segments(cells, ["b"], allowed)).toEqual([{ engine: "python", ids: ["b"] }]);
+  });
+  it("runs no Python when the server says Python is off", () => {
+    const cells = [cell("a", "python"), cell("b", "sql", "select 1")];
+    expect(segments(cells, ["a", "b"], { enabled: false, reason: "no" }).map((s) => s.engine)).toEqual(["sql"]);
+  });
+});

@@ -31,8 +31,9 @@ function load(scope = ""): void {
 
 function valid(v: unknown): v is RecentDoc {
   const d = v as RecentDoc;
-  return !!d && typeof d.path === "string" && (d.path.startsWith("/") || d.kind === "query" || d.kind === "query-draft")
-    && typeof d.name === "string" && ["notebook","file","table","query","query-draft"].includes(d.kind);
+  const kinds = ["notebook", "file", "table", "lakebase", "app", "job", "pipeline", "run", "query", "query-draft"];
+  return !!d && typeof d.path === "string" && d.path.length > 0
+    && typeof d.name === "string" && kinds.includes(d.kind);
 }
 
 function save(): void {
@@ -60,7 +61,15 @@ export function forgetDocs(scope = ""): void {
   save();
 }
 
-/** Tables are named `catalog.schema.table`, so a "name" is the last part, not the last path segment. */
+/** Tables are named `catalog.schema.table`, so a "name" is the last part, not the last path segment.
+ *  A job and a run are named by their id (a job's *name* is not unique in a workspace, so it is not an
+ *  identity); a pipeline is its UUID's first segment. */
 export function nameOf(kind: RecentDoc["kind"], path: string): string {
-  return kind === "table" ? path.split(".").pop() ?? path : path.split("/").pop() ?? path;
+  if (kind === "table") return path.split(".").pop() ?? path;
+  if (kind === "lakebase") return path.split("/").pop() ?? path;
+  if (kind === "job") return `job ${path}`;
+  if (kind === "run") return `run ${path}`;
+  if (kind === "pipeline") return path.slice(0, 8);
+  if (kind === "app") return path;
+  return path.split("/").pop() ?? path;
 }

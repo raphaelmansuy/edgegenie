@@ -48,6 +48,7 @@ Read in this order the first time. Each document is self-contained and cross-lin
 | 18 | [**Gap analysis**](18-gap-analysis.md) | What separates this from Genie Code, and what closed it? | All |
 | 19 | [**Interaction design**](19-interaction-design.md) | Is it as fast to use as the best app of 2026? Palette, keys, navigation | 05, 11 |
 | 20 | [**Accessibility**](20-accessibility.md) | Does it meet WCAG 2.2 AA, and how is that proven? | 05, 09 |
+| 21 | [**Two workspaces**](21-two-workspaces.md) | Deployed to the dev workspace without touching prod: what differed, what broke, what proves it | 12, 17 |
 | — | [E2E screenshots](e2e/README.md) | What does it actually look like? | UX |
 
 Beyond this set: [**001-perfect-shell**](../001-perfect-shell/README.md) audits the shell itself —
@@ -177,7 +178,7 @@ Details, alternatives and rejected options: [02 Architecture](02-architecture.md
 |---|---|
 | [`docs/06-results-and-lessons.md`](../../docs/06-results-and-lessons.md) | The measured evidence for tool design, supervisor loops and model choice |
 | [`docs/04-safety-and-governance.md`](../../docs/04-safety-and-governance.md) | The layered defences and the known hole in the command-line path |
-| [`mcp/databricks_notebook_mcp.py`](../../mcp/databricks_notebook_mcp.py) | The 26-tool server this app wraps (19 in the `core` profile) |
-| [`mcp/skills/`](../../mcp/skills) | The four on-demand skills the agent reads |
+| [`apps/coding-agent/tools/databricks_notebook_mcp.py`](../../apps/coding-agent/tools/databricks_notebook_mcp.py) | The 41-tool server this app wraps (28 in the `core` profile) |
+| [`apps/coding-agent/tools/skills/`](../../apps/coding-agent/tools/skills) | The four on-demand skills the agent reads |
 | [`exams/`](../../exams) | The grader patterns this app's evaluation reuses |
 | [`docs/tutorial.md`](../../docs/tutorial.md) | The manual, single-user version of this product |

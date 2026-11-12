@@ -6,15 +6,17 @@ import { currentMission, lastAchieved, missionView, type MissionProof } from "..
 import { modelTail } from "../domain/models";
 import { stripEvidence } from "../domain/toolview";
 import { EMPTY_ROUTE, linkTo } from "../domain/route";
-import { Alert, ArrowUpRight, Check, Chat, ChevronDown, Clock, FileIcon, Folder, ListIcon, Lock, Notebook, Ring, Sparkle, Square } from "./Icons";
+import { Alert, ArrowUpRight, Check, Chat, ChevronDown, Clock, Database, FileIcon, Folder, Layers, ListIcon, Lock, Notebook, Play, Ring, Sparkle, Square, Table } from "./Icons";
+import type { DocKind } from "../domain/docs";
 import { CopyButton } from "./CopyButton";
 import { Markdown } from "./Markdown";
 import { MAX_MARKDOWN, ToolCard, TurnView } from "./Transcript";
 import { RunStatus } from "./RunStatus";
+import type { StreamState } from "../domain/stream";
 
 interface Props {
   session: SessionView;
-  conn: string;
+  conn: StreamState;
   dockVisible: boolean;
   error?: string | null;
   onOpen: (doc: Doc) => void;
@@ -61,6 +63,20 @@ function MissionPlan({ view }: { view: ReturnType<typeof missionView> }) {
         && <p className="mission-note">The turn ended before every plan step was marked complete.</p>}
     </> : <p className="mission-empty">No plan was reported for this mission. Activity and results remain available as they arrive.</p>}
   </section>;
+}
+
+/** The glyph for an artifact's kind. Before spec 014 this was `notebook ? <Notebook/> : <FileIcon/>`, so a
+ *  job the agent created appeared as a FILE in "Outputs & references" — the object was openable and its
+ *  icon said it was something else (spec 014 [UI-1]). */
+export function artifactIcon(kind: DocKind) {
+  switch (kind) {
+    case "notebook": return <Notebook size={18} />;
+    case "table": return <Table size={18} />;
+    case "lakebase": return <Database size={18} />;
+    case "job": case "run": return <Play size={18} />;
+    case "pipeline": return <Layers size={18} />;
+    default: return <FileIcon size={18} />;
+  }
 }
 
 export function MissionScreen({ session, conn, dockVisible, error, onOpen, onConversation, onStop, onRestore }: Props) {
@@ -152,7 +168,7 @@ export function MissionScreen({ session, conn, dockVisible, error, onOpen, onCon
               <section className="mission-section mission-outputs" aria-labelledby="mission-outputs-heading">
                 <div className="mission-section-head"><h3 id="mission-outputs-heading"><FileIcon size={15} /> Outputs & references</h3><span>{v.artifacts.length}</span></div>
                 {v.artifacts.length > 0 ? <ul>{v.artifacts.map((a) => <li key={a.doc.id}><button type="button" onClick={() => onOpen(a.doc)} className="mission-output" title={a.doc.ref}>
-                  <span className="mission-output-icon" aria-hidden>{a.doc.kind === "notebook" ? <Notebook size={18} /> : <FileIcon size={18} />}</span>
+                  <span className="mission-output-icon" aria-hidden>{artifactIcon(a.doc.kind)}</span>
                   <span className="mission-output-text"><strong>{a.doc.name}</strong><small>{a.wrote ? "Written" : "Read"} · {a.doc.kind}</small></span><ArrowUpRight size={14} />
                 </button></li>)}</ul> : <p className="mission-empty">No files reported{v.state === "running" || v.state === "auditing" ? " yet" : ""}. Results can also appear in the response.</p>}
               </section>
@@ -160,6 +176,16 @@ export function MissionScreen({ session, conn, dockVisible, error, onOpen, onCon
                 <div className="mission-section-head"><h3 id="mission-evidence-heading"><Check size={15} /> Evidence</h3><span>{v.proof.length ? `${v.proven} of ${v.proof.length} verified` : "Not reported"}</span></div>
                 {v.proof.length ? v.proof.map((p, i) => <Proof key={`${turn?.id}:${i}`} proof={p} />)
                   : <p className="mission-empty">No verified tool evidence reported. A finished response alone does not verify the work.</p>}
+                {/* When the header says "blocked" because a requirement has no evidence, the panel must
+                    SAY which requirement, beside the rows. "3 of 3 verified" next to "Blocked" is two true
+                    statements about different things, and a reader cannot tell them apart — the picture
+                    contradicts the headline. `[R-31]`; found by inspecting this screenshot. */}
+                {v.state === "blocked" && v.missing?.length > 0 && (
+                  <p className="mission-evidence-gap">
+                    <strong>Not proven:</strong>{" "}
+                    {v.missing.map((m, i) => <span key={i}>{i ? "; " : ""}{m}</span>)}
+                  </p>
+                )}
               </section>
             </div>
             {ended && <MissionPlan view={v} />}

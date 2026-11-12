@@ -105,6 +105,47 @@ export function suggestionsFor(focus: Focus): Suggestion[] {
       { label: "Rewrite it in my folder", prompt: `Rewrite the attached file in my working folder with the same behaviour and clearer structure. Leave the original alone.` },
     ];
   }
+  /* A project and an app are infrastructure, so the suggestions are about their state rather than
+   * about reading code. Showing "Explain this notebook" over a Lakebase project is the defect the S2
+   * screenshot found: a plausible button that is wrong about the subject (spec 013 [UI-3], [UI-4]).
+   *
+   * Spec 014 adds three more kinds, and every one of them was a chance to repeat that defect — which is
+   * why `[UI-6]` asserts it in a test rather than trusting the next author to notice. */
+  if (doc.kind === "lakebase") {
+    return [
+      { label: `What is in ${doc.name}?`, prompt: `List the tables in the Lakebase project ${doc.name} with their row counts, and name the branch you read. Quote the numbers.` },
+      { label: "Is it healthy?", prompt: `Check the Lakebase project ${doc.name}: are its compute and branches ready, is anything suspended, and is the autoscaling range legal? Report what you observe, not what you assume.` },
+      { label: "Add a table", prompt: `Create a new table in the Lakebase project ${doc.name} on a branch for this session (never on production), insert a few seed rows, and show me the count you read back.` },
+    ];
+  }
+  if (doc.kind === "app") {
+    return [
+      { label: `Is ${doc.name} working?`, prompt: `Run a health check on the Databricks App ${doc.name}: report the status code and the time it took. If it is failing, read its logs and tell me the first error.` },
+      { label: "What does it read?", prompt: `Describe the Databricks App ${doc.name}: its resources, which Lakebase branch it connects to, and which tables it reads.` },
+      { label: "Fix it", prompt: `The Databricks App ${doc.name} is not working. Read its logs at its /logz URL, find the cause, fix the source in my working folder, redeploy, and prove it answers.` },
+    ];
+  }
+  if (doc.kind === "job") {
+    return [
+      { label: "Why did the last run fail?", prompt: `Read the last run of the job ${doc.name}. Name the task that failed, quote its error, and check the tables that task reads against their real columns with describe_table. Then tell me whether the code or the data is wrong. Do not change anything until you have said which.` },
+      { label: "What does this job write?", prompt: `Describe the job ${doc.name}: its tasks in order, the notebook or pipeline each one runs, and the tables each task writes. Check every table name with describe_table before you name it.` },
+      { label: "Add a task and re-run it", prompt: `Add a task to the job ${doc.name} that checks the output row count of its last task and fails if it is zero. Re-read the job first so you keep its existing tasks and dependencies, then run it and show me the new task's result.` },
+    ];
+  }
+  if (doc.kind === "run") {
+    return [
+      { label: "What failed here?", prompt: `Read run ${doc.name}. Name the task that failed, quote its error and the tail of its trace, and say which table or column the error is about.` },
+      { label: "Which task is slow?", prompt: `Read run ${doc.name} and compare each task's duration. Name the slowest, and read its notebook to say what it does that could be slow. Quote the durations.` },
+      { label: "Make this job more reliable", prompt: `Run ${doc.name} failed or was slow. Read the job's tasks, then write a corrected copy of the failing notebook in my working folder with a retry-safe write and a row-count check, and tell me what you changed.` },
+    ];
+  }
+  if (doc.kind === "pipeline") {
+    return [
+      { label: "Did the last update work?", prompt: `Read the pipeline ${doc.name}: its last update's state, how many flows it has, and any failed expectation. Quote the update id and the counts.` },
+      { label: "What does it build?", prompt: `Describe the pipeline ${doc.name}: each library file, the tables it materialises, and the expectations it declares. Read the files; do not guess from the name.` },
+      { label: "The last update failed", prompt: `The pipeline ${doc.name}: read its recent ERROR events, find the cause in the library files, fix the source in my working folder, validate with validate_only, then start an update and show me its result.` },
+    ];
+  }
   return [
     { label: "Explain this notebook", prompt: ACTIONS.explain.prompt, action: "explain" },
     { label: "Find the bug in this notebook", prompt: `Review the attached notebook for bugs. Check every table and column name with describe_table before judging it. Write a corrected copy in your working folder, run it, and show the evidence.`, action: "fix" },

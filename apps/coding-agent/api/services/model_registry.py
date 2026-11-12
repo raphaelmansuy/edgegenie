@@ -18,7 +18,7 @@ from ..adapters.llm.discovery import DatabricksDiscovery
 from ..adapters.llm.store.memory import MemoryRegistryStore
 from ..adapters.llm.store.seed_store import SeedRegistryStore
 from ..adapters.llm.store.seed import load as load_seed
-from ..adapters.llm.vault import EnvVault, MemoryVault, dev_kek_from_env
+from ..adapters.llm.vault import EnvVault, MemoryVault
 from ..adapters.llm.vault.layered import LayeredVault
 from ..config import Settings
 from ..domain.llm import (

@@ -4,11 +4,12 @@
  * trees add chips too. A chip marked "open" is the document on screen: it rides along with the
  * message automatically, the way Genie Code knows which notebook you are looking at.
  */
-import { createElement, useEffect, useMemo, useRef, useState } from "react";
+import { createElement, useEffect, useId, useMemo, useRef, useState } from "react";
 import { api, type CatalogItem, type WsHit } from "../api/client";
 import { applyCommand, commandAt, matchCommands, pushHistory, stepHistory, type Command } from "../domain/commands";
 import type { Attachment } from "../domain/events";
-import type { Doc } from "../domain/docs";
+import { reasonText, type BlockedReason } from "../domain/compose";
+import { canAttach, type Doc } from "../domain/docs";
 import { ACCEPT } from "../domain/blob";
 import { AttachMenu } from "./AttachMenu";
 import { Chip } from "./Chip";
@@ -26,10 +27,16 @@ export { Chip } from "./Chip";
 
 interface Option { a: Attachment; hint: string }
 
-export function Composer({ disabled, busy, onSend, onStop, attachments, auto, onAdd, onRemove, openDocs, placeholder, inputRef,
+export function Composer({ blockedReason: why, busy, onSend, onStop, attachments, auto, onAdd, onRemove, openDocs, placeholder, inputRef,
   variant = "main", compact = false, modelSlot, searchRoot, sessionId = null, modelSeesImages = true, modelName }: {
   /** `mine` is what THIS composer holds: ready blobs, which the parent's `attachments` cannot know about. */
-  disabled?: boolean; busy: boolean;
+  /** Why this composer cannot accept text, or null when it can.
+   *
+   *  This used to be a `disabled: boolean` computed at FOUR call sites from the connection state,
+   *  which is how the reported defect happened and why two composers disagreed about one session
+   *  (specs/012 02 §F7). It is now the reason from `domain/compose`, so the component cannot be told
+   *  "disabled" without also being told why, and the connection cannot reach it at all. */
+  blockedReason?: BlockedReason | null; busy: boolean;
   onSend: (text: string, mine?: Attachment[]) => Promise<void>; onStop: () => void;
   /** Lets the app focus the box from a shortcut (⌘L) without prop-drilling a callback. */
   inputRef?: { current: HTMLTextAreaElement | null };
@@ -55,6 +62,10 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  /** `blocked` is DERIVED, never passed as a boolean: one reason in, one presentation out. */
+  const blocked = Boolean(why);
+  const blockedText = why ? reasonText(why) : "";
+  const blockedReasonId = useId();
   /** Why the last send did not go, in the server's words. Cleared as soon as the user edits. */
   const [failure, setFailure] = useState("");
   const [caret, setCaret] = useState(0);
@@ -131,9 +142,15 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
     };
     // An open document says so; an open table also says where it lives, so two `trips` in
     // different schemas are told apart.
-    openDocs.filter((d) => !q || d.name.toLowerCase().includes(q) || d.ref.toLowerCase().includes(q))
-      .forEach((d) => add({ kind: d.kind, ref: d.ref, name: d.name },
-        d.kind === "table" ? d.ref.split(".").slice(0, -1).join(".") : "open"));
+    // Only what the server can re-read is offerable: a project or an app is not attachable content
+    // (spec 013 [UI-5]), so it is not in this list. The palette finds them instead.
+    openDocs.filter((d) => canAttach(d.kind))
+      .filter((d) => !q || d.name.toLowerCase().includes(q) || d.ref.toLowerCase().includes(q))
+      .forEach((d) => {
+        if (!canAttach(d.kind)) return;          // the predicate, where the narrowing happens
+        add({ kind: d.kind, ref: d.ref, name: d.name },
+          d.kind === "table" ? d.ref.split(".").slice(0, -1).join(".") : "open");
+      });
     found.forEach((h) => add({ kind: h.kind === "notebook" ? "notebook" : "file", ref: h.path, name: h.name },
       h.path.split("/").slice(0, -1).join("/")));
     // the hint is where the table lives, so two `trips` in different schemas are told apart
@@ -155,7 +172,7 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
 
   const submit = async () => {
     const value = text.trim();
-    if (!value || sending || disabled || blobs.busy) return;
+    if (!value || sending || blocked || blobs.busy) return;
     setSending(true);
     setFailure("");
     setText("");
@@ -221,7 +238,7 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
   return (
     <section className={`composer${variant === "dock" ? " is-dock" : ""}${compact ? " is-compact" : ""}`} data-has-text={!!text.trim()} role="region"
       aria-label={variant === "dock" ? "Message the assistant" : "Message composer"}>
-      <div className="composer-box">
+      <div className={`composer-box${blocked ? " is-blocked" : ""}`}>
         {(attachments.length > 0 || auto || blobs.chips.length > 0) && (
           <div className={`ctx-row${auto && !attachments.length && !blobs.chips.length ? " is-auto-only" : ""}`} aria-label="Context for this message">
             {auto && !attachments.some((x) => x.ref === auto.ref) && <Chip a={auto} auto />}
@@ -282,7 +299,20 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
           <textarea
             ref={ref}
             value={text}
-            placeholder={placeholder ?? "Ask for a notebook, a job, a fix, an investigation…   @ adds a notebook, file or table"}
+            /* A blocked composer is `readOnly`, NEVER `disabled`.
+             *
+             * `disabled` removes a form control from the tab order and from the accessibility tree's
+             * focus, so a keyboard or screen-reader user could not reach the one place they are
+             * supposed to write — and `⌘L`, which promises to focus it, silently did nothing. That
+             * was the reported defect (specs/012 02 §F1, §F3).
+             *
+             * `readOnly` refuses edits exactly as firmly; it only stops pretending the control is not
+             * there. Combined with `aria-disabled` and a described reason, the box stays reachable and
+             * explains itself in place. [FX-1] [FX-2] */
+            readOnly={Boolean(blocked)}
+            aria-disabled={blocked ? true : undefined}
+            aria-describedby={blocked ? blockedReasonId : undefined}
+            placeholder={blocked ? blockedText : (placeholder ?? "Ask for a notebook, a job, a fix, an investigation…   @ adds a notebook, file or table")}
             aria-label="Message the agent"
             aria-description="Enter sends your message. Shift+Enter adds a new line."
             aria-autocomplete="list"
@@ -320,7 +350,9 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); }
               if (e.key === "Escape" && busy) { e.preventDefault(); onStop(); }
             }}
-            disabled={disabled}
+            /* NOT `disabled`. See this element's attribute block above: `disabled` makes the field
+               unfocusable, which is the reported defect. `readOnly` + `aria-disabled` refuse edits
+               just as firmly while keeping the field reachable. [FX-1] [FX-2] */
           />
           {cmdOpen && (
             <div className="mention" role="listbox" aria-label="Commands">
@@ -358,15 +390,26 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
             </div>
           )}
         </div>
+        {/* The reason, once, linked by `aria-describedby`.
+         *
+         * Visually it is already in the placeholder, which is where a sighted user looks. A screen
+         * reader gets it through this element instead — and it is NOT a tab stop, because inserting a
+         * focusable "reason" ahead of the box would make a keyboard user Tab into a paragraph.
+         * [FX-2] */}
+        {blocked && (
+          <p id={blockedReasonId} className="composer-blocked-reason" role="note">
+            {blockedText}
+          </p>
+        )}
         <div className="composer-actions">
           {/* Tools on the left, the primary action on the right: the reading order of every chat UI. */}
           <AttachMenu
-            disabled={disabled}
+            disabled={blocked}
             onFiles={accept}
             onContext={mention}
           />
-          <button className="btn ghost icon-btn" aria-label="Add a notebook, file or table" title="Add context (⌘⇧A)" onClick={mention} disabled={disabled}>＠</button>
-          <button className="btn ghost icon-btn" aria-label="Commands" title="Commands (/)" disabled={disabled}
+          <button className="btn ghost icon-btn" aria-label="Add a notebook, file or table" title="Add context (⌘⇧A)" onClick={mention} disabled={blocked}>＠</button>
+          <button className="btn ghost icon-btn" aria-label="Commands" title="Commands (/)" disabled={blocked}
             onClick={() => {
               const el = ref.current;
               const at = el?.selectionStart ?? text.length;
@@ -378,9 +421,9 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
           {modelSlot}
           <span className="hint"><kbd>⏎</kbd> send · <kbd>⇧⏎</kbd> new line</span>
           {busy ? (
-            <button className="btn stop" disabled={disabled} onClick={onStop}>Stop <kbd>Esc</kbd></button>
+            <button className="btn stop" disabled={blocked} onClick={onStop}>Stop <kbd>Esc</kbd></button>
           ) : (
-            <button className="btn primary" onClick={() => void submit()} disabled={!text.trim() || disabled || blobs.busy}
+            <button className="btn primary" onClick={() => void submit()} disabled={!text.trim() || blocked || blobs.busy}
               title={blobs.busy
                 ? `Waiting for ${blobs.chips.find((c) => c.state === "pending")?.name ?? "an attachment"} to finish uploading`
                 : undefined}>
