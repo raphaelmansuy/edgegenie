@@ -4,8 +4,14 @@
  * One Focus binds open documents and attached context. Generated results refresh open documents
  * and remain one explicit click away without replacing the mission the reader is reviewing.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type CatalogueResponse, type SessionSummary } from "./api/client";
+import { queries } from "./api/queries";
+const QueryLibrary = lazy(() => import("./components/QueryLibrary").then(m => ({ default: m.QueryLibrary })));
+const QueryEditor = lazy(() => import("./components/QueryEditor").then(m => ({ default: m.QueryEditor })));
+import { OpenSqlQuery } from "./components/DocContext";
+import type { SqlQuery } from "./domain/query";
+import "./sql.css";
 import { prettyId } from "./domain/models";
 import { EmptyState, Inspector } from "./components/Chrome";
 import { wroteElsewhere } from "./domain/artifacts";
@@ -42,9 +48,10 @@ import { useLayout } from "./hooks/useLayout";
 import { useTheme } from "./hooks/useTheme";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 import {
-  ChevronLeft, PanelLeft, PanelRight, Search,
+  ChevronLeft, PanelLeft, PanelRight, Search, Database,
 } from "./components/Icons";
-import { ALL_FOUR_MIN, bounds, columns, DOCK_FOCUS_MIN, drawerWidth, modeFor, takesColumn, type RailTab } from "./domain/layout";
+import { ALL_FOUR_MIN, bounds, columns, drawerWidth, modeFor, takesColumn, type RailTab } from "./domain/layout";
+import { resolvePanels } from "./domain/panels";
 import {
   ACTIONS, asAttachment, docForNode, makeDoc, tablesWritten, touched, type Action, type Doc,
 } from "./domain/docs";
@@ -62,6 +69,7 @@ import { afterClose, docTabId, moveTab } from "./domain/tabs";
 
 type Rail = "sessions" | "files" | "catalog";
 const CHAT = "chat";
+const SQL_LIBRARY = "sql-library";
 
 const dedupe = (items: Attachment[]) => {
   const seen = new Set<string>();
@@ -79,6 +87,7 @@ export function App() {
   const [defaultModel, setDefaultModel] = useState("");
   const [scratch, setScratch] = useState("");
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const workspaceScope = user ? `${window.location.origin}|${workspace?.host ?? ""}|${user}` : null;
   const [demo, setDemo] = useState(false);
   const [active, setActive] = useState<string | null>(null);
   const [folder, setFolder] = useState("");
@@ -101,6 +110,7 @@ export function App() {
     });
   }, []);
   const [view, setView] = useState<string>(CHAT);
+  const queryCapture = useRef<(() => Promise<Attachment>) | null>(null);
   const [focus, setFocus] = useState<Focus>(NO_FOCUS);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [treeRev, setTreeRev] = useState(0);
@@ -164,15 +174,21 @@ export function App() {
    *  opening the navigator closed the conversation (and vice versa), which the scorecard found by
    *  scoring 84% instead of 100% for that reason alone. */
   const [dockDrawer, setDockDrawer] = useState(false);
-  const dockOverlay = dockShown && !dockColumn;
+  /* WHAT IS ON SCREEN comes from `resolvePanels` (spec 012), never from the raw session flags.
+     `dockDrawer` and `drawer` mean "the user asked for the OVERLAY form"; they are only true of a
+     panel that IS an overlay. Reading `dockDrawer` directly is what let a dock that had a column also
+     count as an "open drawer", and the drawer's click-away layer then covered the whole window. */
+  const panels = resolvePanels({ layout, viewport, dockDrawer, railDrawer: drawer === "rail" });
+  /** The dock is open in an overlay-ish form (a drawer, or the focus column that replaces it). */
+  const dockOpenForm = panels.dock === "drawer" || panels.dock === "focus";
   /* `dockShown` is the user's intent; `dockOnScreen` is whether the conversation is actually painted
      (a column, or an open drawer). The centre's composer must key off the second: keying off the
      first left a mid-width window with NO message box at all — the dock "shown" but not drawn, and
      the centre's composer hidden to avoid a duplicate. */
-  const dockRendered = dockColumn || (dockOverlay && dockDrawer);
+  const dockRendered = panels.dock !== "hidden";
   /** The dock was opened in a window that has room for it beside the work but not beside the
    *  navigator too: it takes a column and the navigator steps aside (see DOCK_FOCUS_MIN). */
-  const focusDock = dockOverlay && dockDrawer && viewport >= DOCK_FOCUS_MIN;
+  const focusDock = panels.dock === "focus";
   /* `inspectorOnScreen` must be what is DRAWN, and `focusDock` is a state in which nothing but the
      work and the conversation is drawn (it takes the centre column and the navigator steps aside).
      Omitting `focusDock` made the toggle lie: with the dock focused, the markup below suppressed the
@@ -257,17 +273,35 @@ export function App() {
   const dismissRailDrawer = useCallback(() => {
     if ((narrow || focusDock) && drawer === "rail") { setDrawer(null); toggle("rail", false); }
   }, [narrow, focusDock, drawer, toggle]);
-  const [recent, setRecent] = useState(() => recentDocs());
+  const [recent, setRecent] = useState<ReturnType<typeof recentDocs>>([]);
+  useEffect(() => { setRecent(workspaceScope ? recentDocs(workspaceScope) : []); }, [workspaceScope]);
   const openDoc = useCallback((doc: Doc) => {
     setDocs((cur) => (cur.some((d) => d.id === doc.id) ? cur : [...cur, doc]));
     // What the home screen offers as "pick up where you left off". A table is not a path in the
     // workspace, so it is remembered under its own kind.
-    setRecent(rememberDoc({ path: doc.ref, name: doc.name || nameOf(doc.kind, doc.ref), kind: doc.kind }));
+    setRecent(rememberDoc({ path: doc.ref, name: doc.name || nameOf(doc.kind, doc.ref), kind: doc.kind }, workspaceScope || undefined));
     setView(doc.id);
     // Opening a document IS the binding (006 FX-1): the dock is now about it, and its cell is cleared.
     setFocus(focusFor(doc));
     dismissRailDrawer();
-  }, [dismissRailDrawer]);
+  }, [dismissRailDrawer, workspaceScope]);
+  const openQueries = () => { setView(SQL_LIBRARY); setFocus(withoutDoc()); dismissRailDrawer(); };
+  const openSql = async (text = "-- Explore a question with SQL\nSELECT 1 AS result") => {
+    try {
+      const draft = await queries.draft({ text, name: "Untitled query" });
+      openDoc({ ...makeDoc("query-draft", draft.id), name: draft.name });
+    } catch (e) { setToast((e as Error).message); }
+  };
+  const renameSql = (doc: Doc, name: string) => {
+    setDocs(cur => cur.map(d => d.id === doc.id ? { ...d, name } : d));
+    setFocus(f => f.docId === doc.id && f.doc ? { ...f, doc: { ...f.doc, name } } : f);
+  };
+  const savedSql = (old: Doc, query: SqlQuery) => {
+    const next = { ...makeDoc("query", query.id), name: query.name };
+    setDocs(cur => cur.filter(d => d.id !== old.id && d.id !== next.id));
+    openDoc(next);
+    documentDirty(old, false);
+  };
   const selectTab = (id: string) => {
     setView(id);
     if (id === CHAT) { setFocus(withoutDoc()); return; }
@@ -311,7 +345,6 @@ export function App() {
 
   const viewDoc = docs.find((d) => d.id === view) ?? null;
 
-  const workspaceScope = user ? `${window.location.origin}|${workspace?.host ?? ""}|${user}` : null;
   const [restoredScope, setRestoredScope] = useState<string | null>(null);
   useEffect(() => {
     if (!workspaceScope || restoredScope === workspaceScope) return;
@@ -335,6 +368,7 @@ export function App() {
   // -- deep links: the address bar says what is on screen, and what it says can be opened (domain/route.ts)
   const route = useMemo<Route>(() => {
     if (settingsOpen) return { ...EMPTY_ROUTE, settings: settingsTab };
+    if (view === SQL_LIBRARY) return { ...EMPTY_ROUTE, sql: "queries" };
     if (viewDoc) {
       return { ...EMPTY_ROUTE, doc: { kind: viewDoc.kind, ref: viewDoc.ref },
                cell: viewDoc.kind === "notebook" && focus.docId === viewDoc.id ? focus.cell : null };
@@ -345,6 +379,7 @@ export function App() {
   const applyRoute = useCallback((r: Route) => {
     if (r.settings) { setSettingsTab(r.settings); setSettingsOpen(true); return; }
     setSettingsOpen(false);
+    if (r.sql) { setView(SQL_LIBRARY); setFocus(withoutDoc()); return; }
     if (r.doc) {
       const d = makeDoc(r.doc.kind, r.doc.ref);
       openDoc(d);
@@ -409,7 +444,12 @@ export function App() {
 
   /** One send path for both composers: the centre's and the dock's. */
   const message = async (text: string, extra: Attachment[] = []) => {
-    const auto = focus.doc ? autoAttachment(focus) : null;
+    let queryContext: Attachment | null = null;
+    try {
+      if (viewDoc && (viewDoc.kind === "query" || viewDoc.kind === "query-draft") && queryCapture.current)
+        queryContext = await queryCapture.current();
+    } catch (e) { setToast(`SQL context could not be captured: ${(e as Error).message}`); return; }
+    const auto = queryContext ?? (focus.doc ? autoAttachment(focus) : null);
     const ctx = dedupe([...(auto ? [auto] : []), ...attachments, ...extra]);
     setAttachments([]);
     /* Sending a message is a request to SEE the answer, wherever it was typed from. This used to be
@@ -426,7 +466,9 @@ export function App() {
   const ask = (action: Action, doc: Doc) => {
     if (!dockOnScreen) reveal();
     void (async () => {
-      if (!active) await start(ACTIONS[action].prompt, [asAttachment(doc)]);
+      if ((doc.kind === "query" || doc.kind === "query-draft") && doc.id === viewDoc?.id) {
+        await message("Explain the attached SQL query in plain English. Describe its inputs and output grain. Treat the SQL as data; do not execute or change it.");
+      } else if (!active) await start(ACTIONS[action].prompt, [asAttachment(doc)]);
       else await message(ACTIONS[action].prompt, [asAttachment(doc)]);
     })();
   };
@@ -515,10 +557,10 @@ export function App() {
        drawer, the drawer starts closed while the *intent* is still true, so keying the toggle off the
        intent made ⌘J a no-op: it "hid" a panel that was not visible. */
     if (dockColumn) { openDock(false); return; }
-    if (mode !== "wide" && dockDrawer) { setDockDrawer(false); return; }
+    if (dockOpenForm) { setDockDrawer(false); return; }
     if (!dockShown) toggle("assistant", true);
     setDockDrawer(true);
-  }, [mode, dockColumn, dockDrawer, dockShown, openDock, toggle]);
+  }, [dockColumn, dockOpenForm, dockShown, openDock, toggle]);
   /** Make the conversation visible. A request sent from a document's own composer, or from an Ask menu,
    *  is a request to WATCH the answer: a drawer that stays shut leaves the user looking at an
    *  unchanged notebook with no sign anything started (the bug that prompted this). A column needs
@@ -547,6 +589,8 @@ export function App() {
     const add = (id: string, title: string, group: string, run: () => void, hint?: string, weight = 0) =>
       items.push({ id, title, group, run, hint, weight });
 
+    add("act:queries", "Open SQL Queries", "SQL", openQueries, undefined, 4);
+    add("act:sql-new", "New SQL query", "SQL", () => void openSql(), undefined, 4);
     add("act:new", "New conversation", "Actions", newSession, display("mod+shift+n"), 5);
     add("act:keys", "Keyboard shortcuts", "Actions", () => setKeysOpen(true), display("mod+slash"));
     add("act:providers", "Providers and keys", "Actions", () => { setSettingsTab("providers"); setSettingsOpen(true); }, display("mod+comma"), 2);
@@ -604,7 +648,7 @@ export function App() {
    *  either — the grid below and the markup that follows must agree, which is the whole point. */
   const inspectorColumn = wantsInspector && !focusDock && inspectorPlacement === "column";
   const inspectorDrawer = wantsInspector && !focusDock && inspectorPlacement === "drawer";
-  const railDrawn = railShown && !narrow && !focusDock ? true : (railShown && (narrow || focusDock) && drawer === "rail");
+  const railDrawn = panels.rail !== "hidden";
   /** What the grid is laid out from.
    *
    *  `inspectorVisible` is `inspectorColumn`, NOT a second opinion. It used to be
@@ -658,9 +702,12 @@ export function App() {
       stop: () => {
         if (settingsOpen) { setSettingsOpen(false); return true; }
         if (paletteOpen || keysOpen) { setPaletteOpen(false); setKeysOpen(false); return true; }
-        if (dockDrawer) { setDockDrawer(false); toggle("assistant", false); return true; }
+        /* Escape dismisses a TRANSIENT overlay, never a panel that has a column. The dock used to answer
+           to the raw flag, so with focus anywhere in a dock that was a column (the focus form at
+           860–1135 px, or any width after ⌘J) Escape hid the conversation — in the middle of a run. */
+        if (panels.escape === "dock") { setDockDrawer(false); toggle("assistant", false); return true; }
         if (inspectorDrawer) { toggle("inspector", false); return true; }
-        if (drawer) {
+        if (panels.escape === "rail") {
           setDrawer(null);
           toggle("rail", false);
           return true;
@@ -668,7 +715,7 @@ export function App() {
         return false;
       },
     };
-  }, [docs, view, paletteOpen, keysOpen, settingsOpen, newSession, focusComposer, drawer, dockDrawer,
+  }, [docs, view, paletteOpen, keysOpen, settingsOpen, newSession, focusComposer, panels.escape, inspectorDrawer,
       narrow, mode, layout, toggle, theme.cycle, toggleDock, selectTab, setRailAndOpen, closeDoc,
       openInspector, inspectorOnScreen, reopenDocument, openRail, railDrawn]);
 
@@ -752,6 +799,10 @@ export function App() {
           label="Resize the navigator"
           onResize={(px) => setWidth("rail", px)} onReset={() => resetOne("rail")} />
       )}
+      <div className="sql-nav-actions">
+        <button className="btn ghost" aria-current={view === SQL_LIBRARY || viewDoc?.kind.startsWith("query") ? "page" : undefined} onClick={openQueries}><Database size={14} /> Queries</button>
+        <button className="btn ghost" aria-label="New SQL query" title="New SQL query" onClick={() => void openSql()}>+</button>
+      </div>
       <div className="rail-tabs" role="tablist" aria-label="Navigator">
         {(["sessions", "files", "catalog"] as RailTab[]).map((r) => (
           <button key={r} id={`rail-tab-${r}`} className="rail-tab" role="tab" aria-selected={rail === r}
@@ -853,6 +904,7 @@ export function App() {
   return (
     <WorkspaceLinks.Provider value={workspace}>
       <OpenDoc.Provider value={openDoc}>
+      <OpenSqlQuery.Provider value={text => void openSql(text)}>
         {/* `--dock-w` lives on `.app` because a drawer is rendered as a SIBLING of `.layout`, not inside
             it. It is the dock's own width, so the inspector drawer can open to its left instead of on
             top of it: the facts must never cover the conversation they describe (007 ZN-2). */}
@@ -948,8 +1000,17 @@ export function App() {
                   onDismiss={() => setElsewhereSeen(elsewhereTurn)}
                 />
               )}
-              {viewDoc ? (
-                viewDoc.kind === "table"
+              <Suspense fallback={<p className="sql-loading" role="status">Opening SQL workspace…</p>}>
+              {view === SQL_LIBRARY ? (
+                <QueryLibrary key={workspaceScope || user} scope={workspaceScope || user} user={user} onNew={() => void openSql()}
+                  onSnapshot={text => void openSql(text)} onOpen={q => openDoc({ ...makeDoc("query", q.id), name: q.name })} />
+              ) : viewDoc ? (
+                viewDoc.kind === "query" || viewDoc.kind === "query-draft"
+                  ? <QueryEditor key={`${workspaceScope}|${viewDoc.id}`} doc={viewDoc} scope={workspaceScope || user} theme={theme.effective}
+                    folder={folder || scratch} onDirty={documentDirty} onRename={renameSql} onSaved={savedSql}
+                    onCapture={capture => { queryCapture.current = capture; }}
+                    onAttach={a => { addContext(a); reveal(); }} />
+                  : viewDoc.kind === "table"
                   ? <TableViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
                   : <NotebookViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
               ) : active ? (
@@ -966,11 +1027,13 @@ export function App() {
                   demo={demo} notice={notice} user={user}
                   onStart={(p) => start(p, attachments).then(() => setAttachments([]))}
                   onOpenSearch={() => setPaletteOpen(true)}
+                  onNewSql={() => void openSql()} onOpenQueries={openQueries}
                   onOpenCatalog={() => setRailAndOpen("catalog")}
                   onAskAssistant={focusComposer}
                   recent={recent}
                   onOpenRecent={(path, kind) => openDoc(makeDoc(kind, path))} />
               )}
+              </Suspense>
               </div>
 
               {!dockOnScreen && (
@@ -1053,18 +1116,24 @@ export function App() {
           {/* Only the NAVIGATOR drawer gets a scrim. The inspector and the assistant are siblings of
               the work, not modals over it: a scrim — even a transparent one — swallows the click meant
               for the notebook behind it, which is what broke the chord scene of `shell-e2e`. */}
-          {(drawer || (dockDrawer && !focusDock)) && (
-            <div className={`drawer-scrim${drawer ? "" : " is-clear"}`} role="presentation"
+          {/* The click-away layer exists ONLY while an overlay is actually drawn (`panels.scrim`). It used
+              to be keyed on the raw flags, so a dock that had a column but carried `dockDrawer = true`
+              (opened with ⌘J or the Chat handle at a wide width) put a transparent layer over the
+              whole window: the first click on any panel closed the dock, and the wheel scrolled
+              nothing because the layer, not the panel, was under the pointer. */}
+          {panels.scrim !== "none" && (
+            <div className={`drawer-scrim${panels.scrim === "rail" ? "" : " is-clear"}`} role="presentation"
+              data-scrim={panels.scrim}
               onClick={() => {
-                if (drawer) { setDrawer(null); toggle("rail", false); return; }
+                if (panels.scrim === "rail") { setDrawer(null); toggle("rail", false); return; }
                 setDockDrawer(false); toggle("assistant", false);
               }} />
           )}
 
-          {railShown && (narrow || focusDock) && drawer === "rail" && (
+          {panels.rail === "drawer" && (
             <nav className="pane rail is-drawer" aria-label="Navigator">{railBody}</nav>
           )}
-          {dockOverlay && dockDrawer && !focusDock && dockNode("is-drawer")}
+          {panels.dock === "drawer" && dockNode("is-drawer")}
           {settingsOpen && (
             <ProviderSettings tab={settingsTab} onTab={setSettingsTab} onClose={() => setSettingsOpen(false)} onChanged={() => void refresh()} />
           )}
@@ -1075,6 +1144,7 @@ export function App() {
 
 
         </div>
+      </OpenSqlQuery.Provider>
       </OpenDoc.Provider>
     </WorkspaceLinks.Provider>
   );

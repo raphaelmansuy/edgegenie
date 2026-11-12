@@ -65,9 +65,10 @@ def normalize_host(host: str | None) -> str:
 
 
 class DbxHttp:
-    def __init__(self, host: str, token_provider: Callable[[], str | None]) -> None:
+    def __init__(self, host: str, token_provider: Callable[[], str | None], *, max_response_bytes: int = 0) -> None:
         self._host = normalize_host(host)
         self._token_provider = token_provider
+        self._max_response_bytes = max_response_bytes
 
     def _headers(self, token: str | None) -> dict[str, str]:
         tok = token or self._token_provider()
@@ -83,7 +84,17 @@ class DbxHttp:
             raise RuntimeError("DATABRICKS_HOST is not set: the app cannot reach the workspace")
         headers = self._headers(token)
         async with httpx.AsyncClient(timeout=timeout) as client:
-            r = await client.request(method, f"{self._host}{path}", params=params, json=body, headers=headers)
+            if self._max_response_bytes:
+                async with client.stream(method, f"{self._host}{path}", params=params, json=body, headers=headers) as upstream:
+                    chunks, size = [], 0
+                    async for chunk in upstream.aiter_bytes():
+                        size += len(chunk)
+                        if size > self._max_response_bytes:
+                            raise RuntimeError("workspace response exceeds this app's bounded preview limit")
+                        chunks.append(chunk)
+                    r = httpx.Response(upstream.status_code, headers=upstream.headers, content=b"".join(chunks))
+            else:
+                r = await client.request(method, f"{self._host}{path}", params=params, json=body, headers=headers)
         if r.status_code == 404:
             raise LookupError(f"not found: {(params or {}).get('path') or path}")
         if r.status_code in (401, 403):
@@ -91,8 +102,8 @@ class DbxHttp:
             # sentence may be a summary of them. Logged for the operator; never carries a token.
             # `token scopes` are the NAMES in the caller's own token: they show whether a refusal is a stale
             # sign-in (token older than the app's scopes) or an app that was never granted the scope.
-            log.warning("workspace call refused: %s %s -> %s %s | token scopes: %s", method, path,
-                        r.status_code, r.text[:300], " ".join(token_scopes(headers["Authorization"][7:])) or "none")
+            log.warning("workspace call refused: %s %s -> %s | token scopes: %s", method, path,
+                        r.status_code, " ".join(token_scopes(headers["Authorization"][7:])) or "none")
             raise denial(r.status_code, r.text, (params or {}).get("path") or path)
         if r.status_code >= 400:
             raise RuntimeError(f"{path} failed ({r.status_code}): {r.text[:200]}")

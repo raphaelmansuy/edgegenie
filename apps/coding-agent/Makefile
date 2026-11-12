@@ -122,8 +122,8 @@ vision: ## Prove the model can READ an image (needs dev-real on REAL_PORT)
 	@cd $(WEB) && APP_URL=http://127.0.0.1:$(REAL_PORT) node scripts/vision-e2e.mjs
 
 # ---------------------------------------------------------------- deployment
-sync: ## Copy the TRACKED files into the workspace folder the app deploys from
-	@printf '\033[1msync\033[0m    git ls-files -> $(WS_SRC)\n'
+sync: ## Copy tracked and unignored new app files into the deployment workspace folder
+	@printf '\033[1msync\033[0m    git ls-files (tracked + new) -> $(WS_SRC)\n'
 	@cd $(APP_DIR) && ./scripts/sync-app-source.sh "$(WS_SRC)"
 
 deploy-only: ## Deploy and wait until SUCCEEDED (does not verify the live URL)

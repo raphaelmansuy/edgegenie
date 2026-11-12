@@ -4,7 +4,7 @@
  * trees add chips too. A chip marked "open" is the document on screen: it rides along with the
  * message automatically, the way Genie Code knows which notebook you are looking at.
  */
-import { createElement, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createElement, useEffect, useMemo, useRef, useState } from "react";
 import { api, type CatalogItem, type WsHit } from "../api/client";
 import { applyCommand, commandAt, matchCommands, pushHistory, stepHistory, type Command } from "../domain/commands";
 import type { Attachment } from "../domain/events";
@@ -12,16 +12,14 @@ import type { Doc } from "../domain/docs";
 import { ACCEPT } from "../domain/blob";
 import { AttachMenu } from "./AttachMenu";
 import { Chip } from "./Chip";
-import { FileIcon, Folder, Notebook, Table } from "./Icons";
+import { FileIcon } from "./Icons";
 import { useBlobUpload } from "../hooks/useBlobUpload";
 
 const MENTION = /(^|\s)@([^\s@]*)$/;
 const HISTORY_KEY = "coding-agent:prompt-history";
 
-/** One source of truth for "what does a notebook look like" across chips, tabs, and mentions. */
-export const KIND_ICON: Record<string, (p: { size?: number }) => ReactNode> = {
-  notebook: Notebook, file: FileIcon, folder: Folder, table: Table, blob: FileIcon,
-};
+import { KIND_ICON } from "./AssetIcon";
+export { KIND_ICON } from "./AssetIcon";
 
 /** Kept for callers that already import it from here; the implementation moved to `Chip.tsx`. */
 export { Chip } from "./Chip";

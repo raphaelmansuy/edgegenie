@@ -1,7 +1,7 @@
 /** Open documents, quick-action prompts and "which object did this tool touch". Pure, no React. */
 import type { Attachment } from "./events";
 
-export type DocKind = "notebook" | "file" | "table";
+export type DocKind = "notebook" | "file" | "table" | "query" | "query-draft";
 export interface Doc { id: string; kind: DocKind; ref: string; name: string; rev: number }
 
 /** One path, two spellings, one object.
@@ -90,4 +90,6 @@ export const ACTIONS_FOR: Record<DocKind, Action[]> = {
   notebook: ["explain", "fix", "document", "optimize"],
   file: ["explain"],
   table: ["profile", "query"],
+  query: ["explain"],
+  "query-draft": ["explain"],
 };

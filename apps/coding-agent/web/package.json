@@ -21,6 +21,8 @@
     "verify:editor-choice": "node scripts/verify-editor-choice.mjs",
     "verify:spec-006": "node scripts/verify-spec-links.mjs ../../../specs/006-databricks && node scripts/verify-spec-ascii.mjs ../../../specs/006-databricks",
     "e2e:assistant": "node scripts/dock-e2e.mjs",
+    "e2e:dock-focus": "node scripts/dock-focus-e2e.mjs",
+    "audit:panels": "node scripts/dock-matrix.mjs",
     "audit:dock": "node scripts/dock-audit.mjs",
     "verify:spec-mermaid": "node scripts/verify-spec-mermaid.mjs ../../../specs/006-databricks",
     "e2e:long-running": "node scripts/long-running-e2e.mjs",
@@ -28,6 +30,7 @@
     "e2e:tabs": "node scripts/tabs-e2e.mjs",
     "verify:spec-tabs": "node scripts/verify-spec-links.mjs ../../../specs/010-tab-management && node scripts/verify-tab-wireframes.mjs",
     "e2e:ux": "node scripts/ui-refinement-e2e.mjs",
+    "e2e:sql": "node scripts/sql-query-e2e.mjs",
     "e2e:mission": "node scripts/mission-e2e.mjs",
     "verify:spec-011": "node scripts/verify-spec-links.mjs ../../../specs/011-ux-coding-mission && node scripts/verify-spec-ascii.mjs ../../../specs/011-ux-coding-mission && node scripts/verify-mission-wireframes.mjs"
   },

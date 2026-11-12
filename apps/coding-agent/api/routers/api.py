@@ -28,6 +28,7 @@ from ..domain.session import DomainError, Session
 from ..services import context as ctx_service
 from ..services.pyrun_service import PythonRuns
 from .llm_admin import can_configure
+from .sql import actor as sql_actor
 from ..services.orchestrator import Orchestrator
 
 log = logging.getLogger("app.api")
@@ -290,7 +291,8 @@ async def send_message(
         raise HTTPException(422, str(exc)) from exc
     resolved = await ctx_service.resolve(
         items, _browser(request), request.app.state.catalog, _user_token(request),
-        blobs=getattr(request.app.state, "blobs", None), user_id=_user(request))
+        blobs=getattr(request.app.state, "blobs", None), user_id=_user(request),
+        sql=request.app.state.sql, sql_actor=sql_actor(request))
     orch.touch(sid)
     try:
         turn = await orch.submit(sid, body.text, ctx.render(resolved), [a.to_dict() for a in items],

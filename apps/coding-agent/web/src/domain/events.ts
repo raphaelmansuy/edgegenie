@@ -83,7 +83,7 @@ export type TurnStatus =
 /** `cell` is a fragment on a notebook path (`/path#3`); the server renders only that cell (006 FX-3). */
 export interface Attachment {
   /** `blob` is bytes the user handed us (paste, drop, picker); the rest are references to the workspace. */
-  kind: "notebook" | "file" | "folder" | "table" | "cell" | "blob";
+  kind: "notebook" | "file" | "folder" | "table" | "cell" | "blob" | "query" | "query-draft";
   ref: string;
   name: string;
 }

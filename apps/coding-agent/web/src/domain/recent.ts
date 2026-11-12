@@ -10,19 +10,20 @@
 export interface RecentDoc {
   path: string;
   name: string;
-  kind: "notebook" | "file" | "table";
+  kind: import("./docs").DocKind;
 }
 
 const KEY = "coding-agent:recent-docs:v1";
 const MAX = 6;
-let loaded = false;
+let loadedKey = "";
 let memory: RecentDoc[] = [];
 
-function load(): void {
-  if (loaded) return;
-  loaded = true;
+function load(scope = ""): void {
+  const key = scope ? `${KEY}:${encodeURIComponent(scope)}` : KEY;
+  if (loadedKey === key) return;
+  loadedKey = key;
   try {
-    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(KEY) : null;
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
     const parsed = raw ? (JSON.parse(raw) as unknown) : [];
     memory = Array.isArray(parsed) ? parsed.filter(valid).slice(0, MAX) : [];
   } catch { memory = []; }
@@ -30,31 +31,31 @@ function load(): void {
 
 function valid(v: unknown): v is RecentDoc {
   const d = v as RecentDoc;
-  return !!d && typeof d.path === "string" && d.path.startsWith("/")
-    && typeof d.name === "string" && (d.kind === "notebook" || d.kind === "file" || d.kind === "table");
+  return !!d && typeof d.path === "string" && (d.path.startsWith("/") || d.kind === "query" || d.kind === "query-draft")
+    && typeof d.name === "string" && ["notebook","file","table","query","query-draft"].includes(d.kind);
 }
 
 function save(): void {
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(KEY, JSON.stringify(memory));
+    if (typeof localStorage !== "undefined") localStorage.setItem(loadedKey, JSON.stringify(memory));
   } catch { /* private mode: the list still works for this page */ }
 }
 
-export function recentDocs(): RecentDoc[] {
-  load();
+export function recentDocs(scope = ""): RecentDoc[] {
+  load(scope);
   return [...memory];
 }
 
 /** Put a document at the front, once. Returns the new list, so a caller can render without a re-read. */
-export function rememberDoc(doc: RecentDoc): RecentDoc[] {
-  load();
+export function rememberDoc(doc: RecentDoc, scope = ""): RecentDoc[] {
+  load(scope);
   memory = [doc, ...memory.filter((d) => !(d.path === doc.path && d.kind === doc.kind))].slice(0, MAX);
   save();
   return [...memory];
 }
 
-export function forgetDocs(): void {
-  load();
+export function forgetDocs(scope = ""): void {
+  load(scope);
   memory = [];
   save();
 }

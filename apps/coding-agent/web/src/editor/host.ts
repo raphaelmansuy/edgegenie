@@ -32,6 +32,8 @@ export interface EditorHost {
   focus(at?: number): void;
   /** Where the caret is now (character offset). Read-only geometry, never content. */
   getCaret(): number;
+  /** Query execution snapshots one contiguous selection, in UTF-16 editor offsets. */
+  getSelection?(): { start: number; end: number; multiple: boolean };
   /** Called when the caret moves (typing, arrows, click), so the app can remember the user's place. */
   onCaret(cb: (pos: number) => void): void;
   /** Take the keyboard focus away (the cell stays selected). */

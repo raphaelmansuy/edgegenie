@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { loadEditorHost, type EditorChord, type EditorHost } from "../editor/host";
 
 interface Props {
+  onReady?: (host: EditorHost) => void;
   /** The document text to show. A change here *replaces* the buffer (load, recover, apply diff). */
   value: string;
   language: string;
@@ -39,6 +40,7 @@ interface Props {
 export function Editor({
   value, language, readOnly = false, theme, onChange, onSave, autoFocus = false, ariaLabel,
   onChord, onCaret, focusRequest, onFocusDone,
+  onReady,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorHost | null>(null);
@@ -72,6 +74,7 @@ export function Editor({
         local.onCaret((pos) => handlers.current.onCaret?.(pos));
         applied.current = value;
         editor.current = local;
+        onReady?.(local);
         setStatus("ready");
         // A lazily loaded file must not steal focus from keyboard tab navigation or its picker.
         if (focusOnMount.current && !document.activeElement?.closest('.doc-tabs, .tab-popover')) local.focus();

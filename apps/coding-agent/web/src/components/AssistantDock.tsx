@@ -10,7 +10,8 @@
  *  - **the approval is inline**, because the modal sheet covers the code the approval is about (D4);
  *  - **it never opens itself**: below 1180 px it is a drawer that only `⌘J` or the toggle opens (AD-4).
  */
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { useFollowScroll } from "../hooks/useFollowScroll";
 import type { Approval, Attachment, SessionView, Turn } from "../domain/events";
 import { dockState, dockStateWord, dockTitle, suggestionsFor, type DockState, type Suggestion } from "../domain/dock";
 import { focusLabel, type Focus } from "../domain/focus";
@@ -85,25 +86,13 @@ export function AssistantDock(p: DockProps) {
     last: turns.at(-1) ? { status: turns.at(-1)!.status } : null,
     pendingApprovals: pending.length,
   });
-  const scroller = useRef<HTMLElement>(null);
   const last = turns.at(-1);
   const canSend = p.session.status !== "archived" && !p.session.requiresResume && (!p.hasSession || p.conn === "live");
-  /* Follow the stream while the reader is pinned to the bottom, and stop the moment they scroll up.
-     "Pinned" is remembered from the last scroll event, not measured after an update: by the time an
-     effect runs the content has already grown, so measuring then says "far from the bottom" for any
-     update bigger than the threshold, and a long turn would never be followed. */
-  const pinned = useRef(true);
-  const onScroll = () => {
-    const el = scroller.current;
-    if (el) pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-  };
-  // A different conversation starts at its end.
-  useEffect(() => { pinned.current = true; }, [p.session.id]);
-  useEffect(() => {
-    const el = scroller.current;
-    // Instant, not smooth: a smooth scroll fires intermediate scroll events that would unpin the reader.
-    if (el && pinned.current) el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
-  }, [p.session.id, turns.length, last?.answer.length, last?.tools.length, last?.status, state, p.error]);
+  /* Follow the stream while the reader is at the tail, and let go the moment they move up — by wheel,
+     finger, key or scrollbar. The decision is `domain/follow.ts`; the panel-wide wheel and focus
+     contract is the hook's (spec 012 §3). */
+  const { scroller, region, behind, toEnd, forwardWheel, claimFocus } = useFollowScroll(
+    p.session.id ?? "", [turns.length, last?.answer.length, last?.tools.length, last?.status, state, p.error, pending.length]);
 
   const empty = state === "empty" && turns.length === 0;
   // The dock says READY after a turn that ended blocked: true of the connection, false of the work.
@@ -114,7 +103,7 @@ export function AssistantDock(p: DockProps) {
        reader because that is what the region IS; the link says "the conversation" because that is
        what the user calls it. Both names are stated in the e2e (E-33). */
     <aside id="dock" tabIndex={-1} className={`pane assistant${p.className ? ` ${p.className}` : ""}`} aria-label="Assistant"
-      data-state={state}>
+      data-state={state} onWheel={forwardWheel} onMouseDown={claimFocus}>
       {p.edge}
       {/* The header answers two questions in one line: what is happening, and what it is about.
           A separate bold title competed with the binding for the 380 px available and truncated the
@@ -152,7 +141,9 @@ export function AssistantDock(p: DockProps) {
 
       <RunStatus key={p.session.id} session={p.session} conn={p.conn} onRestore={p.onRestore} onStop={p.onStop} />
 
-      <div className="dock-body" ref={scroller as React.RefObject<HTMLDivElement>} onScroll={onScroll} role="log"
+      {/* `tabIndex={0}`: a region that scrolls must be reachable by keyboard (axe: scrollable-region-focusable),
+          and it is what a click on the panel's dead space focuses, so PageUp / Space / ↑↓ scroll it. */}
+      <div className="dock-body" ref={scroller} tabIndex={0} {...region} role="log"
         aria-label="Conversation" aria-live="polite" aria-busy={state === "streaming"}>
         {empty && <Start focus={p.focus} onSuggestion={p.onSuggestion} hasSession={p.hasSession} />}
 
@@ -177,6 +168,14 @@ export function AssistantDock(p: DockProps) {
 
         {p.error && state !== "failed" && (
           <p className="dock-error" role="alert"><Alert size={13} /> {p.error}</p>
+        )}
+
+        {/* Only when the reader has left the tail and there is more below: the way back to following. */}
+        {behind && (
+          <button type="button" className="dock-jump"
+            onClick={() => { toEnd(); scroller.current?.focus({ preventScroll: true }); }}>
+            <span aria-hidden>↓</span> {state === "streaming" ? "Follow the work" : "Latest"}
+          </button>
         )}
       </div>
 

@@ -16,7 +16,7 @@ export async function localApp() {
   const url = `http://127.0.0.1:${port}`;
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(APP_|DATABRICKS_|LLM_)/.test(key)));
   Object.assign(env, { APP_AGENT_MODE: 'fake', APP_DEFAULT_MODEL: 'fake/model-a', APP_ALLOWED_MODELS: '["fake/model-a"]',
-    APP_TOOL_MODE: 'none', APP_DEMO_SCENARIO: 'longrun', APP_DEMO_EVENT_DELAY: '.12', APP_SESSION_DB_PATH: resolve(scratch, 'journal.sqlite'),
+    APP_TOOL_MODE: 'none', APP_DEMO_SCENARIO: 'longrun', APP_DEMO_EVENT_DELAY: process.env.MISSION_EVENT_DELAY ?? '.12', APP_SESSION_DB_PATH: resolve(scratch, 'journal.sqlite'),
     APP_BLOB_DIR: resolve(scratch, 'blobs'), APP_STREAM_HEARTBEAT_SECONDS: '1', APP_DEV_USER: 'mission@example.test', DATABRICKS_HOST: '', APP_DEV_TOKEN_AUTO: '0' });
   let processHandle;
   process.once('exit', () => { if (processHandle?.exitCode === null) processHandle.kill('SIGTERM'); });

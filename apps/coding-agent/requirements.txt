@@ -28,3 +28,4 @@ psycopg-pool>=3.2
 databricks-sdk>=0.60
 # `seed/llm_models.yaml` is data, parsed at boot rather than compiled in.
 pyyaml>=6
+sqlglot==28.10.1

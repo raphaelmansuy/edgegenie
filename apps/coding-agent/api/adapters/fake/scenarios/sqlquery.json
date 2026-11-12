@@ -1,0 +1,8 @@
+{
+  "models": ["fake/model-a", "fake/model-b"],
+  "turn": {
+    "updates": [],
+    "answer": "Here is a SQL proposal for review. It returns one row and reads no workspace tables.\n\n```sql\nSELECT 'Reviewed' AS status, 1 AS result\n```\n\nOpen it as a query to inspect or edit it. Run and save are separate actions.",
+    "usage": {"inputTokens": 100, "outputTokens": 50, "cachedReadTokens": 0}
+  }
+}
