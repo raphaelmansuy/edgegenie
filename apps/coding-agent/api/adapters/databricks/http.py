@@ -92,7 +92,13 @@ class DbxHttp:
                         if size > self._max_response_bytes:
                             raise RuntimeError("workspace response exceeds this app's bounded preview limit")
                         chunks.append(chunk)
-                    r = httpx.Response(upstream.status_code, headers=upstream.headers, content=b"".join(chunks))
+                    # aiter_bytes already decoded compression. Retaining Content-Encoding would
+                    # make the reconstructed response try to decompress the JSON a second time.
+                    decoded_headers = {
+                        key: value for key, value in upstream.headers.items()
+                        if key.lower() not in {"content-encoding", "content-length", "transfer-encoding"}
+                    }
+                    r = httpx.Response(upstream.status_code, headers=decoded_headers, content=b"".join(chunks))
             else:
                 r = await client.request(method, f"{self._host}{path}", params=params, json=body, headers=headers)
         if r.status_code == 404:

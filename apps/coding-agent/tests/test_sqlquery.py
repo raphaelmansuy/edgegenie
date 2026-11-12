@@ -430,3 +430,45 @@ def test_cancel_intent_survives_authorization_failure_and_resumes_on_observation
     monkeypatch.setattr(provider, "cancel", original)
     recovered = client.get(f"/api/sql/runs/{attempt['id']}").json()
     assert recovered["cancelRequested"] and recovered["state"] == "canceled"
+
+
+async def test_bounded_transport_decodes_gzipped_json_once(monkeypatch):
+    import gzip
+    import json
+
+    import httpx
+
+    from api.adapters.databricks.http import DbxHttp
+
+    expected = {"warehouses": [{"id": "w", "name": "SQL", "state": "STOPPED"}]}
+    compressed = gzip.compress(json.dumps(expected).encode())
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            headers={"content-encoding": "gzip", "content-type": "application/json"},
+            content=compressed,
+        )
+    )
+    client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: client(transport=transport, **kw))
+    api = DbxHttp("https://workspace.test", lambda: None, max_response_bytes=1024)
+    assert await api.get("/api/2.0/sql/warehouses", "user-token") == expected
+
+
+async def test_bounded_transport_applies_limit_after_decompression(monkeypatch):
+    import gzip
+
+    import httpx
+
+    from api.adapters.databricks.http import DbxHttp
+
+    compressed = gzip.compress(b'{"padding":"' + b"x" * 4096 + b'"}')
+    assert len(compressed) < 256
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, headers={"content-encoding": "gzip"}, content=compressed)
+    )
+    client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: client(transport=transport, **kw))
+    api = DbxHttp("https://workspace.test", lambda: None, max_response_bytes=256)
+    with pytest.raises(RuntimeError, match="bounded preview limit"):
+        await api.get("/api/2.0/sql/warehouses", "user-token")
