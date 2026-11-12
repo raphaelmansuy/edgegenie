@@ -36,8 +36,8 @@ class SqlService:
             "run": self.run_enabled and sqlpolicy.available() and recovery,
             "update": False,
             "durable": self.store.durable,
-            "reason": "" if recovery else "Configure a persistent SQL journal before enabling execution.",
-            "createReason": "Native creation is gated until deployment interoperability is verified.",
+            "reason": "" if recovery else "SQL execution is unavailable. Private drafts are temporary in this workspace.",
+            "createReason": "Saving a new Query is unavailable in this workspace.",
         }
 
     async def draft(self, actor, body, draft_id=None):
@@ -147,7 +147,7 @@ class SqlService:
         if not self.capabilities()["run"]:
             raise SqlError(
                 "CAPABILITY_DISABLED",
-                "SQL execution is not enabled or its parser/durable journal is unavailable.",
+                "SQL execution is unavailable in this workspace.",
                 409,
             )
         draft = await self.source(actor, "query-draft", body["draftId"])
