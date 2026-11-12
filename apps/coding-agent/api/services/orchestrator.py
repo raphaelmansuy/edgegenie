@@ -67,9 +67,9 @@ from ..ports import AgentRuntime, RuntimeHandle, SessionSpec, ToolRegistry
 
 MAX_TURNS = 200
 #: How many tools the `core` profile advertises, for the UI's "N tools" badge. It is NOT the authority
-#: on the budget: `NBMCP_PROFILE=core` selects the set, and `tests/test_tools_fence.py` holds it to 28
-#: (spec 014 [TOOL-1]). This number is a label that must match, and a test asserts it does.
-TOOL_COUNT_CORE = 28
+#: on the budget: `NBMCP_PROFILE=core` selects the set, and `tests/test_tools_fence.py` holds it to 32
+#: (spec 013 SQL-agent follow-up: 28 existing + read/update/run/status; cancel shares status). This number is a label that must match, and a test asserts it does.
+TOOL_COUNT_CORE = 32
 #: The folder the agent may write to, handed to the child so it can name real paths. A reference
 #: agent's scenarios record `/Users/you/…` as a placeholder; without this it reported a path that
 #: does not exist and every demo turn opened a 404.
@@ -103,7 +103,7 @@ class Live:
     #: The resolved model this process was started with. A switch compares protocols against it.
     resolved: ResolvedModel | None = None
 
-    def record(self, call_id: str, name: str, status: str, summary: str = "", args: str = "") -> None:
+    def record(self, call_id: str, name: str, status: str, summary: str = "", args: str = "", proof=None) -> None:
         c = self.state.calls.setdefault(call_id, {"name": name, "status": "running"})
         if name:
             c["name"] = name
@@ -112,6 +112,8 @@ class Live:
             c["summary"] = summary
         if args:
             c["args"] = args
+        if proof:
+            c["proof"] = proof
 
     def tool_calls(self) -> list[ToolCall]:
         return [
@@ -120,6 +122,7 @@ class Live:
                 name=c.get("name", ""),
                 status=c.get("status", ""),
                 summary=c.get("summary", ""),
+                proof=c.get("proof"),
             )
             for cid, c in self.state.calls.items()
         ]
@@ -881,6 +884,7 @@ class Orchestrator:
             # Stop means the entire accepted queue stops. It must not launch another write next.
             live.cancel = True
             live.extra["stopping"] = True
+            await self._cancel_agent_sql(live)
             for turn in list(live.state.turns):
                 if turn.status is TurnStatus.QUEUED:
                     live.state.update(turn.finish(TurnStatus.CANCELLED))
@@ -936,6 +940,39 @@ class Orchestrator:
         await self._emit(Event(session_id, "blob.attached", dict(payload)))
 
     # -- turns ----------------------------------------------------------------
+    async def record_sql_change(self, session_id: str, turn_id: str, draft_id: str,
+                                version: int, run_id: str = "") -> None:
+        await self._emit(Event(session_id, "sql.changed", {
+            "draftId": draft_id, "version": version, "runId": run_id,
+        }, turn_id=turn_id, actor="app"))
+
+    def attach_sql(self, service, workspace: str) -> None:
+        self._sql_service, self._sql_workspace = service, workspace
+
+    async def _cancel_agent_sql(self, live: Live) -> None:
+        service = getattr(self, "_sql_service", None)
+        if service is None:
+            return
+        from ..domain.sqlquery import SqlActor
+
+        try:
+            path = live.extra.get("token_file")
+            token = Path(path).read_text().strip() if path else None
+        except OSError:
+            token = None
+        actor = SqlActor(self._sql_workspace, live.state.session.user_id, token)
+        async def cancel_one(run_id):
+            try:
+                row = await service.observe(actor, run_id, cancel=True)
+                await self.record_sql_change(live.state.session.id, "", row["sourceRef"], 0, run_id)
+            except Exception as exc:
+                # Cancellation intent is recorded before contacting the provider; status can reconcile it.
+                logging.getLogger("app.sql").warning("agent SQL cancellation needs reconciliation: %s", type(exc).__name__)
+        try:
+            await asyncio.wait_for(asyncio.gather(*(cancel_one(r) for r in live.extra.get("sql_runs", set()))), 6)
+        except TimeoutError:
+            logging.getLogger("app.sql").warning("agent SQL cancellation is still pending")
+
     async def submit(self, session_id: str, text: str, context: str = "",
                      attachments: list[dict] | None = None, user_token: str | None = None,
                      request_key: str = "", request_hash: str = "") -> Turn:
@@ -1234,6 +1271,7 @@ class Orchestrator:
                         item.payload["status"],
                         item.payload.get("summary", ""),
                         item.payload.get("args", ""),
+                        item.payload.get("proof"),
                     )
         finally:
             # The tail. A missing flush here is a lost last sentence, which is why it is in a `finally`
@@ -1276,14 +1314,21 @@ class Orchestrator:
             return
 
         requirements = extract_requirements(turn.prompt)
+        from ..domain.query_intent import forbidden_query_action, query_explanation_only
+
+        query_target = next((a["ref"] for a in turn.attachments if a.get("kind") == "query-draft"), "")
+        read_only = (query_explanation_only(turn.prompt) or (
+            forbidden_query_action(turn.prompt, "update") and forbidden_query_action(turn.prompt, "run")
+        )) if query_target else (is_read_only(requirements, bool(turn.context)) or says_no_tools(turn.prompt))
         decision = supervisor.decide(
             supervisor.State(
                 requirements=requirements,
-                read_only=is_read_only(requirements, bool(turn.context)) or says_no_tools(turn.prompt),
+                read_only=read_only,
                 calls=live.tool_calls(),
                 answer=answer,
                 continuations=continuations,
                 audits=audits,
+                query_target=query_target,
             )
         )
 

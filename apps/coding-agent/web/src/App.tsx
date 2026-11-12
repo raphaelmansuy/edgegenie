@@ -1124,6 +1124,7 @@ export function App() {
                   ? <QueryEditor key={`${workspaceScope}|${viewDoc.id}`} doc={viewDoc} scope={workspaceScope || user} theme={theme.effective}
                     folder={folder || scratch} onDirty={documentDirty} onRename={renameSql} onSaved={savedSql}
                     onCapture={capture => { queryCapture.current = capture; }}
+                    agentChanges={session.sqlChanges}
                     onAttach={a => { addContext(a); reveal(); }} />
                   : viewDoc.kind === "table"
                   ? <TableViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />

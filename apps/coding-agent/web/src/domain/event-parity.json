@@ -1,6 +1,8 @@
 {
  "types": [
   "session.created",
+  "session.recovery_required",
+  "session.checkpoint",
   "session.ready",
   "session.degraded",
   "session.archived",
@@ -25,7 +27,6 @@
   "usage.updated",
   "document.saved",
   "blob.attached",
-  "session.recovery_required",
-  "session.checkpoint"
+  "sql.changed"
  ]
 }

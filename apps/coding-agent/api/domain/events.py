@@ -38,6 +38,7 @@ EventType = Literal[
     "usage.updated",
     "document.saved",
     "blob.attached",
+    "sql.changed",
 ]
 
 EVENT_TYPES: tuple[str, ...] = EventType.__args__  # type: ignore[attr-defined]
@@ -123,8 +124,11 @@ def tool_updated(
     error: str = "",
     args: str = "",
     table: dict[str, Any] | None = None,
+    proof: dict[str, Any] | None = None,
 ) -> Event:
     p: dict[str, Any] = {"callId": call_id, "status": status}
+    if proof:
+        p["proof"] = proof
     if table:
         # A query result, kept structured so the UI can show a grid instead of a sentence.
         p["table"] = table

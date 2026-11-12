@@ -11,7 +11,7 @@ export type EventType =
   | "evidence.proposed" | "turn.auditing"
   | "turn.completed" | "turn.blocked" | "turn.cancelled" | "turn.interrupted"
   | "turn.failed" | "turn.retrying" | "session.compacted" | "usage.updated"
-  | "blob.attached";
+  | "blob.attached" | "sql.changed";
 
 export const EVENT_TYPES: EventType[] = [
   "session.recovery_required", "session.checkpoint",
@@ -23,6 +23,7 @@ export const EVENT_TYPES: EventType[] = [
   "turn.completed", "turn.blocked", "turn.cancelled", "turn.interrupted",
   "turn.failed", "turn.retrying", "session.compacted", "usage.updated",
   "blob.attached",
+  "sql.changed",
 ];
 
 export interface AgentEvent {
@@ -108,6 +109,7 @@ export interface Turn {
 }
 
 export interface SessionView {
+  sqlChanges?: Record<string,import("./query").SqlChange>;
   id: string;
   title: string;
   folder: string;
@@ -173,6 +175,11 @@ export function append(current: string, delta: string, max: number): string {
 export function reduce(state: SessionView, e: AgentEvent): SessionView {
   const s = state.turns ? state : { ...state, turns: [], approvals: state.approvals ?? [] };
   switch (e.type) {
+    case "sql.changed": {
+      const id=String(e.draftId??""),previous=s.sqlChanges?.[id];
+      if(!id||(previous&&previous.seq>=e.seq))return s;
+      return {...s,sqlChanges:{...s.sqlChanges,[id]:{version:Number(e.version),runId:String(e.runId??""),seq:e.seq}}};
+    }
     case "session.created":
       return { ...s, folder: String(e.folder ?? s.folder), model: String(e.model ?? s.model),
         schema: (e.schema as string | null) ?? s.schema, status: "provisioning" };

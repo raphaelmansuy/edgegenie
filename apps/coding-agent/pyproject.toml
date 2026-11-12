@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "databricks-coding-agents"
-version = "1.2.0-rc.2"
+version = "1.2.0-rc.3"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115",

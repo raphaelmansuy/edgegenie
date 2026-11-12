@@ -3,7 +3,7 @@ import { queries } from "../api/queries";
 import { ApiError } from "../api/client";
 import type { Doc } from "../domain/docs";
 import type { Attachment } from "../domain/events";
-import { ACTIVE_SQL, recoveredSqlInputsChanged, clearQueryCreate, pendingQueryCreate, rememberQueryCreate, clearQueryRecovery, parameterNames, recoverQuery, rememberQuery, type SqlCapabilities, type SqlParameter, type SqlQuery, type SqlRun } from "../domain/query";
+import { acceptsAgentQuery, type SqlChange, ACTIVE_SQL, recoveredSqlInputsChanged, clearQueryCreate, pendingQueryCreate, rememberQueryCreate, clearQueryRecovery, parameterNames, recoverQuery, rememberQuery, type SqlCapabilities, type SqlParameter, type SqlQuery, type SqlRun } from "../domain/query";
 import type { EditorHost } from "../editor/host";
 import { Editor } from "../editor/Editor";
 import { SqlResults } from "./SqlResults";
@@ -12,11 +12,13 @@ import { workspaceUrl } from "../domain/links";
 import { WorkspaceLinks } from "./DocContext";
 import { copyText } from "../domain/clipboard";
 
-export function QueryEditor({doc,scope,theme,folder,onDirty,onRename,onSaved,onAttach,onCapture}: {
+export function QueryEditor({doc,scope,theme,folder,onDirty,onRename,onSaved,onAttach,onCapture,agentChanges}: {
+  agentChanges?:Record<string,SqlChange>;
   onCapture:(capture:(()=>Promise<Attachment>)|null)=>void;
   doc:Doc;scope:string;theme:"light"|"dark";folder:string;onDirty:(doc:Doc,dirty:boolean)=>void;
   onRename:(doc:Doc,name:string)=>void;onSaved:(doc:Doc,query:SqlQuery)=>void;onAttach:(a:Attachment)=>void;
 }) {
+  const [incoming,setIncoming]=useState<SqlQuery|null>(null);
   const [source,setSource]=useState<SqlQuery|null>(null),[initial,setInitial]=useState("");
   const [name,setName]=useState(doc.name),[warehouse,setWarehouse]=useState(""),[catalog,setCatalog]=useState(""),[schema,setSchema]=useState("");
   const [warehouses,setWarehouses]=useState<{id:string;name:string;state:string}[]>([]),[caps,setCaps]=useState<SqlCapabilities|null>(null);
@@ -45,11 +47,43 @@ export function QueryEditor({doc,scope,theme,folder,onDirty,onRename,onSaved,onA
       saved.current=doc.kind==="query-draft"?q:null;
       setParams(parameterNames(text.current).map(name=>({name,type:"STRING",value:""})));
       onDirty(doc,!!restored);
+      if(restored&&recovery.base!==undefined&&recovery.base!==original)setIncoming(q);
       if(restored)setNotice("Recovered local changes from this browser.");
       void queries.history().then(async h=>{const previous=h.items.find(r=>r.sourceRef===doc.ref);if(previous&&live){const detail=await queries.status(previous.id);if(live)setRun(detail);}}).catch(()=>{});
     }).catch(e=>{if(live)setError(e.message);});
     return()=>{live=false;if(bufferTimer.current)clearTimeout(bufferTimer.current);};
   },[doc.id,scope]);
+  const applyingAgent=useRef(false);
+  const remote=saved.current?agentChanges?.[saved.current.id]:undefined;
+  function adopt(q:SqlQuery) {
+    if(bufferTimer.current)clearTimeout(bufferTimer.current);
+    text.current=q.text??"";saved.current=q;setInitial(text.current);
+    applyingAgent.current=true;editor.current?.setValue(text.current);applyingAgent.current=false;
+    setSource(old=>({...old,...q,canRun:old?.canRun,runReason:old?.runReason}));
+    setName(q.name);onRename(doc,q.name);setWarehouse(q.warehouseId||"");setCatalog(q.catalog||"");setSchema(q.schema||"");
+    setParams(parameterNames(text.current).map(name=>({name,type:"STRING",value:""})));
+    clearQueryRecovery(scope,doc.id);setIncoming(null);onDirty(doc,false);setNotice("Agent changes are now shown in this query.");
+  }
+  useEffect(()=>{
+    if(!remote||!saved.current)return;
+    let live=true;const id=saved.current.id;
+    void queries.get("query-draft",id).then(q=>{
+      if(!live||!saved.current)return;
+      if(q.version!==saved.current.version){
+        const current={text:text.current,name:latest.current.name,warehouseId:latest.current.warehouse,catalog:latest.current.catalog,schema:latest.current.schema};
+        if(acceptsAgentQuery(current,saved.current))adopt(q);else setIncoming(q);
+      }
+      if(remote.runId)void queries.status(remote.runId).then(r=>{if(live){setRun(r);setResultTab("results");setRunError("");}}).catch(e=>{if(live)setRunError(e.message);});
+    }).catch(e=>{if(live)setError(e.message);});
+    return()=>{live=false;};
+  },[remote?.seq]);
+  async function keepLocal() {
+    if(!incoming||!saved.current)return;
+    try{
+      const q=await queries.draft({text:text.current,name,warehouseId:warehouse,catalog,schema,version:incoming.version},saved.current.id);
+      saved.current=q;setSource(old=>({...old,...q}));setIncoming(null);onDirty(doc,false);setNotice("Your SQL was kept. Agent run snapshots remain in history.");
+    }catch(e){setError((e as Error).message);}
+  }
   useEffect(()=>{
     if(!run)return;
     let live=true;
@@ -63,12 +97,14 @@ export function QueryEditor({doc,scope,theme,folder,onDirty,onRename,onSaved,onA
   },[run?.id,run?.state]);
   useEffect(()=>{const before=(e:BeforeUnloadEvent)=>{if(source&&text.current!==source.text){e.preventDefault();e.returnValue="";}};window.addEventListener("beforeunload",before);return()=>window.removeEventListener("beforeunload",before);},[source]);
   function changed(value:string) {
+    if(applyingAgent.current)return;
     text.current=value;
     if(bufferTimer.current)clearTimeout(bufferTimer.current);
     bufferTimer.current=setTimeout(()=>{persist();onDirty(doc,value!==(source?.text??""));setGeneration(n=>n+1);
       setParams(old=>parameterNames(value).map(name=>old.find(p=>p.name===name)??{name,type:"STRING",value:""}));},180);
   }
   async function capture():Promise<SqlQuery> {
+    if(incoming)throw new Error("Review the agent version or keep your SQL before continuing.");
     const values={text:text.current,name,warehouseId:warehouse,catalog,schema,
       originQueryId:doc.kind==="query"?doc.ref:source?.originQueryId||"",...(saved.current?{version:saved.current.version}:{})};
     const draft=await queries.draft(values,saved.current?.id);saved.current=draft;return draft;
@@ -122,10 +158,11 @@ export function QueryEditor({doc,scope,theme,folder,onDirty,onRename,onSaved,onA
   if(!source)return <p className="sql-loading" role="status">Opening SQL query…</p>;
   return <section className={`sql-editor mobile-${mobileTab}`} aria-label={`${name} SQL editor`} data-generation={generation}>
     <header className="sql-document-header"><div className="sql-document-identity"><span className="sql-type-badge">SQL</span><input className="sql-title-input" aria-label="Query name" value={name} maxLength={200} onChange={e=>{setName(e.target.value);onRename(doc,e.target.value);onDirty(doc,true);}}/><span className="sql-local-label">{doc.kind==="query"?(text.current!==source.text||name!==source.name?"Local changes":"Saved Query"):"Private draft"}</span></div><div className="sql-document-actions"><button className="btn" disabled={busy||!caps?.create||source.truncated} title={!caps?.create?caps?.createReason:undefined} onClick={()=>void saveCopy()}>{doc.kind==="query"?"Save copy":"Create Query"}</button><button className="btn ghost" onClick={()=>void attach()}>Add to chat</button>{native&&<a className="btn ghost" href={native} target="_blank" rel="noopener noreferrer">Open in Databricks ↗</a>}<button className="btn ghost" onClick={()=>void copyText(location.href).then(ok=>setNotice(ok?"Link copied":"Clipboard unavailable"))}>Copy link</button></div></header>
-    <div className="sql-execution-bar"><button className="btn primary sql-run-button" disabled={busy||active||!warehouse||!caps?.run||source.canRun===false||source.truncated} title={source.runReason} onClick={()=>void execute()}>{busy?"Preparing…":selection?"▶ Run selection":"▶ Run query"}</button>{active&&<button className="btn" onClick={()=>void queries.cancel(run!.id).then(setRun).catch(e=>setRunError(e.message))}>Cancel</button>}<label className="sql-warehouse"><span className={`sql-status-dot ${warehouses.find(w=>w.id===warehouse)?.state==="RUNNING"?"is-succeeded":""}`} aria-hidden/><select aria-label="SQL warehouse" value={warehouse} onChange={e=>setWarehouse(e.target.value)}><option value="">Choose a warehouse</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.name} · {w.state.toLowerCase()}</option>)}</select></label><span className="sql-viewer-identity">{caps?.demo?"Demo · ":""}Run as viewer <span aria-hidden>·</span> 1,000 row preview{warehouses.find(w=>w.id===warehouse)?.state==="STOPPED"&&<span>· Starts on demand</span>}</span></div>
+    <div className="sql-execution-bar"><button className="btn primary sql-run-button" disabled={busy||active||!!incoming||!warehouse||!caps?.run||source.canRun===false||source.truncated} title={source.runReason} onClick={()=>void execute()}>{busy?"Preparing…":selection?"▶ Run selection":"▶ Run query"}</button>{active&&<button className="btn" onClick={()=>void queries.cancel(run!.id).then(setRun).catch(e=>setRunError(e.message))}>Cancel</button>}<label className="sql-warehouse"><span className={`sql-status-dot ${warehouses.find(w=>w.id===warehouse)?.state==="RUNNING"?"is-succeeded":""}`} aria-hidden/><select aria-label="SQL warehouse" value={warehouse} onChange={e=>setWarehouse(e.target.value)}><option value="">Choose a warehouse</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.name} · {w.state.toLowerCase()}</option>)}</select></label><span className="sql-viewer-identity">{caps?.demo?"Demo · ":""}Run as viewer <span aria-hidden>·</span> 1,000 row preview{warehouses.find(w=>w.id===warehouse)?.state==="STOPPED"&&<span>· Starts on demand</span>}</span></div>
     <div className="sql-context-bar"><label>Catalog <input aria-label="SQL catalog" placeholder="Default catalog" value={catalog} onChange={e=>setCatalog(e.target.value)}/></label><span>/</span><label>Schema <input aria-label="SQL schema" placeholder="Default schema" value={schema} onChange={e=>setSchema(e.target.value)}/></label><span className="sql-context-note">{caps?.durable?"Encrypted run history":"Temporary drafts and history"}</span></div>
     {source.truncated&&<p className="sql-callout">Showing only the first 200 KiB. This source is read-only; open the complete Query in Databricks.</p>}
     {source.canRun===false&&<p className="sql-callout">{source.runReason}</p>}{!caps?.run&&<p className="sql-callout">{caps?.reason||"SQL execution is not enabled for this deployment."}</p>}
+    {incoming&&<div className="sql-callout" role="alert"><strong>Agent changes need review</strong><p>Your local edits are preserved. Choose which version to keep before running or sharing.</p><details><summary>Review agent SQL</summary><pre className="sql-conflict-source">{incoming.text}</pre></details><div className="sql-inline-actions"><button className="btn" onClick={()=>adopt(incoming)}>Use agent version</button><button className="btn" onClick={()=>void keepLocal()}>Keep my SQL</button><button className="btn ghost" onClick={()=>void copyText(text.current)}>Copy my SQL</button></div></div>}
     {error&&<p className="sql-callout is-error" role="alert">{error}</p>}{runError&&<p className="sql-callout is-error" role="alert">{runError} <button className="btn" onClick={()=>void queries.status(run!.id).then(setRun).catch(e=>setRunError(e.message))}>Check status</button></p>}
     {notice&&<p className="sql-callout" role="status">{notice}<button className="sql-dismiss" aria-label="Dismiss SQL notice" onClick={()=>setNotice("")}>×</button></p>}
     {!storageOk&&<p className="sql-callout is-error" role="alert">Browser recovery storage is unavailable. Copy your SQL before closing.</p>}

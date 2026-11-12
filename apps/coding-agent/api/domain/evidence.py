@@ -27,6 +27,48 @@ class ToolCall:
     name: str
     status: str = "running"
     summary: str = ""
+    proof: dict | None = None
+
+
+def successful_call(call: ToolCall, requirement: str = "") -> bool:
+    if call.status != "completed":
+        return False
+    if call.name.endswith(("dbx_run_query", "dbx_query_run_status")):
+        p = call.proof or {}
+        if not _valid_receipt(p) or p.get("kind") != "sql-run":
+            return False
+        if re.search(r"\b(cancel|stop)\b", requirement, re.I):
+            return p.get("state") == "canceled" or (p.get("cancelRequested") is True and p.get("state") in {"succeeded", "failed"})
+        if re.search(r"\b(status|state)\b", requirement, re.I) and not re.search(r"\b(run|execute)\b", requirement, re.I):
+            return p.get("state") in {"pending", "running", "succeeded", "failed", "canceled", "cancel_requested", "submission_unknown", "outcome_unknown"}
+        return (_valid_receipt(p) and p.get("kind") == "sql-run" and p.get("state") == "succeeded"
+                and p.get("resultAvailable") is True and bool(p.get("statementId")))
+    if call.name.endswith(("dbx_read_query", "dbx_update_query")):
+        p = call.proof or {}
+        action = "updated" if call.name.endswith("dbx_update_query") else "read"
+        return (_valid_receipt(p) and p.get("kind") == "sql-query" and p.get("action") == action
+                and isinstance(p.get("version"), int) and p["version"] > 0)
+    # Legacy synchronous SQL reports PENDING/FAILED as a completed RPC. Those are not execution proof.
+    return not (call.name.endswith("dbx_run_sql") and re.search(r'"(?:state|error)"\s*:', call.summary))
+
+
+def _valid_receipt(proof: dict) -> bool:
+    from uuid import UUID
+
+    try:
+        UUID(proof.get("draftId", ""))
+    except (ValueError, AttributeError, TypeError):
+        return False
+    return bool(re.fullmatch(r"[0-9a-f]{64}", str(proof.get("sourceHash", ""))))
+
+
+def receipt_summary(call: ToolCall) -> str:
+    p = call.proof or {}
+    if p.get("kind") == "sql-query":
+        return f"SQL draft {p.get('action')}; version {p.get('version')}; source {p.get('sourceHash')}"
+    if p.get("kind") == "sql-run":
+        return f"SQL {p.get('state')}; run {p.get('runId')}; source {p.get('sourceHash')}; preview rows {p.get('rowCount', 'unavailable')}"
+    return call.summary
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,7 +123,7 @@ CHANGE_RE = re.compile(
 #: "migrate the SQL dialects" was classified as conversation and finished `DONE` with zero tool calls.
 ACTION_RE = re.compile(
     r"\b(?:write|create|build|make|fix|run|execute|add|remove|update|delete|drop|rename|schedule|deploy|"
-    r"optimi[sz]e|modify|insert|save|generate|rewrite|refactor|document|profile|query|select|join|aggregate|"
+    r"optimi[sz]e|modify|insert|save|generate|rewrite|refactor|replace|edit|document|profile|query|select|join|aggregate|"
     r"plot|chart|list|find|search|check|verify|describe|explain|summari[sz]e|investigate|compare|compute|"
     r"count|calculate|show|tell|why|how many|what|which|"
     # The verbs that move data or code somewhere. Each one names work a tool does.
@@ -186,15 +228,15 @@ def verify(claimed: list[dict], calls: list[ToolCall]) -> list[EvidenceRow]:
             if not candidates:  # tolerate the agent dropping a server prefix
                 candidates = [c for name, cs in by_name.items() if name.endswith(tool) for c in cs]
             match = next(
-                (c for c in candidates if c.status == "completed"), candidates[0] if candidates else None
+                (c for c in candidates if successful_call(c, str(claim.get("requirement", "")))), candidates[0] if candidates else None
             )
         rows.append(
             EvidenceRow(
                 requirement=str(claim.get("requirement") or claim.get("text") or "")[:200],
                 tool_call_id=match.call_id if match else cid or "",
                 tool_name=match.name if match else tool,
-                result_summary=str(claim.get("summary") or (match.summary if match else ""))[:300],
-                verified=bool(match and match.status == "completed"),
+                result_summary=(receipt_summary(match) if match and match.proof else str(claim.get("summary") or (match.summary if match else "")))[:300],
+                verified=bool(match and successful_call(match, str(claim.get("requirement", "")))),
             )
         )
     return rows

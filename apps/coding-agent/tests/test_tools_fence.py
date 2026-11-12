@@ -209,7 +209,10 @@ def test_a_plain_identifier_is_accepted(monkeypatch, good):
 #: compensating removal and three assertions, not an edited number: `07 §6` of spec 014 carries the
 #: arithmetic and the two merges that were considered and rejected. Every MCP tool is advertised on every
 #: request, so this count is a cost paid on every turn of every session.
-CORE_BUDGET = 28
+# SQL editor integration adds four narrow operations: read/update/run/status. Cancellation shares
+# status. Their permission and completion contracts differ, so they are not a loose action bag.
+# The 28 existing tools stay available; spec 013's AI assessment records the explicit 32-tool budget.
+CORE_BUDGET = 32
 
 #: The tools that LEFT `core` in spec 014. Each must still be discoverable, which here means named by a
 #: skill: a tool that left `core` and is named by no skill is a tool the agent can no longer reach.
@@ -224,7 +227,7 @@ def test_the_core_profile_stays_within_its_budget(monkeypatch):
     m = load(monkeypatch)
     assert len(m._CORE) <= CORE_BUDGET, (
         f"_CORE has {len(m._CORE)} tools, over the budget of {CORE_BUDGET}. Adding one means removing "
-        f"one, or raising the budget with a reason in spec 014 [07 §6].")
+        f"one, or raising the budget with a reason in the SQL-agent assessment in spec 013.")
 
 
 def test_every_core_tool_is_reachable_from_a_flow(monkeypatch):

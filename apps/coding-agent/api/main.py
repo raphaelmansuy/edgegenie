@@ -243,6 +243,7 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
     sql_provider = (DemoQueries(sql_store) if cfg.agent_mode == "fake" and not os.environ.get("DATABRICKS_HOST")
                     else DatabricksQueries(DbxHttp(app.state.sql_workspace, lambda: None, max_response_bytes=8*1024*1024), cfg.sql_create))
     app.state.sql = SqlService(sql_provider, sql_store, create_enabled=cfg.sql_create, run_enabled=cfg.sql_run)
+    orch.attach_sql(app.state.sql, app.state.sql_workspace)
     app.include_router(sql_router)
 
     # Bytes the user hands us (spec 009). A directory in dev, memory in tests; the port makes a third
@@ -327,6 +328,9 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
     app.include_router(llm_router)
     app.include_router(llm_admin_router)
     app.include_router(internal_router)
+    from .routers.sql_agent import router as sql_agent_router
+
+    app.include_router(sql_agent_router)
     app.include_router(infra_router)
     app.include_router(jobs_router)
 
