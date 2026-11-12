@@ -76,6 +76,28 @@ missing volume is a session that never starts, which the app reports in words an
 
 A 403 "resolving file endpoints" warning from the SDK is harmless: it uses the default endpoints.
 
+## Deployed, and what the deployment proved
+
+`make deploy ENV=dev` shipped commit `ae955ba` and `verify-deployed.sh` passed 25 checks. Three of them
+are new and would have failed on the 1.0.0 build: the volume grant, `/api/notebook/kernels`, and the
+version the served bundle carries.
+
+Then a session was run against the live URL over HTTP, as the browser does:
+
+| Cell | What it did | Answer |
+|---|---|---|
+| 1 | `x = 41; print('first', x)` | `first 41`, after 18 s including compute start |
+| 2 | `print(x + 1)` | `42`, in 0.96 s — the variable survived |
+| 3 | an object with `_repr_html_` | output type `html` |
+
+The HTML output frame is safe on the platform: the app sets no `Content-Security-Policy` and the
+platform adds none, so there is no policy for the sandboxed frame to violate. The frame's protection
+is the `sandbox` attribute the app puts on it, not a header it depends on.
+
+One thing to know when reading `databricks jobs list-runs --active-only`: a session whose notebook is
+open in a browser shows up as an active run, and that is correct — the open tab renews the lease every
+30 s, and the session ends on its own once the tab is closed.
+
 ## Not done, and not true
 
 - Python does not run as the signed-in user. Scala and R are not supported.
@@ -83,5 +105,6 @@ A 403 "resolving file endpoints" warning from the SDK is harmless: it uses the d
 - `%run` takes no arguments. It stops at 3 levels, 200 cells, or 500 KB, and it refuses a cycle.
 - A package installed with `%pip` is not loaded again in a session that already imported it. Restart
   the session.
-- Not yet checked after deploy: the HTML output frame under the platform content security policy.
-  `make deploy ENV=dev` has not been run.
+- Python sessions are on the dev workspace only. The prod workspace has no session volume yet: running
+  `make deploy ENV=prod` will create it, because the step lives in the shared deploy path.
+
