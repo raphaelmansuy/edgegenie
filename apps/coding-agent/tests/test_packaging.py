@@ -7,7 +7,11 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -126,6 +130,44 @@ def test_the_build_hook_produces_the_web_bundle():
     hook = (APP / "scripts" / "prepare-app.sh").read_text()
     assert "web/dist" in hook
     assert "opencode" in hook, "the agent binary is installed by the build hook, not by the platform"
+
+
+@pytest.mark.parametrize("version,accepted", [("1.18.19", True), ("1.18.18", False)])
+def test_clean_build_initializes_the_agent_and_keeps_its_version_pin(tmp_path, version, accepted):
+    """A fresh package wrapper fails until postinstall initializes its binary, as in Databricks."""
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    shutil.copyfile(APP / "scripts/prepare-app.sh", scripts / "prepare-app.sh")
+    for helper in ("check-run-identity.py", "install-databricks-cli.py"):
+        (scripts / helper).write_text("")
+    binaries = tmp_path / "fixture-bin"
+    binaries.mkdir()
+    npm = binaries / "npm"
+    npm.write_text(f"#!{sys.executable}\n" + '''
+import os, sys
+from pathlib import Path
+if "--prefix" in sys.argv:
+    if "build" in sys.argv:
+        Path("web/dist").mkdir(parents=True)
+        Path("web/dist/index.html").write_text("built")
+else:
+    Path("node_modules/opencode-ai/bin").mkdir(parents=True)
+    Path("node_modules/.bin").mkdir()
+    Path("node_modules/opencode-ai/postinstall.mjs").write_text(
+        "import fs from 'node:fs'; fs.writeFileSync('node_modules/opencode-ai/bin/ready', 'ready');")
+    wrapper = Path("node_modules/.bin/opencode")
+    wrapper.write_text("#!/usr/bin/env node\\n"
+        "const fs=require('node:fs'); if(!fs.existsSync('node_modules/opencode-ai/bin/ready'))process.exit(7);"
+        "console.log(process.env.FIXTURE_AGENT_VERSION);")
+    wrapper.chmod(0o755)
+''')
+    npm.chmod(0o755)
+    result = subprocess.run(["bash", str(scripts / "prepare-app.sh")], capture_output=True, text=True,
+                            env={**os.environ, "PATH": f"{binaries}:{os.environ['PATH']}",
+                                 "FIXTURE_AGENT_VERSION": version})
+    assert (result.returncode == 0) is accepted, result.stdout + result.stderr
+    assert (tmp_path / "node_modules/opencode-ai/bin/ready").is_file()
+    assert (tmp_path / "web/dist/index.html").is_file() is accepted
 
 
 def test_the_agent_is_a_declared_dependency():

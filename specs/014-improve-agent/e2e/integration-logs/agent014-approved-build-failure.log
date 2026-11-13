@@ -1,0 +1,37 @@
+2026-11-13T23:27:36Z [BUILD] [INFO] Starting deployment 01f1dfb9cee014e8a83661f9af4ddee6...
+2026-11-13T23:27:36Z [APP] INFO:     Shutting down
+2026-11-13T23:27:36Z [APP] INFO:     Waiting for application shutdown.
+2026-11-13T23:27:36Z [APP] INFO:     Application shutdown complete.
+2026-11-13T23:27:36Z [APP] INFO:     Finished server process [317]
+2026-11-13T23:27:36Z [BUILD] [INFO] Cloning git repository: https://github.com/raphaelmansuy/opengenie (commit: 692dc53dc1c65fbd2e6276e6d2039ef57baba83f)
+2026-11-13T23:27:36Z [BUILD] [INFO] Downloading source code...
+2026-11-13T23:27:39Z [BUILD] [INFO] Downloaded source code, extracting...
+2026-11-13T23:27:40Z [BUILD] [INFO] Successfully downloaded and extracted git repository
+2026-11-13T23:27:40Z [BUILD] [INFO] Running security scan on source
+2026-11-13T23:27:40Z [BUILD] [INFO] Installing Python dependencies...
+2026-11-13T23:27:40Z [BUILD] [INFO] Requirements have not changed. Skipping installation.
+2026-11-13T23:27:40Z [BUILD] [INFO] Installing dependencies...
+2026-11-13T23:27:45Z [BUILD]
+changed 5 packages, and audited 4 packages in 5s
+2026-11-13T23:27:45Z [BUILD]
+found 0 vulnerabilities
+2026-11-13T23:27:45Z [BUILD] [INFO] Dependencies installed successfully.
+2026-11-13T23:27:45Z [BUILD] [INFO] Running build script bash scripts/prepare-app.sh
+2026-11-13T23:27:45Z [BUILD]
+> build
+> bash scripts/prepare-app.sh
+2026-11-13T23:27:46Z [BUILD] Agent execution identity: user only; no separate identity declared or app-SP fallback enabled
+2026-11-13T23:27:46Z [BUILD] [prepare] installing the coding agent
+2026-11-13T23:27:52Z [BUILD]
+added 5 packages in 7s
+2026-11-13T23:27:52Z [BUILD] Error: opencode-ai's postinstall script was not run.
+2026-11-13T23:27:52Z [BUILD] This occurs when using --ignore-scripts during installation, or when using a
+package manager like pnpm that does not run postinstall scripts by default.
+
+To fix this, run the postinstall script manually:
+  cd node_modules/opencode-ai && node postinstall.mjs
+
+Or reinstall opencode-ai without the --ignore-scripts flag.
+2026-11-13T23:27:52Z [BUILD] [WARN] Security scan did not complete: scan canceled before completion
+2026-11-13T23:27:52Z [BUILD] [INFO] Deployment 01f1dfb9cee014e8a83661f9af4ddee6 ended in 16.421316695s
+2026-11-13T23:27:52Z [BUILD] [ERROR] Error building app
