@@ -1,0 +1,89 @@
+{
+  "version": "1.2.0-rc.3",
+  "sourceRevision": "7f104c78d859f42a8ef0ab764fc4adf1907e89fe",
+  "deploymentId": "01f1de694b321347a8d654ebb982a162",
+  "reviewedAt": "2026-11-12T07:23:23.637816+00:00",
+  "images": [
+    {
+      "file": "screenshots/34-agent-query-working.png",
+      "sha256": "80449a9a10be6921f842a1c47eb51df28cbd300c003c2cbc0b3ab299132ff274",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Accepted synthetic query mission is visible beside the unchanged starting draft; connecting/queued state remains explicit and does not imply execution.",
+      "captureDeploymentId": "01f1de694b321347a8d654ebb982a162"
+    },
+    {
+      "file": "screenshots/35-agent-query-verified-results.png",
+      "sha256": "6c3d2891813c2ca953bc7a96f8d2a8ca62ab2c4237599b4a9f04d0080b2d38e9",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Agent SQL replaces SELECT 1 in the open editor; native Agent verified/42 result and all four receipt-backed evidence rows agree; primary controls remain clear.",
+      "captureDeploymentId": "01f1de694b321347a8d654ebb982a162"
+    },
+    {
+      "file": "screenshots/36-agent-query-reload.png",
+      "sha256": "c84b625392803315cdef96154ed443d20f6391c2f86dd332c896cc9b2354aaff",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Reload retains the changed draft and same successful native result; the new conversation affordance is separate from recovered SQL history.",
+      "captureDeploymentId": "01f1de694b321347a8d654ebb982a162"
+    },
+    {
+      "file": "screenshots/37-agent-human-conflict.png",
+      "sha256": "90bb12796988a8fe19da1e45e1a56c23f5c5dc1d5113ea395c9b2782e6f34847",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Human local SQL stays in the editor while a separate expanded agent version is reviewable; use/keep/copy actions are clear and Run is disabled.",
+      "captureDeploymentId": "01f1de694b321347a8d654ebb982a162"
+    },
+    {
+      "file": "screenshots/38-agent-human-conflict-dark.png",
+      "sha256": "30d15826f2214b25f32b0f3ff0d499008db064d6603b221d4b698e701e39130b",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Dark conflict screen preserves readable source, review text and distinct recovery controls using existing theme colors.",
+      "captureDeploymentId": "01f1de694b321347a8d654ebb982a162"
+    },
+    {
+      "file": "screenshots/39-agent-human-conflict-mobile.png",
+      "sha256": "53bbf5ba07e9ea6342dbb37fc7231cff94cf06995d98b9018b741c4488e615a3",
+      "width": 375,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "At 375px the human and remote SQL remain visible; recovery buttons wrap cleanly, Run stays disabled, and no page-wide overflow appears.",
+      "captureDeploymentId": "01f1de694b321347a8d654ebb982a162"
+    },
+    {
+      "file": "screenshots/40-agent-human-kept.png",
+      "sha256": "d59b82775b0bed7607347b713dc7bb478cae9a3e58d36c32479be8ab1efce1ff",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Keep my SQL restores the enabled Run action and preserves the human text; the completed agent change remains accurately described in chat.",
+      "captureDeploymentId": "01f1de694b321347a8d654ebb982a162"
+    },
+    {
+      "file": "screenshots/41-agent-explanation-only.png",
+      "sha256": "6fee91adc1467f7594f6113da80e0f66aedbda862870f35f06b9b8b5030d5ef0",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Injected comment remains source text; assistant explains the scalar one-row grain without running or editing. The analysis row is explicitly unverified; the actual source read is verified.",
+      "captureDeploymentId": "01f1de694b321347a8d654ebb982a162"
+    },
+    {
+      "file": "screenshots/42-agent-schema-grounded-taxi-query.png",
+      "sha256": "88f5bae223603b404d3a5222c68d11d094a3cac9ee2efba2dd85edfc18937da1",
+      "width": 1440,
+      "height": 1100,
+      "visuallyInspected": true,
+      "observation": "Schema-grounded trip_distance/fare_amount query shows LIMIT 5, all five real native rows and all five verified action-evidence rows; 1100px screen capture includes result footer without blank full-page extension.",
+      "captureDeploymentId": "01f1de694b321347a8d654ebb982a162"
+    }
+  ]
+}

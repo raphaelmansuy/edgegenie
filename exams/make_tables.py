@@ -25,7 +25,7 @@ def trial_of(batch: str) -> str:
     return m.group(1) if m else "t1"
 
 
-def load(trials: bool = False):
+def load(trials: bool = False, via: str = "kit"):
     """trials=False: first trial only (what the main tables use). trials=True: every trial."""
     rows = []
     for f in glob.glob(str(R / "*" / "*.json")):
@@ -33,6 +33,8 @@ def load(trials: bool = False):
         if b in SKIP or b.startswith("_") or f.endswith(".events.jsonl"):
             continue
         d = json.load(open(f))
+        if d.get("via", "kit") != via or d.get("valid") is False:
+            continue
         d["_batch"] = b
         d["_trial"] = trial_of(b)
         if trials or d["_trial"] == "t1":
@@ -131,11 +133,15 @@ def repeat_table(rows_all, key, missions, title):
 def blocks() -> dict[str, str]:
     """Named markdown blocks. docs/ reference them with <!-- BEGIN:name --> ... <!-- END:name -->."""
     rows, allrows = load(), load(trials=True)
+    app_rows = load(via="app")
     cop = [d for d in rows if d.get("agent") == "copilot"]
     oc = [d for d in rows if d.get("agent", "opencode") == "opencode"]
     return {
-        "dev": table(oc, DEV, "Development set (M1-M8): used while tuning V2-V4"),
-        "held": table(oc, HELD, "Held-out set (X1-X3): never used for tuning"),
+        "app_dev": table(app_rows, DEV, "App HTTP path: development set (M1-M8)"),
+        "app_agent014": table(app_rows, [f"M{i}" for i in range(9, 15)], "App HTTP path: agent lifecycle qualification (M9-M14)"),
+        "app_held": table(app_rows, HELD, "App HTTP path: held-out set (X1-X3)"),
+        "dev": table(oc, DEV, "Kit path: development set (M1-M8): used while tuning V2-V4"),
+        "held": table(oc, HELD, "Kit path: held-out set (X1-X3): never used for tuning"),
         "summary_dev": matrix(rows, DEV, "Development set (M1-M8), total score"),
         "summary_held": matrix(rows, HELD, "Held-out set (X1-X3), total score"),
         "repeat": repeat_table(allrows, ("opencode", "V4", "gpt-oss-120b"), DEV,

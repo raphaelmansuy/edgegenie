@@ -1,0 +1,19 @@
+{
+  "pass": false,
+  "sessionId": "6979ab4f0d4847a6",
+  "folder": "/Users/raphael.mansuy@gmail.com/agent_scratch/agent014-e2e-55982780",
+  "captures": [
+    "01-real-review",
+    "02-real-applied",
+    "03-observed-supported-block",
+    "04-real-undo"
+  ],
+  "checks": {
+    "reviewWroteNothing": true,
+    "exactlyOneCellChanged": true,
+    "other59ByteIdentical": true,
+    "readBackVerified": true,
+    "undoByteIdentical": true
+  },
+  "failure": "Old supervisor blocked supported prose despite an observed exact revision. Regression corrected and separately retested."
+}

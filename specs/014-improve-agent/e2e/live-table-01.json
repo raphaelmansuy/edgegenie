@@ -1,0 +1,24 @@
+{
+  "pass": true,
+  "captures": [
+    "01-native-table-run",
+    "02-native-table-resource",
+    "03-table-cleanup-review",
+    "04-native-table-deleted"
+  ],
+  "errors": [],
+  "sessionId": "0fd4e5cbdcd04520",
+  "schema": "workspace.agent014_table_0e62bbae88",
+  "table": "workspace.agent014_table_0e62bbae88.created",
+  "folder": "/Users/raphael.mansuy@gmail.com/agent_scratch/agent014-table-0e62bbae88",
+  "nativeTableId": "af00ca9b-6415-4559-a5d5-75e7049011bf",
+  "checks": {
+    "actualModelSql": true,
+    "oneCreatedResource": true,
+    "noUndoExplicit": true,
+    "reviewWroteNothing": true,
+    "nativeAbsenceAfterCleanup": true,
+    "emptySchemaRemoved": true
+  },
+  "scope": "Real model/app/ACP/MCP; native SQL as current user and reviewed deletion of exactly its isolated table."
+}

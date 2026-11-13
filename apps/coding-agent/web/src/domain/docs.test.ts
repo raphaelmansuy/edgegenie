@@ -59,10 +59,11 @@ describe("documents and actions", () => {
   it("a table document is named by its table", () => {
     expect(makeDoc("table", "main.s.orders").name).toBe("orders");
   });
-  it("every action that changes something promises to leave the original alone", () => {
+  it("every mutating action requires a revisioned inside edit or a fenced copy", () => {
     for (const a of ["fix", "document", "optimize"] as const) {
       expect(ACTIONS[a].prompt).toMatch(/working folder/);
-      expect(ACTIONS[a].prompt).toMatch(/original|never modify/i);
+      expect(ACTIONS[a].prompt).toMatch(/revision|review/i);
+      expect(ACTIONS[a].prompt).toMatch(/outside|otherwise/i);
     }
     expect(ACTIONS_FOR.table).toEqual(["profile", "query"]);
   });

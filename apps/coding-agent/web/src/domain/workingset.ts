@@ -7,8 +7,8 @@ const key = (scope: string) => `coding-agent:working-set:v1:${encodeURIComponent
 const MAX = 100;
 function documentOf(value: unknown): Doc | null {
   const d = value as Partial<Doc> | null;
-  if (!d || !["file", "notebook", "table"].includes(d.kind ?? "") || typeof d.ref !== "string" || !d.ref || d.ref.length > 2048) return null;
-  if (d.kind !== "table" && !d.ref.startsWith("/")) return null;
+  if (!d || !["file", "notebook", "table", "query", "query-draft"].includes(d.kind ?? "") || typeof d.ref !== "string" || !d.ref || d.ref.length > 2048) return null;
+  if (!["table","query","query-draft"].includes(d.kind!) && !d.ref.startsWith("/")) return null;
   return makeDoc(d.kind!, d.ref);
 }
 export function parseWorkingSet(raw: string | null): WorkingSet {

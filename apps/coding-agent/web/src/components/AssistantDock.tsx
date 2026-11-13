@@ -1,3 +1,4 @@
+import { WorkComposerBar, PendingWork } from "./AgentWork";
 /** The assistant dock: the conversation, beside the document it is about.
  *
  * Spec 006 04. The whole point is in the header: it states the binding (`in context: …`), so the
@@ -10,7 +11,8 @@
  *  - **the approval is inline**, because the modal sheet covers the code the approval is about (D4);
  *  - **it never opens itself**: below 1180 px it is a drawer that only `⌘J` or the toggle opens (AD-4).
  */
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { useFollowScroll } from "../hooks/useFollowScroll";
 import type { Approval, Attachment, SessionView, Turn } from "../domain/events";
 import { dockState, dockStateWord, dockTitle, suggestionsFor, type DockState, type Suggestion } from "../domain/dock";
 import { focusLabel, type Focus } from "../domain/focus";
@@ -22,6 +24,7 @@ import { followUps } from "../domain/followups";
 import { conversationMarkdown, exportName } from "../domain/transcript";
 import type { SessionSummary } from "../api/client";
 import { RunStatus } from "./RunStatus";
+import { AgentMeter } from "./AgentMeter";
 import { Composer } from "./Composer";
 import { TurnView } from "./Transcript";
 import type { Doc } from "../domain/docs";
@@ -85,25 +88,20 @@ export function AssistantDock(p: DockProps) {
     last: turns.at(-1) ? { status: turns.at(-1)!.status } : null,
     pendingApprovals: pending.length,
   });
-  const scroller = useRef<HTMLElement>(null);
+  const [historyEnd,setHistoryEnd]=useState<number | null>(null);
+  // History expansion belongs to one conversation; a visit to another resets the DOM bound.
+  const [historySession,setHistorySession]=useState(p.session.id);
+  if (historySession !== p.session.id) {
+    setHistorySession(p.session.id);
+    setHistoryEnd(null);
+  }
   const last = turns.at(-1);
   const canSend = p.session.status !== "archived" && !p.session.requiresResume && (!p.hasSession || p.conn === "live");
-  /* Follow the stream while the reader is pinned to the bottom, and stop the moment they scroll up.
-     "Pinned" is remembered from the last scroll event, not measured after an update: by the time an
-     effect runs the content has already grown, so measuring then says "far from the bottom" for any
-     update bigger than the threshold, and a long turn would never be followed. */
-  const pinned = useRef(true);
-  const onScroll = () => {
-    const el = scroller.current;
-    if (el) pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-  };
-  // A different conversation starts at its end.
-  useEffect(() => { pinned.current = true; }, [p.session.id]);
-  useEffect(() => {
-    const el = scroller.current;
-    // Instant, not smooth: a smooth scroll fires intermediate scroll events that would unpin the reader.
-    if (el && pinned.current) el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
-  }, [p.session.id, turns.length, last?.answer.length, last?.tools.length, last?.status, state, p.error]);
+  /* Follow the stream while the reader is at the tail, and let go the moment they move up — by wheel,
+     finger, key or scrollbar. The decision is `domain/follow.ts`; the panel-wide wheel and focus
+     contract is the hook's (spec 012 §3). */
+  const { scroller, region, behind, toEnd, forwardWheel, claimFocus } = useFollowScroll(
+    p.session.id ?? "", [turns.length, last?.answer.length, last?.tools.length, last?.status, state, p.error, pending.length]);
 
   const empty = state === "empty" && turns.length === 0;
   // The dock says READY after a turn that ended blocked: true of the connection, false of the work.
@@ -114,7 +112,7 @@ export function AssistantDock(p: DockProps) {
        reader because that is what the region IS; the link says "the conversation" because that is
        what the user calls it. Both names are stated in the e2e (E-33). */
     <aside id="dock" tabIndex={-1} className={`pane assistant${p.className ? ` ${p.className}` : ""}`} aria-label="Assistant"
-      data-state={state}>
+      data-state={state} onWheel={forwardWheel} onMouseDown={claimFocus}>
       {p.edge}
       {/* The header answers two questions in one line: what is happening, and what it is about.
           A separate bold title competed with the binding for the 380 px available and truncated the
@@ -152,22 +150,32 @@ export function AssistantDock(p: DockProps) {
 
       <RunStatus key={p.session.id} session={p.session} conn={p.conn} onRestore={p.onRestore} onStop={p.onStop} />
 
-      <div className="dock-body" ref={scroller as React.RefObject<HTMLDivElement>} onScroll={onScroll} role="log"
+      {/* `tabIndex={0}`: a region that scrolls must be reachable by keyboard (axe: scrollable-region-focusable),
+          and it is what a click on the panel's dead space focuses, so PageUp / Space / ↑↓ scroll it. */}
+      <div className="dock-body" ref={scroller} tabIndex={0} {...region} role="log"
         aria-label="Conversation" aria-live="polite" aria-busy={state === "streaming"}>
         {empty && <Start focus={p.focus} onSuggestion={p.onSuggestion} hasSession={p.hasSession} />}
 
-        {turns.map((t) => (
+        {turns.length > 30 && <nav className="transcript-pages" aria-label="Conversation history pages">
+          <p role="status">Viewing turns {Math.max(0, (historyEnd ?? turns.length) - 30) + 1}–{historyEnd ?? turns.length} of {turns.length}</p>
+          <button className="btn ghost" disabled={(historyEnd ?? turns.length) <= 30} onClick={() => { setHistoryEnd(Math.max(0, (historyEnd ?? turns.length) - 30)); scroller.current?.scrollTo({top:0}); }}>Show 30 earlier turns</button>
+          {historyEnd !== null && <>
+            <button className="btn ghost" onClick={() => { setHistoryEnd(historyEnd + 30 >= turns.length ? null : historyEnd + 30); scroller.current?.scrollTo({top:0}); }}>Show 30 newer turns</button>
+            <button className="btn ghost" onClick={() => { setHistoryEnd(null); requestAnimationFrame(toEnd); }}>Return to latest turn</button>
+          </>}
+        </nav>}
+        {turns.slice(Math.max(0, (historyEnd ?? turns.length) - 30), historyEnd ?? turns.length).map((t) => (
           // Retry is offered on the last turn only, and only when it is not the thing already running.
           <TurnView key={t.id} turn={t} onRetry={canSend && t === last && state !== "streaming" && state !== "asking" && t.status !== "interrupted" ? p.onRetry : undefined} />
         ))}
 
         {/* The next step, derived from what this turn actually did. Only on the last turn, and only when
             nothing is running or waiting: a chip beside a pending approval is a second place to look. */}
-        {last && canSend && state === "empty" && (
+        {historyEnd === null && last && canSend && state === "empty" && (
           <FollowUps items={followUps(last)} onPick={p.onSuggestion} />
         )}
 
-        {state === "asking" && pending.map((a) => (
+        {state === "asking" && pending.filter(a => !a.changeId).map((a) => (
           <InlineApproval key={a.approvalId} approval={a} disabled={!canSend} onDecide={p.onApprove} />
         ))}
 
@@ -177,6 +185,14 @@ export function AssistantDock(p: DockProps) {
 
         {p.error && state !== "failed" && (
           <p className="dock-error" role="alert"><Alert size={13} /> {p.error}</p>
+        )}
+
+        {/* Only when the reader has left the tail and there is more below: the way back to following. */}
+        {behind && (
+          <button type="button" className="dock-jump"
+            onClick={() => { setHistoryEnd(null); requestAnimationFrame(() => { toEnd(); scroller.current?.focus({ preventScroll: true }); }); }}>
+            <span aria-hidden>↓</span> {state === "streaming" ? "Follow the work" : "Latest"}
+          </button>
         )}
       </div>
 
@@ -189,6 +205,7 @@ export function AssistantDock(p: DockProps) {
           <span className="dock-pin-was"> · the answer above came from {shortLabel(p.lastTurnModel)}</span>
         </p>
       )}
+      <PendingWork /><WorkComposerBar /><AgentMeter session={p.session} />
       <Composer
         variant="dock"
         disabled={!canSend}
@@ -282,15 +299,17 @@ export function InlineApproval({ approval, onDecide, disabled = false }: {
         <strong>Needs your decision</strong>
       </header>
       <p className="dock-approval-action">
-        it wants to <strong>{approval.action}</strong> something outside your working folder
+        The agent requested <strong>{approval.action}</strong>
       </p>
       <p className="dock-approval-target"><code>{approval.target}</code></p>
       {approval.reason && <p className="dock-approval-reason">{approval.reason}</p>}
+      {approval.validationError && <p className="dock-approval-reason" role="alert">Proposal refused: {approval.validationError} Reject this call so the agent can correct its input.</p>}
+      {approval.input && <pre className="approval-input">{JSON.stringify(approval.input, null, 2)}</pre>}
       {approval.blastRadius && <p className="dock-approval-reason">Blast radius: {approval.blastRadius}</p>}
       <div className="dock-approval-actions">
-        <button className="btn sm primary" disabled={disabled || pending || !approval.options.some((o) => o.kind === "allow_once")}
+        <button className="btn sm primary" disabled={disabled || pending || approval.argumentsKnown === false || !approval.options.some((o) => o.kind === "allow_once")}
           onClick={() => void decide("allow_once")}>Allow once</button>
-        <button className="btn sm" disabled={disabled || pending || !approval.options.some((o) => o.kind === "allow_always")}
+        <button className="btn sm" disabled={disabled || pending || approval.argumentsKnown === false || !approval.options.some((o) => o.kind === "allow_always")}
           onClick={() => void decide("allow_session")}>Allow this session</button>
         <button className="btn sm ghost stop" disabled={disabled || pending} onClick={() => void decide("deny")}>Deny</button>
       </div>

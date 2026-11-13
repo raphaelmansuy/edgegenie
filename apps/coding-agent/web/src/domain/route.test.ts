@@ -32,6 +32,7 @@ describe("parseRoute", () => {
     r({ doc: { kind: "notebook", ref: "/Users/raphael.mansuy@gmail.com/agent_scratch/avg_fare_by_hour" } }),
     r({ doc: { kind: "notebook", ref: "/Shared/my notebook #1?" }, cell: 12 }),
     r({ doc: { kind: "file", ref: "/Users/me/lib/util.py" } }),
+    r({ doc: { kind: "notebook", ref: "/Users/me/revenue" }, cell: 3, session: "owned-session" }),
     r({ doc: { kind: "table", ref: "samples.nyctaxi.trips" } }),
     r({ session: "s_01HZX" }),
     r({ settings: "models" }),

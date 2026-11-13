@@ -1,0 +1,3 @@
+== M12 Continue after a long native run  (run vb0403)
+  no-op        : 1/10  OK (fails)
+  reference    : 10/10  OK

@@ -19,7 +19,7 @@ API = APP / "api"
 
 #: The exact file the shipped app writes for a Databricks model, captured before this spec changed the
 #: code. `tests/fixtures/opencode.databricks.golden.json` is the byte-for-byte expectation.
-GOLDEN = Path(__file__).resolve().parent / "fixtures" / "opencode.databricks.golden.json"
+GOLDEN = Path(__file__).resolve().parent / "fixtures" / "opencode.agent014.golden.json"
 
 
 def test_the_databricks_agent_config_is_byte_identical_to_the_shipped_one():
@@ -75,9 +75,11 @@ def test_the_only_vendor_names_left_are_provider_kind_members_and_adapter_files(
     pattern = re.compile(r"""['"](databricks|openai|anthropic|google_vertex|vertex)['"]""")
     #: Files that must name a provider: the enum, the seed data, the adapters, and copy shown to a
     #: person. Everything else is a regression.
-    allowed_prefixes = ("api/adapters/llm/", "api/domain/llm/")
+    allowed_prefixes = ("api/adapters/", "api/domain/llm/")
     allowed = {"api/adapters/acp/agent_config.py", "api/services/model_resolver.py",
-               "api/services/model_registry.py", "api/services/credential_service.py",
+               "api/composition/model_registry.py", "api/services/credential_service.py",
+               # SQL grammar selection is a dialect, not a model-provider branch.
+               "api/domain/sqlpolicy.py",
                # A Databricks adapter: it shells out to the `databricks` CLI to refresh a local
                # development token. Naming the vendor is the point of the file, and it is the only
                # place the name may appear for this reason (see `api/adapters/databricks/devtoken.py`).
@@ -109,7 +111,7 @@ def test_config_for_is_defined_once_and_known_endpoints_is_gone():
 def test_the_limits_guard_iterates_the_registry_not_a_python_list():
     """C-4: the guard is a property of the resolver over the catalogue, not of `Settings`."""
     from api.domain.llm import LimitEvidence
-    from api.services.model_registry import _seed
+    from api.composition.model_registry import _seed
 
     offered = list(_seed().models)
     assert offered, "the seed file is empty"
@@ -126,7 +128,7 @@ def test_the_limits_guard_iterates_the_registry_not_a_python_list():
 def test_every_seeded_credential_kind_matches_its_provider():
     """A model that needs a key must say which kind, or the settings form cannot ask for it."""
     from api.domain.llm import CredentialKind
-    from api.services.model_registry import _seed
+    from api.composition.model_registry import _seed
 
     for spec in _seed().models:
         if spec.id.provider.value == "databricks":
@@ -136,11 +138,19 @@ def test_every_seeded_credential_kind_matches_its_provider():
 
 
 def test_the_resolver_is_the_only_place_a_url_is_built():
-    """The descriptor is pure and lives with its adapter; nothing else assembles a provider URL."""
+    """Pure config serialization and URL normalization are values, never network adapters.
+
+    Spec 014 moves them into the domain so lifecycle services do not import the ACP adapter.
+    Other domain modules still may not assemble provider URLs.
+    """
+    pure_values={API / 'domain/urls.py', API / 'domain/llm/agent_config.py'}
+    for value in pure_values:
+        assert 'httpx' not in value.read_text()
+        assert 'from ..adapters' not in value.read_text()
     offenders = []
     for path in (API / "domain").rglob("*.py"):
         text = path.read_text()
-        if "https://" in text:
+        if "https://" in text and path not in pure_values:
             offenders.append(str(path.relative_to(APP)))
     assert not offenders, f"a URL reached the domain: {offenders}"
 

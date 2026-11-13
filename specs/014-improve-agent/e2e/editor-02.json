@@ -1,0 +1,11 @@
+{
+  "pass": true,
+  "captures": [
+    "01-unsaved-local",
+    "02-incoming-preserves-local",
+    "03-local-recovered",
+    "04-live-editor-refreshed"
+  ],
+  "errors": [],
+  "scope": "Real local editor and app routes, draft recovery and ledger-triggered source refresh."
+}

@@ -17,6 +17,8 @@ const label = toolLabel;
 
 /** A query result as a real table: alignment, numbers right, one header row. */
 function Grid({ table }: { table: { columns: string[]; rows: string[][]; truncated: boolean } }) {
+  const [page, setPage] = useState(0);
+  const start = Math.min(page * 20, Math.max(0, Math.ceil(table.rows.length / 20) - 1) * 20);
   const numeric = table.columns.map((_, c) =>
     table.rows.length > 0 && table.rows.every((r) => r[c] === "" || /^-?[\d.,]+$/.test(r[c])));
   return (
@@ -25,11 +27,16 @@ function Grid({ table }: { table: { columns: string[]; rows: string[][]; truncat
         <caption>{table.rows.length} row{table.rows.length === 1 ? "" : "s"}{table.truncated ? ", first ones shown" : ""}</caption>
         <thead><tr>{table.columns.map((c, i) => <th key={i} className={numeric[i] ? "num" : ""}>{c}</th>)}</tr></thead>
         <tbody>
-          {table.rows.map((r, ri) => (
+          {table.rows.slice(start, start + 20).map((r, ri) => (
             <tr key={ri}>{r.map((v, ci) => <td key={ci} className={numeric[ci] ? "num" : ""}>{v}</td>)}</tr>
           ))}
         </tbody>
       </table>
+      {table.rows.length > 20 && <nav className="transcript-pages" aria-label="Result rows">
+        <span>Rows {start + 1}–{Math.min(start + 20, table.rows.length)} of {table.rows.length}</span>
+        <button className="btn ghost" disabled={start === 0} onClick={() => setPage(Math.max(0, page - 1))}>Previous result rows</button>
+        <button className="btn ghost" disabled={start + 20 >= table.rows.length} onClick={() => setPage(page + 1)}>Next result rows</button>
+      </nav>}
     </div>
   );
 }
@@ -43,7 +50,7 @@ export function ToolCard({ name, args, status, seconds, summary, error, table }:
   const hit = touched(name, args, summary);
   const state = toolState(status);
   // Drawn, not typed: a "✓" character sits on the font baseline and never centres in the badge.
-  const glyph = state === "error" ? <Alert size={12} /> : state === "completed" ? <Check size={12} /> : null;
+  const glyph = state === "error" ? <Alert size={12} /> : state === "completed" ? <Check size={12} /> : state === "declined" ? <Ring size={12} /> : null;
   return (
     <div className="tool" data-open={open}>
       <button className="tool-row" onClick={() => setOpen((o) => !o)}
@@ -109,7 +116,7 @@ function Plan({ turn }: { turn: Turn }) {
 const tokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 
 function Footer({ turn }: { turn: Turn }) {
-  if (!["completed", "blocked", "failed", "cancelled", "interrupted"].includes(turn.status)) return null;
+  if (!["completed", "blocked", "failed", "cancelled", "interrupted", "declined", "refused", "truncated"].includes(turn.status)) return null;
   const u = turn.usage;
   const parts = [
     turn.seconds ? `${turn.seconds.toFixed(1)} s` : "",
@@ -128,13 +135,13 @@ function Footer({ turn }: { turn: Turn }) {
 
 /** What a person does with an answer: take it, or ask again. Shown once the turn has ended. */
 function TurnActions({ turn, onRetry }: { turn: Turn; onRetry?: () => void }) {
-  const ended = ["completed", "blocked", "failed", "cancelled", "interrupted"].includes(turn.status);
+  const ended = ["completed", "blocked", "failed", "cancelled", "interrupted", "declined", "refused", "truncated"].includes(turn.status);
   const text = turn.evidence.length ? stripEvidence(turn.answer) : turn.answer;
   if (!ended || (!text.trim() && !onRetry)) return null;
   return (
     <div className="turn-actions" role="group" aria-label="Answer actions">
       {text.trim() && <CopyButton text={text} label="Copy answer" title="Copy the answer as text" />}
-      {onRetry && (
+      {onRetry && turn.status !== "declined" && (
         <button type="button" className="copy-btn" onClick={onRetry} title="Ask the same thing again">
           <Refresh size={12} /> Retry
         </button>
@@ -170,6 +177,10 @@ function Evidence({ turn }: { turn: Turn }) {
 
 function Blocked({ turn }: { turn: Turn }) {
   if (!turn.blocked) return null;
+  if (turn.status === "declined") return <section className="decision-stopped" role="status" aria-label="Stopped by your decision">
+    <strong>Stopped by your decision</strong><p>{turn.blocked.reason}</p>
+    <p>The rejected tool was not executed. No automatic retry was sent.</p>
+  </section>;
   return (
     <section className="blocked" aria-label="Blocked">
       <h3><Alert size={14} /> {turn.status === "interrupted" ? "Work was interrupted" : "I could not finish this"}</h3>
@@ -216,6 +227,7 @@ export const MAX_MARKDOWN = 40_000;
 const statusWord: Record<string, string> = {
   running: "working", auditing: "checking the work", queued: "queued", completed: "done",
   blocked: "blocked", cancelled: "stopped", failed: "failed", interrupted: "interrupted",
+  declined: "stopped by you", refused: "model declined", truncated: "model limit",
 };
 
 function TurnViewInner({ turn, onRetry }: { turn: Turn; onRetry?: () => void }) {

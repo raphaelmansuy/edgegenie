@@ -7,6 +7,7 @@ so the precedence rules are asserted without a database or a network.
 from __future__ import annotations
 
 import pytest
+from api.adapters.llm.providers import adapter_for
 
 from api.adapters.llm.discovery import DiscoveryResult
 from api.adapters.llm.store.memory import MemoryRegistryStore
@@ -196,7 +197,7 @@ async def test_a_store_that_throws_keeps_serving_the_last_catalogue():
 # -- the resolver: one path, typed errors ----------------------------------------------------
 async def _resolver(specs, vault=None) -> ModelResolver:
     svc = await service(specs=specs)
-    return ModelResolver(svc, CredentialService(vault or MemoryVault(EnvKek.generate())))
+    return ModelResolver(svc, CredentialService(vault or MemoryVault(EnvKek.generate()), providers=adapter_for), providers=adapter_for)
 
 
 async def test_the_resolver_returns_a_resolved_model_with_compliant_limits():

@@ -24,6 +24,7 @@ from ..domain.llm import (
     ResolvedModel,
 )
 from ..ports import ChildEnv, CredentialRef, Secret
+from ..domain.credential import VaultRefused
 
 log = logging.getLogger("app.llm.credentials")
 
@@ -31,14 +32,16 @@ log = logging.getLogger("app.llm.credentials")
 PROVIDER_KEY_ENV = "LLM_PROVIDER_KEY"
 WORKSPACE_TOKEN_ENV = "DATABRICKS_TOKEN"
 
+
 class CredentialService:
     """`ref -> Secret`, with the scope check. Caches within one call, never across turns."""
 
     def rebind(self, vault) -> None:
         self._vault = vault
 
-    def __init__(self, vault, *, allow_env: bool = True) -> None:
+    def __init__(self, vault, *, providers, allow_env: bool = True) -> None:
         self._vault = vault
+        self.providers = providers
         self._allow_env = allow_env
         #: A one-spawn cache: `(ref, user) -> Secret`. Cleared by `forget` on revoke.
         self._cache: dict[tuple[str, str], tuple[Secret, float]] = {}
@@ -52,14 +55,21 @@ class CredentialService:
         return str(getattr(self._vault, "mode", "none"))
 
     # -- writes ---------------------------------------------------------------
-    async def put(self, provider: ProviderKind, kind: CredentialKind | str, secret: str, *,
-                  user_id: str, scope: str = "user") -> CredentialRef:
-        from ..adapters.llm.vault import VaultRefused
+    async def put(
+        self,
+        provider: ProviderKind,
+        kind: CredentialKind | str,
+        secret: str,
+        *,
+        user_id: str,
+        scope: str = "user",
+    ) -> CredentialRef:
         from ..domain.llm import CredentialError
 
         try:
-            return await self._vault.put(provider, str(getattr(kind, "value", kind)), secret,
-                                         user_id=user_id, scope=scope)
+            return await self._vault.put(
+                provider, str(getattr(kind, "value", kind)), secret, user_id=user_id, scope=scope
+            )
         except (VaultRefused, CredentialError):
             raise
         except Exception as exc:  # noqa: BLE001 - surface a sentence, not a stack trace
@@ -95,8 +105,7 @@ class CredentialService:
         self._cache[(ref, user_id)] = (secret, time.time())
         return secret
 
-    async def open_for(self, provider: ProviderKind, *, user_id: str,
-                       session_id: str = "") -> Secret:
+    async def open_for(self, provider: ProviderKind, *, user_id: str, session_id: str = "") -> Secret:
         """This user's key, else a workspace key, else `NoCredential`. Never somebody else's."""
         ref = await self._vault.find(provider, user_id=user_id)
         if ref is None:
@@ -104,8 +113,9 @@ class CredentialService:
         return await self.open_ref(ref.id, user_id=user_id, session_id=session_id)
 
     # -- injection ------------------------------------------------------------
-    async def env_for(self, resolved: ResolvedModel, *, user_id: str, session_id: str = "",
-                      workspace_token: str = "") -> ChildEnv:
+    async def env_for(
+        self, resolved: ResolvedModel, *, user_id: str, session_id: str = "", workspace_token: str = ""
+    ) -> ChildEnv:
         """The child's environment: the workspace token plus **exactly one** provider credential.
 
         A Databricks model needs the user's forwarded token and nothing else; an external model needs
@@ -119,10 +129,8 @@ class CredentialService:
         # the demo provider). This is the one place "no key" is expressible, so no caller guesses.
         if resolved.provider is ProviderKind.DATABRICKS or not resolved.env_var:
             return ChildEnv(vars=env)
-        from ..adapters.llm.providers import adapter_for
-
         secret = await self.open_ref(resolved.credential_ref, user_id=user_id, session_id=session_id)
-        provider_env = await adapter_for(resolved.provider).child_env(resolved, secret)
+        provider_env = await self.providers(resolved.provider).child_env(resolved, secret)
         return ChildEnv(vars={**env, **provider_env.vars}, files=dict(provider_env.files))
 
     def source_of(self, resolved: ResolvedModel) -> CredentialSource:

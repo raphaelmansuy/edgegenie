@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from ..adapters.acp.agent_config import AgentConfig
+from ..domain.llm.agent_config import AgentConfig
 from ..adapters.llm.discovery import DatabricksDiscovery
 from ..adapters.llm.store.memory import MemoryRegistryStore
 from ..adapters.llm.store.seed_store import SeedRegistryStore
@@ -21,6 +21,7 @@ from ..adapters.llm.store.seed import load as load_seed
 from ..adapters.llm.vault import EnvVault, MemoryVault, dev_kek_from_env
 from ..adapters.llm.vault.layered import LayeredVault
 from ..config import Settings
+from ..adapters.llm.providers import adapter_for
 from ..domain.llm import (
     CredentialKind,
     ModelId,
@@ -30,10 +31,10 @@ from ..domain.llm import (
     ResolvedModel,
     UnknownModel,
 )
-from .credential_service import CredentialService
-from .health_service import HealthService
-from .model_resolver import ModelResolver
-from .model_service import ModelService
+from ..services.credential_service import CredentialService
+from ..services.health_service import HealthService
+from ..services.model_resolver import ModelResolver
+from ..services.model_service import ModelService
 
 log = logging.getLogger("app.llm.registry")
 
@@ -61,19 +62,37 @@ async def build_registry(cfg: Settings, *, host: str = "") -> Registry:
     """Choose the store, the vault and the discovery adapter the way the spec says to."""
     store = await _store_for(cfg)
     vault = _vault_for(cfg)
-    discovery = DatabricksDiscovery(host, lambda: None, ttl=float(cfg.llm_discovery_seconds)) if host else None
-    default = (getattr(store, "default_model", "") or cfg.default_model)
-    service = ModelService(store, discovery, default_model=default,
-                           allow_external=cfg.llm_allow_external, vault=vault)
-    credentials = CredentialService(vault)
-    resolver = ModelResolver(service, credentials, host=host,
-                             allow_external=cfg.llm_allow_external)
-    health = HealthService(store, credentials, interval=float(cfg.llm_probe_seconds), host=host)
-    log.info("llm registry: source=%s vault=%s external=%s",
-             getattr(store, "source", "?"), getattr(vault, "mode", "?"), cfg.llm_allow_external)
-    return Registry(store=store, vault=vault, catalogue=service, resolver=resolver,
-                    credentials=credentials, discovery=discovery, default_model=default,
-                    allow_external=cfg.llm_allow_external, health=health)
+    discovery = (
+        DatabricksDiscovery(host, lambda: None, ttl=float(cfg.llm_discovery_seconds)) if host else None
+    )
+    default = getattr(store, "default_model", "") or cfg.default_model
+    service = ModelService(
+        store, discovery, default_model=default, allow_external=cfg.llm_allow_external, vault=vault
+    )
+    credentials = CredentialService(vault, providers=adapter_for)
+    resolver = ModelResolver(
+        service, credentials, providers=adapter_for, host=host, allow_external=cfg.llm_allow_external
+    )
+    health = HealthService(
+        store, credentials, providers=adapter_for, interval=float(cfg.llm_probe_seconds), host=host
+    )
+    log.info(
+        "llm registry: source=%s vault=%s external=%s",
+        getattr(store, "source", "?"),
+        getattr(vault, "mode", "?"),
+        cfg.llm_allow_external,
+    )
+    return Registry(
+        store=store,
+        vault=vault,
+        catalogue=service,
+        resolver=resolver,
+        credentials=credentials,
+        discovery=discovery,
+        default_model=default,
+        allow_external=cfg.llm_allow_external,
+        health=health,
+    )
 
 
 def has_database(cfg: Settings) -> bool:
@@ -91,12 +110,16 @@ async def connect_database(cfg: Settings):
     if cfg.llm_pg_endpoint:
         from ..adapters.llm.store import lakebase
 
-        target = await asyncio.to_thread(lakebase.resolve_target, cfg.llm_pg_endpoint,
-                                         cfg.llm_pg_database, cfg.llm_pg_user)
+        target = await asyncio.to_thread(
+            lakebase.resolve_target, cfg.llm_pg_endpoint, cfg.llm_pg_database, cfg.llm_pg_user
+        )
         source = lakebase.TokenSource(cfg.llm_pg_endpoint)
         store = await PgRegistryStore.connect(
-            target.conninfo, seed_path=path, connection_class=lakebase.connection_class(source),
-            max_lifetime=lakebase.CONNECTION_MAX_LIFETIME)
+            target.conninfo,
+            seed_path=path,
+            connection_class=lakebase.connection_class(source),
+            max_lifetime=lakebase.CONNECTION_MAX_LIFETIME,
+        )
         store.location = f"{target.host}/{target.database}"
         return store
     store = await PgRegistryStore.connect(cfg.llm_database_url, seed_path=path)
@@ -134,8 +157,11 @@ async def adopt_database(registry: Registry, cfg: Settings) -> bool:
     if registry.health is not None:
         registry.health.rebind(store)
     registry.default_model = getattr(store, "default_model", "") or registry.default_model
-    log.info("llm registry: now on the database (%s), vault=%s", getattr(store, "location", "?"),
-             getattr(vault, "mode", "?"))
+    log.info(
+        "llm registry: now on the database (%s), vault=%s",
+        getattr(store, "location", "?"),
+        getattr(vault, "mode", "?"),
+    )
     return True
 
 
@@ -182,27 +208,39 @@ def demo_store(cfg: Settings):
         except Exception:  # noqa: BLE001 - an unresolvable demo id is skipped, not fatal
             continue
         _register(store, spec)
-    store.default_model = (cfg.default_model if cfg.default_model in store._models  # noqa: SLF001
-                           else next(iter(store._models), ""))
+    store.default_model = (
+        cfg.default_model
+        if cfg.default_model in store._models  # noqa: SLF001
+        else next(iter(store._models), "")
+    )
     return store
 
 
 def _register(store, spec) -> None:
     """One model and its provider in a memory store. Never overwrites a row that already exists."""
-    store._models.setdefault(spec.id.value, spec)                                  # noqa: SLF001
-    store._providers.setdefault(spec.id.provider.value, {                          # noqa: SLF001
-        "id": spec.id.provider.value, "display_name": spec.provider_name,
-        "kind": spec.id.provider.value, "wire": spec.wire.value,
-        "base_url": "", "npm": "", "enabled": True,
-    })
+    store._models.setdefault(spec.id.value, spec)  # noqa: SLF001
+    store._providers.setdefault(
+        spec.id.provider.value,
+        {  # noqa: SLF001
+            "id": spec.id.provider.value,
+            "display_name": spec.provider_name,
+            "kind": spec.id.provider.value,
+            "wire": spec.wire.value,
+            "base_url": "",
+            "npm": "",
+            "enabled": True,
+        },
+    )
 
 
 def _demo_seed_specs() -> list:
     """The seed rows, with the Databricks ones marked unknown: nothing has probed them here."""
     from dataclasses import replace
 
-    return [replace(spec, state=ModelState.UNKNOWN) if spec.state is ModelState.AVAILABLE else spec
-            for spec in _seed().models]
+    return [
+        replace(spec, state=ModelState.UNKNOWN) if spec.state is ModelState.AVAILABLE else spec
+        for spec in _seed().models
+    ]
 
 
 def _vault_for(cfg: Settings):
@@ -244,8 +282,11 @@ def _scope_kek(cfg: Settings):
     if not cfg.llm_kek_scope:
         return from_settings(env_kek=None)
     value = _read_scope(cfg.llm_kek_scope, cfg.llm_kek_key)
-    return from_settings(secret_scope_value=value, scope_name=cfg.llm_kek_scope) if value else NoneKek(
-        f"secret scope {cfg.llm_kek_scope!r} is not readable")
+    return (
+        from_settings(secret_scope_value=value, scope_name=cfg.llm_kek_scope)
+        if value
+        else NoneKek(f"secret scope {cfg.llm_kek_scope!r} is not readable")
+    )
 
 
 def _read_scope(scope: str, key: str) -> str | None:
@@ -262,8 +303,13 @@ def _read_scope(scope: str, key: str) -> str | None:
     if not shutil.which("databricks"):
         return None
     try:
-        out = subprocess.run(["databricks", "secrets", "get-secret", "--scope", scope, "--key", key,
-                              "--output", "json"], capture_output=True, text=True, timeout=15, check=True)
+        out = subprocess.run(
+            ["databricks", "secrets", "get-secret", "--scope", scope, "--key", key, "--output", "json"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
+        )
         import json
 
         body = json.loads(out.stdout or "{}")
@@ -300,9 +346,14 @@ def static_spec(model_id: str) -> ModelSpec:
             from ..domain.llm.limits import DEFAULT_LIMITS
 
             return ModelSpec(
-                id=mid, display_name=mid.name, provider_name="The demo agent",
-                wire=WireProtocol.FAKE, endpoint=mid.name, limits=DEFAULT_LIMITS,
-                capability=Capability.TOOLS, credential_kind=CredentialKind.NONE,
+                id=mid,
+                display_name=mid.name,
+                provider_name="The demo agent",
+                wire=WireProtocol.FAKE,
+                endpoint=mid.name,
+                limits=DEFAULT_LIMITS,
+                capability=Capability.TOOLS,
+                credential_kind=CredentialKind.NONE,
                 # Declared, like every other model's capability, and true for the reference agent: its
                 # scenarios are written by hand, so it can "consume" anything. This is what lets the
                 # attachment path be exercised end to end in demo mode and in the e2e suite without a
@@ -313,14 +364,18 @@ def static_spec(model_id: str) -> ModelSpec:
         # An id the seed does not know may still be a served endpoint written directly:
         # `databricks/<endpoint>`. That is a lookup, not string surgery: the model name IS the endpoint.
         if mid.provider is ProviderKind.DATABRICKS and "/" not in mid.name:
-            from ..adapters.acp.agent_config import _limits_for
+            from ..domain.llm.agent_config import _limits_for
             from ..domain.llm import Capability, WireProtocol
 
             return ModelSpec(
-                id=mid, display_name=mid.name.replace("databricks-", ""),
-                provider_name="Databricks AI Gateway", wire=WireProtocol.SERVING,
-                endpoint=mid.name, limits=_limits_for(mid.name),
-                capability=Capability.TOOLS, credential_kind=CredentialKind.NONE,
+                id=mid,
+                display_name=mid.name.replace("databricks-", ""),
+                provider_name="Databricks AI Gateway",
+                wire=WireProtocol.SERVING,
+                endpoint=mid.name,
+                limits=_limits_for(mid.name),
+                capability=Capability.TOOLS,
+                credential_kind=CredentialKind.NONE,
             )
         raise UnknownModel(mid.value)
     return spec
@@ -334,10 +389,16 @@ def resolve_static(model_id: str, host: str = "") -> AgentConfig:
 
     desc = adapter_for(spec.id.provider).descriptor(spec, host=host)
     resolved = ResolvedModel(
-        id=spec.id, provider=spec.id.provider, wire=spec.wire, endpoint=spec.endpoint,
-        base_url=desc.base_url, limits=clamp(spec.limits), capability=spec.capability,
+        id=spec.id,
+        provider=spec.id.provider,
+        wire=spec.wire,
+        endpoint=spec.endpoint,
+        base_url=desc.base_url,
+        limits=clamp(spec.limits),
+        capability=spec.capability,
         sees_images=bool(getattr(spec, "sees_images", False)),
-        env_var="", npm=desc.npm,
+        env_var="",
+        npm=desc.npm,
     )
     return AgentConfig.from_resolved(resolved, host=host)
 
@@ -363,8 +424,9 @@ def build_registry_sync(cfg: Settings) -> Registry:
     if cfg.agent_mode == "fake":
         store = demo_store(cfg)
     else:
-        store = SeedRegistryStore(source="degraded" if has_database(cfg) else "seed",
-                                  path=cfg.llm_seed_path or None)
+        store = SeedRegistryStore(
+            source="degraded" if has_database(cfg) else "seed", path=cfg.llm_seed_path or None
+        )
         # The seed file is small and local, so loading it inline keeps boot deterministic. A
         # configured DSN is *marked* degraded until the async lifespan upgrades it, which is honest
         # about the state rather than pretending the database was reached.
@@ -375,27 +437,44 @@ def build_registry_sync(cfg: Settings) -> Registry:
     kek = _configured_kek(cfg)
     vault = LayeredVault(MemoryVault(kek), EnvVault()) if kek.usable else EnvVault()
 
-    discovery = DatabricksDiscovery(host, lambda: None,
-                                    ttl=float(cfg.llm_discovery_seconds)) if host else None
+    discovery = (
+        DatabricksDiscovery(host, lambda: None, ttl=float(cfg.llm_discovery_seconds)) if host else None
+    )
     default = getattr(store, "default_model", "") or cfg.default_model
-    service = ModelService(store, discovery, default_model=default,
-                           allow_external=cfg.llm_allow_external, vault=vault)
-    credentials = CredentialService(vault)
-    resolver = ModelResolver(service, credentials, host=host,
-                             allow_external=cfg.llm_allow_external)
-    health = HealthService(store, credentials, interval=float(cfg.llm_probe_seconds), host=host)
-    return Registry(store=store, vault=vault, catalogue=service, resolver=resolver,
-                    credentials=credentials, discovery=discovery, default_model=default,
-                    allow_external=cfg.llm_allow_external, health=health)
+    service = ModelService(
+        store, discovery, default_model=default, allow_external=cfg.llm_allow_external, vault=vault
+    )
+    credentials = CredentialService(vault, providers=adapter_for)
+    resolver = ModelResolver(
+        service, credentials, providers=adapter_for, host=host, allow_external=cfg.llm_allow_external
+    )
+    health = HealthService(
+        store, credentials, providers=adapter_for, interval=float(cfg.llm_probe_seconds), host=host
+    )
+    return Registry(
+        store=store,
+        vault=vault,
+        catalogue=service,
+        resolver=resolver,
+        credentials=credentials,
+        discovery=discovery,
+        default_model=default,
+        allow_external=cfg.llm_allow_external,
+        health=health,
+    )
 
 
 def _load_seed_inline(store) -> None:
     """Load the seed rows into a store without awaiting: the file is local and tiny."""
     for provider in store.seed.providers:
         store._providers[provider.id] = {  # noqa: SLF001 - constructor work, one place
-            "id": provider.id, "display_name": provider.display_name,
-            "kind": provider.kind.value, "wire": provider.wire.value,
-            "base_url": provider.base_url, "npm": provider.npm, "enabled": True,
+            "id": provider.id,
+            "display_name": provider.display_name,
+            "kind": provider.kind.value,
+            "wire": provider.wire.value,
+            "base_url": provider.base_url,
+            "npm": provider.npm,
+            "enabled": True,
         }
     for spec in store.seed.models:
         store._models[spec.id.value] = spec  # noqa: SLF001

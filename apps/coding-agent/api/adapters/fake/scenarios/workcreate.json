@@ -1,0 +1,27 @@
+{
+  "turn": {
+    "actions": [
+      {
+        "id": "create",
+        "tool": "dbx_create",
+        "arguments": {
+          "kind": "notebook",
+          "id": "$folder/new-notebook",
+          "content": "# Databricks notebook source\nprint(7)\n"
+        }
+      }
+    ],
+    "answer": "The new notebook is proposed for review. It has not been written.",
+    "followupActions": [
+      {
+        "id": "read",
+        "tool": "dbx_read",
+        "arguments": {
+          "kind": "notebook",
+          "id": "$folder/new-notebook"
+        }
+      }
+    ],
+    "followupAnswer": "Read back the new notebook.\n\n| requirement | tool | summary |\n|---|---|---|\n| Verify the notebook | ${read.invocationId} | 7 |"
+  }
+}

@@ -1,0 +1,22 @@
+{
+ "$schema": "https://opencode.ai/config.json",
+ "model": "google-vertex/gemini-3.8-flash",
+ "permission": {
+  "*": "deny",
+  "todowrite": "allow",
+  "probe_*": "allow"
+ },
+ "provider": {
+  "google-vertex": {
+   "name": "Google Vertex AI",
+   "models": {
+    "gemini-3.8-flash": {
+     "name": "google/gemini-3.8-flash",
+     "limit": {"context": 1000000, "output": 30000},
+     "attachment": true,
+     "modalities": {"input": ["text", "image"], "output": ["text"]}
+    }
+   }
+  }
+ }
+}

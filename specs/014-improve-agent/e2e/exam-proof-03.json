@@ -1,0 +1,27 @@
+{
+  "pass": true,
+  "captures": [
+    "gpt-oss-overview",
+    "gpt-oss-change",
+    "maverick-overview",
+    "maverick-mobile-blocked"
+  ],
+  "errors": [],
+  "records": [
+    {
+      "model": "databricks/databricks-gpt-oss-120b",
+      "sessionId": "603acfc2f2704526",
+      "status": "completed",
+      "score": 12,
+      "total": 12
+    },
+    {
+      "model": "databricks/databricks-llama-4-maverick",
+      "sessionId": "fa23fff5bf7149df",
+      "status": "blocked",
+      "score": 6,
+      "total": 12
+    }
+  ],
+  "scope": "Actual app-path exam sessions with served models. No live workspace resource is changed by this UI review."
+}

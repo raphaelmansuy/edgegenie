@@ -59,7 +59,7 @@ def golden(ctx: Ctx) -> dict[str, str]:
 
 
 def job_name(ctx: Ctx) -> str:
-    return f"{ctx.run_id}_etl"
+    return ctx.extra.get("jobPrefix", f"{ctx.run_id}_") + "etl"
 
 
 def prompt(ctx: Ctx) -> str:

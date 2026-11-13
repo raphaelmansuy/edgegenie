@@ -1,0 +1,13 @@
+{
+  "pass": true,
+  "captures": [
+    "iteration-03/01-permission-desktop.png",
+    "iteration-03/02-rejected-desktop.png",
+    "iteration-03/03-approved-desktop.png",
+    "iteration-03/04-meter-desktop.png",
+    "iteration-03/05-permission-390.png",
+    "iteration-03/05-permission-320.png"
+  ],
+  "pageErrors": [],
+  "scope": "Local scripted agent. No workspace or model was contacted."
+}

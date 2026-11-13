@@ -42,7 +42,7 @@ class Catalogue:
     """The answer to "which models exist for this user", with where the answer came from."""
 
     models: tuple[ModelSpec, ...]
-    source: str                 # seed | memory | database | degraded
+    source: str  # seed | memory | database | degraded
     updated_at: float
     default_model: str = ""
     providers: tuple[dict, ...] = ()
@@ -98,8 +98,16 @@ def stronger_limits(a, b):
 class ModelService:
     """Composes the store and discovery into one catalogue. The only catalogue a route reads."""
 
-    def __init__(self, store, discovery=None, *, default_model: str = "",
-                 allow_external: bool = True, vault=None, ttl: float = 30.0) -> None:
+    def __init__(
+        self,
+        store,
+        discovery=None,
+        *,
+        default_model: str = "",
+        allow_external: bool = True,
+        vault=None,
+        ttl: float = 30.0,
+    ) -> None:
         self._store = store
         self._discovery = discovery
         self._default = default_model
@@ -110,8 +118,9 @@ class ModelService:
         self._cached_at = 0.0
 
     # -- reads ----------------------------------------------------------------
-    async def catalogue(self, user_id: str, groups: frozenset[str] = frozenset(),
-                        *, refresh: bool = False) -> Catalogue:
+    async def catalogue(
+        self, user_id: str, groups: frozenset[str] = frozenset(), *, refresh: bool = False
+    ) -> Catalogue:
         """The merged catalogue, filtered for this user. Cached for `ttl` (C-6, NFR-1)."""
         now = time.time()
         if refresh or self._last is None or now - self._cached_at >= self._ttl:
@@ -204,17 +213,18 @@ class ModelService:
                 state, detail, at = health
                 try:
                     changed = replace(changed, state=ModelState(state), detail=detail, checked_at=at)
-                except ValueError:      # a health row from a newer build: keep the catalogue row
+                except ValueError:  # a health row from a newer build: keep the catalogue row
                     pass
         if not self._allow_external and spec.id.provider not in (
-                ProviderKind.DATABRICKS, ProviderKind.FAKE):
+            ProviderKind.DATABRICKS,
+            ProviderKind.FAKE,
+        ):
             changed = replace(changed, refusal="external providers are disabled in this workspace")
         if spec.credential_kind is not CredentialKind.NONE and not spec.credential_hint:
             changed = replace(changed, credential_source=CredentialSource.NONE)
         return changed
 
-    async def _authorise(self, cat: Catalogue, user_id: str,
-                         groups: frozenset[str]) -> Catalogue:
+    async def _authorise(self, cat: Catalogue, user_id: str, groups: frozenset[str]) -> Catalogue:
         """Copy the catalogue with only what this user may see, and their own key hint.
 
         Grants are applied here rather than in `_merge` so the merged catalogue is shared between
@@ -227,11 +237,11 @@ class ModelService:
                 continue
             visible.append(await self._with_credential(spec, user_id))
         if len(visible) == len(cat.models) and all(
-                v.credential_hint == s.credential_hint for v, s in zip(visible, cat.models)):
+            v.credential_hint == s.credential_hint for v, s in zip(visible, cat.models)
+        ):
             return cat
         default = cat.default_model if any(m.id.value == cat.default_model for m in visible) else ""
-        return replace(cat, models=tuple(visible),
-                       default_model=default or self._resolve_default(visible))
+        return replace(cat, models=tuple(visible), default_model=default or self._resolve_default(visible))
 
     async def _with_credential(self, spec: ModelSpec, user_id: str) -> ModelSpec:
         """Say which key is in play, by `last4` only, so the picker can show `key …7f3a`."""
@@ -244,12 +254,15 @@ class ModelService:
             return spec
         if ref is None:
             return replace(spec, credential_source=CredentialSource.NONE, credential_hint="")
-        source = (CredentialSource.ENV if ref.id.startswith("env:")
-                  else CredentialSource.USER if ref.scope_kind == "user"
-                  else CredentialSource.WORKSPACE)
+        source = (
+            CredentialSource.ENV
+            if ref.id.startswith("env:")
+            else CredentialSource.USER
+            if ref.scope_kind == "user"
+            else CredentialSource.WORKSPACE
+        )
         hint = f"{ref.kind.replace('_', ' ')} …{ref.last4}" if ref.last4 else ref.kind
-        return replace(spec, credential_source=source, credential_hint=hint,
-                       credential_ref_id=ref.id)
+        return replace(spec, credential_source=source, credential_hint=hint, credential_ref_id=ref.id)
 
     def _resolve_default(self, models: list[ModelSpec]) -> str:
         if self._default and any(m.id.value == self._default for m in models):
@@ -281,9 +294,14 @@ def _merge_one(existing: ModelSpec, discovered: ModelSpec) -> ModelSpec:
 def _order(models: list[ModelSpec]) -> list[ModelSpec]:
     """Deterministic order: provider rank, availability, then name. A list that reorders itself
     cannot be learned (D14), and the picker relies on this order for its groups."""
-    return sorted(models, key=lambda m: (_PROVIDER_RANK.get(m.id.provider, 9),
-                                         _STATE_RANK.get(m.state, 9),
-                                         m.display_name.lower()))
+    return sorted(
+        models,
+        key=lambda m: (
+            _PROVIDER_RANK.get(m.id.provider, 9),
+            _STATE_RANK.get(m.state, 9),
+            m.display_name.lower(),
+        ),
+    )
 
 
 def iso(epoch: float) -> str:

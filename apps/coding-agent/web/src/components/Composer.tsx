@@ -1,10 +1,11 @@
+import { SessionFeatures } from "./AgentWork";
 /** Composer: message box, context chips, and the "@" picker for notebooks, files, tables.
  *
  * Context chips are references. Typing "@" searches the workspace by name; the files and catalog
  * trees add chips too. A chip marked "open" is the document on screen: it rides along with the
  * message automatically, the way Genie Code knows which notebook you are looking at.
  */
-import { createElement, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createElement, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, type CatalogItem, type WsHit } from "../api/client";
 import { applyCommand, commandAt, matchCommands, pushHistory, stepHistory, type Command } from "../domain/commands";
 import type { Attachment } from "../domain/events";
@@ -12,16 +13,14 @@ import type { Doc } from "../domain/docs";
 import { ACCEPT } from "../domain/blob";
 import { AttachMenu } from "./AttachMenu";
 import { Chip } from "./Chip";
-import { FileIcon, Folder, Notebook, Table } from "./Icons";
+import { FileIcon } from "./Icons";
 import { useBlobUpload } from "../hooks/useBlobUpload";
 
 const MENTION = /(^|\s)@([^\s@]*)$/;
 const HISTORY_KEY = "coding-agent:prompt-history";
 
-/** One source of truth for "what does a notebook look like" across chips, tabs, and mentions. */
-export const KIND_ICON: Record<string, (p: { size?: number }) => ReactNode> = {
-  notebook: Notebook, file: FileIcon, folder: Folder, table: Table, blob: FileIcon,
-};
+import { KIND_ICON } from "./AssetIcon";
+export { KIND_ICON } from "./AssetIcon";
 
 /** Kept for callers that already import it from here; the implementation moved to `Chip.tsx`. */
 export { Chip } from "./Chip";
@@ -55,6 +54,9 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
   /** The model's own name, for the refusal sentence. */
   modelName?: string;
 }) {
+  const features=useContext(SessionFeatures);
+  const [skillCommands,setSkillCommands]=useState<Command[]>([]);
+  const skillsLoaded=useRef("");
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   /** Why the last send did not go, in the server's words. Cleared as soon as the user edits. */
@@ -100,7 +102,16 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
   const open = query !== null && dismissed !== `${caret}:${text}`;
   const cmd = commandAt(text, caret);
   const cmdOpen = cmd.open && dismissed !== `c:${caret}:${text}`;
-  const commands: Command[] = cmdOpen ? matchCommands(cmd.query) : [];
+  useEffect(()=>{
+    if(!cmdOpen || !sessionId || !features.agentWork || skillsLoaded.current===sessionId)return;
+    const controller=new AbortController();
+    fetch(`/api/sessions/${sessionId}/skills`,{signal:controller.signal}).then(r=>{if(!r.ok)throw new Error();return r.json();}).then(result=>{
+      skillsLoaded.current=sessionId;
+      setSkillCommands((result.skills ?? []).map((s:{name:string;description:string})=>({name:"/"+s.name,hint:s.description,insert:`Load dbx_skill(name=${JSON.stringify(s.name)}) and use this skill for the task: `,source:"Skill"})));
+    }).catch(()=>{});
+    return()=>controller.abort();
+  },[cmdOpen,sessionId,features.agentWork]);
+  const commands: Command[] = cmdOpen ? matchCommands(cmd.query, [...skillCommands,...(features.commands ?? []).map(c => ({ name: "/"+c.name.replace(/^\//,""), hint:c.description || "Agent command", insert:"/"+c.name.replace(/^\//,""), source:"Agent" as const }))]) : [];
 
   useEffect(() => {
     if (query === null || query.length < 2) { setFound([]); return; }
@@ -334,7 +345,7 @@ export function Composer({ disabled, busy, onSend, onStop, attachments, auto, on
                   onMouseDown={(e) => { e.preventDefault(); pickCommand(c); }}>
                   <span aria-hidden>/</span>
                   <span className="mention-name">{c.name.slice(1)}</span>
-                  <span className="mention-hint is-cmd">{c.hint}</span>
+                  <span className="mention-hint is-cmd">{c.hint} <small>{c.source}</small></span>
                 </button>
               ))}
             </div>

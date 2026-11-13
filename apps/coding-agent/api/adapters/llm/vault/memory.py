@@ -19,13 +19,10 @@ from dataclasses import dataclass, field
 
 from ....domain.llm import CredentialKind, CredentialParsed, ProviderKind, validate
 from ....domain.redact import redact
+from ....domain.credential import VaultRefused
 from ....ports import CredentialRef, Secret
 from .envelope import Sealed, Tampered, open_sealed, seal
 from .kek import EnvKek, KekError, KekProvider
-
-
-class VaultRefused(RuntimeError):
-    """A key cannot be stored or opened, with a reason a person can act on."""
 
 
 @dataclass

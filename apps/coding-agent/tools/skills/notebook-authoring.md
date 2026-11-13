@@ -1,27 +1,26 @@
-# Authoring and editing notebooks that run and read well
+# Author and edit notebooks with revision-bound cell operations
 
-## Write
-- `dbx_write_notebook(path, cells=[{"type":"markdown","source":"..."}, {"type":"code","source":"..."}])`.
-  Pass `cells` as a real list. The reply shows `markdown_cells` / `code_cells`: check them.
-- Structure for an analyst: title cell (question + data source) -> for each analysis a
-  short markdown cell then a code cell -> a final "Findings" markdown cell quoting numbers.
-- Charts: `display(df)` renders a table that can be switched to a chart; or matplotlib.
-- If the task needs a return value, the LAST cell calls `dbutils.notebook.exit(json.dumps({...}))`
-  with values computed in code, never typed in.
+Read dbx_capabilities first. The advertised tools and identity tiers are authoritative.
 
-## Run and verify
-- `dbx_run_notebook(path)` runs it on serverless and returns `exit_value` or the `error`.
-  A success with no `exit_value` means `dbutils.notebook.exit` was never reached.
-- Fix the cause of any error and run again. Do not report until a run succeeded.
+## Focused edits
+1. Read dbx_read(kind="notebook", id=path), following every next_offset needed for the task.
+2. Keep its revision and the affected cell SHA. Use dbx_edit with base and ops; supported operations
+   are replace_cell, insert_cell, delete_cell and move_cell. Cell indices are zero based.
+3. In Review, end the turn while awaiting_review. Nothing is written until the user chooses.
+4. A conflict requires a fresh read and a new proposal. Never rewrite unrelated cells or make a copy
+   to bypass a stale base. A rejected change is final.
+5. After apply, read back the produced revision. If execution was requested, submit dbx_run and
+   poll dbx_operation using the returned operation ID. Never repeat an unknown submission.
 
-## Edit an existing notebook
-- `dbx_read_notebook` (page through `next_offset`), change the smallest thing, write it back
-  with the same cell layout and every line the user said to keep. Then run it.
-- A notebook can run without error and still be wrong: compare its result with an
-  independent SQL query before you say it is fixed.
+New notebooks use dbx_create with SOURCE text inside the working folder. Include the Databricks SOURCE
+header and command separators. Write a question/title, explain assumptions in markdown, and finish
+with findings grounded in observed results. Never claim that defining a notebook executed it.
 
-## Serverless gotchas
-- No `spark.sparkContext`, RDDs, `.cache()`, `.persist()`.
-- ANSI mode is on: bad strings fail the run. Use `try_cast`, `try_to_timestamp`, `try_divide`.
-- `F.sum("col")` on a column that does not exist is an AnalysisException: describe tables first.
-- `DataFrame.first()` without `orderBy` returns an arbitrary row.
+## Serverless correctness
+Describe every referenced table and copy its real columns. Avoid RDDs and sparkContext. Use defensive
+casts with ANSI mode. Order rows before selecting a first value. For a returned notebook value, use
+actual computed values in dbutils.notebook.exit(json.dumps(...)). Quote results only from a successful
+operation observation and cite that observation's invocationId in Evidence.
+
+If Jobs scope is unavailable, notebook execution is unavailable. Read-back can verify source, but
+cannot prove execution. No code may run as the app service principal.

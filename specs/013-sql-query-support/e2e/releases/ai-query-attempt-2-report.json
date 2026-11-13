@@ -1,0 +1,140 @@
+{
+  "success": false,
+  "version": "1.2.0-rc.3",
+  "gitCommit": "52668c86c69b64216c5b4a7db31f2dc63faa471d",
+  "deploymentId": "01f1de6706b01073be23f4dcfd65e6b5",
+  "checks": [
+    "Exact release and dev warehouse verified (initial RUNNING)"
+  ],
+  "cases": [
+    {
+      "sid": "c572d6136fd446c1",
+      "tid": "44440987c389",
+      "qid": "d9fe3f9a-693d-4dbf-a5c5-d06e3038eab5",
+      "prompt": "Replace the attached SQL query with SELECT 'Agent verified' AS status, 42 AS result; run it and report the actual results. Use the open query; do not create a notebook.",
+      "status": "completed",
+      "tools": [
+        {
+          "name": "db_dbx_read_query",
+          "status": "completed"
+        },
+        {
+          "name": "db_dbx_update_query",
+          "status": "completed"
+        },
+        {
+          "name": "db_dbx_run_query",
+          "status": "completed"
+        },
+        {
+          "name": "db_dbx_query_run_status",
+          "status": "completed"
+        }
+      ],
+      "receipts": [
+        {
+          "name": "db_dbx_read_query",
+          "status": "completed",
+          "proof": {
+            "kind": "sql-query",
+            "action": "read",
+            "draftId": "d9fe3f9a-693d-4dbf-a5c5-d06e3038eab5",
+            "version": 2,
+            "sourceHash": "44c9baf3fbc2e4f6f0d0b4301cbf36afbd3e815cf6dc4d4213c781ca7d78c870"
+          }
+        },
+        {
+          "name": "db_dbx_update_query",
+          "status": "completed",
+          "proof": {
+            "kind": "sql-query",
+            "action": "updated",
+            "draftId": "d9fe3f9a-693d-4dbf-a5c5-d06e3038eab5",
+            "version": 3,
+            "sourceHash": "57168ac526fdeb1cebb3d8c80350773c9396f96f0677837a90264dbd446462ed"
+          }
+        },
+        {
+          "name": "db_dbx_run_query",
+          "status": "completed",
+          "proof": {
+            "kind": "sql-run",
+            "runId": "0da725f8-1db8-468c-9b12-383f3ee448f2",
+            "state": "pending",
+            "draftId": "d9fe3f9a-693d-4dbf-a5c5-d06e3038eab5",
+            "sourceHash": "57168ac526fdeb1cebb3d8c80350773c9396f96f0677837a90264dbd446462ed",
+            "statementId": "01f1de67-af72-1b48-8ef9-2c94a761de3c",
+            "warehouseId": "50b601f08d1a858d",
+            "cancelRequested": false,
+            "resultAvailable": false
+          }
+        },
+        {
+          "name": "db_dbx_query_run_status",
+          "status": "completed",
+          "proof": {
+            "kind": "sql-run",
+            "runId": "0da725f8-1db8-468c-9b12-383f3ee448f2",
+            "state": "succeeded",
+            "draftId": "d9fe3f9a-693d-4dbf-a5c5-d06e3038eab5",
+            "rowCount": 1,
+            "sourceHash": "57168ac526fdeb1cebb3d8c80350773c9396f96f0677837a90264dbd446462ed",
+            "statementId": "01f1de67-af72-1b48-8ef9-2c94a761de3c",
+            "warehouseId": "50b601f08d1a858d",
+            "cancelRequested": false,
+            "resultAvailable": true
+          }
+        }
+      ],
+      "evidence": [
+        {
+          "tool": "db_dbx_run_query`",
+          "summary": "Query completed with state `succeeded`, row count `1`, columns `[\"status\", \"result\"]`, rows `[[\"Agent verified\", \"42\"]]",
+          "verified": false,
+          "toolCallId": "",
+          "requirement": "Run query and report results"
+        },
+        {
+          "tool": "db_dbx_read_query",
+          "summary": "SQL draft read; version 2; source 44c9baf3fbc2e4f6f0d0b4301cbf36afbd3e815cf6dc4d4213c781ca7d78c870",
+          "verified": true,
+          "toolCallId": "call_17072084436940093365",
+          "requirement": "Read open query draft"
+        },
+        {
+          "tool": "db_dbx_update_query",
+          "summary": "SQL draft updated; version 3; source 57168ac526fdeb1cebb3d8c80350773c9396f96f0677837a90264dbd446462ed",
+          "verified": true,
+          "toolCallId": "call_7713567279771415736",
+          "requirement": "Replace query SQL"
+        }
+      ],
+      "changes": [
+        {
+          "draftId": "d9fe3f9a-693d-4dbf-a5c5-d06e3038eab5",
+          "version": 3,
+          "runId": ""
+        },
+        {
+          "draftId": "d9fe3f9a-693d-4dbf-a5c5-d06e3038eab5",
+          "version": 3,
+          "runId": "0da725f8-1db8-468c-9b12-383f3ee448f2"
+        },
+        {
+          "draftId": "d9fe3f9a-693d-4dbf-a5c5-d06e3038eab5",
+          "version": 3,
+          "runId": "0da725f8-1db8-468c-9b12-383f3ee448f2"
+        }
+      ]
+    }
+  ],
+  "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('cell', { name: 'Agent verified', exact: true })\nExpected: visible\nError: strict mode violation: getByRole('cell', { name: 'Agent verified', exact: true }) resolved to 2 elements:\n    1) <td>Agent verified</td> aka getByRole('region', { name: 'Query results' }).getByRole('cell', { name: 'Agent verified' })\n    2) <td class=\"\">Agent verified</td> aka getByRole('log', { name: 'Conversation' }).getByRole('cell', { name: 'Agent verified' })\n\nCall log:\n  - Expect \"toBeVisible\" getByRole('cell', { name: 'Agent verified', exact: true }) with timeout 60000ms\n  - waiting for getByRole('cell', { name: 'Agent verified', exact: true })\n\n    at captureRawStack (/Users/raphaelmansuy/Github/03-working/edgegenie/apps/coding-agent/web/node_modules/playwright-core/lib/coreBundle.js:9551:17)\n    at callMatcherAsStep (/Users/raphaelmansuy/Github/03-working/edgegenie/apps/coding-agent/web/node_modules/playwright/lib/matchers/expect.js:13342:57)\n    at Object.toBeVisible (/Users/raphaelmansuy/Github/03-working/edgegenie/apps/coding-agent/web/node_modules/playwright/lib/matchers/expect.js:13334:23)\n    at /Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/tools/agent-query-smoke.mjs:56:74",
+  "screenshots": [
+    {
+      "file": "screenshots/34-agent-query-working.png",
+      "sha256": "3c3f3b9f797d1303244e45a8793b74499f66ca29d16aa20664967873a8578b4e"
+    }
+  ],
+  "browserErrors": [],
+  "transportErrors": []
+}

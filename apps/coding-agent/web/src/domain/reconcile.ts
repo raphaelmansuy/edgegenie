@@ -18,6 +18,13 @@ const same = (a: Cell, b: Cell) => a.kind === b.kind && a.source === b.source;
 
 export function reconcileIds(before: readonly Cell[], after: readonly Cell[]): Cell[] {
   const n = before.length, m = after.length;
+  // Bound quadratic work on very large notebooks; preserve identities by exact content queues.
+  if (n * m > 250_000) {
+    const buckets=new Map<string,string[]>();
+    for(const cell of before){const key=cell.kind+"\0"+cell.source;const ids=buckets.get(key) ?? [];ids.push(cell.id);buckets.set(key,ids);}
+    const used=new Set<string>();
+    return after.map((cell,index)=>{const key=cell.kind+"\0"+cell.source;let id=buckets.get(key)?.shift();if(!id && before[index]?.kind===cell.kind && !used.has(before[index].id))id=before[index].id;if(!id || used.has(id))id=fresh();used.add(id);return {...cell,id};});
+  }
   // LCS lengths, suffix form so the walk below goes forward.
   const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
   for (let i = n - 1; i >= 0; i--) {

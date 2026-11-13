@@ -29,14 +29,13 @@ def _authorised(request: Request, session: str, key: str):
     bridge = getattr(request.app.state, "run_bridge", None)
     if bridge is None or not bridge.verify(session, key):
         raise HTTPException(403, "not allowed")
-    if not request.app.state.settings.python_run:
-        raise HTTPException(403, "running notebooks is switched off for this app")
-    if not bridge.granted(session):
-        raise HTTPException(
-            403, "running a notebook needs serverless compute as the app's service principal, which only "
-                 "the app's administrators can use. Tell the user to run it in Databricks, or to ask an "
-                 "administrator.")
-    return request.app.state.pyruns
+    # A legacy grant must never authorize model-written code under the secret-bearing app identity.
+    # The human Run button uses the separately authorized /api/python routes.
+    raise HTTPException(
+        403,
+        "Agent code never runs as the app service principal. Run it in Databricks as yourself; "
+        "a separate execution identity is not configured or qualified for this deployment.",
+    )
 
 
 @router.post("/run-notebook")

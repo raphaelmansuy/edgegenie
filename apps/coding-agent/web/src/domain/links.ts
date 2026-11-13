@@ -6,7 +6,7 @@
  */
 export interface Workspace { host: string; orgId?: string }
 
-export type LinkKind = "notebook" | "file" | "directory" | "repo" | "library" | "table";
+export type LinkKind = "notebook" | "file" | "directory" | "repo" | "library" | "table" | "query" | "query-draft";
 
 export interface LinkTarget { kind: LinkKind; ref: string; objectId?: string }
 
@@ -19,6 +19,8 @@ export function workspaceUrl(ws: Workspace | null | undefined, t: LinkTarget): s
   if (!ws?.host) return null;
   const host = ws.host.replace(/\/+$/, "");
   const o = ws.orgId ? `?o=${encodeURIComponent(ws.orgId)}` : "";
+  if (t.kind === "query") return /^[0-9a-f-]{36}$/i.test(t.ref) ? `${host}/editor/queries/uuid/${encodeURIComponent(t.ref)}${o}` : null;
+  if (t.kind === "query-draft") return null;
   if (t.kind === "table") {
     const parts = t.ref.split(".");
     return parts.length === 3 ? `${host}/explore/data/${parts.map(encodeURIComponent).join("/")}${o}` : null;

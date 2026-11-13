@@ -1,0 +1,9 @@
+{
+  "pass": false,
+  "captures": [
+    "01-storage-desktop"
+  ],
+  "reason": "Responsive inspector relocation raced the initial mobile assertion.",
+  "retained": true,
+  "scope": "Failed intermediate harness iteration; captures inspected; not a product qualification pass."
+}

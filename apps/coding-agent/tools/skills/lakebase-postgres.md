@@ -1,30 +1,15 @@
-# Lakebase (managed Postgres): create, connect, query
+# Lakebase instances: explicit cost, reviewed creation and readiness
 
-## Flow with the tools
-1. `dbx_lakebase_create(name, capacity="CU_1")`: creates the instance and waits for `AVAILABLE`.
-   Idempotent. Name must start with the allowed prefix.
-2. `dbx_lakebase_sql(instance, sql)`: runs SQL (several statements allowed) with a fresh
-   short-lived credential. Use it to create schemas/tables, insert seed rows, and to verify.
-3. Verify with a SELECT (row count, a sample) and quote the result in your report.
+Read dbx_capabilities first. Use dbx_define(kind="instance") with the session instance prefix and an
+explicit capacity. Instance creation incurs ongoing cost and always waits for review, including Auto.
 
-## Facts
-- Default database is `databricks_postgres`. The Postgres user is your Databricks identity
-  (your email). The password is a short-lived token, never a stored secret.
-- TLS is required: `sslmode=require`. Port 5432.
-- Create objects explicitly: `CREATE SCHEMA IF NOT EXISTS app;` then
-  `CREATE TABLE IF NOT EXISTS app.tasks (...)`. `SERIAL` / `TIMESTAMPTZ DEFAULT now()` work.
+Creation returning an instance is not proof that it is ready. Use a durable dbx_run readiness operation
+and poll dbx_operation until AVAILABLE, or report the last observed state. Tools return within 30
+seconds; never repeat a submission whose outcome is unknown. Do not obtain or print database tokens.
 
-## Credentials from code (for an app or script)
-```python
-import uuid
-from databricks.sdk import WorkspaceClient
-w = WorkspaceClient()
-token = w.database.generate_database_credential(
-    request_id=str(uuid.uuid4()), instance_names=["<instance>"]).token
-conn = psycopg2.connect(host=host, port=5432, dbname="databricks_postgres",
-                        user=w.current_user.me().user_name, password=token, sslmode="require")
-```
+For application code, a separately authorized runtime can obtain a short-lived credential. Use TLS
+and parameterized SQL. The agent's own app identity is never a fallback database execution identity.
+If the advertised tool catalogue has no database SQL capability, report that limitation explicitly.
 
-## Application SQL
-Use parameterised queries only: `cur.execute("INSERT ... VALUES (%s)", (value,))`.
-Never build SQL with f-strings from request data.
+Instances created by this session appear in Resources. Review cleanup there. A renamed or changed
+instance is refused for automatic cleanup, and archiving alone does not stop its ongoing cost.

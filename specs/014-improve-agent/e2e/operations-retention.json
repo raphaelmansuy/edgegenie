@@ -1,0 +1,13 @@
+{
+  "pass": true,
+  "captures": [
+    "01-run-review",
+    "02-running",
+    "03-settled-return",
+    "04-recovered",
+    "05-cancelled",
+    "06-mobile-cancelled"
+  ],
+  "errors": [],
+  "scope": "Actual local app/ACP/MCP, durable journal and deterministic native runner. Browser closure, continuation, restart and cancellation."
+}

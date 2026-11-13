@@ -26,7 +26,7 @@ import pytest
 
 from api.adapters.acp.agent_config import config_for, model_entry
 from api.domain.llm.model import ModelSpec
-from api.services.model_registry import resolve_static
+from api.composition.model_registry import resolve_static
 
 VISION = "databricks/databricks-llama-4-maverick"
 
@@ -121,7 +121,7 @@ def test_the_wire_field_is_published():
 # -- helpers ---------------------------------------------------------------------------------
 
 def _seed_specs() -> list[ModelSpec]:
-    from api.services.model_registry import _seed
+    from api.composition.model_registry import _seed
 
     return list(_seed().models)
 
@@ -137,6 +137,7 @@ def _resolve_text(sees_images: bool) -> str:
     from api.domain.context import parse
     from api.services.blobs import BlobService
     from api.services.context import resolve
+    from api.composition.context import build_attachment_reader
 
     async def run():
         store = MemoryBlobStore()
@@ -145,7 +146,7 @@ def _resolve_text(sees_images: bool) -> str:
         row = await store.put("s", "u", spec, raw)
         svc = BlobService(store, model_sees_images=sees_images)
         items = parse([{"kind": "blob", "ref": row.id, "name": "shot.png"}])
-        out = await resolve(items, None, None, None, blobs=svc, user_id="u")
+        out = await resolve(items, build_attachment_reader(blobs=svc, user_id="u"))
         return out[0].text
 
     return asyncio.run(run())

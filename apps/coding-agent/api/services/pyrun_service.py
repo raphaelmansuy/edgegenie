@@ -5,6 +5,7 @@ A run takes a minute or more on cold serverless compute, longer than a request s
 belongs to whoever started it: another user's handle is "not found", not "forbidden", so a guessed id
 reveals nothing.
 """
+
 from __future__ import annotations
 
 import secrets
@@ -46,28 +47,40 @@ class PythonRuns:
         self._now = clock
         self._handles: dict[str, _Handle] = {}
 
-    async def start(self, owner: str, cells: list[pyrun.PyCell], *, upto: int | None,
-                    show: set[int] | None) -> dict[str, Any]:
+    async def start(
+        self, owner: str, cells: list[pyrun.PyCell], *, upto: int | None, show: set[int] | None
+    ) -> dict[str, Any]:
         """Start a run. Either a handle, or the cells' refusals when there is nothing to run."""
         self._forget()
         p = pyrun.plan(cells, upto=upto, show=show)
         if not p.steps or not p.show:
-            return {"refused": {i: RunResult(state=RunState.REFUSED, error=why).to_dict()
-                                for i, why in p.refused.items()} or
-                    {i: RunResult(state=RunState.REFUSED, error="there is no Python to run").to_dict()
-                     for i in (show or set())}}
+            return {
+                "refused": {
+                    i: RunResult(state=RunState.REFUSED, error=why).to_dict()
+                    for i, why in p.refused.items()
+                }
+                or {
+                    i: RunResult(state=RunState.REFUSED, error="there is no Python to run").to_dict()
+                    for i in (show or set())
+                }
+            }
         token = secrets.token_urlsafe(12)
         run_id, path = await self._runner.submit(f"run_{token}", pyrun.wrapper_notebook(p))
-        self._handles[token] = _Handle(owner=owner, run_id=run_id, path=path, plan=p,
-                                       started=self._now())
-        return {"handle": token, "refused": {i: RunResult(state=RunState.REFUSED, error=why).to_dict()
-                                             for i, why in p.refused.items()}}
+        self._handles[token] = _Handle(owner=owner, run_id=run_id, path=path, plan=p, started=self._now())
+        return {
+            "handle": token,
+            "refused": {
+                i: RunResult(state=RunState.REFUSED, error=why).to_dict() for i, why in p.refused.items()
+            },
+        }
 
     def _own(self, owner: str, token: str) -> _Handle:
         h = self._handles.get(token)
         if h is None or h.owner != owner:
-            raise LookupError("this run is no longer known to the app (it restarted, or the result "
-                              "expired); run the cell again")
+            raise LookupError(
+                "this run is no longer known to the app (it restarted, or the result "
+                "expired); run the cell again"
+            )
         return h
 
     async def poll(self, owner: str, token: str) -> dict[str, Any]:
@@ -80,14 +93,23 @@ class PythonRuns:
             if ended:
                 output, error = await self._runner.output(info.task_run_id)
             finished, results = pyrun.results_from_run(
-                h.plan, life_cycle=info.life_cycle, result_state=info.result_state,
-                message=info.message, output=output, error=error, seconds=seconds)
+                h.plan,
+                life_cycle=info.life_cycle,
+                result_state=info.result_state,
+                message=info.message,
+                output=output,
+                error=error,
+                seconds=seconds,
+            )
             if not finished:
                 return {"state": "running", "seconds": seconds, "stage": _stage(info.life_cycle)}
             h.done, h.finished_at = results, self._now()
             await self._runner.discard(h.path)
-        return {"state": "done", "seconds": seconds,
-                "results": {str(i): r.to_dict() for i, r in h.done.items()}}
+        return {
+            "state": "done",
+            "seconds": seconds,
+            "results": {str(i): r.to_dict() for i, r in h.done.items()},
+        }
 
     async def cancel(self, owner: str, token: str) -> None:
         h = self._own(owner, token)
@@ -96,7 +118,9 @@ class PythonRuns:
 
     def _forget(self) -> None:
         now = self._now()
-        for key in [k for k, h in self._handles.items() if h.done is not None and now - h.finished_at > KEEP_SECONDS]:
+        for key in [
+            k for k, h in self._handles.items() if h.done is not None and now - h.finished_at > KEEP_SECONDS
+        ]:
             del self._handles[key]
 
 

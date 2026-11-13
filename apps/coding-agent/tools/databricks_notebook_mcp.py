@@ -49,12 +49,19 @@ Tools
 """
 from __future__ import annotations
 
+import functools
 import base64
 import json
 import os
 import re
 import sys
 from typing import Any
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from api.adapters.mcp.deadline import invoke
+from api.domain.policy.paths import inside
+from api.domain.policy.sql import check_scope, classify
+from api.domain.policy.verdict import ActionClass
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -73,18 +80,18 @@ mcp = FastMCP("databricks-notebook-tools")
 # fewer, better tools beat many. `core` registers the ~20 tools the exam suite
 # showed are actually needed; `full` also registers the rarely-used lookups.
 PROFILE = os.environ.get("NBMCP_PROFILE", "full")
-_CORE = {
-    "dbx_whoami", "dbx_list_tables", "dbx_describe_table", "dbx_search_tables", "dbx_run_sql",
-    "dbx_list_notebooks", "dbx_read_notebook", "dbx_grep_notebook", "dbx_write_notebook",
-    "dbx_write_file", "dbx_run_notebook", "dbx_run_notebook_status", "dbx_create_job", "dbx_run_job", "dbx_job_run_status",
-    "dbx_lakebase_create", "dbx_lakebase_status", "dbx_lakebase_sql", "dbx_create_app", "dbx_skill",
-}
+from api.domain.tool_catalogue import CORE_TOOLS as _CORE
 
 
 def tool():
     def deco(fn):
         if PROFILE == "full" or fn.__name__ in _CORE:
-            return mcp.tool()(fn)
+            @functools.wraps(fn)
+            async def bounded(*args, **kwargs):
+                return await invoke(fn, *args, **kwargs)
+            mcp.tool()(bounded)
+            # Direct Python callers retain the sync API; MCP calls use the bounded adapter.
+            return fn
         return fn
     return deco
 
@@ -193,40 +200,8 @@ def _need_writes() -> None:
 WRITE_SCHEMAS = [s.strip().lower() for s in os.environ.get("NBMCP_WRITE_SCHEMAS", "").split(",") if s.strip()]
 WRITE_PATHS = [p.strip() for p in os.environ.get("NBMCP_WRITE_PATHS", "").split(",") if p.strip()]
 
-_ID = r"`?[A-Za-z_][\w-]*`?"
-_NAME = rf"({_ID})(?:\.({_ID}))?(?:\.({_ID}))?"
-# Write *targets* only: sources of a CTAS (FROM/JOIN) are reads and stay free.
-_TARGETS = re.compile(
-    r"(?i)\b(?:"
-    r"create\s+(?:or\s+replace\s+)?(?:temp(?:orary)?\s+)?(?:external\s+)?(?:table|view|materialized\s+view|streaming\s+table|schema|volume|function)"
-    r"(?:\s+if\s+not\s+exists)?"
-    r"|insert\s+(?:into|overwrite)(?:\s+table)?"
-    r"|merge\s+into|update|delete\s+from|truncate\s+table|copy\s+into"
-    r"|drop\s+(?:table|view|schema|volume|function)(?:\s+if\s+exists)?"
-    r"|alter\s+(?:table|view|schema)"
-    r"|comment\s+on\s+(?:table|schema|column)"
-    r"|optimize|vacuum"
-    r")\s+" + _NAME
-)
-
-
 def _check_sql_scope(sql: str) -> str | None:
-    """Return an error string if any write target is outside the write scope."""
-    if not WRITE_SCHEMAS:
-        return None
-    targets = _TARGETS.findall(sql)
-    if not targets:
-        return "write blocked: could not identify a write target; use plain CREATE/INSERT/MERGE/ALTER statements"
-    for a, b, c in targets:
-        parts = [x.strip("`").lower() for x in (a, b, c) if x]
-        if len(parts) == 2 and f"{parts[0]}.{parts[1]}" in WRITE_SCHEMAS:
-            continue  # schema-level target e.g. CREATE SCHEMA cat.sch
-        if len(parts) == 3 and f"{parts[0]}.{parts[1]}" in WRITE_SCHEMAS:
-            continue
-        # COMMENT ON COLUMN cat.sch.tbl.col is matched as 3 parts, still fine.
-        return (f"write blocked: target {'.'.join(parts)} is not inside allowed schemas "
-                f"{WRITE_SCHEMAS}; use fully qualified catalog.schema.name")
-    return None
+    return check_scope(sql, WRITE_SCHEMAS)
 
 
 JOB_PREFIX = os.environ.get("NBMCP_WRITE_JOB_PREFIX", "")
@@ -239,7 +214,7 @@ def _check_prefix(kind: str, name: str, prefix: str) -> None:
 
 
 def _check_path_scope(path: str) -> None:
-    if WRITE_PATHS and not any(path.startswith(p) for p in WRITE_PATHS):
+    if not any(inside(path, p) for p in WRITE_PATHS):
         raise PermissionError(f"write blocked: {path} outside allowed paths {WRITE_PATHS}")
 
 
@@ -412,21 +387,15 @@ def dbx_grants(securable_type: str, full_name: str) -> str:
 def dbx_run_sql(sql: str, warehouse_id: str = "", limit: int = 100) -> str:
     """Execute SQL on a SQL warehouse and return rows.
 
-    Read-only by convention: statements that are not SELECT/SHOW/DESCRIBE are
-    rejected unless NBMCP_ALLOW_WRITES=1. Uses the Statements API (synchronous
-    wait, so the agent does not have to poll).
+    Parser-validated reads; mutations require a writable schema and NBMCP_ALLOW_WRITES=1.
+    Waits at most 20 seconds, then returns a statement_id to poll without submitting again.
     """
-    head = sql.strip().split(None, 1)[0].upper() if sql.strip() else ""
-    if head not in ("SELECT", "SHOW", "DESCRIBE", "DESC", "WITH", "EXPLAIN") and not ALLOW_WRITES:
-        return json.dumps({"error": f"statement type {head} blocked (read-only server)"})
-    if head not in ("SELECT", "SHOW", "DESCRIBE", "DESC", "EXPLAIN"):
-        # WITH ... SELECT is read-only, but WITH ... INSERT is not; scope-check
-        # anything that is not an obvious read.
-        is_read = head == "WITH" and not re.search(r"(?i)\b(insert|merge|update|delete)\b", sql)
-        if not is_read:
-            err = _check_sql_scope(sql)
-            if err:
-                return json.dumps({"error": err})
+    classification = classify(sql)
+    err = _check_sql_scope(sql)
+    if err:
+        raise PermissionError(err)
+    if classification.action is not ActionClass.READ:
+        _need_writes()
     wh = warehouse_id or WAREHOUSE_ID
     if not wh:
         whs = _get("/api/2.0/sql/warehouses").get("warehouses", [])
@@ -440,7 +409,7 @@ def dbx_run_sql(sql: str, warehouse_id: str = "", limit: int = 100) -> str:
         {
             "warehouse_id": wh,
             "statement": sql,
-            "wait_timeout": "50s",
+            "wait_timeout": "20s",
             "on_wait_timeout": "CONTINUE",
             "format": "JSON_ARRAY",
             "disposition": "INLINE",
@@ -448,11 +417,18 @@ def dbx_run_sql(sql: str, warehouse_id: str = "", limit: int = 100) -> str:
     )
     state = (data.get("status") or {}).get("state")
     if state != "SUCCEEDED":
-        return _trim({"state": state, "error": (data.get("status") or {}).get("error")})
+        error = (data.get("status") or {}).get("error")
+        if error:
+            raise RuntimeError(json.dumps(error))
+        return _trim({"state": state, "statement_id": data.get("statement_id"), "finished": False,
+                      "hint": "Poll the statement_id; do not submit the statement again."})
     result = data.get("result") or {}
     cols = [c["name"] for c in (data.get("manifest") or {}).get("schema", {}).get("columns", [])]
     rows = result.get("data_array") or []
-    return _trim({"columns": cols, "rows": rows[:limit], "row_count": len(rows)})
+    return json.dumps({"columns": cols, "rows": rows[:max(1, min(limit, 100))],
+                       "statement_id": data.get("statement_id"),
+                       "row_count": (data.get("manifest") or {}).get("total_row_count", len(rows)),
+                       "truncated": bool((data.get("manifest") or {}).get("truncated")) or len(rows) > limit})
 
 
 @tool()
@@ -731,6 +707,7 @@ def _task_outputs(run: dict) -> list[dict]:
 
 def _wait_run(run_id: int, wait_seconds: int) -> dict:
     import time
+    wait_seconds = min(max(wait_seconds, 0), 20)
     t0 = time.time()
     while True:
         d = _get("/api/2.1/jobs/runs/get", {"run_id": run_id})
@@ -798,10 +775,11 @@ def _run_via_app(path: str, wait_seconds: int) -> str:
 
 def _poll_app_run(handle: str, wait_seconds: int) -> str:
     import time
+    wait_seconds = min(max(wait_seconds, 0), 20)
     t0 = time.time()
     while True:
         d = _app_call("GET", f"{RUN_URL}/{handle}", params={"session": RUN_SESSION, "key": RUN_KEY})
-        if d.get("state") == "done" or time.time() - t0 >= min(wait_seconds, 55):
+        if d.get("state") == "done" or time.time() - t0 >= min(max(wait_seconds, 0), 20):
             break
         time.sleep(3)
     if d.get("state") != "done":
@@ -824,7 +802,7 @@ def _poll_app_run(handle: str, wait_seconds: int) -> str:
 
 
 @tool()
-def dbx_run_notebook_status(handle: str, wait_seconds: int = 45) -> str:
+def dbx_run_notebook_status(handle: str, wait_seconds: int = 20) -> str:
     """Wait for (or read) a notebook run that dbx_run_notebook left running as the app.
 
     Pass the `handle` it returned. Same output as dbx_run_notebook: each Python cell's printed output,
@@ -836,7 +814,7 @@ def dbx_run_notebook_status(handle: str, wait_seconds: int = 45) -> str:
 
 
 @tool()
-def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int = 45) -> str:
+def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int = 20) -> str:
     """Run a notebook ONCE on serverless compute and wait for the result.
 
     Returns the state, the dbutils.notebook.exit() value and, on failure, the
@@ -844,9 +822,8 @@ def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int =
     wait_seconds you get finished=false and a run_id to poll with
     dbx_job_run_status.
 
-    In a deployed Databricks App the user's token cannot submit runs; then the notebook is run by the
-    app itself as its own service principal (only for administrators). The result says `ran_as`, and
-    you must tell the user it did not run as them. If finished=false, call dbx_run_notebook_status(handle).
+    This runs only as the user. If this deployment cannot submit as the user, execution is refused.
+    Run the SQL cells or open the notebook in Databricks instead.
 
     Kept short on purpose: a tool that blocks for minutes produces no ACP events, so the turn looks
     dead and the app's idle guard fires. Poll instead.
@@ -860,11 +837,9 @@ def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int =
     try:
         run_id = _post("/api/2.1/jobs/runs/submit", {"run_name": "nbmcp-run", "tasks": [task]})["run_id"]
     except PermissionError:
-        # A Databricks App's user authorization has no jobs scope, so the user's token cannot submit a
-        # run. When the host app offers to run it itself (as the app, for administrators), ask it to.
-        if RUN_URL:
-            return _run_via_app(path, wait_seconds)
-        raise
+        # Never substitute another identity for a user-scoped permission refusal.
+        raise PermissionError("Cannot run this notebook as you from here. Agent code never runs as the app. "
+                              "Run SQL cells as you, or open the notebook in Databricks.") from None
     summary = _run_summary(run_id, _wait_run(run_id, wait_seconds))
     # On failure, hand back the tables the notebook reads and their real columns: a failed run is
     # exactly when the agent needs the truth, and making it guess again wastes a whole turn.
@@ -926,11 +901,11 @@ def dbx_create_job(name: str, tasks: list[dict] | None = None, cron: str = "", t
     data = _post("/api/2.1/jobs/create", body)
     return _trim({"job_id": data.get("job_id"), "name": name, "tasks": [t["task_key"] for t in tasks],
                   "schedule": "created PAUSED" if cron else None,
-                  "next": "call dbx_run_job(job_id, wait_seconds=300) to run it"})
+                  "next": "call dbx_run_job(job_id, wait_seconds=20) to run it"})
 
 
 @tool()
-def dbx_run_job(job_id: int, wait_seconds: int = 45) -> str:
+def dbx_run_job(job_id: int, wait_seconds: int = 20) -> str:
     """Trigger a job run. With wait_seconds > 0 wait for it and return per-task
     results (exit values, errors). Requires NBMCP_ALLOW_WRITES=1."""
     _need_writes()
@@ -989,7 +964,7 @@ def dbx_write_file(path: str, content: str, overwrite: bool = True) -> str:
 
 
 @tool()
-def dbx_lakebase_create(name: str, capacity: str = "CU_1", wait_seconds: int = 45) -> str:
+def dbx_lakebase_create(name: str, capacity: str = "CU_1", wait_seconds: int = 20) -> str:
     """Create a Lakebase (managed Postgres) instance and wait until AVAILABLE.
     Idempotent: if it exists, returns its state. Name must start with the allowed prefix."""
     _need_writes()

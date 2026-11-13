@@ -94,3 +94,30 @@ describe("reducer", () => {
     expect(new Set(py.default.types)).toEqual(new Set(EVENT_TYPES));
   });
 });
+
+it("keeps protocol usage and explicit refusal outcomes", () => {
+  let s = reduce(emptySession("s"), { seq: 1, sessionId: "s", type: "turn.started", turnId: "t", text: "test" });
+  s = reduce(s, { seq: 2, sessionId: "s", type: "usage.updated", usage: { used: 12, size: 100, cost: { amount: .01, currency: "USD" } } });
+  expect(s.meter?.used).toBe(12);
+  s = reduce(s, { seq: 3, sessionId: "s", type: "turn.declined", turnId: "t", reason: "Stopped by your decision" });
+  expect(s.turns[0].status).toBe("declined");
+});
+
+it("refreshes assets only from applied ledger state and retains the latest transition", () => {
+  let s = emptySession("s");
+  s = reduce(s, ev({ type: "change.proposed", change: { id: "c", state: "awaiting_review", asset: { kind: "notebook", id: "/scratch/n" } } }));
+  expect(s.changedAssets).toBeUndefined();
+  s = reduce(s, ev({ type: "change.applied", change: { id: "c", version: 2, state: "applied", asset: { kind: "notebook", id: "/scratch/n" } } }));
+  expect(s.changedAssets).toEqual([{ kind: "notebook", id: "/scratch/n", key: "c:2:applied" }]);
+  s = reduce(s, ev({ type: "change.settled", change: { id: "c", version: 3, state: "reverted", asset: { kind: "notebook", id: "/scratch/n" } } }));
+  expect(s.changedAssets).toEqual([{ kind: "notebook", id: "/scratch/n", key: "c:3:reverted" }]);
+});
+
+it.each([true,false])('a linked native proposal remains a pending owner decision, link-first=%s',linkFirst=>{
+ let s=emptySession('s');
+ const linked=ev({type:'approval.linked',approvalId:'a',changeId:'c'}),requested=ev({type:'approval.requested',approvalId:'a',callId:'call',action:'edit'});
+ for(const event of linkFirst?[linked,requested]:[requested,linked])s=reduce(s,event);
+ expect(s.approvals[0].changeId).toBe('c');expect(s.approvals[0].outcome).toBeUndefined();
+ s=reduce(s,ev({type:'approval.decided',approvalId:'a',outcome:'allow_once'}));
+ expect(s.approvals[0].outcome).toBe('allow_once');
+});

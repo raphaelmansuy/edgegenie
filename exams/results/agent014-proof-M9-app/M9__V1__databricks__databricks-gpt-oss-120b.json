@@ -1,0 +1,63 @@
+{
+  "mission": "M9",
+  "title": "One-cell edit in a long notebook",
+  "variant": "V1",
+  "model": "databricks/databricks-gpt-oss-120b",
+  "agent": "opencode",
+  "via": "app",
+  "tag": "databricks__databricks-gpt-oss-120b",
+  "run_id": "xaba27",
+  "batch": "agent014-proof-M9",
+  "session_id": "603acfc2f2704526",
+  "turn_id": "0ad764c6dec8",
+  "turn_status": "completed",
+  "tool_calls": 4,
+  "steps": 2,
+  "tokens": 22773,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "db_dbx_describe",
+    "db_dbx_edit",
+    "db_dbx_read",
+    "dbx_read"
+  ],
+  "tool_errors": 1,
+  "answer": "**Solution**\n\nThe literal **BROKEN** in zero\u2011based cell\u202f37 of the notebook was replaced with **FIXED** while preserving every other cell and all byte\u2011level separators.\n\n**Evidence**\n\n| Requirement | Tool | Summary |\n|---|---|---|\n| Read cell\u202f37 source & SHA | `db_dbx_read` | `inv_6783e1ceb59546a69a13` \u2013 source contains `print(\"cell-37-BROKEN\")`, SHA `1c804984d6ad17bc93f923e8b273ab35e44c724f8e55da3d47595de59da97e92`, revision `7ce0096de5bcde1d924dbe7129cf455a58e121c2c13ae471cbca447ec0ac380b`. |\n| Apply replace_cell edit | `db_dbx_edit` | `inv_4d1dcf56722c4ead96f5` \u2013 edit applied, new revision `838a8cef7c8b53ea789167e95a4410401aab843ce6f07f0407d0389e4c1a4fdf`, diff shows `print(\"cell-37-FIXED\")`. |\n| Verify new notebook revision | `db_dbx_describe` | `inv_95fba7d91b254f658187` \u2013 notebook now at revision `838a8cef7c8b53ea789167e95a4410401aab843ce6f07f0407d0389e4c1a4fdf`; cell\u202f37 SHA updated to `2ad055bbcf5b04225f55de4b26d28bc04c8e9a1fc05bd8914a817fcf14976f0f`. |\n\nAll other cells and separators remain byte\u2011identical to the original notebook.\n\n**EVIDENCE**\n\n| requirement | tool | summary |\n|---|---|---|\n| Read cell\u202f37 source & SHA | inv_6783e1ceb59546a69a13 (dbx_read) | Revision `7ce0096de5bcde1d924dbe7129cf455a58e121c2c13ae471cbca447ec0ac380b`; cell\u202f37 SHA `1c804984d6ad17bc93f923e8b273ab35e44c724f8e55da3d47595de59da97e92`; source contains `print(\"cell-37-BROKEN\")`. |\n| Apply a revision\u2011bound `replace_cell` that changes only the literal and leaves all other cells and byte\u2011separators unchanged | inv_4d1dcf56722c4ead96f5 (dbx_edit) | Base revision `7ce0096de5bcde1d924dbe7129cf455a58e121c2c13ae471cbca447ec0ac380b`; new revision `838a8cef7c8b53ea789167e95a4410401aab843ce6f07f0407d0389e4c1a4fdf`; diff shows only `-print(\"cell-37-BROKEN\")` \u2192 `+print(\"cell-37-FIXED\")`, confirming no other cells or separators were altered. |\n| Verify the notebook\u2019s new revision after the edit | inv_95fba7d91b254f658187 (dbx_describe) | Notebook revision now `838a8cef7c8b53ea789167e95a4410401aab843ce6f07f0407d0389e4c1a4fdf`; cell\u202f37 SHA updated to `2ad055bbcf5b04225f55de4b26d28bc04c8e9a1fc05bd8914a817fcf14976f0f`, reflecting the `FIXED` literal. |\n| **Maintain byte\u2011identical other cells and separators** (restated requirement) | inv_4d1dcf56722c4ead96f5 (dbx_edit) | The diff in the edit output contains only the single line change for cell\u202f37, proving that every other cell and all notebook separators remain byte\u2011identical to the original. |",
+  "score": 12,
+  "total": 12,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "same notebook path and 60 cells",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "exactly cell 37 changed",
+      "passed": true,
+      "weight": 3,
+      "detail": "[37]"
+    },
+    {
+      "name": "target replacement only",
+      "passed": true,
+      "weight": 3,
+      "detail": ""
+    },
+    {
+      "name": "all other 59 raw segments byte-identical",
+      "passed": true,
+      "weight": 3,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 34
+}

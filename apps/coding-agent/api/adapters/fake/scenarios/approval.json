@@ -1,16 +1,50 @@
 {
   "turn": {
     "permission": {
-      "title": "Write a notebook outside the working folder",
-      "description": "This notebook is outside the session working folder.",
-      "subject": {"path": "/Shared/revenue_review", "action": "write", "toolCallId": "approval_tool"},
       "options": [
-        {"optionId": "once", "kind": "allow_once", "name": "Allow once"},
-        {"optionId": "session", "kind": "allow_always", "name": "Allow this session"},
-        {"optionId": "deny", "kind": "reject_once", "name": "Deny"}
-      ]
+        {
+          "optionId": "once",
+          "kind": "allow_once",
+          "name": "Allow once"
+        },
+        {
+          "optionId": "session",
+          "kind": "allow_always",
+          "name": "Allow this session"
+        },
+        {
+          "optionId": "deny",
+          "kind": "reject_once",
+          "name": "Deny"
+        }
+      ],
+      "toolCall": {
+        "toolCallId": "approval_tool",
+        "title": "db_dbx_write_notebook",
+        "kind": "other",
+        "status": "pending",
+        "rawInput": {}
+      }
     },
-    "updates": [],
+    "updates": [
+      {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "approval_tool",
+        "title": "db_dbx_write_notebook",
+        "kind": "other",
+        "status": "pending",
+        "rawInput": {}
+      },
+      {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "approval_tool",
+        "status": "in_progress",
+        "rawInput": {
+          "path": "/Shared/revenue_review",
+          "source": "SELECT 1"
+        }
+      }
+    ],
     "answer": "The permission decision was received. No Databricks operation was executed by this fixture.",
     "stopReason": "end_turn"
   }

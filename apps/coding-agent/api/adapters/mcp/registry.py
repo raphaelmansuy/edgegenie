@@ -10,6 +10,8 @@ import asyncio
 import os
 import socket
 import tempfile
+
+from ..child_env import child_env
 from pathlib import Path
 
 # Look in the app's own tree first (a deployment ships only its source folder), then in the
@@ -44,26 +46,16 @@ class SubprocessToolRegistry:
         self._procs: dict[str, tuple[asyncio.subprocess.Process, str]] = {}
         self._stderr: str = ""
         self._logs: dict[str, str] = {}
+        self._homes: dict[str, str] = {}
 
     async def start(self, session_id: str, folder: str, schema: str | None,
                     token_file: str | None = None) -> str:
+        existing = self._procs.get(session_id)
+        if existing and existing[0].returncode is None:
+            return existing[1]
         port = free_port()
-        env = {
-            **os.environ,
-            "NBMCP_TRANSPORT": "http",
-            "NBMCP_PORT": str(port),
-            "NBMCP_HOST": "127.0.0.1",
-            "NBMCP_PROFILE": "core",
-            "NBMCP_ALLOW_WRITES": "1",
-            "NBMCP_WRITE_SCHEMAS": schema or "",
-            "NBMCP_WRITE_PATHS": folder.rstrip("/") + "/",
-            "NBMCP_WRITE_JOB_PREFIX": f"agent_{session_id[:8]}_",
-            "NBMCP_WRITE_INSTANCE_PREFIX": f"agent-{session_id[:8]}-",
-            "NBMCP_SKILLS_DIR": str(self._server.parent / "skills"),
-            # Where the server reads the user's current token; never the agent's working folder.
-            **({"NBMCP_TOKEN_FILE": token_file} if token_file else {}),
-            **(self._bridge.env_for(session_id) if self._bridge else {}),
-        }
+        home = self._homes.setdefault(session_id, tempfile.mkdtemp(prefix="tool-home-", dir="/tmp"))
+        env = self.environment(session_id, folder, schema, token_file, port, home)
         # stderr goes to a file, not a pipe nobody reads and not /dev/null: when the server cannot
         # start, its own message is the only useful diagnostic, and a full pipe would block it.
         log = tempfile.NamedTemporaryFile(prefix=f"toolserver-{session_id[:8]}-", suffix=".log", delete=False)
@@ -82,13 +74,37 @@ class SubprocessToolRegistry:
             if proc.returncode is not None:
                 break
             if await self.health(url) > 0:
-                return url
+                # A successful TCP connect may belong to an unrelated listener that won the
+                # free-port race. Check that our child survived before reporting readiness.
+                await asyncio.sleep(0.05)
+                if proc.returncode is None:
+                    return url
             await asyncio.sleep(0.25)
         stderr_tail = self._read_log(session_id)
         await self.stop(session_id)
         raise RuntimeError(
             f"the tool server did not start (server={self._server}, exists={self._server.exists()}). "
             f"Last output: {stderr_tail.strip()[:300] or '(none)'}")
+
+    def environment(self, session_id, folder, schema, token_file, port, home):
+        env = {
+            **child_env({"DATABRICKS_HOST": os.environ.get("DATABRICKS_HOST", "")}, home=home),
+            "NBMCP_TRANSPORT": "http",
+            "NBMCP_PORT": str(port),
+            "NBMCP_HOST": "127.0.0.1",
+            "NBMCP_PROFILE": "core",
+            "NBMCP_ALLOW_WRITES": "1",
+            "NBMCP_WRITE_SCHEMAS": schema or "",
+            "NBMCP_WRITE_PATHS": folder.rstrip("/") + "/",
+            "NBMCP_WRITE_JOB_PREFIX": f"agent_{session_id[:8]}_",
+            "NBMCP_WRITE_INSTANCE_PREFIX": f"agent-{session_id[:8]}-",
+            "NBMCP_SKILLS_DIR": str(self._server.parent / "skills"),
+            # Where the server reads the user's current token; never the agent's working folder.
+            **({"NBMCP_TOKEN_FILE": token_file} if token_file else {}),
+            # Agent code must never run as the app identity (AG-34).
+            # A separate, verified run adapter is required before offering a bridge.
+        }
+        return env
 
     def _read_log(self, session_id: str) -> str:
         try:
@@ -131,3 +147,16 @@ class NullToolRegistry:
 
     async def stop(self, session_id: str) -> None:
         return None
+
+
+class FacadeToolRegistry(SubprocessToolRegistry):
+    """No user token, provider credential or workspace client is passed to this child."""
+    def __init__(self, access, app_url, python):
+        super().__init__(server=Path(__file__).with_name('facade.py'),python=python)
+        self.access,self.app_url=access,app_url
+    def environment(self,sid,folder,schema,token_file,port,home):
+        return child_env({'NBMCP_PORT':str(port),'TOOL_SESSION':sid,'TOOL_KEY':self.access.issue(sid),
+                          'TOOL_APP_URL':self.app_url},home=home)
+    async def stop(self,sid):
+        self.access.revoke(sid)
+        await super().stop(sid)

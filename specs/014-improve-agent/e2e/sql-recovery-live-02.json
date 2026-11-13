@@ -1,0 +1,20 @@
+{
+  "pass": true,
+  "workspace": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "identity": "raphael.mansuy@gmail.com",
+  "owner": "78760067054768",
+  "statementId": "01f1df57-4885-17e2-bb5a-936b98294506",
+  "operationId": "op_d8df6da2c6184e59b47f",
+  "submitCount": 1,
+  "checks": {
+    "lostAcknowledgement": true,
+    "lostOperationHandle": true,
+    "bothStoresReopened": true,
+    "sameNativeStatement": true,
+    "actualResultVerified": true,
+    "repeatReturnedOriginal": true,
+    "noTableMutation": true
+  },
+  "fixtureStorage": "/var/folders/dn/l5m680yx7mj31wv2j2vvck6m0000gn/T/agent014-sql-recovery-_lq_ouaw",
+  "scope": "Native backend fault injection; not a browser or model exam"
+}

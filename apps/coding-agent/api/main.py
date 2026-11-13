@@ -35,7 +35,7 @@ from .routers.internal import router as internal_router
 from .services.catalogue import SettingsModelCatalog
 from .services.health_service import HealthService
 from .services.identity import ForwardedIdentity, NullGroups
-from .services.model_registry import Registry, build_registry
+from .composition.model_registry import Registry, build_registry, resolve_static
 from .services.orchestrator import Orchestrator
 
 WEB_DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
@@ -43,6 +43,8 @@ WEB_DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
 
 def build(settings: Settings | None = None, *, llm: Registry | None = None) -> FastAPI:
     cfg = settings or load_settings()
+    from .domain.run_identity import check_declaration
+    check_declaration(cfg.agent_run_identity)
     if cfg.session_database_url or cfg.session_use_lakebase:
         from .adapters.durable.postgres import PostgresSessionStore
         store = PostgresSessionStore(cfg)
@@ -76,8 +78,7 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
 
         runtime = HttpAcpAgentRuntime(cfg.agent_config_dir or None)
 
-    # The agent's tool server cannot submit runs as the user (an App has no jobs scope); it asks the
-    # app, over loopback, to run the notebook as the app. The key only opens one session's door.
+    # Retain legacy session-key compatibility; internal agent execution is disabled at the route.
     from .services.run_bridge import RunBridge
 
     bridge = RunBridge(cfg.internal_url or f"http://127.0.0.1:{os.environ.get('DATABRICKS_APP_PORT') or '8000'}")
@@ -96,7 +97,7 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
                         resolver=llm.resolver if llm is not None else None,
                         credentials=llm.credentials if llm is not None else None,
                         store_llm=llm.store if llm is not None else None,
-                        health=llm.health if llm is not None else None,
+                        health=llm.health if llm is not None else None, static_resolve=resolve_static,
                         max_run_seconds=cfg.session_max_run_seconds, max_concurrent=cfg.max_concurrent_agents)
 
     @asynccontextmanager
@@ -104,6 +105,8 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
         if cfg.production and not (cfg.session_db_path or cfg.session_database_url or cfg.session_use_lakebase):
             raise RuntimeError("a durable session journal is required in production (Lakebase, Postgres, or persistent SQLite)")
         await orch.restore()
+        if orch.work:
+            await orch.work.startup()
         # A background reaper, because `archive()` tears a session down properly but nothing called
         # it: every session a user opened kept its agent subprocess for the life of the server. An
         # afternoon of testing accumulated 29 live agents, which is what exhausted the machine and
@@ -118,7 +121,17 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
+            if orch.work:
+                await orch.work.operations.close()
             await orch.shutdown()
+            if orch.work:
+                await orch.work.close()
+            for browser in (app.state.workspace,app.state.catalog,app.state.serving):
+                closer=getattr(browser,"close",None)
+                if closer:await closer()
+            sql_http=getattr(app.state.sql.provider,"http",None)
+            if sql_http:await sql_http.close()
+            app.state.sql.store.close()
             if hasattr(store, "close"):
                 result = store.close()
                 if inspect.isawaitable(result):
@@ -130,6 +143,8 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
 
     app = FastAPI(title="OpenGenie", version="0.1.0", lifespan=lifespan)
     app.state.settings = cfg
+    from .composition.context import build_attachment_reader
+    app.state.attachment_reader = build_attachment_reader
     app.state.run_bridge = bridge
     app.state.store = store
     app.state.models = models
@@ -153,6 +168,19 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
         lambda: os.environ.get("DATABRICKS_TOKEN") or None,
     )
     app.state.dev_token = os.environ.get("APP_DEV_TOKEN") or os.environ.get("DATABRICKS_TOKEN")
+    from .adapters.databricks.http import DbxHttp, normalize_host
+    from .adapters.databricks.queries import DatabricksQueries, DemoQueries
+    from .adapters.durable.query_sqlite import SqliteQueryStore
+    from .services.sql_service import SqlService
+    from .routers.sql import SqlBodyLimit, router as sql_router
+
+    sql_path = cfg.sql_db_path or (cfg.session_db_path + ".sql" if cfg.session_db_path else "")
+    sql_store = SqliteQueryStore(sql_path, cfg.sql_key, cfg.production)
+    app.state.sql_workspace = normalize_host(os.environ.get("DATABRICKS_HOST", "")) or "local-demo"
+    sql_provider = (DemoQueries(sql_store) if cfg.agent_mode == "fake" and not os.environ.get("DATABRICKS_HOST")
+                    else DatabricksQueries(DbxHttp(app.state.sql_workspace, lambda: None, max_response_bytes=8*1024*1024), cfg.sql_create))
+    app.state.sql = SqlService(sql_provider, sql_store, create_enabled=cfg.sql_create, run_enabled=cfg.sql_run)
+    app.include_router(sql_router)
 
     # Bytes the user hands us (spec 009). A directory in dev, memory in tests; the port makes a third
     # implementation additive rather than a migration ([BLB-5]).
@@ -179,6 +207,18 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
         app.state.llm = _sync_registry(cfg)
     app.state.orchestrator.attach_registry(app.state.llm)
 
+    if cfg.changes:
+        from .composition.agent_work import build_work
+        from .adapters.mcp.registry import FacadeToolRegistry
+        from .routers.work import router as work_router
+        app.state.work=build_work(cfg,orch,store,app.state.workspace,app.state.catalog,app.state.sql)
+        if cfg.agent_workspace_demo:
+            app.state.workspace = app.state.work.workspace
+        facade=FacadeToolRegistry(app.state.work.toolbox,
+            cfg.internal_url or f"http://127.0.0.1:{os.environ.get('DATABRICKS_APP_PORT') or '8000'}",sys.executable)
+        orch.attach_work(app.state.work,facade if cfg.tool_mode=='subprocess' else None,lazy=cfg.journal_v2)
+        app.include_router(work_router)
+
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
     @app.middleware("http")
@@ -199,11 +239,16 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
         # boundary. Returning 404 avoids disclosing the existence of another person's journal.
         match = re.match(r"^/api/(?:sessions|approvals)/([^/]+)(?:/|$)", request.url.path)
         if match:
-            live = orch._live.get(match.group(1))
-            if live is None or live.state.session.user_id != request.state.user_id:
+            try:
+                await orch.ensure_owned(match.group(1), request.state.user_id)
+                orch.set_principal(match.group(1),request.state.home)
+                token=request.headers.get('x-forwarded-access-token') or (app.state.dev_token if not cfg.production else None)
+                orch.refresh_credentials(match.group(1),token,bool(request.headers.get('x-forwarded-access-token')) or cfg.production)
+            except KeyError:
                 return JSONResponse({"detail": "no such session"}, status_code=404)
         return await call_next(request)
 
+    app.add_middleware(SqlBodyLimit)
     app.include_router(router)
     app.include_router(llm_router)
     app.include_router(llm_admin_router)
@@ -231,7 +276,7 @@ def _sync_registry(cfg: Settings) -> Registry:
     seed store is loaded synchronously here, so this path needs no loop at all; a configured
     `LLM_DATABASE_URL` on this path is connected lazily on first use instead.
     """
-    from .services.model_registry import build_registry_sync
+    from .composition.model_registry import build_registry_sync
 
     return build_registry_sync(cfg)
 
@@ -258,6 +303,8 @@ async def _reap_loop(app: FastAPI) -> None:
         try:
             await asyncio.sleep(interval)
             reaped = await app.state.orchestrator.reap_idle()
+            if app.state.orchestrator.work:
+                await app.state.orchestrator.work.maintenance()
             if reaped:
                 log.info("reaped %d idle session(s)", len(reaped))
         except asyncio.CancelledError:
@@ -272,7 +319,7 @@ async def _database_loop(app: FastAPI) -> None:
     A Lakebase compute that was suspended takes a few seconds to wake, and a network that is not up
     at boot is not a reason to serve the seed for the life of the process.
     """
-    from .services.model_registry import adopt_database
+    from .composition.model_registry import adopt_database
 
     cfg = app.state.settings
     registry = getattr(app.state, "llm", None)

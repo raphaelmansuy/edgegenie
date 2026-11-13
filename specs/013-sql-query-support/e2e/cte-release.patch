@@ -1,0 +1,312 @@
+diff --git a/apps/coding-agent/VERSION b/apps/coding-agent/VERSION
+index 6410ff4..0c51519 100644
+--- a/apps/coding-agent/VERSION
++++ b/apps/coding-agent/VERSION
+@@ -1 +1 @@
+-1.2.0-rc.3
++1.2.0-rc.4
+diff --git a/apps/coding-agent/api/domain/sqlpolicy.py b/apps/coding-agent/api/domain/sqlpolicy.py
+index b4f1db1..5ad398c 100644
+--- a/apps/coding-agent/api/domain/sqlpolicy.py
++++ b/apps/coding-agent/api/domain/sqlpolicy.py
+@@ -14,39 +14,45 @@ try:
+ except ImportError:
+     sqlglot = None
+ 
+-# A deliberate small initial function vocabulary. Unknown/UDF/external calls are refused.
+-FUNCTIONS = frozenset(
++# One registry binds reviewed AST classes to actual Databricks spellings. Parser-normalized
++# names (STR_TO_UNIX, TS_OR_DS_TO_DATE) are not themselves authority to call a workspace UDF.
++BUILTINS = (
+     {
+-        "COUNT",
+-        "SUM",
+-        "AVG",
+-        "MIN",
+-        "MAX",
+-        "COALESCE",
+-        "CAST",
+-        "TRY_CAST",
+-        "ABS",
+-        "ROUND",
+-        "LOWER",
+-        "UPPER",
+-        "LENGTH",
+-        "CONCAT",
+-        "SUBSTRING",
+-        "TRIM",
+-        "CURRENT_DATE",
+-        "CURRENT_TIMESTAMP",
+-        "DATE_TRUNC",
+-        "YEAR",
+-        "MONTH",
+-        "DAY",
+-        "ROW_NUMBER",
+-        "RANK",
+-        "DENSE_RANK",
+-        "LAG",
+-        "LEAD",
+-        "IF",
+-        "CASE",
++        exp.Count: ("COUNT",),
++        exp.Sum: ("SUM",),
++        exp.Avg: ("AVG",),
++        exp.Min: ("MIN",),
++        exp.Max: ("MAX",),
++        exp.Coalesce: ("COALESCE", "NVL", "IFNULL"),
++        exp.Cast: ("CAST", "DATE"),
++        exp.TryCast: ("TRY_CAST",),
++        exp.Abs: ("ABS",),
++        exp.Round: ("ROUND",),
++        exp.Lower: ("LOWER", "LCASE"),
++        exp.Upper: ("UPPER", "UCASE"),
++        exp.Length: ("LENGTH", "LEN", "CHAR_LENGTH", "CHARACTER_LENGTH"),
++        exp.Concat: ("CONCAT",),
++        exp.Substring: ("SUBSTRING", "SUBSTR"),
++        exp.Trim: ("TRIM",),
++        exp.CurrentDate: ("CURRENT_DATE", "CURDATE"),
++        exp.CurrentTimestamp: ("CURRENT_TIMESTAMP", "NOW"),
++        exp.DateTrunc: ("DATE_TRUNC",),
++        exp.TimestampTrunc: ("DATE_TRUNC",),
++        exp.TsOrDsToDate: ("TO_DATE",),
++        exp.StrToUnix: ("UNIX_TIMESTAMP", "TO_UNIX_TIMESTAMP"),
++        exp.Year: ("YEAR",),
++        exp.Month: ("MONTH",),
++        exp.Day: ("DAY",),
++        exp.RowNumber: ("ROW_NUMBER",),
++        exp.Rank: ("RANK",),
++        exp.DenseRank: ("DENSE_RANK",),
++        exp.Lag: ("LAG",),
++        exp.Lead: ("LEAD",),
++        exp.If: ("IF",),
++        exp.Case: ("CASE",),
+     }
++    if sqlglot is not None
++    else {}
+ )
+ TYPE = re.compile(r"^(STRING|BIGINT|INT|INTEGER|DATE|TIMESTAMP|DECIMAL(?:\((\d{1,2}),(\d{1,2})\))?)$")
+ 
+@@ -87,10 +93,27 @@ def validate(source: str, parameters: list[dict], *, dialect=None) -> list[dict]
+             ):
+                 # Qualified columns also use Dot in some dialects; unsupported is safer than guessing.
+                 raise ValueError("unsupported or mutating SQL construct")
+-            if isinstance(node, exp.Func):
+-                name = node.name.upper() if isinstance(node, exp.Anonymous) else node.sql_name().upper()
+-                if name not in FUNCTIONS:
+-                    raise ValueError(f"function {name} is not in the supported read-only set")
++            # AND/OR and EXISTS inherit Func in SQLGlot, but are structural operators.
++            # Their children are still visited, including nested writes and unknown calls.
++            if isinstance(node, exp.Func) and not isinstance(node, (exp.And, exp.Or, exp.Exists)):
++                names = BUILTINS.get(type(node))
++                if not names:
++                    name = (
++                        "Unrecognized or external function calls"
++                        if isinstance(node, exp.Anonymous)
++                        else "Function " + node.sql_name()
++                    )
++                    raise SqlError(
++                        "UNSUPPORTED_FUNCTION",
++                        name
++                        + " cannot run in SQL previews yet. Use supported built-ins or review the query in Databricks.",
++                    )
++                start, end = node.meta.get("start"), node.meta.get("end")
++                if start is not None and end is not None and source[start : end + 1].upper() not in names:
++                    raise SqlError(
++                        "UNSUPPORTED_FUNCTION",
++                        "This function spelling is not a supported Databricks built-in. Use its documented SQL name.",
++                    )
+         required = {str(p.this) for p in tree.find_all(exp.Placeholder)}
+     except SqlError:
+         raise
+diff --git a/apps/coding-agent/pyproject.toml b/apps/coding-agent/pyproject.toml
+index 8c847d4..a407eb6 100644
+--- a/apps/coding-agent/pyproject.toml
++++ b/apps/coding-agent/pyproject.toml
+@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
+ 
+ [project]
+ name = "databricks-coding-agents"
+-version = "1.2.0-rc.3"
++version = "1.2.0-rc.4"
+ requires-python = ">=3.11"
+ dependencies = [
+   "fastapi>=0.115",
+diff --git a/apps/coding-agent/tests/test_sqlpolicy_databricks.py b/apps/coding-agent/tests/test_sqlpolicy_databricks.py
+new file mode 100644
+index 0000000..7ddd425
+--- /dev/null
++++ b/apps/coding-agent/tests/test_sqlpolicy_databricks.py
+@@ -0,0 +1,129 @@
++"""Databricks AST semantics: syntax operators, normalized built-ins and execution policy differ."""
++
++import pytest
++from sqlglot.dialects.databricks import Databricks
++
++from api.domain.sqlpolicy import validate
++from api.domain.sqlquery import SqlError
++
++# One row per trip enters the CTE; the outer result has one row per pickup date.
++TAXI_CTE = """WITH trip_metrics AS (
++    SELECT date(tpep_pickup_datetime) AS pickup_date, trip_distance, fare_amount,
++           ROUND((unix_timestamp(tpep_dropoff_datetime) - unix_timestamp(tpep_pickup_datetime)) / 60.0, 2) AS duration_minutes
++    FROM samples.nyctaxi.trips
++    WHERE trip_distance > 0 AND fare_amount > 0
++)
++SELECT pickup_date, COUNT(*) AS total_trips,
++       ROUND(AVG(trip_distance), 2) AS avg_distance_miles,
++       ROUND(AVG(fare_amount), 2) AS avg_fare_amount,
++       ROUND(AVG(duration_minutes), 2) AS avg_duration_minutes
++FROM trip_metrics GROUP BY pickup_date ORDER BY pickup_date ASC;"""
++
++
++@pytest.mark.parametrize(
++    "sql",
++    [
++        TAXI_CTE,
++        "SELECT 1 WHERE 1 > 0 AND 2 > 0",
++        "SELECT 1 WHERE 1 > 0 OR 2 > 0",
++        "SELECT 1 WHERE NOT (1 > 0 AND 2 < 0)",
++        "SELECT 1 WHERE EXISTS (SELECT 1 WHERE 1 > 0 AND 2 > 0)",
++        "WITH a AS (SELECT 1 AS n), b AS (SELECT n FROM a WHERE n > 0 AND n < 5) SELECT n FROM b",
++        "SELECT 'AND custom_udf(1); DELETE FROM x' AS harmless",
++    ],
++)
++def test_read_queries_allow_structural_operators_throughout_ctes_and_subqueries(sql):
++    assert validate(sql, [], dialect=Databricks) == []
++
++
++@pytest.mark.parametrize(
++    "expression",
++    [
++        "COUNT(*)",
++        "SUM(1)",
++        "AVG(1)",
++        "MIN(1)",
++        "MAX(1)",
++        "COALESCE(NULL, 1)",
++        "CAST(1 AS BIGINT)",
++        "TRY_CAST('1' AS INT)",
++        "ABS(-1)",
++        "ROUND(1.234, 2)",
++        "LOWER('A')",
++        "UPPER('a')",
++        "LENGTH('abc')",
++        "CONCAT('a', 'b')",
++        "SUBSTRING('abc', 1, 2)",
++        "TRIM(' a ')",
++        "CURRENT_DATE()",
++        "CURRENT_TIMESTAMP()",
++        "DATE_TRUNC('DAY', CURRENT_TIMESTAMP())",
++        "YEAR(CURRENT_DATE())",
++        "MONTH(CURRENT_DATE())",
++        "DAY(CURRENT_DATE())",
++        "ROW_NUMBER() OVER ()",
++        "RANK() OVER (ORDER BY 1)",
++        "DENSE_RANK() OVER (ORDER BY 1)",
++        "LAG(1) OVER (ORDER BY 1)",
++        "LEAD(1) OVER (ORDER BY 1)",
++        "IF(TRUE, 1, 0)",
++        "CASE WHEN 1 = 1 AND 2 = 2 THEN 1 ELSE 0 END",
++        "DATE('2026-01-01')",
++        "TO_DATE('01/01/2026', 'dd/MM/yyyy')",
++        "UNIX_TIMESTAMP('2026-01-01 00:00:00')",
++        "TO_UNIX_TIMESTAMP('2026-01-01', 'yyyy-MM-dd')",
++        "YEAR(:day)",
++        "DATE_TRUNC('DAY', :day)",
++        "CURRENT_DATE",
++        "CURRENT_TIMESTAMP",
++        "UNIX_TIMESTAMP /* comment */ ('2026-01-01 00:00:00')",
++        "NVL(NULL, 1)",
++        "IFNULL(NULL, 1)",
++        "LCASE('A')",
++        "UCASE('a')",
++        "LEN('abc')",
++        "CHAR_LENGTH('abc')",
++        "CHARACTER_LENGTH('abc')",
++        "SUBSTR('abc',1,2)",
++        "CURDATE()",
++        "NOW()",
++    ],
++)
++def test_documented_databricks_functions_accept_their_normalized_ast(expression):
++    parameters = [{"name": "day", "type": "DATE", "value": "2026-01-01"}] if ":day" in expression else []
++    assert validate("SELECT " + expression, parameters, dialect=Databricks) == parameters
++
++
++@pytest.mark.parametrize(
++    "sql",
++    [
++        "SELECT custom_udf(1) WHERE 1 > 0 AND 2 > 0",
++        "SELECT 1 WHERE EXISTS (SELECT custom_udf(1))",
++        "WITH x AS (SELECT custom_udf(1) AS n) SELECT n FROM x WHERE n > 0 AND n < 5",
++        "SELECT read_files('s3://example') WHERE 1 = 1 OR 2 = 2",
++        "SELECT system.ai.query('endpoint', 'text')",
++        "WITH x AS (SELECT 1) INSERT INTO target SELECT * FROM x",
++        "WITH x AS (SELECT 1) DELETE FROM target WHERE EXISTS (SELECT * FROM x)",
++        "SELECT 1 WHERE 1 > 0 AND 2 > 0; DROP TABLE target",
++        # Internal AST names can parse as built-ins even though they are not Databricks SQL names.
++        "SELECT str_to_unix('2026-01-01')",
++        "SELECT ts_or_ds_to_date('2026-01-01')",
++        "SELECT `str_to_unix`('2026-01-01')",
++    ],
++)
++def test_operator_support_never_bypasses_nested_mutations_or_unknown_function_calls(sql):
++    with pytest.raises(SqlError):
++        validate(sql, [], dialect=Databricks)
++
++
++def test_unsupported_function_error_is_specific_without_echoing_private_sql():
++    with pytest.raises(SqlError) as error:
++        validate(
++            "SELECT private_secret_udf('private literal') WHERE 1 = 1 AND 2 = 2", [], dialect=Databricks
++        )
++    assert error.value.code == "UNSUPPORTED_FUNCTION"
++    assert "Unrecognized or external function calls" in str(error.value)
++    assert "private" not in str(error.value) and "mutations" not in str(error.value)
++    with pytest.raises(SqlError) as builtin:
++        validate("SELECT ACOS(0.5)", [], dialect=Databricks)
++    assert builtin.value.code == "UNSUPPORTED_FUNCTION" and "ACOS" in str(builtin.value)
+diff --git a/apps/coding-agent/tests/test_version.py b/apps/coding-agent/tests/test_version.py
+index 8fa561b..6786fd0 100644
+--- a/apps/coding-agent/tests/test_version.py
++++ b/apps/coding-agent/tests/test_version.py
+@@ -37,7 +37,7 @@ def test_the_version_file_exists_and_is_semver():
+     assert re.match(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$", text), (
+         f"VERSION holds {text!r}, which is not a semantic version"
+     )
+-    assert text == "1.2.0-rc.3", f"VERSION moved to {text}; update the tag and the release notes with it"
++    assert text == "1.2.0-rc.4", f"VERSION moved to {text}; update the tag and the release notes with it"
+ 
+ 
+ def test_the_python_package_version_is_the_file():
+diff --git a/apps/coding-agent/web/package-lock.json b/apps/coding-agent/web/package-lock.json
+index 6a89811..a18551f 100644
+--- a/apps/coding-agent/web/package-lock.json
++++ b/apps/coding-agent/web/package-lock.json
+@@ -1,12 +1,12 @@
+ {
+   "name": "coding-agent-web",
+-  "version": "1.2.0-rc.3",
++  "version": "1.2.0-rc.4",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "coding-agent-web",
+-      "version": "1.2.0-rc.3",
++      "version": "1.2.0-rc.4",
+       "dependencies": {
+         "@codemirror/autocomplete": "^6.20.4",
+         "@codemirror/commands": "^6.11.1",
+diff --git a/apps/coding-agent/web/package.json b/apps/coding-agent/web/package.json
+index bb90e24..56009c0 100644
+--- a/apps/coding-agent/web/package.json
++++ b/apps/coding-agent/web/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "coding-agent-web",
+-  "version": "1.2.0-rc.3",
++  "version": "1.2.0-rc.4",
+   "private": true,
+   "type": "module",
+   "homepage": "https://raphaelmansuy.github.io/opengenie/",

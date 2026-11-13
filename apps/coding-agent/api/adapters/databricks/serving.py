@@ -32,3 +32,7 @@ class ServingBrowser:
             and (e.get("state") or {}).get("ready", "READY") == "READY")
         self._cache = (time.monotonic(), names)
         return names
+
+    async def close(self):
+        closer=getattr(self._http,'close',None)
+        if closer:await closer()

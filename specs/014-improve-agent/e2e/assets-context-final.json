@@ -1,0 +1,14 @@
+{
+  "pass": false,
+  "captures": [
+    "01-native-single-review",
+    "02-native-verified-once",
+    "03-native-rejected",
+    "04-bundle-review",
+    "05-bundle-inspected",
+    "06-asset-attached"
+  ],
+  "reason": "Harness incorrectly used receipt.id and requested resolved private context from a public API.",
+  "retained": true,
+  "scope": "Failed intermediate harness iteration; captures inspected; not a product qualification pass."
+}

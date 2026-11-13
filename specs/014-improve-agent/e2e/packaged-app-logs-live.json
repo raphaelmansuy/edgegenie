@@ -1,0 +1,12 @@
+{
+  "pass": false,
+  "attempts": 2,
+  "stopped": true,
+  "workspace": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "identity": "raphael.mansuy@gmail.com",
+  "cliVersion": "0.289.1",
+  "archiveChecksumVerified": true,
+  "localSyntheticCacheContractPassed": true,
+  "nativeLogsObserved": false,
+  "reason": "The bundled CLI log stream could not be read as the user. Both attempts refused; no alternate identity, raw CLI error, raw logs or token was retained. Preinstalled-CLI observation earlier in this session remains separate evidence."
+}

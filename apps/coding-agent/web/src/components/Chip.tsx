@@ -10,10 +10,8 @@ import { api } from "../api/client";
 import type { Attachment } from "../domain/events";
 import { FileIcon, Folder, Notebook, Table } from "./Icons";
 
-/** One source of truth for "what does a notebook look like" across chips, tabs, and mentions. */
-export const KIND_ICON: Record<string, (p: { size?: number }) => React.ReactNode> = {
-  notebook: Notebook, file: FileIcon, folder: Folder, table: Table, blob: FileIcon, cell: Notebook,
-};
+import { KIND_ICON } from "./AssetIcon";
+export { KIND_ICON } from "./AssetIcon";
 
 export interface ChipProps {
   /** The server-side reference once it exists; also what a thumbnail is fetched by. */

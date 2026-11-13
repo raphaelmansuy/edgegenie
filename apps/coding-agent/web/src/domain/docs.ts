@@ -1,7 +1,7 @@
 /** Open documents, quick-action prompts and "which object did this tool touch". Pure, no React. */
 import type { Attachment } from "./events";
 
-export type DocKind = "notebook" | "file" | "table";
+export type DocKind = "notebook" | "file" | "table" | "query" | "query-draft";
 export interface Doc { id: string; kind: DocKind; ref: string; name: string; rev: number }
 
 /** One path, two spellings, one object.
@@ -74,14 +74,13 @@ export function tablesWritten(name: string, args?: string): string[] {
 export type Action = "explain" | "fix" | "document" | "optimize" | "profile" | "query";
 
 /**
- * Quick actions. Every one that changes something says "in your working folder, leave the original
- * alone": the write fence is the product's promise, and the prompt must not talk the agent around it.
+ * Quick actions preserve the fence and ask for revisioned review before an in-place edit.
  */
 export const ACTIONS: Record<Action, { label: string; prompt: string }> = {
   explain: { label: "Explain", prompt: "Explain what the attached notebook does, cell by cell, in plain English. Do not change anything." },
-  fix: { label: "Fix errors", prompt: "Review the attached notebook for bugs. Check every table and column name with describe_table before judging it. Write a corrected copy in your working folder (never modify the original), run it, and show the evidence that it works." },
-  document: { label: "Document", prompt: "Add clear markdown documentation to the attached notebook: a title, one short note per step, and the assumptions. Write it as a new notebook in your working folder; leave the original untouched." },
-  optimize: { label: "Optimize", prompt: "Find the performance problems in the attached notebook (shuffles, repeated reads, collect(), row-wise UDFs). Write an optimized copy in your working folder (leave the original untouched), run both, and show the timings side by side." },
+  fix: { label: "Fix errors", prompt: "Review the attached notebook for bugs. Check every table and column name with describe_table before judging it. For an asset inside the working folder, read its revision and propose minimal cell or range edits for review. For an outside asset, propose a copy inside the working folder. Run the approved result as my identity and show the evidence." },
+  document: { label: "Document", prompt: "Add clear markdown documentation to the attached notebook: a title, one short note per step, and the assumptions. Read the revision and propose cell edits for review if it is inside the working folder; otherwise propose a new notebook inside the working folder." },
+  optimize: { label: "Optimize", prompt: "Find the performance problems in the attached notebook (shuffles, repeated reads, collect(), row-wise UDFs). Propose revisioned edits inside the working folder, or an inside copy of an outside asset. Run the approved result as my identity and show measured timings." },
   profile: { label: "Profile", prompt: "Profile the attached table: row count, null rate per column, distinct counts for likely keys, and anything that looks wrong. Show the SQL you used." },
   query: { label: "Write a query", prompt: "Suggest three useful queries on the attached table and run the first one. Check the real column names before writing SQL." },
 };
@@ -90,4 +89,6 @@ export const ACTIONS_FOR: Record<DocKind, Action[]> = {
   notebook: ["explain", "fix", "document", "optimize"],
   file: ["explain"],
   table: ["profile", "query"],
+  query: ["explain"],
+  "query-draft": ["explain"],
 };

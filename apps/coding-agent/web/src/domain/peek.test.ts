@@ -7,6 +7,10 @@ const sess = (status: string, turns: unknown[], approvals: unknown[] = []) => ({
 
 describe("peekOf", () => {
   it("is idle before the first turn", () => expect(peekOf(sess("ready", [])).state).toBe("idle"));
+  it("does not claim a lazy idle agent is starting", () => {
+    expect(peekOf(sess("ready", [])).headline).toBe("Ready for the next question");
+    expect(peekOf(sess("provisioning", [])).headline).toBe("Starting the agent…");
+  });
   it("names the tool that is running right now", () => {
     const p = peekOf(sess("streaming", [turn({ tools: [{ callId: "1", name: "dbxnb_dbx_write_notebook", status: "in_progress" }] })]));
     expect(p).toMatchObject({ state: "working", headline: "Writing a notebook…" });

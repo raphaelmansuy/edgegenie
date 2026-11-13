@@ -1,33 +1,25 @@
-# Databricks Apps: app.yaml format, port, database access, deployment
+# Databricks Apps: reviewed source, deployment and observed status
 
-## app.yaml (the manifest) - exact format
-`command` is a TOP-LEVEL list. `env` is a top-level LIST of objects with `name` and
-`value` (or `valueFrom` to reference a resource or secret). Nothing is nested under
-`entry:` or `environment:` - those keys do not exist.
+Use dbx_capabilities. Create source files with dbx_create(kind="file") and change existing files with
+base revision and replace_range operations. Keep all source inside the working folder.
+
+app.yaml has a top-level command array and an env array of name/value objects:
 
 ```yaml
 command: ["python", "app.py"]
 env:
-  - name: PGDATABASE
-    value: "databricks_postgres"
-  - name: PGHOST
-    valueFrom: "database"      # a database resource attached to the app
-  - name: PGPORT
-    value: "5432"
+  - name: EXAMPLE_SETTING
+    value: "example"
 ```
 
-## Runtime contract
-- Listen on `0.0.0.0` at the port in env `DATABRICKS_APP_PORT` (default 8000 locally).
-  Typical FastAPI entry: `uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("DATABRICKS_APP_PORT", "8000")))`.
-- `requirements.txt` lists pip packages (fastapi, uvicorn, psycopg2-binary, databricks-sdk, pydantic).
-- Never put tokens or passwords in any file. Read PGPASSWORD from the environment, or
-  generate a short-lived Lakebase credential with the SDK (see skill `lakebase-postgres`).
+Listen on 0.0.0.0 and DATABRICKS_APP_PORT (8000 for local development). Declare runtime packages in
+requirements.txt. Never place tokens, passwords or service principal credentials in source.
 
-## Files
-Use `dbx_write_file` for app.py, app.yaml, requirements.txt (plain workspace files, not notebooks).
+Use dbx_define(kind="app") with the session's app name prefix. Agent-created apps cannot attach
+secrets or database resources. A new app's creation and its deployment are distinct facts.
+Deploy through dbx_run with source_code_path inside the folder. Deployment always needs a person,
+including Auto mode. Poll its operation ID with dbx_operation; quote its observed status and URL.
+A platform refusal is final. Say that the app was not deployed; do not invent a running URL.
 
-## Deployment
-Some workspaces refuse to create Apps unless the app is backed by a Git repository.
-`dbx_create_app` returns the platform's answer verbatim, including refusals. If it
-refuses, quote the exact `platform_error` in your report and say the app was NOT
-deployed. Never claim a deployment, URL or "running" status you did not observe.
+Stop through a reviewed run action, and delete only a session-created resource through Resources
+cleanup. Existing apps that can read app secrets/databases cannot receive model-written code.

@@ -21,10 +21,28 @@ class Settings(BaseSettings):
     agent_command: str = "opencode acp"
     agent_cwd: str = "/tmp/agent-work"
     agent_config_dir: str = ""  # empty -> the default HOME
+    agent_run_identity: str = ""  # S13: declarations fail closed until isolation is qualified
 
     # tools
     tool_mode: Literal["none", "subprocess"] = "none"
     tool_server_python: str = "python3"
+
+    # Spec 014 phases remain opt-in until live release qualification.
+    changes: bool = False
+    operations: bool = False
+    assets: bool = False
+    evidence_v2: bool = False
+    journal_v2: bool = False
+    agent_workspace_demo: bool = False
+    agent_ascode_demo: bool = False
+    asset_kinds: list[str] = Field(default_factory=lambda:["job","pipeline","app","instance","job_run","pipeline_update","job_task_run","lineage","column_lineage","compute_usage","query_history"])
+    agent_db_path: str = ""
+    agent_key: str = ""
+    agent_token_ceiling: int = Field(default=1000000, ge=1000)
+    agent_money_ceiling: float = Field(default=10, gt=0, allow_inf_nan=False)
+    agent_max_pass_cost: float = Field(default=0, ge=0, allow_inf_nan=False)
+    agent_poll_seconds: float = Field(default=2, ge=.05, le=30)
+    agent_native_concurrency: int = Field(default=8, ge=1, le=64)
 
     # models
     # The catalogue is data now: `seed/llm_models.yaml` plus discovery plus the registry. These two
@@ -91,6 +109,11 @@ class Settings(BaseSettings):
     session_db_path: str = ""
     session_database_url: str = ""
     session_use_lakebase: bool = False
+    # SQL is opt-in for live execution/creation until workspace interoperability is qualified.
+    sql_run: bool = False
+    sql_create: bool = False
+    sql_db_path: str = ""
+    sql_key: str = ""
     session_max_run_seconds: int = Field(default=21600, ge=1, le=604800)
     demo_event_delay: float = Field(default=0, ge=0, le=5)
 

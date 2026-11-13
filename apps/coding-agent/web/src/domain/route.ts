@@ -14,9 +14,10 @@
  * route (the tests hold that), and anything unrecognised parses to the empty route rather than throwing:
  * a stale link must open the app, not a blank page.
  */
-export type DocRouteKind = "notebook" | "file" | "table";
+export type DocRouteKind = "notebook" | "file" | "table" | "query" | "query-draft";
 
 export interface Route {
+  sql?: "queries";
   doc: { kind: DocRouteKind; ref: string } | null;
   /** 1-based cell number within `doc`. */
   cell: number | null;
@@ -31,12 +32,15 @@ const encodePath = (p: string) => p.replace(/^\/+/, "").split("/").map(encodeSeg
 const decodeSegment = (s: string) => { try { return decodeURIComponent(s); } catch { return s; } };
 
 export function formatRoute(r: Route): string {
+  if (r.sql) return "#/queries";
   if (r.settings) return `#/settings/${r.settings}`;
   if (r.doc) {
     const { kind, ref } = r.doc;
     const body = kind === "table" ? encodeSegment(ref) : encodePath(ref);
-    const cell = r.cell && r.cell > 0 && kind === "notebook" ? `?cell=${Math.floor(r.cell)}` : "";
-    return `#/${kind}/${body}${cell}`;
+    const params = new URLSearchParams();
+    if (r.cell && r.cell > 0 && kind === "notebook") params.set("cell", String(Math.floor(r.cell)));
+    if (r.session) params.set("session", r.session);
+    return `#/${kind}/${body}${params.size ? "?" + params : ""}`;
   }
   if (r.session) return `#/session/${encodeSegment(r.session)}`;
   return "";
@@ -48,9 +52,14 @@ export function parseRoute(hash: string): Route {
   const legacy = /^settings\/(models|providers)$/.exec(text);
   if (legacy) return { ...EMPTY_ROUTE, settings: legacy[1] as "models" | "providers" };
   const [pathPart, query = ""] = text.split("?", 2);
+  const candidate = new URLSearchParams(query).get("session") ?? "";
+  const session = /^[A-Za-z0-9_-]{1,64}$/.test(candidate) ? candidate : null;
   const parts = pathPart.replace(/^\/+/, "").split("/");
   const head = parts[0];
   const rest = parts.slice(1);
+  if (head === "queries" && rest.length === 0) return { ...EMPTY_ROUTE, sql: "queries" };
+  if ((head === "query" || head === "query-draft") && rest.length === 1 && /^[0-9a-f-]{36}$/i.test(rest[0]))
+    return { ...EMPTY_ROUTE, session, doc: { kind: head, ref: rest[0].toLowerCase() } };
   if (head === "settings") {
     return { ...EMPTY_ROUTE, settings: rest[0] === "models" ? "models" : "providers" };
   }
@@ -60,10 +69,10 @@ export function parseRoute(hash: string): Route {
   if ((head === "notebook" || head === "file") && rest.length > 0 && rest.join("")) {
     const ref = `/${rest.map(decodeSegment).join("/")}`;
     const n = Number(new URLSearchParams(query).get("cell"));
-    return { ...EMPTY_ROUTE, doc: { kind: head, ref }, cell: head === "notebook" && Number.isInteger(n) && n > 0 ? n : null };
+    return { ...EMPTY_ROUTE, session, doc: { kind: head, ref }, cell: head === "notebook" && Number.isInteger(n) && n > 0 ? n : null };
   }
   if (head === "table" && rest.length === 1 && rest[0]) {
-    return { ...EMPTY_ROUTE, doc: { kind: "table", ref: decodeSegment(rest[0]) } };
+    return { ...EMPTY_ROUTE, session, doc: { kind: "table", ref: decodeSegment(rest[0]) } };
   }
   return EMPTY_ROUTE;
 }

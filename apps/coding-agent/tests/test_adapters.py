@@ -74,7 +74,7 @@ def test_tool_error_text_is_preserved():
             "sessionUpdate": "tool_call_update",
             "toolCallId": "c9",
             "status": "error",
-            "rawInput": {"error": "PERMISSION_DENIED: USE SCHEMA"},
+            "rawOutput": {"error": "PERMISSION_DENIED: USE SCHEMA"},
         },
     )
     assert "PERMISSION_DENIED" in ev.payload["error"]
@@ -91,7 +91,7 @@ def test_permission_maps_all_four_option_kinds():
         {
             "title": "Write a table",
             "description": "the task needs a shared table",
-            "subject": {"path": "workspace.default.t", "toolCallId": "c1"},
+            "toolCall": {"rawInput": {"path": "workspace.default.t"}, "toolCallId": "c1", "title": "Write a table"},
             "options": [
                 {"optionId": "o1", "kind": "allow_once", "name": "Allow once"},
                 {"optionId": "o2", "kind": "allow_always", "name": "Allow always"},
@@ -349,12 +349,13 @@ async def test_agent_that_cannot_start_raises_a_typed_error(tmp_path):
 async def _orchestrator(tmp_path: Path, scenario: str = "notebook", delay: float = 0.0) -> Orchestrator:
     """scenario is pinned with `fixed:` so a test never depends on prompt-based selection."""
     from api.adapters.mcp.registry import NullToolRegistry
+    from api.composition.model_registry import resolve_static
 
     rt = AcpAgentRuntime(command=f"{sys.executable} -m api.adapters.fake.agent fixed:{scenario} {delay}")
     cfg = Settings(allowed_models=["fake/model-a", "fake/model-b"], default_model="fake/model-a")
     models = SettingsModelCatalog(cfg)
     rt._extra_env = {"PYTHONPATH": str(ROOT)}  # noqa: SLF001
-    return Orchestrator(rt, NullToolRegistry(), MemoryEventStore(), models, demo=True)
+    return Orchestrator(rt, NullToolRegistry(), MemoryEventStore(), models, demo=True, static_resolve=resolve_static)
 
 
 async def _wait(live, *, timeout=5.0):

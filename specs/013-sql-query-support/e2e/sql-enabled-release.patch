@@ -1,0 +1,627 @@
+diff --git a/apps/coding-agent/VERSION b/apps/coding-agent/VERSION
+index a94c1f6..8f89092 100644
+--- a/apps/coding-agent/VERSION
++++ b/apps/coding-agent/VERSION
+@@ -1 +1 @@
+-1.2.0-rc.1
++1.2.0-rc.2
+diff --git a/apps/coding-agent/api/adapters/durable/postgres.py b/apps/coding-agent/api/adapters/durable/postgres.py
+index 0d9a70a..077670f 100644
+--- a/apps/coding-agent/api/adapters/durable/postgres.py
++++ b/apps/coding-agent/api/adapters/durable/postgres.py
+@@ -184,6 +184,10 @@ class PostgresSessionStore(Broadcast):
+             raise
+ 
+     # -- the journal ---------------------------------------------------------------
++    async def run_operation(self, operation, *, retry: bool = False):
++        """Shared persistence seam: retain cancellation, reconnect and owner-lock guarantees."""
++        return await self._run(operation, retry=retry)
++
+     async def snapshots(self) -> list[dict]:
+         async def op(conn):
+             async with conn.cursor() as cur:
+diff --git a/apps/coding-agent/api/adapters/durable/query_postgres.py b/apps/coding-agent/api/adapters/durable/query_postgres.py
+new file mode 100644
+index 0000000..78e3027
+--- /dev/null
++++ b/apps/coding-agent/api/adapters/durable/query_postgres.py
+@@ -0,0 +1,117 @@
++"""Encrypted SQL journal over the existing cancellation-safe Postgres coordinator.
++
++The injected runner owns authentication, reconnection, single-server ownership and shutdown.
++Transactions serialize intent reservation before any external SQL submission. Ciphertexts bind
++their owner and identity; the deployment KEK derives a separate SQL key, never stored in Postgres.
++"""
++
++from __future__ import annotations
++
++import base64
++import json
++import time
++
++from cryptography.fernet import Fernet
++from cryptography.hazmat.primitives import hashes
++from cryptography.hazmat.primitives.kdf.hkdf import HKDF
++
++from ...domain.sqlquery import ACTIVE, SqlError, check_operation, check_run_capacity
++
++SQL_LOCK = 0x53514C4A4F55524E
++
++
++class PostgresQueryStore:
++    durable = True
++
++    def __init__(self, run_operation, key: str = "", shared_key: str = ""):
++        self._run = run_operation
++        if not key:
++            raw = base64.urlsafe_b64decode(shared_key.encode())
++            if len(raw) != 32:
++                raise ValueError("Persistent SQL recovery requires APP_SQL_KEY or the deployment KEK")
++            key = base64.urlsafe_b64encode(HKDF(
++                algorithm=hashes.SHA256(), length=32, salt=None,
++                info=b"opengenie/sql-journal/v1",
++            ).derive(raw)).decode()
++        self._cipher = Fernet(key.encode())
++
++    def _encode(self, scope, kind, key, body):
++        return self._cipher.encrypt(json.dumps([scope, kind, key, body], ensure_ascii=False).encode())
++
++    def _decode(self, scope, kind, key, data):
++        owner, stored_kind, stored_key, body = json.loads(self._cipher.decrypt(bytes(data)))
++        if (owner, stored_kind, stored_key) != (scope, kind, key):
++            raise SqlError("STORAGE_UNAVAILABLE", "SQL recovery could not be authenticated.", 503)
++        return body
++
++    async def _read(self, cur, scope, kind, key):
++        await cur.execute("SELECT body FROM agent.sql_item WHERE scope=%s AND kind=%s AND id=%s",
++                          (scope, kind, key))
++        row = await cur.fetchone()
++        if not row:
++            raise SqlError("NOT_FOUND", "This item is unavailable or no longer accessible.", 404)
++        return self._decode(scope, kind, key, row[0])
++
++    async def get(self, scope, kind, key):
++        async def op(conn):
++            async with conn.cursor() as cur:
++                return await self._read(cur, scope, kind, key)
++        return await self._run(op, retry=True)
++
++    async def _write(self, cur, scope, kind, key, body, expected=None):
++        await cur.execute("SELECT version FROM agent.sql_item WHERE scope=%s AND kind=%s AND id=%s",
++                          (scope, kind, key))
++        old = await cur.fetchone()
++        if expected is not None and (not old or old[0] != expected):
++            raise SqlError("CONFLICT", "This draft or run changed. Reload before applying changes.", 409)
++        saved = {**body, "version": old[0] + 1 if old else 1}
++        await cur.execute("""INSERT INTO agent.sql_item
++            (scope,kind,id,created,version,state,source_ref,body) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
++            ON CONFLICT(scope,kind,id) DO UPDATE SET version=EXCLUDED.version,
++            state=EXCLUDED.state,source_ref=EXCLUDED.source_ref,body=EXCLUDED.body""",
++            (scope, kind, key, saved["createdAt"], saved["version"], saved.get("state", ""),
++             saved.get("sourceRef", ""), self._encode(scope, kind, key, saved)))
++        return saved
++
++    async def put(self, scope, kind, key, body, expected=None):
++        async def op(conn):
++            async with conn.transaction(), conn.cursor() as cur:
++                await cur.execute("SELECT pg_advisory_xact_lock(%s)", (SQL_LOCK,))
++                return await self._write(cur, scope, kind, key, body, expected)
++        return await self._run(op)
++
++    async def list(self, scope, kind, before=0, limit=50):
++        async def op(conn):
++            async with conn.cursor() as cur:
++                await cur.execute("""SELECT id,body FROM agent.sql_item
++                    WHERE scope=%s AND kind=%s AND created<%s ORDER BY created DESC,id DESC LIMIT %s""",
++                    (scope, kind, before or time.time() + 1, max(1, min(limit, 50))))
++                return [self._decode(scope, kind, row[0], row[1]) for row in await cur.fetchall()]
++        return await self._run(op, retry=True)
++
++    async def reserve(self, scope, key, fingerprint, body):
++        async def op(conn):
++            async with conn.transaction(), conn.cursor() as cur:
++                await cur.execute("SELECT pg_advisory_xact_lock(%s)", (SQL_LOCK,))
++                await cur.execute("SELECT fingerprint,id,kind,created FROM agent.sql_operation "
++                                  "WHERE scope=%s AND key=%s", (scope, key))
++                old = await cur.fetchone()
++                if old:
++                    check_operation(fingerprint, old[0], old[3])
++                    return await self._read(cur, scope, old[2], old[1]), False
++                kind = body.get("operationKind", "run")
++                if kind == "run":
++                    await cur.execute("""SELECT scope,source_ref FROM agent.sql_item
++                        WHERE kind='run' AND state=ANY(%s) LIMIT 33""", (list(ACTIVE),))
++                    active = await cur.fetchall()
++                    check_run_capacity([row[1] for row in active if row[0] == scope],
++                                       len(active), body.get("sourceRef", ""))
++                saved = await self._write(cur, scope, kind, body["id"], body)
++                await cur.execute("INSERT INTO agent.sql_operation (scope,key,fingerprint,id,kind,created) "
++                                  "VALUES (%s,%s,%s,%s,%s,%s)",
++                                  (scope, key, fingerprint, body["id"], kind, time.time()))
++                return saved, True
++        return await self._run(op)
++
++    def close(self):
++        """The shared coordinator owns connection shutdown; no second connection exists here."""
+diff --git a/apps/coding-agent/api/adapters/durable/query_sqlite.py b/apps/coding-agent/api/adapters/durable/query_sqlite.py
+index 02c6833..08254b5 100644
+--- a/apps/coding-agent/api/adapters/durable/query_sqlite.py
++++ b/apps/coding-agent/api/adapters/durable/query_sqlite.py
+@@ -12,7 +12,7 @@ from pathlib import Path
+ 
+ from cryptography.fernet import Fernet
+ 
+-from ...domain.sqlquery import ACTIVE, SqlError
++from ...domain.sqlquery import ACTIVE, SqlError, check_operation, check_run_capacity
+ 
+ 
+ class SqliteQueryStore:
+@@ -144,43 +144,23 @@ class SqliteQueryStore:
+                     (scope, key),
+                 ).fetchone()
+                 if old:
+-                    if old[0] != fingerprint:
+-                        raise SqlError("CONFLICT", "This operation key belongs to different input.", 409)
+-                    if time.time() - old[3] > 86400:
+-                        raise SqlError(
+-                            "CONFLICT", "This operation key has expired; it cannot be replayed.", 409
+-                        )
++                    check_operation(fingerprint, old[0], old[3])
+                     return self._read(scope, old[2], old[1]), False
+                 kind = body.get("operationKind", "run")
+                 if kind == "run":
+                     states = tuple(ACTIVE)
+                     marks = ",".join("?" for _ in states)
+-                    count = db.execute(
+-                        f"SELECT COUNT(*) FROM sql_item WHERE scope=? AND kind='run' AND state IN ({marks})",
+-                        (scope, *states),
+-                    ).fetchone()[0]
+                     total = db.execute(
+                         f"SELECT COUNT(*) FROM sql_item WHERE kind='run' AND state IN ({marks})", states
+                     ).fetchone()[0]
+-                    if count >= 4 or total >= 32:
+-                        raise SqlError(
+-                            "RUN_LIMIT",
+-                            "Too many active SQL runs. Cancel or resolve an existing run first.",
+-                            409,
+-                        )
+-                    source = body.get("sourceRef", "")
+-                    if source:
+-                        active = db.execute(
+-                            f"SELECT body FROM sql_item WHERE scope=? AND kind='run' AND state IN ({marks})",
+-                            (scope, *states),
+-                        ).fetchall()
+-                        if any(
+-                            json.loads(self._cipher.decrypt(row[0])).get("sourceRef") == source
+-                            for row in active
+-                        ):
+-                            raise SqlError(
+-                                "RUN_LIMIT", "This query already has an active or unresolved run.", 409
+-                            )
++                    active = db.execute(
++                        f"SELECT body FROM sql_item WHERE scope=? AND kind='run' AND state IN ({marks})",
++                        (scope, *states),
++                    ).fetchall()
++                    check_run_capacity(
++                        [json.loads(self._cipher.decrypt(row[0])).get("sourceRef", "") for row in active],
++                        total, body.get("sourceRef", ""),
++                    )
+                 saved = self._write(scope, kind, body["id"], body)
+                 db.execute(
+                     "INSERT INTO sql_operation VALUES (?,?,?,?,?,?)",
+diff --git a/apps/coding-agent/api/adapters/llm/store/migrate.py b/apps/coding-agent/api/adapters/llm/store/migrate.py
+index 28c178b..2e764b9 100644
+--- a/apps/coding-agent/api/adapters/llm/store/migrate.py
++++ b/apps/coding-agent/api/adapters/llm/store/migrate.py
+@@ -22,7 +22,7 @@ MIGRATIONS = Path(__file__).resolve().parent / "migrations"
+ #: The highest migration this build understands. A database ABOVE this is refused (`SchemaAhead`) rather
+ #: than run against a schema the code does not know — the guard that makes a rollback safe.
+ #:   1 llm schema · 2 llm setting · 3 llm_model.sees_images (spec 009 [D7])
+-EXPECTED_VERSION = 4
++EXPECTED_VERSION = 5
+ 
+ 
+ class SchemaAhead(RuntimeError):
+diff --git a/apps/coding-agent/api/adapters/llm/store/migrations/005_sql_journal.sql b/apps/coding-agent/api/adapters/llm/store/migrations/005_sql_journal.sql
+new file mode 100644
+index 0000000..c1d5b03
+--- /dev/null
++++ b/apps/coding-agent/api/adapters/llm/store/migrations/005_sql_journal.sql
+@@ -0,0 +1,23 @@
++-- SQL assets and execution intents have their own owner-scoped, encrypted journal.
++CREATE TABLE IF NOT EXISTS agent.sql_item (
++    scope text NOT NULL,
++    kind text NOT NULL,
++    id text NOT NULL,
++    created double precision NOT NULL,
++    version bigint NOT NULL CHECK (version > 0),
++    state text NOT NULL,
++    source_ref text NOT NULL DEFAULT '',
++    body bytea NOT NULL,
++    PRIMARY KEY (scope, kind, id)
++);
++CREATE INDEX IF NOT EXISTS sql_recent ON agent.sql_item (scope, kind, created DESC, id DESC);
++CREATE INDEX IF NOT EXISTS sql_active ON agent.sql_item (kind, state, scope, source_ref);
++CREATE TABLE IF NOT EXISTS agent.sql_operation (
++    scope text NOT NULL,
++    key text NOT NULL,
++    fingerprint text NOT NULL,
++    id text NOT NULL,
++    kind text NOT NULL,
++    created double precision NOT NULL,
++    PRIMARY KEY (scope, key)
++);
+diff --git a/apps/coding-agent/api/domain/sqlquery.py b/apps/coding-agent/api/domain/sqlquery.py
+index 762f1a9..f36c3ab 100644
+--- a/apps/coding-agent/api/domain/sqlquery.py
++++ b/apps/coding-agent/api/domain/sqlquery.py
+@@ -4,6 +4,7 @@ from __future__ import annotations
+ 
+ import hashlib
+ import json
++import time
+ from dataclasses import dataclass
+ from typing import Protocol
+ from uuid import UUID
+@@ -15,6 +16,21 @@ ACTIVE = frozenset(
+ )
+ 
+ 
++def check_operation(fingerprint: str, previous: str, created: float) -> None:
++    """Both journals apply identical replay/expiry policy inside their atomic transaction."""
++    if previous != fingerprint:
++        raise SqlError("CONFLICT", "This operation key belongs to different input.", 409)
++    if time.time() - created > 86400:
++        raise SqlError("CONFLICT", "This operation key has expired; it cannot be replayed.", 409)
++
++
++def check_run_capacity(own_sources: list[str], total: int, source: str) -> None:
++    if len(own_sources) >= 4 or total >= 32:
++        raise SqlError("RUN_LIMIT", "Too many active SQL runs. Cancel or resolve an existing run first.", 409)
++    if source and source in own_sources:
++        raise SqlError("RUN_LIMIT", "This query already has an active or unresolved run.", 409)
++
++
+ class SqlError(Exception):
+     def __init__(self, code: str, message: str, status: int = 422):
+         self.code, self.message, self.status = code, message, status
+diff --git a/apps/coding-agent/api/main.py b/apps/coding-agent/api/main.py
+index ea01651..b3a6dae 100644
+--- a/apps/coding-agent/api/main.py
++++ b/apps/coding-agent/api/main.py
+@@ -232,7 +232,13 @@ def build(settings: Settings | None = None, *, llm: Registry | None = None) -> F
+     from .routers.sql import SqlBodyLimit, router as sql_router
+ 
+     sql_path = cfg.sql_db_path or (cfg.session_db_path + ".sql" if cfg.session_db_path else "")
+-    sql_store = SqliteQueryStore(sql_path, cfg.sql_key, cfg.production)
++    if (not sql_path and (cfg.session_database_url or cfg.session_use_lakebase)
++            and (cfg.sql_key or cfg.llm_kek or cfg.sql_run)):
++        from .adapters.durable.query_postgres import PostgresQueryStore
++
++        sql_store = PostgresQueryStore(store.run_operation, cfg.sql_key, cfg.llm_kek)
++    else:
++        sql_store = SqliteQueryStore(sql_path, cfg.sql_key, cfg.production)
+     app.state.sql_workspace = normalize_host(os.environ.get("DATABRICKS_HOST", "")) or "local-demo"
+     sql_provider = (DemoQueries(sql_store) if cfg.agent_mode == "fake" and not os.environ.get("DATABRICKS_HOST")
+                     else DatabricksQueries(DbxHttp(app.state.sql_workspace, lambda: None, max_response_bytes=8*1024*1024), cfg.sql_create))
+diff --git a/apps/coding-agent/app.yaml b/apps/coding-agent/app.yaml
+index a976e32..62d07aa 100644
+--- a/apps/coding-agent/app.yaml
++++ b/apps/coding-agent/app.yaml
+@@ -36,6 +36,9 @@ env:
+   # Durable session history shares Lakebase; never falls back to container memory.
+   - name: APP_SESSION_USE_LAKEBASE
+     value: "true"
++  # User-authenticated, read-only SQL; encrypted intents share the existing Lakebase journal.
++  - name: APP_SQL_RUN
++    value: "true"
+   - name: APP_LLM_ADMINS
+     value: raphael.mansuy@gmail.com
+   # The key-encryption key for stored provider keys. It is an app RESOURCE (a Databricks secret), so a
+diff --git a/apps/coding-agent/pyproject.toml b/apps/coding-agent/pyproject.toml
+index cc2f4ff..746b46d 100644
+--- a/apps/coding-agent/pyproject.toml
++++ b/apps/coding-agent/pyproject.toml
+@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
+ 
+ [project]
+ name = "databricks-coding-agents"
+-version = "1.2.0-rc.1"
++version = "1.2.0-rc.2"
+ requires-python = ">=3.11"
+ dependencies = [
+   "fastapi>=0.115",
+diff --git a/apps/coding-agent/tests/test_sqlquery_postgres.py b/apps/coding-agent/tests/test_sqlquery_postgres.py
+new file mode 100644
+index 0000000..fb90f89
+--- /dev/null
++++ b/apps/coding-agent/tests/test_sqlquery_postgres.py
+@@ -0,0 +1,218 @@
++"""Real Postgres contracts: encryption, isolation, CAS, reservation and restart recovery.
++
++Every test creates its own new database on the explicitly configured local test server.
++No existing tables or databases are deleted. Native execution is covered separately in dev E2E.
++"""
++
++import asyncio
++import os
++import time
++from uuid import uuid4
++
++import pytest
++from cryptography.fernet import Fernet, InvalidToken
++
++from api.adapters.durable.postgres import PostgresSessionStore
++from api.adapters.durable.query_postgres import PostgresQueryStore
++from api.config import Settings
++from api.domain.sqlquery import SqlActor, SqlError
++from api.services.sql_service import SqlService
++
++
++@pytest.fixture
++async def pg():
++    import psycopg
++    from psycopg import sql
++    from psycopg.conninfo import make_conninfo
++
++    dsn = os.environ.get("TEST_SQL_PG_DSN")
++    if not dsn:
++        pytest.skip("TEST_SQL_PG_DSN must name the isolated SQL test server")
++    name = "sqltest_" + uuid4().hex
++    async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as admin:
++        await admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
++    dsn = make_conninfo(dsn, dbname=name)
++    journal = PostgresSessionStore(Settings(session_database_url=dsn))
++    await journal.open()
++    key = Fernet.generate_key().decode()
++    store = PostgresQueryStore(journal.run_operation, key)
++    try:
++        yield store, journal, key, dsn
++    finally:
++        await journal.close()
++
++
++def attempt(**extra):
++    return {"id": str(uuid4()), "state": "submitting", "createdAt": time.time(), **extra}
++
++
++async def test_atomic_reservation_encryption_and_restart(pg):
++    store, journal, key, dsn = pg
++    row = attempt(text="private SQL canary", sourceRef="source")
++    results = await asyncio.gather(*(store.reserve("alice", "run:key", "same", row) for _ in range(8)))
++    assert sum(fresh for _, fresh in results) == 1
++    assert len({saved["id"] for saved, _ in results}) == 1
++
++    async def encrypted(conn):
++        cur = await conn.execute("SELECT body FROM agent.sql_item WHERE scope='alice'")
++        return bytes((await cur.fetchone())[0])
++
++    assert b"private SQL canary" not in await journal.run_operation(encrypted)
++    await journal.close()
++    reopened = PostgresSessionStore(Settings(session_database_url=dsn))
++    try:
++        await reopened.open()
++        recovered = PostgresQueryStore(reopened.run_operation, key)
++        assert (await recovered.get("alice", "run", row["id"]))["text"] == row["text"]
++        saved, fresh = await recovered.reserve("alice", "run:key", "same", row)
++        assert not fresh and saved["id"] == row["id"]
++    finally:
++        await reopened.close()
++
++
++async def test_cas_and_owner_isolation(pg):
++    store, *_ = pg
++    one = await store.put("alice", "draft", "draft", attempt(text="one"))
++    results = await asyncio.gather(*(store.put("alice", "draft", "draft", {**one, "text": str(i)},
++                                             one["version"]) for i in range(8)), return_exceptions=True)
++    assert sum(isinstance(row, dict) for row in results) == 1
++    assert all(isinstance(row, (dict, SqlError)) for row in results)
++    with pytest.raises(SqlError, match="unavailable"):
++        await store.get("bob", "draft", "draft")
++    assert (await store.get("alice", "draft", "draft"))["version"] == 2
++
++
++async def test_identity_bound_ciphertext_cannot_move_between_owners(pg):
++    store, journal, *_ = pg
++    await store.put("alice", "draft", "id", attempt(text="secret"))
++    await store.put("bob", "draft", "id", attempt(text="public"))
++
++    async def swap(conn):
++        await conn.execute("UPDATE agent.sql_item SET body=(SELECT body FROM agent.sql_item "
++                           "WHERE scope='alice') WHERE scope='bob'")
++
++    await journal.run_operation(swap)
++    with pytest.raises(SqlError, match="authenticated"):
++        await store.get("bob", "draft", "id")
++
++
++async def test_operation_conflict_expiry_and_recent_order(pg):
++    store, journal, *_ = pg
++    row, _ = await store.reserve("alice", "key", "same", attempt())
++    with pytest.raises(SqlError, match="different"):
++        await store.reserve("alice", "key", "changed", attempt())
++
++    async def expire(conn):
++        await conn.execute("UPDATE agent.sql_operation SET created=%s", (time.time() - 90000,))
++
++    await journal.run_operation(expire)
++    with pytest.raises(SqlError, match="expired"):
++        await store.reserve("alice", "key", "same", row)
++    for i in range(3):
++        await store.put("alice", "draft", str(i), attempt(id=str(i), createdAt=100 + i))
++    assert [r["id"] for r in await store.list("alice", "draft", before=102, limit=2)] == ["1", "0"]
++
++
++async def test_concurrency_source_user_and_global_limits(pg):
++    store, *_ = pg
++    await store.reserve("alice", "a", "a", attempt(sourceRef="same"))
++    with pytest.raises(SqlError, match="active"):
++        await store.reserve("alice", "b", "b", attempt(sourceRef="same"))
++    for i in range(3):
++        await store.reserve("alice", str(i), str(i), attempt())
++    with pytest.raises(SqlError, match="active"):
++        await store.reserve("alice", "fifth", "fifth", attempt())
++    for i in range(28):
++        await store.reserve(f"user{i}", "key", "key", attempt())
++    with pytest.raises(SqlError, match="active"):
++        await store.reserve("last", "key", "key", attempt())
++
++
++async def test_run_recovery_keeps_statement_handle_without_resubmit(pg):
++    from api.adapters.databricks.queries import DemoQueries
++
++    store, journal, key, dsn = pg
++    actor = SqlActor("workspace", "alice", "user-token")
++    service = SqlService(DemoQueries(store), store)
++    source = await service.draft(actor, {"text": "SELECT 1 AS result"})
++    body = {"draftId": source["id"], "version": source["version"], "warehouseId": "demo-warehouse"}
++    run = await service.run(actor, body, "once")
++    await journal.close()
++    reopened = PostgresSessionStore(Settings(session_database_url=dsn))
++    try:
++        await reopened.open()
++        recovered = PostgresQueryStore(reopened.run_operation, key)
++        provider = DemoQueries(recovered)
++
++        async def forbidden(*_):
++            raise AssertionError("A recovered intent must not submit twice")
++
++        provider.submit = forbidden
++        service = SqlService(provider, recovered)
++        replay = await service.run(actor, body, "once")
++        assert replay["id"] == run["id"] and replay["statementId"] == run["statementId"]
++        assert (await service.observe(actor, run["id"], cancel=True))["state"] == "canceled"
++    finally:
++        await reopened.close()
++
++
++def test_key_derivation_is_stable_separate_and_requires_a_key():
++    shared = Fernet.generate_key().decode()
++    first = PostgresQueryStore(None, shared_key=shared)
++    second = PostgresQueryStore(None, shared_key=shared)
++    encoded = first._encode("a", "draft", "id", {"text": "SELECT 1"})
++    assert second._decode("a", "draft", "id", encoded)["text"] == "SELECT 1"
++    with pytest.raises(InvalidToken):
++        Fernet(shared.encode()).decrypt(encoded)
++    with pytest.raises(ValueError):
++        PostgresQueryStore(None)
++
++
++async def test_native_stopped_warehouse_submits_on_demand_without_a_start_call(pg):
++    from api.adapters.databricks.queries import DatabricksQueries
++
++    store, *_ = pg
++
++    class Http:
++        calls = []
++
++        async def get(self, path, token, params=None):
++            self.calls.append(("GET", path, token, params))
++            return {"warehouses": [{"id": "stopped", "name": "Serverless", "state": "STOPPED"}]}
++
++        async def post(self, path, token, body=None):
++            self.calls.append(("POST", path, token, body))
++            return {"statement_id": str(uuid4()), "status": {"state": "PENDING"}}
++
++    http = Http()
++    service = SqlService(DatabricksQueries(http), store, run_enabled=True)
++    actor = SqlActor("workspace", "alice", "user-token")
++    source = await service.draft(actor, {"text": "SELECT 1 AS result"})
++    body = {"draftId": source["id"], "version": source["version"], "warehouseId": "stopped"}
++    one = await service.run(actor, body, "once")
++    two = await service.run(actor, body, "once")
++    posts = [call for call in http.calls if call[0] == "POST"]
++    assert one["state"] == "pending" and one["id"] == two["id"]
++    assert len(posts) == 1 and posts[0][1:3] == ("/api/2.0/sql/statements", "user-token")
++    assert posts[0][3]["wait_timeout"] == "0s"
++
++
++async def test_http_composition_uses_the_durable_shared_journal(pg, monkeypatch):
++    from fastapi.testclient import TestClient
++
++    from api.main import build
++
++    _, journal, key, dsn = pg
++    await journal.close()
++    monkeypatch.delenv("DATABRICKS_HOST", raising=False)
++    cfg = Settings(session_database_url=dsn, sql_key=key, sql_run=True,
++                   allowed_models=["fake/model-a"], default_model="fake/model-a")
++    app = build(cfg)
++    assert isinstance(app.state.sql.store, PostgresQueryStore)
++    with TestClient(app) as client:
++        assert client.get("/api/sql/capabilities").json()["durable"]
++        source = client.post("/api/sql/drafts", json={"text": "SELECT 1"}).json()
++        run = client.post("/api/sql/runs", headers={"Idempotency-Key": "once"}, json={
++            "draftId": source["id"], "version": source["version"], "warehouseId": "demo-warehouse",
++        })
++        assert run.status_code == 202 and run.json()["statementId"]
+diff --git a/apps/coding-agent/tests/test_version.py b/apps/coding-agent/tests/test_version.py
+index af3005a..4cd8750 100644
+--- a/apps/coding-agent/tests/test_version.py
++++ b/apps/coding-agent/tests/test_version.py
+@@ -37,7 +37,7 @@ def test_the_version_file_exists_and_is_semver():
+     assert re.match(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$", text), (
+         f"VERSION holds {text!r}, which is not a semantic version"
+     )
+-    assert text == "1.2.0-rc.1", f"VERSION moved to {text}; update the tag and the release notes with it"
++    assert text == "1.2.0-rc.2", f"VERSION moved to {text}; update the tag and the release notes with it"
+ 
+ 
+ def test_the_python_package_version_is_the_file():
+diff --git a/apps/coding-agent/web/package-lock.json b/apps/coding-agent/web/package-lock.json
+index da68c59..882bf01 100644
+--- a/apps/coding-agent/web/package-lock.json
++++ b/apps/coding-agent/web/package-lock.json
+@@ -1,12 +1,12 @@
+ {
+   "name": "coding-agent-web",
+-  "version": "1.2.0-rc.1",
++  "version": "1.2.0-rc.2",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "coding-agent-web",
+-      "version": "1.2.0-rc.1",
++      "version": "1.2.0-rc.2",
+       "dependencies": {
+         "@codemirror/autocomplete": "^6.20.4",
+         "@codemirror/commands": "^6.11.1",
+diff --git a/apps/coding-agent/web/package.json b/apps/coding-agent/web/package.json
+index 6406809..b934b3e 100644
+--- a/apps/coding-agent/web/package.json
++++ b/apps/coding-agent/web/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "coding-agent-web",
+-  "version": "1.2.0-rc.1",
++  "version": "1.2.0-rc.2",
+   "private": true,
+   "type": "module",
+   "homepage": "https://raphaelmansuy.github.io/opengenie/",
+diff --git a/apps/coding-agent/web/src/components/QueryEditor.tsx b/apps/coding-agent/web/src/components/QueryEditor.tsx
+index e89b0ac..ffa65da 100644
+--- a/apps/coding-agent/web/src/components/QueryEditor.tsx
++++ b/apps/coding-agent/web/src/components/QueryEditor.tsx
+@@ -50,6 +50,12 @@ export function QueryEditor({doc,scope,theme,folder,onDirty,onRename,onSaved,onA
+     }).catch(e=>{if(live)setError(e.message);});
+     return()=>{live=false;if(bufferTimer.current)clearTimeout(bufferTimer.current);};
+   },[doc.id,scope]);
++  useEffect(()=>{
++    if(!run)return;
++    let live=true;
++    void queries.warehouses().then(w=>{if(live)setWarehouses(w.items);}).catch(()=>{});
++    return()=>{live=false;};
++  },[run?.id,run?.state]);
+   useEffect(()=>{if(!run||!ACTIVE_SQL.has(run.state)||run.state==="submission_unknown")return;
+     let live=true;let timer:ReturnType<typeof setTimeout>;
+     const poll=async()=>{try{const next=await queries.status(run.id);if(live){setRun(next);setRunError("");if(ACTIVE_SQL.has(next.state))timer=setTimeout(poll,document.hidden?15000:1000);}}catch(e){if(live){setRunError((e as Error).message);if (!(e instanceof ApiError && [401,403,404].includes(e.status))) timer=setTimeout(poll,5000);}}};
+@@ -116,7 +122,7 @@ export function QueryEditor({doc,scope,theme,folder,onDirty,onRename,onSaved,onA
+   if(!source)return <p className="sql-loading" role="status">Opening SQL query…</p>;
+   return <section className={`sql-editor mobile-${mobileTab}`} aria-label={`${name} SQL editor`} data-generation={generation}>
+     <header className="sql-document-header"><div className="sql-document-identity"><span className="sql-type-badge">SQL</span><input className="sql-title-input" aria-label="Query name" value={name} maxLength={200} onChange={e=>{setName(e.target.value);onRename(doc,e.target.value);onDirty(doc,true);}}/><span className="sql-local-label">{doc.kind==="query"?(text.current!==source.text||name!==source.name?"Local changes":"Saved Query"):"Private draft"}</span></div><div className="sql-document-actions"><button className="btn" disabled={busy||!caps?.create||source.truncated} title={!caps?.create?caps?.createReason:undefined} onClick={()=>void saveCopy()}>{doc.kind==="query"?"Save copy":"Create Query"}</button><button className="btn ghost" onClick={()=>void attach()}>Add to chat</button>{native&&<a className="btn ghost" href={native} target="_blank" rel="noopener noreferrer">Open in Databricks ↗</a>}<button className="btn ghost" onClick={()=>void copyText(location.href).then(ok=>setNotice(ok?"Link copied":"Clipboard unavailable"))}>Copy link</button></div></header>
+-    <div className="sql-execution-bar"><button className="btn primary sql-run-button" disabled={busy||active||!warehouse||!caps?.run||source.canRun===false||source.truncated} title={source.runReason} onClick={()=>void execute()}>{busy?"Preparing…":selection?"▶ Run selection":"▶ Run query"}</button>{active&&<button className="btn" onClick={()=>void queries.cancel(run!.id).then(setRun).catch(e=>setRunError(e.message))}>Cancel</button>}<label className="sql-warehouse"><span className="sql-status-dot is-succeeded" aria-hidden/><select aria-label="SQL warehouse" value={warehouse} onChange={e=>setWarehouse(e.target.value)}><option value="">Choose a warehouse</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.name} · {w.state.toLowerCase()}</option>)}</select></label><span className="sql-viewer-identity">{caps?.demo?"Demo · ":""}Run as viewer <span aria-hidden>·</span> 1,000 row preview</span></div>
++    <div className="sql-execution-bar"><button className="btn primary sql-run-button" disabled={busy||active||!warehouse||!caps?.run||source.canRun===false||source.truncated} title={source.runReason} onClick={()=>void execute()}>{busy?"Preparing…":selection?"▶ Run selection":"▶ Run query"}</button>{active&&<button className="btn" onClick={()=>void queries.cancel(run!.id).then(setRun).catch(e=>setRunError(e.message))}>Cancel</button>}<label className="sql-warehouse"><span className={`sql-status-dot ${warehouses.find(w=>w.id===warehouse)?.state==="RUNNING"?"is-succeeded":""}`} aria-hidden/><select aria-label="SQL warehouse" value={warehouse} onChange={e=>setWarehouse(e.target.value)}><option value="">Choose a warehouse</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.name} · {w.state.toLowerCase()}</option>)}</select></label><span className="sql-viewer-identity">{caps?.demo?"Demo · ":""}Run as viewer <span aria-hidden>·</span> 1,000 row preview{warehouses.find(w=>w.id===warehouse)?.state==="STOPPED"&&<span>· Starts on demand</span>}</span></div>
+     <div className="sql-context-bar"><label>Catalog <input aria-label="SQL catalog" placeholder="Default catalog" value={catalog} onChange={e=>setCatalog(e.target.value)}/></label><span>/</span><label>Schema <input aria-label="SQL schema" placeholder="Default schema" value={schema} onChange={e=>setSchema(e.target.value)}/></label><span className="sql-context-note">{caps?.durable?"Encrypted run history":"Temporary drafts and history"}</span></div>
+     {source.truncated&&<p className="sql-callout">Showing only the first 200 KiB. This source is read-only; open the complete Query in Databricks.</p>}
+     {source.canRun===false&&<p className="sql-callout">{source.runReason}</p>}{!caps?.run&&<p className="sql-callout">{caps?.reason||"SQL execution is not enabled for this deployment."}</p>}

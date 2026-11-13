@@ -1,0 +1,62 @@
+diff --git a/apps/coding-agent/VERSION b/apps/coding-agent/VERSION
+index 9084fa2..a94c1f6 100644
+--- a/apps/coding-agent/VERSION
++++ b/apps/coding-agent/VERSION
+@@ -1 +1 @@
+-1.1.0
++1.2.0-rc.1
+diff --git a/apps/coding-agent/pyproject.toml b/apps/coding-agent/pyproject.toml
+index 4fa83e0..cc2f4ff 100644
+--- a/apps/coding-agent/pyproject.toml
++++ b/apps/coding-agent/pyproject.toml
+@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
+ 
+ [project]
+ name = "databricks-coding-agents"
+-version = "1.1.0"
++version = "1.2.0-rc.1"
+ requires-python = ">=3.11"
+ dependencies = [
+   "fastapi>=0.115",
+diff --git a/apps/coding-agent/tests/test_version.py b/apps/coding-agent/tests/test_version.py
+index a7ce052..af3005a 100644
+--- a/apps/coding-agent/tests/test_version.py
++++ b/apps/coding-agent/tests/test_version.py
+@@ -37,7 +37,7 @@ def test_the_version_file_exists_and_is_semver():
+     assert re.match(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$", text), (
+         f"VERSION holds {text!r}, which is not a semantic version"
+     )
+-    assert text == "1.1.0", f"VERSION moved to {text}; update the tag and the release notes with it"
++    assert text == "1.2.0-rc.1", f"VERSION moved to {text}; update the tag and the release notes with it"
+ 
+ 
+ def test_the_python_package_version_is_the_file():
+diff --git a/apps/coding-agent/web/package-lock.json b/apps/coding-agent/web/package-lock.json
+index cd342aa..da68c59 100644
+--- a/apps/coding-agent/web/package-lock.json
++++ b/apps/coding-agent/web/package-lock.json
+@@ -1,10 +1,12 @@
+ {
+   "name": "coding-agent-web",
++  "version": "1.2.0-rc.1",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "coding-agent-web",
++      "version": "1.2.0-rc.1",
+       "dependencies": {
+         "@codemirror/autocomplete": "^6.20.4",
+         "@codemirror/commands": "^6.11.1",
+diff --git a/apps/coding-agent/web/package.json b/apps/coding-agent/web/package.json
+index f179cee..6406809 100644
+--- a/apps/coding-agent/web/package.json
++++ b/apps/coding-agent/web/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "coding-agent-web",
+-  "version": "1.1.0",
++  "version": "1.2.0-rc.1",
+   "private": true,
+   "type": "module",
+   "homepage": "https://raphaelmansuy.github.io/opengenie/",

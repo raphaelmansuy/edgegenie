@@ -7,6 +7,7 @@ import { ModelPicker } from "./ModelPicker";
 import { FolderPicker } from "./FolderPicker";
 import { LogoMark } from "./Logo";
 import { ModelFacts } from "./ModelFacts";
+import { SessionStorage } from "./SessionStorage";
 import { ArrowUpRight, Bug, ChevronRight, Clock, Database, FileIcon, ListIcon, Notebook, Search, Sparkle, Table } from "./Icons";
 
 export function ApprovalSheet({ approval, sessionId, onDecided }: {
@@ -19,7 +20,7 @@ export function ApprovalSheet({ approval, sessionId, onDecided }: {
   if (approval.outcome) return null;
 
   const decide = async (outcome: "allow_once" | "allow_session" | "deny") => {
-    const pick = approval.options.find((o) => o.kind === (outcome === "deny" ? "reject_once" : "allow_once"))
+    const pick = approval.options.find((o) => o.kind === (outcome === "deny" ? "reject_once" : outcome === "allow_session" ? "allow_always" : "allow_once"))
       ?? approval.options[0];
     await api.decide(sessionId, approval.approvalId, outcome, pick?.optionId);
     onDecided();
@@ -30,21 +31,22 @@ export function ApprovalSheet({ approval, sessionId, onDecided }: {
       <div className="sheet" ref={ref} tabIndex={-1}>
         <header>
           <h2 id="approval-title">⏸ The agent is waiting for your decision</h2>
-          <p>It wants to {approval.action} something outside your working scope.</p>
+          <p>The agent requested {approval.action}.</p>
         </header>
         <div className="body">
           <div className="target">{approval.target}</div>
+          {approval.input && <pre className="approval-input">{JSON.stringify(approval.input, null, 2)}</pre>}
           <dl>
             <dt>Why</dt><dd>{approval.reason || "the agent asked for permission"}</dd>
             {approval.blastRadius && (<><dt>Blast radius</dt><dd>{approval.blastRadius}</dd></>)}
           </dl>
           <p style={{ color: "var(--ink-3)", fontSize: 12.5, margin: 0 }}>
-            If you deny, the agent gets a clear refusal and will try another way.
+            If you deny, this turn ends with your decision.
           </p>
         </div>
         <div className="actions">
-          <button className="btn" onClick={() => void decide("allow_once")}>Allow once</button>
-          <button className="btn" onClick={() => void decide("allow_session")}>Allow this session</button>
+          <button className="btn" disabled={approval.argumentsKnown === false} onClick={() => void decide("allow_once")}>Allow once</button>
+          <button className="btn" disabled={approval.argumentsKnown === false} onClick={() => void decide("allow_session")}>Allow this session</button>
           <button className="btn primary" onClick={() => void decide("deny")}>Deny</button>
         </div>
         <p className="note">ⓘ Recorded in the audit log with your name, the session and the object.</p>
@@ -151,6 +153,7 @@ export function Inspector({ session, edge, onHide, className = "", activeId, onA
                 <span className={`pill ${c.status === "error" ? "blocked" : "ready"}`}>{c.status}</span>
               </div>
             ))}
+            {activeId && session.agentWork && <SessionStorage key={activeId} sid={activeId} />}
           </div>
         )}
       </div>
@@ -187,7 +190,7 @@ const CARDS = [
 export const USER_SCRATCH = "/Users/me/agent_scratch";
 
 export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddKey, onStart, demo, notice,
-  user, recent, onOpenRecent, onOpenSearch, onOpenCatalog, onAskAssistant }: {
+  user, recent, onOpenRecent, onOpenSearch, onOpenCatalog, onAskAssistant, onNewSql, onOpenQueries }: {
   catalogue: CatalogueResponse | null;
   folder: string; onFolder: (v: string) => void;
   model: string; onModel: (v: string) => void;
@@ -199,9 +202,11 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
   user?: string;
   /** Notebooks and tables that already exist, so the first screen is a way IN rather than only a way
    *  to start: the most common task is "change something I already have". */
-  recent?: { name: string; path: string; kind: "notebook" | "file" | "table" }[];
-  onOpenRecent?: (path: string, kind: "notebook" | "file" | "table") => void;
+  recent?: { name: string; path: string; kind: import("../domain/docs").DocKind }[];
+  onOpenRecent?: (path: string, kind: import("../domain/docs").DocKind) => void;
   onOpenSearch?: () => void;
+  onNewSql?: () => void;
+  onOpenQueries?: () => void;
   onOpenCatalog?: () => void;
   onAskAssistant?: () => void;
 }) {
@@ -242,6 +247,9 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
           <button className="home-start" disabled={starting} onClick={() => void start(demo ? `${CARDS[0].prompt} [[scenario:notebook]]` : CARDS[0].prompt)}>
             <Notebook size={20} /><strong>Create a notebook</strong><span>Build with your assistant</span>
           </button>
+          <button className="home-start" onClick={onNewSql}>
+            <Database size={20} /><strong>New SQL query</strong><span>Write, run and save your SQL</span>
+          </button>
           <button className="home-start" onClick={onAskAssistant}>
             <Sparkle size={20} /><strong>Ask the assistant</strong><span>Explore an idea or solve a problem</span>
           </button>
@@ -267,6 +275,7 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
             <button className="home-search" onClick={onOpenSearch}>
               <Search size={13} /><span>Search notebooks and tables</span><kbd>⌘K</kbd>
             </button>
+            <button className="home-search" onClick={onOpenQueries}><Database size={13} /><span>Open SQL Queries</span></button>
             <button className="home-search" onClick={onOpenCatalog}>
               <Table size={13} /><span>Browse the catalog</span>
             </button>

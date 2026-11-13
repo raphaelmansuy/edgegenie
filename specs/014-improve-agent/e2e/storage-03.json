@@ -1,0 +1,19 @@
+{
+  "pass": true,
+  "captures": [
+    "01-storage-desktop",
+    "02-storage-mobile",
+    "03-storage-unavailable",
+    "04-storage-recovered"
+  ],
+  "errors": [],
+  "checks": {
+    "loadsOnDemand": true,
+    "refresh": true,
+    "keyboard": true,
+    "narrow": true,
+    "visibleFailure": true,
+    "recovery": true
+  },
+  "scope": "Actual local app, shared SQLite journal/ledger, no workspace or model."
+}

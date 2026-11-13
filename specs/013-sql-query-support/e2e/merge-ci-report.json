@@ -1,0 +1,19 @@
+{
+  "url": "https://github.com/raphaelmansuy/opengenie/actions/runs/43181131344",
+  "gitCommit": "d2d4754e05f15dc06f41d57fdeaaa8b9ae6415e8",
+  "status": "completed",
+  "conclusion": "success",
+  "browserViews": 180,
+  "browserFailures": 0,
+  "internalLinks": 69,
+  "jobs": [
+    {
+      "name": "build and check",
+      "conclusion": "success"
+    },
+    {
+      "name": "deploy",
+      "conclusion": "success"
+    }
+  ]
+}

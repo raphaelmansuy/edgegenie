@@ -1,0 +1,29 @@
+{
+  "pass": true,
+  "identity": "raphael.mansuy@gmail.com",
+  "workspace": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "cases": [
+    {
+      "kind": "job",
+      "validated": true,
+      "definedNotDeployed": true,
+      "definitionAsset": {
+        "kind": "file",
+        "id": "/Users/raphael.mansuy@gmail.com/agent_scratch//job/databricks.yml"
+      },
+      "warningCount": 0
+    },
+    {
+      "kind": "pipeline",
+      "validated": true,
+      "definedNotDeployed": true,
+      "definitionAsset": {
+        "kind": "file",
+        "id": "/Users/raphael.mansuy@gmail.com/agent_scratch//pipeline/databricks.yml"
+      },
+      "warningCount": 0
+    }
+  ],
+  "noDeployment": true,
+  "nativeApiCallsByHandler": 0
+}

@@ -36,6 +36,21 @@ H=(-H "Authorization: Bearer $TOKEN" -H "X-Forwarded-Email: $USER_EMAIL")
 printf '\n\033[1mVerifying %s\033[0m\n' "$URL"
 info "$(databricks apps get "$APP" -o json 2>/dev/null | python3 -c 'import json,sys;d=json.load(sys.stdin);dp=d.get("active_deployment") or {};print("deployment", dp.get("deployment_id"), "created", dp.get("create_time"))' 2>/dev/null)"
 
+# The platform replaces scopes as a complete list; drift must fail a deployment check.
+scopes_python="${PYTHON:-python3}"
+[ ! -x "$APP_DIR/.venv/bin/python" ] || scopes_python="$APP_DIR/.venv/bin/python"
+if databricks apps get "$APP" -o json | "$scopes_python" "$HERE/check-app-scopes.py" coding-agent; then
+  ok "user API scopes match databricks.yml"
+else
+  bad "user API scopes differ from databricks.yml or could not be read"
+fi
+
+if "$scopes_python" "$HERE/check-run-identity.py"; then
+  ok "agent run-identity declaration is safe"
+else
+  bad "agent run identity has not passed isolation qualification"
+fi
+
 # -- 1. it answers at all -----------------------------------------------------------------------
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$URL/api/health" "${H[@]}")
 [ "$code" = "200" ] && ok "the app answers /api/health" || bad "/api/health returned $code"

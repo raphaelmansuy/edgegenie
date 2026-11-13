@@ -84,7 +84,12 @@ class CatalogBrowser:
                 for c in sorted(t.get("columns", []), key=lambda c: c.get("position", 0))]
         return {"fullName": t.get("full_name", full_name), "tableType": t.get("table_type", ""),
                 "owner": t.get("owner", ""), "comment": t.get("comment", ""), "columns": cols,
-                "format": t.get("data_source_format", ""), "updatedAt": t.get("updated_at")}
+                "format": t.get("data_source_format", ""), "updatedAt": t.get("updated_at"),
+                "tableId": t.get("table_id", ""), "createdAt": t.get("created_at")}
+
+    async def remove_table(self, full_name: str, token: str | None):
+        _quote(full_name)
+        await self._http.request("DELETE", f"/api/2.1/unity-catalog/tables/{full_name}", token)
 
     async def preview(self, full_name: str, token: str | None) -> dict[str, Any]:
         """The first rows, through the SQL Statement API on a running warehouse the user can use."""
@@ -118,7 +123,7 @@ class CatalogBrowser:
         return pick
 
     async def run_sql(self, statement: str, token: str | None, *, limit: int = 200,
-                      wait_seconds: float = 50.0) -> tuple[dict[str, Any], str]:
+                      wait_seconds: float = 50.0, parameters: list[dict] | None = None) -> tuple[dict[str, Any], str]:
         """Run one SQL statement and return (raw response, warehouse name).
 
         The raw payload is returned rather than a decoded result so the *domain* decides what a
@@ -129,6 +134,7 @@ class CatalogBrowser:
         payload = await self._http.post("/api/2.0/sql/statements", token, {
             "warehouse_id": pick["id"], "statement": statement,
             "wait_timeout": f"{int(wait_seconds)}s", "on_wait_timeout": "CANCEL", "row_limit": limit,
+            **({"parameters": parameters} if parameters is not None else {}),
         }, timeout=wait_seconds + 15)
         return payload, pick.get("name", "")
 
@@ -230,3 +236,7 @@ class CatalogBrowser:
         scored.sort(key=lambda t: (t[0], len(t[1])))
         return [{"kind": "table", "name": n.rsplit(".", 1)[-1], "ref": n, "path": n}
                 for _, n in scored[:limit]]
+
+    async def close(self):
+        closer=getattr(self._http,'close',None)
+        if closer:await closer()

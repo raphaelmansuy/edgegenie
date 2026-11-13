@@ -7,10 +7,19 @@ so it lives in domain code with tests, not in a prompt.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 
-from .evidence import Requirement, ToolCall, dedupe, gaps, limit_to, needs_evidence, parse_evidence_block, verify
+from .evidence import (
+    Requirement,
+    ToolCall,
+    dedupe,
+    gaps,
+    limit_to,
+    needs_evidence,
+    parse_evidence_block,
+    verify,
+)
 
 
 class Verdict(str, Enum):
@@ -29,6 +38,9 @@ class State:
     audits: int = 0
     #: The user only asked about attached context: an answer is the deliverable, no tool needed.
     read_only: bool = False
+    evidence_rows: tuple[dict, ...] | None = None
+    proof_floor: bool = False
+    observed_effects: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,8 +70,8 @@ CONTINUE_PROMPT = (
 
 ACT_PROMPT = (
     "Your last turn ended with reasoning only: no tool was called and nothing was written. Planning is "
-    "finished. Do not think about it again. Call the tool now (for a notebook: dbx_write_notebook with "
-    "the full path and the cells), then continue."
+    "finished. Do not think about it again. Call the tool now (for a notebook: dbx_read, then dbx_edit with "
+    "a base revision and focused cell operations), then continue."
 )
 
 _BLOCKED_CUES = (
@@ -86,7 +98,30 @@ def decide(state: State) -> Decision:
         return Decision(Verdict.BLOCKED, "the agent stopped without an answer", ("no final answer",))
 
     rows = limit_to(state.requirements, dedupe(verify(parse_evidence_block(answer), calls)))
-    missing = gaps(state.requirements, rows)
+    if state.evidence_rows is not None:
+        from .evidence import EvidenceRow
+
+        rows = [
+            EvidenceRow(r["requirement"], r["toolCallId"], r["tool"], r["summary"], r["verified"])
+            for r in state.evidence_rows
+        ]
+    # Supported prose stays visibly supported. A separate, revision-bound observation can still
+    # establish that the effect completed, so harmless wording must not turn it into a false block.
+    coverage = (
+        [
+            replace(row, verified=True) if claim.get("grade") == "supported" else row
+            for row, claim in zip(rows, state.evidence_rows or ())
+        ]
+        if state.observed_effects and state.evidence_rows is not None
+        else rows
+    )
+    missing = gaps(state.requirements, coverage)
+    contradicted = [
+        r["requirement"] for r in (state.evidence_rows or ()) if r.get("grade") == "contradicted"
+    ]
+    missing = list(dict.fromkeys([*missing, *contradicted]))
+    if state.proof_floor and not state.observed_effects and not any(r.verified for r in rows):
+        missing = missing or ["No verified invocation result"]
     lower = answer.lower()
     admits = any(cue in lower for cue in _BLOCKED_CUES)
 
@@ -97,9 +132,9 @@ def decide(state: State) -> Decision:
             tuple(missing) or ("unknown",),
             tuple(r.to_dict() for r in rows),
         )
-    if not missing or (state.read_only and not admits):
+    if not missing or (state.read_only and not admits and not contradicted):
         return Decision(Verdict.DONE, evidence=tuple(r.to_dict() for r in rows))
-    if not any(needs_evidence(r.text) for r in state.requirements):
+    if not state.proof_floor and not any(needs_evidence(r.text) for r in state.requirements):
         # Nothing here names work a tool could prove: the answer IS the deliverable.
         return Decision(Verdict.DONE, evidence=tuple(r.to_dict() for r in rows))
     if state.audits < MAX_AUDITS:

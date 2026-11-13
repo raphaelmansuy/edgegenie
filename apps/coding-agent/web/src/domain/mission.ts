@@ -17,6 +17,9 @@ export function missionLabel(s: { status?: string; requiresResume?: boolean; exe
   switch (s.execution?.state) {
     case "completed": return "Completed";
     case "cancelled": return "Stopped";
+    case "declined": return "Stopped by your decision";
+    case "refused": return "Model declined";
+    case "truncated": return "Model limit reached";
     case "failed": case "interrupted": case "blocked": return "Needs attention";
     default: return s.status === "blocked" || s.status === "failed" ? "Needs attention" : "Ready";
   }
@@ -36,12 +39,18 @@ export function missionStatus(s: SessionView, conn: string): { title: string; de
     detail: "The server runs independently. We’ll catch up on saved progress when the connection returns.",
     tone: "connection",
   };
+  if (s.questions?.some(q => q.state === "pending")) return { title: "Waiting for your answer", detail: "The agent asked a question. Answer, skip, or cancel in the conversation.", tone: "attention" };
   if (s.approvals.some((a) => !a.outcome)) return {
     title: "Waiting for your decision",
     detail: "The agent will wait. Returning later never approves an action automatically.",
     tone: "attention",
   };
   const last = currentMission(s);
+  if (last?.status === "paused") return { title: "Waiting for review or run", detail: "Review saved proposals or follow Runs. No action is approved automatically.", tone: "attention" };
+  if (last?.status === "declined" || last?.status === "refused" || last?.status === "truncated") return {
+    title: last.status === "declined" ? "Stopped by your decision" : last.status === "refused" ? "Model declined" : "Model limit reached",
+    detail: last.blocked?.reason || "Review the saved result before continuing.", tone: "quiet",
+  };
   if (last?.status === "blocked" || last?.status === "failed") return {
     title: last.status === "blocked" ? "Work blocked" : "Work failed",
     detail: last.blocked?.reason || "Review saved tool results before continuing. Some changes may already have completed.",
@@ -88,7 +97,7 @@ export interface MissionProof {
 
 /** Server verdict AND a successful source in this same turn. Never join proof across missions. */
 export function missionProof(turn: Turn): MissionProof[] {
-  const calls = new Map(turn.tools.map((c) => [c.callId, c]));
+  const calls = new Map([...turn.tools, ...(turn.evidenceSources ?? [])].map((c) => [c.callId, c]));
   return turn.evidence.map((row) => {
     const source = calls.get(row.toolCallId);
     return { row, source,
@@ -104,10 +113,15 @@ export function lastAchieved(s: Pick<SessionView, "turns">): Turn | undefined {
   return [...s.turns].reverse().find(isAchieved);
 }
 
-export type MissionState = "starting" | "ready" | "queued" | "running" | "auditing" | "waiting" | "achieved"
-  | "review" | "blocked" | "failed" | "cancelled" | "interrupted" | "recovery" | "archived";
+export type MissionState = "asking" | "paused" | "starting" | "ready" | "queued" | "running" | "auditing" | "waiting" | "achieved"
+  | "declined" | "refused" | "truncated" | "review" | "blocked" | "failed" | "cancelled" | "interrupted" | "recovery" | "archived";
 
 export const MISSION_STATES: Record<MissionState, { label: string; tone: string; detail: string }> = {
+  asking: { label: "Needs your input", tone: "attention", detail: "Answer the agent’s question in the conversation, or skip it to continue." },
+  paused: { label: "Waiting for review or run", tone: "attention", detail: "Review the proposed changes or follow the saved run. No action is approved automatically." },
+  declined: { label: "Stopped by your decision", tone: "quiet", detail: "You rejected the action. The agent was told once." },
+  refused: { label: "Model declined", tone: "attention", detail: "The model declined to continue." },
+  truncated: { label: "Model limit reached", tone: "attention", detail: "The answer stopped at the model limit. Review saved work." },
   starting: { label: "Starting", tone: "quiet", detail: "Your session is opening. Accepted work will appear here." },
   ready: { label: "Ready", tone: "quiet", detail: "Send an instruction to start your first mission." },
   queued: { label: "Queued", tone: "quiet", detail: "This instruction is accepted and waiting for its turn." },
@@ -135,13 +149,15 @@ export function missionView(s: SessionView, turn: Turn | undefined, conn: string
   if (isCurrent) {
     if (s.status === "archived") state = "archived";
     else if (s.requiresResume) state = "recovery";
+    else if (s.questions?.some(q => q.state === "pending")) state = "asking";
     else if (s.approvals.some((a) => !a.outcome)) state = "waiting";
     else if (!turn && (s.status === "failed" || s.status === "blocked")) state = s.status;
   }
   const presentation = MISSION_STATES[state] ?? MISSION_STATES.starting;
   const request = missionRequest(turn?.prompt || s.title || "");
-  const objective = request.split("\n").map((l) => l.trim()).find(Boolean) || "Your next mission";
-  const title = objective.length > 110 ? `${objective.slice(0, 109)}…` : objective;
+  const objective = (request.split("\n").map((l) => l.trim()).find(Boolean) || "Your next mission").replace(/^(?:[-*]|\d+[.)])\s+/, "");
+  const compact = objective.replace(/\/(?:Workspace\/)?(?:Users|Shared|Repos)\/[^\s]+/g, path => path.split("/").at(-1) || path);
+  const title = compact.length > 110 ? `${compact.slice(0, 109)}…` : compact;
   const proof = turn ? missionProof(turn) : [];
   return {
     state, ...presentation, isCurrent, request, title,

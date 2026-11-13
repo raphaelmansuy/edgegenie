@@ -7,3 +7,6 @@ import type { Workspace } from "../domain/links";
 export const WorkspaceLinks = createContext<Workspace | null>(null);
 
 export const OpenDoc = createContext<(doc: Doc) => void>(() => {});
+
+/** Explicit SQL promotion from an assistant code block; never executes the proposal. */
+export const OpenSqlQuery = createContext<((text: string) => void) | null>(null);

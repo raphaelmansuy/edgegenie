@@ -1,0 +1,40 @@
+{
+  "reviewedAt": "2026-11-12T05:22:11.644159+00:00",
+  "version": "1.2.0-rc.1",
+  "sourceRevision": "8e9e520fb0a0a244a758f13daab96c08517161f5",
+  "deploymentId": "01f1de58bbcb18228bf8d92ed9b8e056",
+  "images": [
+    {
+      "file": "screenshots/19-deployed-query-library.png",
+      "sha256": "4dd9062d986405fb9d89c31708f2bd3b1c6379fa2f0acf6f33f493505eed2a81",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Version badge states v1.2.0-rc.1; native empty library, search, filters and New SQL query actions align clearly; existing sessions and assistant remain visible."
+    },
+    {
+      "file": "screenshots/20-deployed-private-draft.png",
+      "sha256": "cd3b5971f224df6696b0733f6faaddb81a0add3efc0f96c524f8bc717aa8fa32",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Native stopped warehouse is visible; draft identity, disabled create/run controls and temporary-storage disclosure are accurate; editor, results and assistant do not overlap."
+    },
+    {
+      "file": "screenshots/21-deployed-mobile-draft.png",
+      "sha256": "895a622a9cd10c0e848d423539658aef66cda3f9c6fb0a433a5c7458046d32d5",
+      "width": 375,
+      "height": 900,
+      "visuallyInspected": true,
+      "observation": "375px layout wraps actions and capability disclosure cleanly; SQL editor, warehouse selector and composer remain accessible without page-wide horizontal overflow. Existing shell intentionally hides the version badge at this width."
+    },
+    {
+      "file": "screenshots/22-deployed-dark-draft.png",
+      "sha256": "1e100efda3f3fa0c3fc17cb00b7920ea652a188247d6b7f7ef3eb65dbcbfd6a1",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Dark shell, editor and fields agree; v1.2.0-rc.1 badge and temporary-storage disclosure are legible; primary controls and source/results boundaries remain clear."
+    }
+  ]
+}

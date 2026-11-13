@@ -12,11 +12,14 @@ from collections.abc import Callable
 from typing import Any
 
 import logging
+import asyncio
+from contextlib import asynccontextmanager
 import re
 
 import httpx
 
 from ...domain.redact import token_scopes
+from ...domain.asset import RemoteRefused
 
 log = logging.getLogger("app.dbx.http")
 
@@ -56,18 +59,29 @@ def denial(status: int, text: str, where: str) -> PermissionError:
     return PermissionError(f"you do not have access to {where}")
 
 
-def normalize_host(host: str | None) -> str:
-    """Databricks Apps may provide DATABRICKS_HOST as a bare hostname; every client needs a URL."""
-    h = (host or "").strip().rstrip("/")
-    if h and not h.startswith(("http://", "https://")):
-        h = f"https://{h}"
-    return h
+from ...domain.urls import normalize_host
 
 
 class DbxHttp:
-    def __init__(self, host: str, token_provider: Callable[[], str | None]) -> None:
+    def __init__(self, host: str, token_provider: Callable[[], str | None], *, max_response_bytes: int = 0) -> None:
         self._host = normalize_host(host)
         self._token_provider = token_provider
+        self._max_response_bytes = max_response_bytes
+        self._client = None
+        self._loop = None
+
+    @asynccontextmanager
+    async def connection(self):
+        loop=asyncio.get_running_loop()
+        if self._client is None or self._client.is_closed or self._loop is not loop:
+            self._client=httpx.AsyncClient(timeout=TIMEOUT)
+            self._loop=loop
+        yield self._client
+
+    async def close(self):
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+        self._client=None
 
     def _headers(self, token: str | None) -> dict[str, str]:
         tok = token or self._token_provider()
@@ -82,8 +96,24 @@ class DbxHttp:
         if not self._host:
             raise RuntimeError("DATABRICKS_HOST is not set: the app cannot reach the workspace")
         headers = self._headers(token)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            r = await client.request(method, f"{self._host}{path}", params=params, json=body, headers=headers)
+        async with self.connection() as client:
+            if self._max_response_bytes:
+                async with client.stream(method, f"{self._host}{path}", params=params, json=body, headers=headers, timeout=timeout) as upstream:
+                    chunks, size = [], 0
+                    async for chunk in upstream.aiter_bytes():
+                        size += len(chunk)
+                        if size > self._max_response_bytes:
+                            raise RuntimeError("workspace response exceeds this app's bounded preview limit")
+                        chunks.append(chunk)
+                    # aiter_bytes already decoded compression. Retaining Content-Encoding would
+                    # make the reconstructed response try to decompress the JSON a second time.
+                    decoded_headers = {
+                        key: value for key, value in upstream.headers.items()
+                        if key.lower() not in {"content-encoding", "content-length", "transfer-encoding"}
+                    }
+                    r = httpx.Response(upstream.status_code, headers=decoded_headers, content=b"".join(chunks))
+            else:
+                r = await client.request(method, f"{self._host}{path}", params=params, json=body, headers=headers, timeout=timeout)
         if r.status_code == 404:
             raise LookupError(f"not found: {(params or {}).get('path') or path}")
         if r.status_code in (401, 403):
@@ -91,9 +121,11 @@ class DbxHttp:
             # sentence may be a summary of them. Logged for the operator; never carries a token.
             # `token scopes` are the NAMES in the caller's own token: they show whether a refusal is a stale
             # sign-in (token older than the app's scopes) or an app that was never granted the scope.
-            log.warning("workspace call refused: %s %s -> %s %s | token scopes: %s", method, path,
-                        r.status_code, r.text[:300], " ".join(token_scopes(headers["Authorization"][7:])) or "none")
+            log.warning("workspace call refused: %s %s -> %s | token scopes: %s", method, path,
+                        r.status_code, " ".join(token_scopes(headers["Authorization"][7:])) or "none")
             raise denial(r.status_code, r.text, (params or {}).get("path") or path)
+        if 400<=r.status_code<500:
+            raise RemoteRefused(f"{path} refused ({r.status_code}): {r.text[:200]}",r.status_code)
         if r.status_code >= 400:
             raise RuntimeError(f"{path} failed ({r.status_code}): {r.text[:200]}")
         return r.json() if r.content else {}

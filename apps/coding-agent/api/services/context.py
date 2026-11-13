@@ -1,77 +1,42 @@
-"""Turn attachment references into text, reading with the user's own token.
+"""Resolve attachments through injected readers; per-item failure never hides missing context."""
 
-Failures are per item: one unreadable attachment must not block the message, and the agent must be
-told it was missing rather than left to assume it saw it.
-"""
 from __future__ import annotations
-
 import asyncio
-
+from ..domain.asset import AssetRef
 from ..domain.context import Attachment, Resolved
+from ..ports.context import AttachmentReader
 
 
-def _cells_text(obj) -> str:
-    return "\n\n".join(f"# --- cell {c.index + 1} ({c.language}) ---\n{c.source}" for c in obj.cells)
+class RegistryContextReader:
+    """Asset reads have exactly the same handler as tools, routes and capability probing."""
+
+    def __init__(self, registry, actor, extensions=None):
+        self.registry, self.actor = registry, actor
+        self.extensions = extensions or {}
+
+    async def read(self, attachment: Attachment) -> Resolved:
+        extension = self.extensions.get(attachment.kind)
+        if extension:
+            return await extension.read(attachment, self.actor)
+        value = await self.registry.handler(attachment.kind).read(
+            AssetRef(attachment.kind, attachment.ref), self.actor
+        )
+        return Resolved(
+            attachment,
+            value.content,
+            "Asset revision " + value.revision + "; read the rest with dbx_read when capped.",
+        )
 
 
-async def _one(a: Attachment, ws, cat, token: str | None, blobs=None, user_id: str = "") -> Resolved:
-    try:
-        if a.kind == "blob":
-            # Bytes the user handed us. There is no token to re-read them with and no path to re-check:
-            # the store already decided who may see this row, and the READER decides what a read means
-            # for its family. A missing blob is REPORTED, never silently dropped, so the agent cannot
-            # answer as if it had seen something (spec 009 [AFC-15]).
-            if blobs is None:
-                return Resolved(a, error="this attachment is no longer available")
-            try:
-                row = await blobs.store.meta(a.ref, user_id)
-                raw = await blobs.store.bytes_for(a.ref, user_id)
-            except LookupError:
-                return Resolved(a, error="this attachment is no longer available")
-            # Whether the model can consume this family decides the SENTENCE, not the bytes: an image on
-            # a vision model must not be described as unseeable, or the model reads the claim instead of
-            # the picture (measured: a correct image_url block plus "you cannot see this" produced
-            # "I can't see the image").
-            unseen = bool(getattr(row, "family", "") == "image" and not blobs.model_sees_images)
-            text, note = await blobs.describe(row, raw, unseen=unseen)
-            return Resolved(a, text, note)
-        if a.kind == "cell":
-            from ..domain.binding import BindingError, cell_text, content_sha, parse_cell_ref, render_cell
+async def resolve(items: list[Attachment], reader: AttachmentReader) -> list[Resolved]:
+    """Every item is read as its owner. An unreadable item is explicit, never an empty success."""
 
-            path, index = parse_cell_ref(a.ref)
-            obj = await ws.read(path, token)
-            if obj.kind != "notebook":
-                raise BindingError(f"{path} is not a notebook, so it has no cell {index}")
-            source, language = cell_text(obj.cells, index)
-            sha = content_sha(source)
-            text = render_cell(path, index, source, language, sha=sha, seen_sha=a.sha)
-            return Resolved(a, text, f"one cell of {len(obj.cells)}; read the others with the notebook tool")
-        if a.kind in ("notebook", "file"):
-            obj = await ws.read(a.ref, token)
-            text = _cells_text(obj) if obj.kind == "notebook" else obj.text
-            note = f"language {obj.language.lower()}, {len(obj.cells)} cells" if obj.kind == "notebook" else ""
-            return Resolved(a, text, note + (" (file larger than the viewer limit)" if obj.truncated else ""))
-        if a.kind == "folder":
-            kids = await ws.list_dir(a.ref, token)
-            lines = [f"{'/' if k.has_children else ''}{k.name}  [{k.kind}]" for k in kids[:80]]
-            more = f"\n... and {len(kids) - 80} more" if len(kids) > 80 else ""
-            return Resolved(a, "\n".join(lines) + more or "(empty)")
-        t = await cat.table(a.ref, token)
-        cols = "\n".join(f"  {c['name']} {c['type']}" + (f" -- {c['comment']}" if c["comment"] else "")
-                         for c in t["columns"])
-        head = f"{t['fullName']} ({t['tableType'].lower() or 'table'})"
-        if t["comment"]:
-            head += f"\ncomment: {t['comment']}"
-        return Resolved(a, f"{head}\ncolumns:\n{cols}")
-    except PermissionError as exc:
-        return Resolved(a, error=str(exc))
-    except (LookupError, IsADirectoryError) as exc:
-        return Resolved(a, error=str(exc))
-    except Exception as exc:  # noqa: BLE001 - never block a message on an attachment
-        return Resolved(a, error=f"{type(exc).__name__}: {str(exc)[:120]}")
+    async def one(item):
+        try:
+            return await reader.read(item)
+        except (PermissionError, LookupError, IsADirectoryError) as exc:
+            return Resolved(item, error=str(exc))
+        except Exception as exc:  # noqa: BLE001 - preserve other readable attachments
+            return Resolved(item, error=f"{type(exc).__name__}: {str(exc)[:120]}")
 
-
-async def resolve(items: list[Attachment], ws, cat, token: str | None,
-                  blobs=None, user_id: str = "") -> list[Resolved]:
-    """Every attachment, resolved independently: one unreadable item must not block the message."""
-    return list(await asyncio.gather(*(_one(a, ws, cat, token, blobs, user_id) for a in items)))
+    return list(await asyncio.gather(*(one(item) for item in items)))

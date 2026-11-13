@@ -24,6 +24,7 @@
 # Makefile starts claiming "up to date" about something that never ran.
 
 SHELL := /bin/bash
+.SHELLFLAGS := -eu -o pipefail -c
 .DEFAULT_GOAL := help
 .PHONY: help doctor setup dev dev-real shell-pg check types unit audits vision \
         long-running
@@ -37,7 +38,7 @@ PY         := $(APP_DIR)/.venv/bin/python
 WEB        := $(APP_DIR)/web
 PORT       ?= 8062
 REAL_PORT  ?= 8071
-export DATABRICKS_HOST ?= https://dbc-1e111e44-3334.cloud.databricks.com
+export DATABRICKS_HOST ?= https://dbc-cb61f1e1-bd8e.cloud.databricks.com
 
 # Help is generated from the `##` comments, so it cannot fall out of step with the targets.
 help: ## Show this help
@@ -107,9 +108,9 @@ types: ## TypeScript, and no Python that fails to import
 
 unit: ## pytest + vitest
 	@printf '\033[1mpytest\033[0m\n'
-	@cd $(APP_DIR) && $(PY) -m pytest tests -q 2>&1 | tail -2
+	@set -euo pipefail; cd $(APP_DIR); env -u DATABRICKS_HOST $(PY) -m pytest tests -q 2>&1 | tail -2
 	@printf '\033[1mvitest\033[0m\n'
-	@cd $(WEB) && npx vitest run 2>&1 | grep -E 'Test Files|Tests '
+	@set -euo pipefail; cd $(WEB); npx vitest run 2>&1 | grep -E 'Test Files|Tests '
 
 audits: ## Accessibility, overflow and layout shift, against a running app on PORT
 	@printf '\033[1maudits against http://127.0.0.1:$(PORT)\033[0m\n'
@@ -122,8 +123,8 @@ vision: ## Prove the model can READ an image (needs dev-real on REAL_PORT)
 	@cd $(WEB) && APP_URL=http://127.0.0.1:$(REAL_PORT) node scripts/vision-e2e.mjs
 
 # ---------------------------------------------------------------- deployment
-sync: ## Copy the TRACKED files into the workspace folder the app deploys from
-	@printf '\033[1msync\033[0m    git ls-files -> $(WS_SRC)\n'
+sync: ## Copy tracked and unignored new app files into the deployment workspace folder
+	@printf '\033[1msync\033[0m    git ls-files (tracked + new) -> $(WS_SRC)\n'
 	@cd $(APP_DIR) && ./scripts/sync-app-source.sh "$(WS_SRC)"
 
 deploy-only: ## Deploy and wait until SUCCEEDED (does not verify the live URL)

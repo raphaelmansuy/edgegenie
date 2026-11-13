@@ -4,7 +4,7 @@
  * transcript. This picks out the one thing the call is about; the full arguments stay one click away.
  */
 
-const ORDER = ["path", "full_name", "fullName", "name", "table", "sql", "statement", "job_id",
+const ORDER = ["path", "full_name", "fullName", "id", "name", "table", "sql", "statement", "job_id",
   "run_id", "instance", "pattern", "query", "needle", "todos", "cells"];
 
 /** The subject of a call, or "" when the arguments say nothing useful. */
@@ -64,6 +64,7 @@ export function isEvidenceHeading(text: string, from: number, to: number): boole
   if (to - i < WORD.length || text.slice(i, i + WORD.length).toLowerCase() !== WORD) return false;
   i += WORD.length;
   skipSpace(); skipStars(); skipSpace();
+  if (text[i] === ":") { i += 1; skipSpace(); }
   return i === to;
 }
 

@@ -33,7 +33,7 @@ from api.domain.llm import (
 from api.ports import Secret
 from api.services.credential_service import CredentialService
 from api.services.model_resolver import ModelResolver
-from api.services.model_registry import demo_store
+from api.composition.model_registry import demo_store
 from api.services.model_service import ModelService
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -76,8 +76,8 @@ def openai_spec(output: int = 16_384) -> ModelSpec:
 async def _registry_with(store, vault):
     service = ModelService(store, None, default_model="openai/gpt-4.1", allow_external=True,
                            vault=vault)
-    credentials = CredentialService(vault)
-    return service, credentials, ModelResolver(service, credentials, allow_external=True)
+    credentials = CredentialService(vault, providers=adapter_for)
+    return service, credentials, ModelResolver(service, credentials, providers=adapter_for, allow_external=True)
 
 
 # -- the assertion the spec cares about most --------------------------------------------------
@@ -166,8 +166,8 @@ async def test_a_vertex_session_receives_the_key_as_a_file_and_the_project_as_a_
         credential_kind=CredentialKind.SERVICE_ACCOUNT_JSON, state=ModelState.AVAILABLE)])
     service = ModelService(store, None, default_model="google_vertex/google/gemini-3.8-flash",
                           allow_external=True, vault=vault)
-    credentials = CredentialService(vault)
-    resolver = ModelResolver(service, credentials, allow_external=True)
+    credentials = CredentialService(vault, providers=adapter_for)
+    resolver = ModelResolver(service, credentials, providers=adapter_for, allow_external=True)
     resolved, _ = await resolver.resolve("google_vertex/google/gemini-3.8-flash",
                                          user_id="u@example.com")
     child = await credentials.env_for(resolved, user_id="u@example.com", workspace_token="dapi-ws")
@@ -199,8 +199,8 @@ async def test_a_turn_pins_the_model_and_a_later_switch_does_not_rewrite_it(tmp_
     vault = MemoryVault(EnvKek.generate())
     service = ModelService(store, None, default_model="fake/model-a", allow_external=False,
                            vault=vault)
-    credentials = CredentialService(vault)
-    resolver = ModelResolver(service, credentials, allow_external=False)
+    credentials = CredentialService(vault, providers=adapter_for)
+    resolver = ModelResolver(service, credentials, providers=adapter_for, allow_external=False)
 
     rt = AcpAgentRuntime(command=f"{sys.executable} -m api.adapters.fake.agent fixed:notebook 0.35")
     rt._extra_env = {"PYTHONPATH": str(ROOT)}                       # noqa: SLF001
@@ -249,8 +249,8 @@ async def test_a_cap_rejection_lowers_the_stored_cap_and_never_raises_it():
 
     store = demo_store_store([openai_spec(output=24_000)])
     vault = MemoryVault(EnvKek.generate())
-    credentials = CredentialService(vault)
-    health = HealthService(store, credentials, interval=0.0)
+    credentials = CredentialService(vault, providers=adapter_for)
+    health = HealthService(store, credentials, providers=adapter_for, interval=0.0)
     spec = openai_spec(output=24_000)
 
     await health.note_turn(spec, "max_tokens (24000) cannot exceed 8192", turn_id="t9")
@@ -270,7 +270,7 @@ async def test_a_turn_failure_is_classified_and_recorded_as_health():
 
     store = demo_store_store([openai_spec()])
     vault = MemoryVault(EnvKek.generate())
-    health = HealthService(store, credentials=CredentialService(vault), interval=0.0)
+    health = HealthService(store, credentials=CredentialService(vault, providers=adapter_for), providers=adapter_for, interval=0.0)
     spec = openai_spec()
     state = await health.note_turn(spec, "401 Unauthorized: Incorrect API key provided.")
     assert state == "unauthorised"
@@ -292,7 +292,7 @@ async def test_a_probe_is_not_repeated_inside_the_interval():
             calls.append(user_id)
             return None
 
-    health = HealthService(store, CredentialService(CounterVault(vault._kek)), interval=900)  # noqa: SLF001
+    health = HealthService(store, CredentialService(CounterVault(vault._kek), providers=adapter_for), providers=adapter_for, interval=900)  # noqa: SLF001
     spec = openai_spec()
     await health.probe(spec, user_id="u@example.com")
     await health.probe(spec, user_id="u@example.com")

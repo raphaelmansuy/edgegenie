@@ -1,0 +1,12 @@
+{
+  "pass": true,
+  "identity": "raphael.mansuy@gmail.com",
+  "workspace": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "checks": {
+    "metadataDescribedBeforeQuery": true,
+    "nativeNamedParametersAccepted": true,
+    "hostileTextRemainsData": true,
+    "resultBound": 1
+  },
+  "scope": "Read-only actual catalogue handler with named STRING binding; no model or workspace mutation."
+}

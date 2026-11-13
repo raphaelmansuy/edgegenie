@@ -298,7 +298,7 @@ export function EditorSurface({
     // While the user is mid-edit the draft IS the live buffer, not something to offer back.
     if (draft && draft.text !== source && !dirtyRef.current) setRestored(true);
     else setRestored(false);
-    text.current = source;
+    if (!dirtyRef.current) text.current = source;
   }, [target.path, source]);
 
   useEffect(() => {
@@ -533,10 +533,16 @@ export function EditorSurface({
     const draft = readDraft(target.path);
     if (!draft) return;
     text.current = draft.text;
+    dirtyRef.current = true;
     setDirty(true);
     setRestored(false);
     setForceValue(draft.text);
-    if (target.kind === "notebook" && onCells) onCells(parseCells(draft.text, target.language));
+    if (target.kind === "notebook") {
+      const recovered = reconcileIds(liveRef.current, parseCells(draft.text, target.language));
+      setLiveCells(recovered);
+      onCells(recovered);
+    }
+    if (draft.basedOn && draft.basedOn !== target.version) setIncoming(source);
     /* A restored draft is the buffer now. Clearing it the next tick hands the editor back to `source`,
        which still holds the draft's text, so nothing visibly changes — but the one-shot override no
        longer outranks every later adoption of an outside change. */

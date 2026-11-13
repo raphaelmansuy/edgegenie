@@ -42,3 +42,6 @@ site/dist/
 # `site-e2e-screenshots` artifact; the reviewed findings live in tests/sites/e2e/visual-inspection.md.
 tests/sites/e2e/screenshots/
 tests/sites/e2e/report.json
+
+# Qualified native tools installed at app build time from pinned releases.
+apps/coding-agent/.bin/

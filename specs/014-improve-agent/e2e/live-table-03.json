@@ -1,0 +1,27 @@
+{
+  "pass": true,
+  "captures": [
+    "01-native-table-run",
+    "02-native-table-resource",
+    "03-table-cleanup-review",
+    "04-native-table-deleted"
+  ],
+  "errors": [],
+  "recoveredFrom": "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/014-improve-agent/e2e/live-table-02.json",
+  "sessionId": "5c8634cd474f4471",
+  "schema": "workspace.agent014_table_81ce1f3dc9",
+  "table": "workspace.agent014_table_81ce1f3dc9.created",
+  "folder": "/Users/raphael.mansuy@gmail.com/agent_scratch/agent014-table-81ce1f3dc9",
+  "nativeTableId": "a9dba22c-be96-4e9b-887c-e9248f4e7ff3",
+  "checks": {
+    "actualModelSql": true,
+    "oneCreatedResource": true,
+    "noUndoExplicit": true,
+    "reviewWroteNothing": true,
+    "nativeAbsenceAfterCleanup": true,
+    "emptySchemaRemoved": true
+  },
+  "scope": "Real model/app/ACP/MCP; native SQL as current user and reviewed deletion of exactly its isolated table.",
+  "modelTurnStatus": "blocked",
+  "qualification": "Table resource lifecycle passed, including recovery and exact native cleanup. The model mission did not pass: subsequent unsupported SQL observations failed and the evidence guard blocked completion."
+}

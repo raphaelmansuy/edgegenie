@@ -71,6 +71,7 @@ class Run:
     tokens: int
     tool_calls: int
     seconds: float
+    via: str = "kit"
 
 
 @dataclass(frozen=True)
@@ -112,7 +113,7 @@ def trial_of(batch: str) -> str:
     return m.group(1) if m else "t1"
 
 
-def load(results_dir: Path = RESULTS, *, every_trial: bool = False) -> tuple[list[Run], list[str]]:
+def load(results_dir: Path = RESULTS, *, every_trial: bool = False, via: str = "kit") -> tuple[list[Run], list[str]]:
     """Accepted runs, plus the batches that were excluded and why.
 
     `every_trial=False` keeps the headline rule: only `t1` counts, so a repeat cannot inflate a table.
@@ -141,9 +142,15 @@ def load(results_dir: Path = RESULTS, *, every_trial: bool = False) -> tuple[lis
         except (json.JSONDecodeError, OSError):
             excluded.append(f"{batch} (unreadable: {Path(path).name})")
             continue
+        if d.get("via", "kit") != via:
+            continue
+        if d.get("valid") is False:
+            excluded.append(f"{batch} (invalid qualification: {Path(path).name})")
+            continue
         runs.append(
             Run(
                 batch=batch,
+                via=d.get("via", "kit"),
                 trial=trial,
                 mission=d["mission"],
                 variant=d["variant"],

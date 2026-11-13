@@ -1,25 +1,13 @@
 """The write fence: what a session may touch. Pure and total — every target is classified.
 
-This is a policy function, not the boundary itself. The boundary is that the tool server
-only receives requests that passed here, and that approval is required for anything the
-rules cannot prove safe. See specs/001 04 and 09.
+Policy adapters for legacy editor callers. Agent authorization uses the same pure policy package;
+editor saves outside the working folder retain their explicit human approval flow.
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from enum import Enum
-
-DESTRUCTIVE = re.compile(r"\b(drop\s+(table|schema|view|database)|truncate|delete\s+from)\b", re.I)
-WRITE_SQL = re.compile(r"\b(create|replace|insert|update|merge|alter|optimize|vacuum|grant|revoke)\b", re.I)
-_TABLE_RE = re.compile(
-    r"\b(?:table|view|schema|database)\s+(?:if\s+not\s+exists\s+|or\s+replace\s+)?"
-    r"([\w.$`\"]+)",
-    re.I,
-)
-_FROM_RE = re.compile(r"\b(?:from|into|update|join)\s+([\w.$`\"]+)", re.I)
-
 
 class Action(str, Enum):
     READ = "read"
@@ -43,7 +31,6 @@ class Scope:
     app_prefix: str
     instance_prefix: str
 
-    @staticmethod
     @staticmethod
     def for_session(session_id: str, folder: str, schema: str | None) -> Scope:
         short = session_id[:8]
@@ -71,60 +58,24 @@ class Decision:
         return self.verdict is Verdict.ALLOW
 
 
-def _norm(path: str) -> str:
-    p = path.replace("\\", "/").strip("`\"'")
-    while "//" in p:
-        p = p.replace("//", "/")
-    return p
-
-
-def _inside(path: str, folder: str) -> bool:
-    p = _norm(path)
-    if ".." in p.split("/"):
-        return False
-    f = _norm(folder)
-    # An empty folder means "there is no writable folder", NOT "every folder is writable".
-    # `"anything".startswith("")` is True, so without this guard a session-less save would be
-    # classified as inside the fence and silently allowed — a real widening of the write boundary.
-    if not f or f == "/":
-        return False
-    return p.startswith(f) and len(p) > len(f) - 1
+# Compatibility exports for editor callers; implementation lives in one policy module.
+from .policy.paths import inside as _inside, normalize as _norm
+from .policy.sql import classify, check_scope
+from .policy.verdict import ActionClass
 
 
 def classify_sql(sql: str) -> Action:
-    if DESTRUCTIVE.search(sql):
-        return Action.DESTRUCTIVE
-    if WRITE_SQL.search(sql):
-        return Action.WRITE
-    return Action.READ
-
-
-def sql_targets(sql: str) -> list[str]:
-    return [t.strip('`"') for t in _TABLE_RE.findall(sql) + _FROM_RE.findall(sql)]
+    cls = classify(sql).action
+    return {ActionClass.READ: Action.READ, ActionClass.CHANGE: Action.WRITE,
+            ActionClass.IRREVERSIBLE: Action.DESTRUCTIVE}.get(cls, Action.DESTRUCTIVE)
 
 
 def check_sql(scope: Scope, sql: str) -> Decision:
+    error = check_scope(sql, [scope.schema] if scope.schema else [])
     action = classify_sql(sql)
-    if action is Action.READ:
-        return Decision(Verdict.ALLOW, Action.READ, "")
-    if action is Action.DESTRUCTIVE:
-        return Decision(
-            Verdict.ASK,
-            Action.DESTRUCTIVE,
-            " ".join(sql.split())[:160],
-            "destructive SQL always needs a human",
-        )
-    targets = sql_targets(sql)
-    if not scope.schema:
-        return Decision(
-            Verdict.ASK, action, ", ".join(targets)[:160], "this session has no writable schema"
-        )
-    outside = [t for t in targets if not t.lower().startswith(scope.schema.lower() + ".")]
-    if outside:
-        return Decision(
-            Verdict.ASK, action, ", ".join(outside)[:160], f"outside the writable schema {scope.schema}"
-        )
-    return Decision(Verdict.ALLOW, action, ", ".join(targets)[:160])
+    if error:
+        return Decision(Verdict.DENY, action, sql[:160], error)
+    return Decision(Verdict.ASK if action is Action.DESTRUCTIVE else Verdict.ALLOW, action, sql[:160])
 
 
 def check_path(scope: Scope, path: str) -> Decision:

@@ -183,6 +183,21 @@ def test_tokens_are_never_a_percentage():
     assert "token" in cl.caveat.lower()
 
 
+@case
+def test_invalid_app_qualifications_are_excluded_from_both_score_readers():
+    with tempfile.TemporaryDirectory() as scratch:
+        root = Path(scratch)
+        batch = root / "app-batch"
+        batch.mkdir()
+        row = {"mission":"M9", "variant":"V1", "model":"test", "via":"app", "score":6, "total":12, "tokens":0, "tool_calls":0, "wall_seconds":1, "valid":False}
+        (batch / "invalid.json").write_text(json.dumps(row))
+        runs, excluded = C.load(root, via="app")
+        assert runs == [] and any("invalid qualification" in reason for reason in excluded)
+        tables = load_module("invalid_exam_tables", ROOT / "exams/make_tables.py")
+        tables.R = root
+        assert tables.load(via="app") == []
+
+
 def main() -> int:
     failed = 0
     for name, fn in CASES:

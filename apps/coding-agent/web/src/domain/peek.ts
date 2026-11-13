@@ -24,7 +24,7 @@ const firstLine = (text: string, max = 140): string => {
 
 export function peekOf(session: Pick<SessionView, "status" | "turns" | "approvals">): Peek {
   const turn = session.turns.at(-1);
-  if (!turn) return { state: "idle", headline: "Starting the agent…", detail: "" };
+  if (!turn) return { state: "idle", headline: session.status === "provisioning" ? "Starting the agent…" : "Ready for the next question", detail: "" };
   if (session.approvals.some((a) => !a.outcome))
     return { state: "waiting", headline: "Waiting for your approval", detail: "The agent paused before changing something." };
   if (session.status === "streaming") {

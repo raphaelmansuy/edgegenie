@@ -1,0 +1,9 @@
+{
+  "pass": false,
+  "reason": "The test inherited Auto from previous exam preferences; explicitly selects Review in subsequent iteration.",
+  "sessionId": "d4016a00c9c64e49",
+  "folder": "/Users/raphael.mansuy@gmail.com/agent_scratch/agent014-e2e-cb952137",
+  "captures": [
+    "00-inherited-auto-mode"
+  ]
+}

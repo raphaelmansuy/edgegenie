@@ -25,6 +25,8 @@ resources:
       user_api_scopes:
         - sql
         - files
+        - apps
+        - postgres
         - model-serving
         - ai-gateway
         - genie

@@ -1,0 +1,16 @@
+{
+  "models": ["fake/model-a"],
+  "turn": {
+    "updates": [
+      {"sessionUpdate":"notice","severity":"warning","title":"Credential expires soon","description":"Keep this conversation open while work is running."},
+      {"sessionUpdate":"compaction_summary_chunk","compactionId":"compact-one","content":{"type":"text","text":"Retained the notebook revision. "}},
+      {"sessionUpdate":"compaction_summary_chunk","compactionId":"compact-one","content":{"type":"text","text":"The pending review still needs your decision."}},
+      {"sessionUpdate":"compaction_update","compactionId":"compact-one","status":"failed","error":"A temporary compaction error"},
+      {"sessionUpdate":"compaction_update","compactionId":"compact-one","status":"completed","error":null},
+      {"sessionUpdate":"available_commands_update","availableCommands":[{"name":"inspect-fixture","description":"Inspect current source"}]}
+    ],
+    "answer":"Protocol updates delivered. No workspace changes were requested or made.",
+    "stopReason":"end_turn",
+    "usage":{"inputTokens":100,"outputTokens":30}
+  }
+}

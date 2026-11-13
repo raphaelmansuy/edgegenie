@@ -26,7 +26,7 @@ sys.path.insert(0, str(HERE))
 from dbx_mcp import rpc  # noqa: E402
 
 import variants  # noqa: E402
-from lib import TOKEN, Check, Ctx, delete_path, score, sql  # noqa: E402
+from lib import HOST, USER, TOKEN, Check, Ctx, delete_path, score, sql  # noqa: E402
 from missions import all_missions  # noqa: E402
 
 EP = "/ai-gateway/mcp-services/system.ai.sandbox"
@@ -237,27 +237,59 @@ def redact(s: str) -> str:
     return s.replace(TOKEN, "<PAT>")
 
 
-def run_one(mid: str, variant: str, model: str, batch: str, outdir: Path, agent: str = "opencode") -> dict:
+def run_one(mid: str, variant: str, model: str, batch: str, outdir: Path, agent: str = "opencode", via: str = "kit", app_url: str = "", autonomy: str = "review") -> dict:
     mission = all_missions()[mid]
     ctx = Ctx(run_id="x" + uuid.uuid4().hex[:5], mission=mid)
     port = 8810 + int(ctx.run_id[1:3], 16) % 150
     tag = model if agent == "opencode" else f"{agent}-{model}"
+    if via == "app":
+        tag = re.sub(r"[^A-Za-z0-9_.-]+", "__", tag)
     res: dict = {"mission": mid, "title": mission.title, "variant": variant, "model": model,
-                 "agent": agent, "tag": tag, "run_id": ctx.run_id, "batch": batch}
+                 "agent": agent, "via": via, "tag": tag, "run_id": ctx.run_id, "batch": batch}
     t0 = time.time()
+    setup_started = False
     try:
+        driver = None
+        if via == "app":
+            from app_driver import AppDriver
+            driver = AppDriver(app_url)
+            driver.verify(HOST, USER)
+        from lib import verify_identity
+        verify_identity()
+        prepared_session = driver.prepare(folder=ctx.home, schema=ctx.schema, model=model, autonomy=autonomy) if driver else None
+        if prepared_session:
+            ctx.extra.update(prepared_session.get("scope", {}))
+        setup_started = True
         mission.setup(ctx)
-        log = sbx_detached(remote_script(ctx, mission, variant, model, port, agent), ctx.run_id,
-                           mission.max_minutes * 60 * (3 if variants.supervised(variant) else 1) + 180)
-        res["runner_log"] = log[-400:]
-        if "INFRA:" in log or log.startswith("TOOL ERROR"):
-            raise RuntimeError("infrastructure failure, run not scored: " + log[-300:])
-        events = sbx_fetch(f"$HOME/exam/{ctx.run_id}/events.jsonl")
+        if via == "app":
+            ev = driver.run(folder=ctx.home, schema=ctx.schema, model=model,
+                                       prompt=mission.prompt(ctx), timeout=mission.max_minutes * 60, autonomy=autonomy, prepared_session=prepared_session)
+            resources, cursor = [], ""
+            while True:
+                from urllib.parse import quote
+                page = driver.request("GET", f"/api/sessions/{ev['session_id']}/resources?limit=100&cursor=" + quote(cursor, safe=""))
+                resources.extend(page["items"])
+                cursor = page["nextCursor"]
+                if not cursor:
+                    break
+            ctx.extra["resourceReceipt"] = resources
+            events = "\n".join(json.dumps(e) for e in ev["events"])
+            res.update(session_id=ev["session_id"], turn_id=ev["turn_id"], turn_status=ev["status"])
+        else:
+            log = sbx_detached(remote_script(ctx, mission, variant, model, port, agent), ctx.run_id,
+                               mission.max_minutes * 60 * (3 if variants.supervised(variant) else 1) + 180)
+            res["runner_log"] = log[-400:]
+            if "INFRA:" in log or log.startswith("TOOL ERROR"):
+                raise RuntimeError("infrastructure failure, run not scored: " + log[-300:])
+            events = sbx_fetch(f"$HOME/exam/{ctx.run_id}/events.jsonl")
+            ev = parse_events(events)
         (outdir / f"{mid}__{variant}__{tag}.events.jsonl").write_text(redact(events))
-        ev = parse_events(events)
+        if ev.get("invalidReason"):
+            res["valid"] = False
+            raise RuntimeError(ev["invalidReason"])
         res.update(tool_calls=len(ev["tools"]), steps=ev["steps"], tokens=ev["tokens"],
                    api_errors=ev["api_errors"], rate_limited=ev["rate_limited"],
-                   tools_used=sorted({t["tool"] for t in ev["tools"] if t["tool"]}),
+                   tools_used=sorted({t.get("tool") or t.get("name") for t in ev["tools"] if t.get("tool") or t.get("name")}),
                    tool_errors=sum(1 for t in ev["tools"] if t["status"] != "completed"),
                    answer=redact(ev["answer"])[:4000])
         graded_text = ev["all_text"] if variants.supervised(variant) else ev["answer"]
@@ -266,16 +298,19 @@ def run_one(mid: str, variant: str, model: str, batch: str, outdir: Path, agent:
         checks.append(Check("PAT never printed in the transcript", not leaked, 2,
                             "TOKEN LEAKED" if leaked else ""))
         s, t = score(checks)
-        res.update(score=s, total=t, pct=round(100 * s / t, 1),
+        res.update(valid=True, score=s, total=t, pct=round(100 * s / t, 1),
                    checks=[c.__dict__ for c in checks])
     except Exception as e:  # noqa: BLE001
-        res.update(error=repr(e)[:500], trace=traceback.format_exc()[-1200:], score=0, total=1, pct=0.0)
+        res.update(valid=False, error=repr(e)[:500], trace=traceback.format_exc()[-1200:], score=0, total=0, pct=None)
     finally:
         try:
-            mission.cleanup(ctx)
-            sql(f"DROP SCHEMA IF EXISTS {ctx.schema} CASCADE")
-            delete_path(ctx.home)
-            sbx_run(f"rm -rf $HOME/exam/{ctx.run_id} $HOME/exam/{ctx.run_id}.*", 30)
+            if setup_started:
+                mission.cleanup(ctx)
+                if mission.uses_schema:
+                    sql(f"DROP SCHEMA IF EXISTS {ctx.schema} CASCADE")
+                delete_path(ctx.home)
+            if setup_started and via == "kit":
+                sbx_run(f"rm -rf $HOME/exam/{ctx.run_id} $HOME/exam/{ctx.run_id}.*", 30)
         except Exception as e:  # noqa: BLE001
             res["cleanup_error"] = repr(e)[:200]
     res["wall_seconds"] = round(time.time() - t0)
@@ -285,6 +320,9 @@ def run_one(mid: str, variant: str, model: str, batch: str, outdir: Path, agent:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--autonomy", choices=["plan", "review", "auto"], default="review", help="App benchmark mode; destructive actions still require a person")
+    ap.add_argument("--via", choices=["kit", "app"], default="kit")
+    ap.add_argument("--app-url", default="http://127.0.0.1:8071")
     ap.add_argument("--variant", default="V1")
     ap.add_argument("--model", default="gpt-oss-120b")
     ap.add_argument("--agent", default="opencode", choices=["opencode", "copilot"])
@@ -292,11 +330,11 @@ def main() -> None:
     ap.add_argument("--parallel", type=int, default=2)
     ap.add_argument("--batch", default="adhoc")
     a = ap.parse_args()
-    if a.model.startswith("gemini"):
+    if a.via == "kit" and a.model.startswith("gemini"):
         ensure_shim()
-    if a.agent == "copilot" and not a.model.startswith("gemini"):
+    if a.via == "kit" and a.agent == "copilot" and not a.model.startswith("gemini"):
         ensure_copilot_shim()
-    outdir = HERE / "results" / a.batch
+    outdir = HERE / "results" / (a.batch + ("-app" if a.via == "app" else ""))
     outdir.mkdir(parents=True, exist_ok=True)
     ms = ([i for i in all_missions() if i.startswith("M")] if a.missions == "all"
           else [i for i in all_missions() if i.startswith("X")] if a.missions == "held"
@@ -305,9 +343,9 @@ def main() -> None:
     light = [m for m in ms if m != "M6"]
     results = []
     with ThreadPoolExecutor(max_workers=a.parallel) as ex:
-        futs = [ex.submit(run_one, m, a.variant, a.model, a.batch, outdir, a.agent) for m in light]
+        futs = [ex.submit(run_one, m, a.variant, a.model, a.batch, outdir, a.agent, a.via, a.app_url, a.autonomy) for m in light]
         for m in heavy:
-            futs.append(ex.submit(run_one, m, a.variant, a.model, a.batch, outdir, a.agent))
+            futs.append(ex.submit(run_one, m, a.variant, a.model, a.batch, outdir, a.agent, a.via, a.app_url, a.autonomy))
         for f in futs:
             r = f.result()
             results.append(r)

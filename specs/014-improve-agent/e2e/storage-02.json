@@ -1,0 +1,9 @@
+{
+  "pass": false,
+  "captures": [
+    "01-storage-desktop"
+  ],
+  "reason": "Responsive inspector remounted while the test addressed the prior column.",
+  "retained": true,
+  "scope": "Failed intermediate harness iteration; captures inspected; not a product qualification pass."
+}

@@ -24,10 +24,11 @@ from ..domain import events
 from ..domain.blob import BlobRefusal
 from ..domain.redact import token_scopes
 from ..domain.workspace_ops import child_path, is_protected
-from ..domain.session import DomainError, Session
+from ..domain.session import DomainError, Session, SessionStatus
 from ..services import context as ctx_service
 from ..services.pyrun_service import PythonRuns
 from .llm_admin import can_configure
+from .sql import actor as sql_actor
 from ..services.orchestrator import Orchestrator
 
 log = logging.getLogger("app.api")
@@ -67,6 +68,9 @@ def _session_json(s: Session, orch: Orchestrator | None = None) -> dict[str, Any
         "schema": s.schema,
         "model": s.model,
         "status": s.status.value,
+        "mode": s.mode,
+        "agentWork": bool(orch and orch.work),
+        "questions": list(orch.get(s.id).extra.get("questions",{}).values()) if orch else [],
         "tools": s.tools,
         "agent": s.agent,
         "agentVersion": s.agent_version,
@@ -138,7 +142,7 @@ async def whoami(request: Request) -> dict:
         request.app.state.warm = getattr(request.app.state, "warm", set())
         request.app.state.warm.add(task)          # keep a reference: a bare task can be collected
         task.add_done_callback(request.app.state.warm.discard)
-    return {"user": user, "home": _home(request), "scratch": f"{_home(request)}/agent_scratch",
+    return {"user": user, "username": getattr(request.state, "home", user), "home": _home(request), "scratch": f"{_home(request)}/agent_scratch",
             "workspace": {"host": normalize_host(os.environ.get("DATABRICKS_HOST")),
                           "orgId": os.environ.get("DATABRICKS_WORKSPACE_ID", "")},
             # What the signed-in token is allowed to do through this app. Names only, never the token.
@@ -165,7 +169,7 @@ async def models(request: Request) -> dict:
     # Offer only what the workspace serves; if that cannot be read, offer the allow-list unfiltered.
     served = await request.app.state.serving.served(_user_token(request))
     if served is not None:
-        from ..services.model_registry import static_spec
+        from ..composition.model_registry import static_spec
 
         kept = []
         for m in allowed:
@@ -180,7 +184,21 @@ async def models(request: Request) -> dict:
 
 
 @router.get("/sessions")
-async def list_sessions(request: Request) -> dict:
+async def list_sessions(request: Request,cursor:str='',limit:int=50) -> dict:
+    orch=_orch(request)
+    if orch.lazy_agents:
+        try:page=await request.app.state.store.session_page(_user(request),cursor,limit)
+        except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+        result=[]
+        for row in page['items']:
+            values={k:v for k,v in row.items() if k in Session.__dataclass_fields__}
+            values['status']=SessionStatus(values['status'])
+            session=Session(**values)
+            if not orch.loaded(session.id) and session.status in (SessionStatus.STREAMING,SessionStatus.PROVISIONING):
+                session=dataclasses.replace(session,status=SessionStatus.BLOCKED,requires_resume=True)
+            result.append(_session_json(session,orch if orch.loaded(session.id) else None))
+            result[-1]['agentWork']=bool(orch.work)
+        return {'sessions':result,'nextCursor':page['nextCursor']}
     return {"sessions": [_session_json(s, _orch(request)) for s in _orch(request).sessions_for(_user(request))]}
 
 
@@ -199,9 +217,7 @@ async def create_session(request: Request, body: CreateSession) -> dict:
         # Log it: in a deployed app the only diagnostic channel is stdout.
         log.exception("session provisioning failed")
         raise HTTPException(503, f"the agent did not start: {exc}") from exc
-    # Whether the agent may run notebooks (as the app) is decided once, by who this user is.
-    if python_run_policy(request)["enabled"]:
-        request.app.state.run_bridge.grant(s.id)
+    _orch(request).set_principal(s.id,request.state.home)
     return _session_json(s, _orch(request))
 
 
@@ -211,6 +227,8 @@ async def get_session(request: Request, sid: str) -> dict:
         live = _orch(request).get(sid)
     except KeyError:
         raise HTTPException(404, "no such session") from None
+    if _orch(request).work:
+        await _orch(request).work.prepare(sid)
     turn = live.state.running()
     return {
         **_session_json(live.state.session, _orch(request)),
@@ -285,12 +303,15 @@ async def send_message(
     except KeyError:
         raise HTTPException(404, "no such session") from None
     try:
-        items = ctx.parse(body.attachments)
+        items = ctx.parse(body.attachments, asset_kinds=[e.kind for e in orch.work.registry.entries()] if orch.work else ())
     except ctx.ContextError as exc:
         raise HTTPException(422, str(exc)) from exc
-    resolved = await ctx_service.resolve(
-        items, _browser(request), request.app.state.catalog, _user_token(request),
-        blobs=getattr(request.app.state, "blobs", None), user_id=_user(request))
+    reader = request.app.state.attachment_reader(
+        _browser(request), request.app.state.catalog, _user_token(request),
+        blobs=getattr(request.app.state, "blobs", None), user_id=_user(request),
+        sql=request.app.state.sql, sql_actor=sql_actor(request),
+        registry=orch.work.registry if orch.work else None, actor=orch.work.actor(sid) if orch.work else None)
+    resolved = await ctx_service.resolve(items, reader)
     orch.touch(sid)
     try:
         turn = await orch.submit(sid, body.text, ctx.render(resolved), [a.to_dict() for a in items],
@@ -332,8 +353,6 @@ async def resume_session(request: Request, sid: str) -> dict:
         raise HTTPException(409, str(exc)) from exc
     except Exception as exc:
         raise HTTPException(503, f"the agent could not restore this session: {exc}") from exc
-    if python_run_policy(request)["enabled"]:
-        request.app.state.run_bridge.grant(s.id)
     return _session_json(s, _orch(request))
 
 
@@ -388,17 +407,24 @@ async def stream(
         queue = store.subscribe(sid)
         try:
             seq = cursor
+            replay=True
             while True:
-                # The queue is a wakeup, the committed journal is truth. This also closes the
-                # subscribe/replay race and heals slow-viewer overflow without dropping events.
-                backlog = await store.since(sid, seq)
-                for ev in backlog:
-                    seq = ev["seq"]
-                    yield _sse(ev)
-                if backlog:
-                    continue
+                if replay:
+                    backlog=await store.since(sid,seq)
+                    for ev in backlog:
+                        seq=ev["seq"]
+                        yield _sse(ev)
+                    if backlog:continue
+                    replay=False
                 try:
-                    await asyncio.wait_for(queue.get(), heartbeat)
+                    ev=await asyncio.wait_for(queue.get(),heartbeat)
+                    if ev is None:
+                        replay=True
+                    elif ev["seq"]==seq+1:
+                        seq=ev["seq"]
+                        yield _sse(ev)
+                    elif ev["seq"]>seq+1:
+                        replay=True
                 except TimeoutError:
                     yield ": heartbeat\n\n"
         finally:
@@ -725,7 +751,7 @@ class AskFence(BaseModel):
     sessionId: str | None = None
 
 
-def _save_scope(request: Request, session_id: str | None) -> scope_mod.Scope:
+async def _save_scope(request: Request, session_id: str | None) -> scope_mod.Scope:
     """The scope a save is judged against.
 
     With a session, it is that session's scope — the same object the agent's tools get, so a human
@@ -735,6 +761,7 @@ def _save_scope(request: Request, session_id: str | None) -> scope_mod.Scope:
     """
     if session_id:
         try:
+            await _orch(request).ensure_owned(session_id, _user(request))
             return _orch(request).scope(session_id)
         except KeyError:
             raise HTTPException(404, "no such session") from None
@@ -750,7 +777,7 @@ def _save_scope(request: Request, session_id: str | None) -> scope_mod.Scope:
 async def workspace_fence(request: Request, body: AskFence) -> dict:
     """What would happen if we saved this path. The client asks before the user types (WR-5)."""
     path = _ws_path(body.path)
-    scope = _save_scope(request, body.sessionId)
+    scope = await _save_scope(request, body.sessionId)
     decision = scope_mod.check_path(scope, path)
     return {
         "verdict": decision.verdict.value,
@@ -778,7 +805,7 @@ async def workspace_save(request: Request, body: SaveDocument) -> dict:
     route to obey.
     """
     path = _ws_path(body.path)
-    scope = _save_scope(request, body.sessionId)
+    scope = await _save_scope(request, body.sessionId)
     decision = scope_mod.check_path(scope, path)
 
     if decision.verdict is scope_mod.Verdict.DENY:
@@ -1117,7 +1144,7 @@ async def blob_upload(request: Request, body: UploadBlob) -> dict:
     user = _user(request)
     if body.sessionId:
         try:
-            orch.get(body.sessionId)
+            await orch.ensure_owned(body.sessionId,_user(request))
         except KeyError:
             raise HTTPException(404, "no such session") from None
         scope_id = body.sessionId
@@ -1184,7 +1211,7 @@ async def blob_materialise(request: Request, blob_id: str, body: MaterialiseBlob
     deny must make this route deny too.
     """
     folder = _ws_path(body.folder)
-    scope = _save_scope(request, body.sessionId)
+    scope = await _save_scope(request, body.sessionId)
     svc = _blobs(request)
     try:
         row = await svc.store.meta(blob_id, _user(request))
@@ -1209,3 +1236,12 @@ async def blob_materialise(request: Request, blob_id: str, body: MaterialiseBlob
             raise FileExistsError(f"{row.stored_name} already exists in that folder")
         await browser.import_content(target, raw, _user_token(request), format="AUTO")
     return {"path": target, "bytes": row.size}
+
+class QuestionAnswer(BaseModel):
+    action:str=Field(pattern='^(accept|decline|cancel)$')
+    content:dict=Field(default_factory=dict)
+
+@router.post('/sessions/{sid}/questions/{qid}')
+async def answer_question(request:Request,sid:str,qid:str,body:QuestionAnswer):
+    try:return await _orch(request).answer_question(sid,qid,body.action,body.content)
+    except (ValueError,LookupError) as exc:raise HTTPException(409,str(exc)) from exc
