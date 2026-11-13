@@ -28,7 +28,7 @@ facade, approval fence, durable work ledger and user identity boundary remain au
 
 ## Validation
 
-The combined application gate passes 2,312 Python tests (40 skipped), 1,246 frontend tests,
+The combined application gate passes 2,314 Python tests (40 skipped), 1,246 frontend tests,
 TypeScript and undefined-name checks. The separate disposable real-Postgres integration run passes
 93 tests (one additional session-DSN test skipped); migration v5-to-v6 and owner-scoped pagination are
 included. Deployment command contracts pass for both transports. Site claim/count/build/link checks
@@ -66,3 +66,19 @@ real-agent timed fault/rotation/long-run recordings and exhaustive crash/load/WC
 [17](17-first-principles-closure.md) remain unqualified. Optional phases and a separate execution
 identity stay disabled pending their required qualification. Source integration and local E2E do
 not establish completion of those live release gates.
+
+## Approved attempt and build correction — 14 November 2026
+
+The user approved one additional attempt of `692dc53`. After compute ACTIVE and the resumed old
+deployment SUCCEEDED, Databricks accepted deployment `01f1dfb9cee014e8a83661f9af4ddee6`, resolving
+exactly that commit. It failed during the build: `npm ci --ignore-scripts` omitted the pinned
+`opencode-ai@1.18.19` postinstall, so its wrapper reported that the required postinstall had not run.
+This is a build-hook defect, not a user permission denial. The app reports UNAVAILABLE; this revision
+is not live and no success or live-app qualification is claimed.
+
+The correction explicitly executes only the pinned agent package's postinstall before verifying its
+exact version. A fresh source-tree build passed agent initialization, the checksum-pinned CLI install
+and the complete frontend build. Regression contracts exercise a fresh wrapper requiring
+initialization and rejection of an unexpected agent version; all 52 packaging/deployment/identity
+contracts pass. The approved attempt is consumed; deploying the correction needs another approval.
+Post-merge CI for `8765015` completed successfully before this correction.

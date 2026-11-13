@@ -15,6 +15,9 @@ echo "[prepare] installing the coding agent"
 mkdir -p .bin
 # Install from the exact dependency and lockfile. A missing agent is a failed build.
 npm ci --ignore-scripts --no-audit --no-fund
+# The pinned package's wrapper needs its platform binary linked by postinstall. Run only this
+# required hook explicitly; npm ci above still suppresses unrelated dependency lifecycle scripts.
+node node_modules/opencode-ai/postinstall.mjs
 agent_version=$(node_modules/.bin/opencode --version)
 [ "$agent_version" = "1.18.19" ] || { echo "Unsupported agent: $agent_version" >&2; exit 1; }
 

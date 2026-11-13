@@ -17,7 +17,7 @@ of workspace context and hands those two decisions back to you.
 [![Version](https://img.shields.io/badge/version-v1.1.0-37B24D?style=flat-square)](https://github.com/raphaelmansuy/opengenie/releases)
 [![Licence](https://img.shields.io/badge/licence-Apache--2.0-37B24D?style=flat-square)](LICENSE)
 [![Evidence](https://img.shields.io/badge/evidence-11%20graded%20tasks-E8590C?style=flat-square)](exams/results)
-[![Tests](https://img.shields.io/badge/tests-2312%20python%20%C2%B7%201246%20front--end%20%C2%B7%20180%20site%20views-37B24D?style=flat-square)](apps/coding-agent/tests)
+[![Tests](https://img.shields.io/badge/tests-2314%20python%20%C2%B7%201246%20front--end%20%C2%B7%20180%20site%20views-37B24D?style=flat-square)](apps/coding-agent/tests)
 
 <img src="specs/006-databricks/e2e/home/deployed-1440-home.png" width="1440"
      alt="The OpenGenie shell at 1440 px: sessions and files in the left rail, a notebook in the centre, and the assistant docked on the right, labelled with the notebook it is bound to.">

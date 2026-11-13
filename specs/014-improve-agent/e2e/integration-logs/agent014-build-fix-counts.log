@@ -1,0 +1,13 @@
+  ok    test_router_and_route_counts
+  ok    test_protocol_count
+  ok    test_layer_file_counts
+  ok    test_event_type_count
+  ok    test_tool_counts
+  ok    test_front_end_test_counts
+  ok    test_attachment_limits
+  ok    test_the_readme_test_counts_are_the_real_numbers
+  ok    test_schema_table_count
+  ok    test_no_doc_links_a_path_that_moved
+  ok    test_relative_links_in_the_new_docs_resolve_on_the_repository
+
+11 tests, 0 failed

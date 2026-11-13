@@ -1,0 +1,11 @@
+[1mtsc[0m
+  ok      no type errors
+All checks passed!
+[1mpytest[0m
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2314 passed, 40 skipped, 19 warnings in 49.91s
+[1mvitest[0m
+ Test Files  86 passed (86)
+      Tests  1246 passed (1246)
+
+[1mcheck: all green[0m
