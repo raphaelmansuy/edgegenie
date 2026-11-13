@@ -52,10 +52,16 @@ The authorized target is the existing `coding-agent` app in
 `https://dbc-cb61f1e1-bd8e.cloud.databricks.com`, organization `7474647158015570`, authenticated as
 `raphael.mansuy@gmail.com`. This workspace deploys from Git. The latest preflight reports compute
 STOPPED because of workspace or account status, app UNAVAILABLE and no active deployment.
-The release sequence is merge, push the tested source, then attempt the normal app deployment.
-No account, billing or permission workaround is part of this release.
+PR #18 merged as `692dc53dc1c65fbd2e6276e6d2039ef57baba83f`. A normal start request was
+accepted. It brought compute ACTIVE and automatically resumed the previous deployment, which now
+serves `d2d4754e05f15dc06f41d57fdeaaa8b9ae6415e8`. Two attempts to deploy the merged revision were
+refused: first while compute was starting, then while the previous deployment was in progress.
+No new revision was deployed by those attempts. AGENTS.md requires stopping after two failures;
+an additional attempt is awaiting explicit approval. No account, billing or permission workaround
+was attempted. The deployment script now waits for compute ACTIVE and any resumed deployment to
+finish before submitting; both transport contracts exercise these transitions and pass (23 tests).
 
-The live result will be reported separately after that attempt. Full two-model exam/noise,
+The eventual deployment result will be reported separately. Full two-model exam/noise,
 real-agent timed fault/rotation/long-run recordings and exhaustive crash/load/WCAG gates from
 [17](17-first-principles-closure.md) remain unqualified. Optional phases and a separate execution
 identity stay disabled pending their required qualification. Source integration and local E2E do

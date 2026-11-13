@@ -251,7 +251,11 @@ def test_deploy_uses_supported_cli_arguments_and_pins_git(tmp_path, source):
 import json, os, sys
 args = sys.argv[1:]
 assert not set(args) & {"--auto-approve", "--git-branch", "--git-source-code-path"}
+from pathlib import Path
+counter = Path(os.environ["READINESS_COUNTER"])
+count = int(counter.read_text()) if counter.exists() else 0
 if args[:2] == ["apps", "deploy"]:
+    assert count >= 3, "must wait for compute and the automatically resumed deployment"
     if os.environ["SOURCE"] == "git":
         body = json.loads(args[args.index("--json") + 1])
         assert body == {"git_source": {"commit": "a" * 40, "source_code_path": "apps/coding-agent"}}
@@ -259,7 +263,10 @@ if args[:2] == ["apps", "deploy"]:
         assert args[args.index("--source-code-path") + 1] == "/Workspace/app"
     print('{"deployment_id":"test","git_source":{"resolved_commit":"' + "a"*40 + '"}}')
 else:
-    print('{"active_deployment":{"status":{"state":"SUCCEEDED"}},"app_status":{"state":"RUNNING"}}')
+    counter.write_text(str(count + 1))
+    print(json.dumps({"compute_status":{"state":"STARTING" if count == 0 else "ACTIVE"},
+                      "active_deployment":{"status":{"state":"IN_PROGRESS" if count < 2 else "SUCCEEDED"}},
+                      "app_status":{"state":"RUNNING"}}))
 ''')
     fake_cli.chmod(0o755)
     (tmp_path / "sync-app-source.sh").write_text("#!/bin/bash\nexit 0\n")
@@ -267,6 +274,7 @@ else:
     script = f'''set -euo pipefail
 say() {{ :; }}
 die() {{ echo "$*" >&2; exit 1; }}
+sleep() {{ :; }}
 git() {{ printf '%040d\\trefs/heads/main\\n' 0 | tr 0 a; }}
 APP_DIR={str(APP)!r}
 HERE={str(tmp_path)!r}
@@ -281,5 +289,6 @@ deploy() {{{deploy}
 deploy
 '''
     result = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
-                            env={**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}", "SOURCE": source})
+                            env={**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}", "SOURCE": source,
+                                 "READINESS_COUNTER": str(tmp_path / "readiness-counter")})
     assert result.returncode == 0, result.stdout + result.stderr

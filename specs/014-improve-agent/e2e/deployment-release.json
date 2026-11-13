@@ -1,0 +1,19 @@
+{
+  "workspace": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "organization": "7474647158015570",
+  "app": "coding-agent",
+  "requested_commit": "692dc53dc1c65fbd2e6276e6d2039ef57baba83f",
+  "compute": "ACTIVE",
+  "serving_commit": "d2d4754e05f15dc06f41d57fdeaaa8b9ae6415e8",
+  "attempts": [
+    {
+      "result": "refused",
+      "reason": "compute not running"
+    },
+    {
+      "result": "refused",
+      "reason": "previous deployment in progress"
+    }
+  ],
+  "status": "additional attempt awaits approval under AGENTS.md two-failure stop"
+}
