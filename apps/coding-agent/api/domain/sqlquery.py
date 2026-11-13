@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
@@ -13,6 +14,21 @@ TERMINAL = frozenset({"succeeded", "failed", "canceled", "outcome_unknown"})
 ACTIVE = frozenset(
     {"submitting", "pending", "running", "cancel_requested", "reconciling", "submission_unknown"}
 )
+
+
+def check_operation(fingerprint: str, previous: str, created: float) -> None:
+    """Both journals apply identical replay/expiry policy inside their atomic transaction."""
+    if previous != fingerprint:
+        raise SqlError("CONFLICT", "This operation key belongs to different input.", 409)
+    if time.time() - created > 86400:
+        raise SqlError("CONFLICT", "This operation key has expired; it cannot be replayed.", 409)
+
+
+def check_run_capacity(own_sources: list[str], total: int, source: str) -> None:
+    if len(own_sources) >= 4 or total >= 32:
+        raise SqlError("RUN_LIMIT", "Too many active SQL runs. Cancel or resolve an existing run first.", 409)
+    if source and source in own_sources:
+        raise SqlError("RUN_LIMIT", "This query already has an active or unresolved run.", 409)
 
 
 class SqlError(Exception):

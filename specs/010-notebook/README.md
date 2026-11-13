@@ -37,6 +37,7 @@ without inventing a cluster, a debugger, or a share button the app cannot honour
 | 09 | [Edge cases](09-edge-cases.md) | What was envisioned, and the two limits we will not fake |
 | 10 | [E2E plan](10-e2e-plan.md) | Scenes, and the inspection loop |
 | 11 | [Outcome](11-outcome.md) | What the screenshots changed |
+| 12 | [Session and gaps](12-session-and-gaps.md) | The Python session, magics, charts, widgets; measured on real compute |
 
 A requirement is `[NB-3]`, a decision `[D4]`, an edge `[E-7]`, a scene `[S2]`, a principle `[P2]`,
 a veto `[V5]`. Each id is defined once.

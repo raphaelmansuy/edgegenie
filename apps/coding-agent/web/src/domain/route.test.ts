@@ -68,3 +68,47 @@ describe("helpers", () => {
     expect(linkTo(r({ settings: "models" }), { origin: "https://app.example", pathname: "/" })).toBe("https://app.example/#/settings/models");
   });
 });
+
+// -- the two infrastructure kinds (spec 013 [UI-1]) --------------------------------------------
+describe("infrastructure routes", () => {
+  it("writes a project the way the platform names it", () => {
+    expect(formatRoute(r({ doc: { kind: "lakebase", ref: "projects/pg_tickets" } })))
+      .toBe("#/lakebase/projects/pg_tickets");
+  });
+
+  it("writes a branch, whose ref has nested segments", () => {
+    expect(formatRoute(r({ doc: { kind: "lakebase", ref: "projects/pg_tickets/branches/agent-4ff4405d" } })))
+      .toBe("#/lakebase/projects/pg_tickets/branches/agent-4ff4405d");
+  });
+
+  it("writes an app by its name", () => {
+    expect(formatRoute(r({ doc: { kind: "app", ref: "tickets_app" } }))).toBe("#/app/tickets_app");
+  });
+
+  it("round-trips every infrastructure route", () => {
+    const routes: Route[] = [
+      r({ doc: { kind: "lakebase", ref: "projects/pg_tickets" } }),
+      r({ doc: { kind: "lakebase", ref: "projects/pg_tickets/branches/agent-4ff4405d" } }),
+      r({ doc: { kind: "app", ref: "tickets_app" } }),
+    ];
+    for (const route of routes) expect(parseRoute(formatRoute(route))).toEqual(route);
+  });
+
+  it("accepts a bare project id and normalises it", () => {
+    // A hand-typed link needs no knowledge of the resource path.
+    expect(parseRoute("#/lakebase/pg_tickets").doc).toEqual({ kind: "lakebase", ref: "projects/pg_tickets" });
+  });
+
+  it("encodes a character that would break the path", () => {
+    const route = r({ doc: { kind: "app", ref: "my app" } });
+    expect(formatRoute(route)).toBe("#/app/my%20app");
+    expect(parseRoute("#/app/my%20app").doc?.ref).toBe("my app");
+  });
+
+  it("treats a malformed infrastructure hash as the start page, not an error", () => {
+    // [E-21] a stale link must open the app
+    for (const bad of ["#/lakebase/", "#/lakebase", "#/app/", "#/app", "#/app/a/b"]) {
+      expect(parseRoute(bad)).toEqual(EMPTY_ROUTE);
+    }
+  });
+});

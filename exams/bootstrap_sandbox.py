@@ -68,7 +68,7 @@ def main() -> None:
     upload(str(tok), "/tmp/dbx_token.txt", sid)
     tok.unlink()
     for local, remote in [
-        (HERE.parent / "mcp" / "databricks_notebook_mcp.py", "/tmp/databricks_notebook_mcp.py"),
+        (HERE.parent / "mcp" / "kit_entry.py", "/tmp/databricks_notebook_mcp.py"),
         (HERE.parent / "mcp" / "legacy" / "nbmcp_v1.py", "/tmp/nbmcp_v1.py"),
         (HERE.parent / "mcp" / "legacy" / "nbmcp_v2.py", "/tmp/nbmcp_v2.py"),
         (HERE.parent / "mcp" / "legacy" / "nbmcp_v3.py", "/tmp/nbmcp_v3.py"),

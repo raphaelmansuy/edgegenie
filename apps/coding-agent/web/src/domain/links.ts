@@ -6,7 +6,7 @@
  */
 export interface Workspace { host: string; orgId?: string }
 
-export type LinkKind = "notebook" | "file" | "directory" | "repo" | "library" | "table" | "query" | "query-draft";
+export type LinkKind = "lakebase" | "app" | "job" | "run" | "pipeline" | "notebook" | "file" | "directory" | "repo" | "library" | "table" | "query" | "query-draft";
 
 export interface LinkTarget { kind: LinkKind; ref: string; objectId?: string }
 
@@ -24,6 +24,31 @@ export function workspaceUrl(ws: Workspace | null | undefined, t: LinkTarget): s
   if (t.kind === "table") {
     const parts = t.ref.split(".");
     return parts.length === 3 ? `${host}/explore/data/${parts.map(encodeURIComponent).join("/")}${o}` : null;
+  }
+  // A Lakebase project and an app live on their own pages. `t.ref` is a resource path or a name, and
+  // each becomes the id that page uses (spec 013 [UI-3], [UI-4]).
+  if (t.kind === "lakebase") {
+    const id = t.ref.replace(/^projects\//, "").split("/")[0];
+    return id ? `${host}/database/projects/${encodeURIComponent(id)}${o}` : null;
+  }
+  if (t.kind === "app") {
+    const name = t.ref.replace(/^https?:\/\//, "").split("/")[0].split(".")[0];
+    return name ? `${host}/apps/${encodeURIComponent(name)}${o}` : null;
+  }
+  // A job, a run and a pipeline each have a page in the workspace UI, and the escape hatch 04 says every
+  // frame carries is this link (spec 014 [UI-7]). `run` carries `job/<id>` when a caller supplied it, so
+  // the run opens inside its job rather than orphaned.
+  if (t.kind === "job") {
+    const id = t.ref.trim();
+    return id ? `${host}/jobs/${encodeURIComponent(id)}${o}` : null;
+  }
+  if (t.kind === "run") {
+    const id = t.ref.trim();
+    return id ? `${host}/jobs/runs/${encodeURIComponent(id)}${o}` : null;
+  }
+  if (t.kind === "pipeline") {
+    const id = t.ref.trim();
+    return id ? `${host}/pipelines/${encodeURIComponent(id)}${o}` : null;
   }
   if (!t.ref.startsWith("/")) return null;
   if (t.objectId) {

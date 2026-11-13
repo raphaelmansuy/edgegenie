@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "databricks-coding-agents"
-version = "0.1.0"
+version = "1.2.0-rc.4"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115",
@@ -19,6 +19,13 @@ dependencies = [
   "pyyaml>=6",
   "sqlglot==28.10.1",
 ]
+
+[project.urls]
+Homepage = "https://raphaelmansuy.github.io/opengenie/"
+Documentation = "https://raphaelmansuy.github.io/opengenie/install/"
+Repository = "https://github.com/raphaelmansuy/opengenie"
+Issues = "https://github.com/raphaelmansuy/opengenie/issues"
+Changelog = "https://github.com/raphaelmansuy/opengenie/releases"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "pytest-cov>=5", "pytest-xdist>=3.6",

@@ -1,7 +1,17 @@
 {
   "name": "coding-agent-web",
+  "version": "1.2.0-rc.4",
   "private": true,
   "type": "module",
+  "homepage": "https://raphaelmansuy.github.io/opengenie/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raphaelmansuy/opengenie.git",
+    "directory": "apps/coding-agent/web"
+  },
+  "bugs": {
+    "url": "https://github.com/raphaelmansuy/opengenie/issues"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

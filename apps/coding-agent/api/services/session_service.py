@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import contextlib
 import dataclasses
 import copy
@@ -10,16 +11,19 @@ import os
 import shutil
 import time
 from typing import Any
+from pathlib import Path
 from uuid import uuid4
 
 from ..domain.events import (
     Event,
+    session_compacted,
     approval_decided,
     document_saved,
     session_created,
     session_ready,
     turn_ended,
 )
+from ..domain import compaction
 from ..domain.redact import redact_value
 from ..domain.scope import Scope, describe
 from ..domain.session import (
@@ -285,40 +289,57 @@ class SessionService:
             for sid, live in self._live.items()
         ]
 
-    async def reap_idle(self, now: float | None = None) -> list[str]:
+    async def reap_idle(self, now: float | None = None, policy=None) -> list[str]:
         """Archive sessions the policy says are finished with. Returns the ids reaped.
 
         This is what calls `archive()`. It existed but was never called, so every session a user
         opened held a subprocess for the life of the server.
+
+        `policy` is injectable for the same reason `reapable` takes one: the default keeps eight
+        sessions, so a test with one session can never reap anything and a test of "does reaping
+        work" passes while reaping nothing.
+
+        **The decision is re-checked under the session's lock.** `idle_candidates` reads a snapshot,
+        and everything after it awaits: a `submit` that lands in that gap would start a turn on a
+        session this pass has already decided to tear down, and the teardown would cancel it. So the
+        lock a submission takes is the lock a reap takes, and the candidate is re-read inside it. A
+        session that became busy in the gap is skipped rather than archived.
         """
         from ..domain.reaper import Policy, reapable
-
         now = now if now is not None else time.time()
-        policy = Policy()
+        policy = policy or Policy()
         reaped: list[str] = []
         # The cap counts sessions still *open*, and archiving one must reduce that count — otherwise
         # a single pass reaps everything: the guard `live_count > keep_minimum` stayed true for every
         # candidate because nothing decremented it. Observed live with keep_minimum=2: all 8 archived.
         open_now = sum(1 for c in self.idle_candidates(now) if c.status != "archived")
-        for c in self.idle_candidates(now):
-            if reapable(c, now=now, live_count=open_now, policy=policy) is None:
+        for candidate in self.idle_candidates(now):
+            if reapable(candidate, now=now, live_count=open_now, policy=policy) is not None:
+                continue
+            live = self._live.get(candidate.session_id)
+            if live is None:
+                continue
+            async with live.lock:
+                # Re-read inside the lock: this is the re-check the docstring promises.
+                if live.state.running() is not None or self.watchers(candidate.session_id):
+                    continue
+                if live.state.session.status is SessionStatus.ARCHIVED:
+                    continue
                 if self._store.durable:
-                    live = self.get(c.session_id)
                     if live.state.session.requires_resume:
                         continue
                     if live.handle:
                         live.extra["agent_session_id"] = live.handle.session_id
                         await self._rt.close(live.handle)
                         live.handle = None
-                    await self._tools.stop(c.session_id)
+                    await self._tools.stop(candidate.session_id)
                     live.state.session = updated(live.state.session, requires_resume=True)
-                    await self._emit(
-                        Event(c.session_id, "session.recovery_required", {"requiresResume": True})
-                    )
+                    await self._emit(Event(candidate.session_id, "session.recovery_required",
+                                           {"requiresResume": True}))
                 else:
-                    await self.archive(c.session_id)
-                reaped.append(c.session_id)
-                open_now -= 1
+                    await self.archive(candidate.session_id)
+            reaped.append(candidate.session_id)
+            open_now -= 1
         return reaped
 
     def scope(self, session_id: str) -> Scope:
@@ -336,6 +357,8 @@ class SessionService:
         schema: str | None,
         title: str = "New session",
         user_token: str | None = None,
+        write_mode: str = "fenced",
+        principal: str = "",
     ) -> Session:
         resolved = await self._resolve(model, user_id, session_id="")
         sid = uuid4().hex[:16]
@@ -347,6 +370,7 @@ class SessionService:
             model=resolved.id.value,
             title=title,
             created_at=time.time(),
+            write_mode=write_mode,
         )
         live = Live(
             state=SessionState(session=session),
@@ -356,8 +380,13 @@ class SessionService:
         )
         # The user's forwarded token: the agent and the tool server act as this user, not as the app.
         live.extra["user_token"] = user_token
+        live.extra["principal"] = principal or user_id
         self._live[sid] = live
-        await self._emit(session_created(sid, folder, resolved.id.value, schema))
+        try:
+            await self._emit(session_created(sid, folder, resolved.id.value, schema))
+        except BaseException:
+            self._live.pop(sid, None)
+            raise
         try:
             if self.work:
                 settings = await self.work.prepare(sid)
@@ -368,8 +397,13 @@ class SessionService:
             else:
                 await self._provision(live)
         except Exception as exc:  # noqa: BLE001 - a failed provision is a visible state, not a crash
-            live.state.session = live.state.session.transition(SessionStatus.FAILED)
-            await self._emit(Event(sid, "session.degraded", {"detail": str(exc)[:400]}))
+            await self._release(live)
+            with contextlib.suppress(DomainError):
+                live.state.session = live.state.session.transition(SessionStatus.FAILED)
+            try:
+                await self._emit(Event(sid, "session.degraded", {"detail": str(exc)[:400]}))
+            except Exception:
+                logging.getLogger("app.session").warning("Could not journal provisioning failure", exc_info=True)
             raise
         return live.state.session
 
@@ -394,6 +428,8 @@ class SessionService:
         secret_dir = live.extra.get("secret_dir")
         if secret_dir:  # the provider key files; same rule: only our own mkdtemp folder
             shutil.rmtree(secret_dir, ignore_errors=True)
+        if self._blobs is not None and not self.work:
+            await self._blobs.store.delete_session(session_id)
         await self._emit(Event(session_id, "session.archived", {}))
         if self.lazy_agents and not self.watchers(session_id):
             self._live.pop(session_id, None)
@@ -453,3 +489,140 @@ class SessionService:
                 await self._store.purge_session(sid)
             self._live.pop(sid, None)
             self._hydrate_locks.pop(sid, None)
+
+    async def _release(self, live: Live) -> None:
+        """Give back a session's processes and private files. Best effort, and safe to call twice."""
+        sid = live.state.session.id
+        log = logging.getLogger("app.session")
+        if live.handle:
+            handle, live.handle = live.handle, None
+            try:
+                await self._rt.close(handle)
+            except Exception:  # noqa: BLE001
+                log.warning("could not close the agent of session %s", sid, exc_info=True)
+        try:
+            await self._tools.stop(sid)
+        except Exception:  # noqa: BLE001
+            log.warning("could not stop the tool server of session %s", sid, exc_info=True)
+        for key in ("token_file", "secret_dir"):
+            path = live.extra.pop(key, "")
+            if path:
+                shutil.rmtree(os.path.dirname(path) if key == "token_file" else path, ignore_errors=True)
+
+    def projection_candidates(self) -> list:
+        """The in-memory projections, with the fields the eviction policy needs.
+
+        Separate from `idle_candidates` because the two ask different questions of different sets:
+        the reaper considers *open* sessions and decides whether to stop their processes, while
+        eviction considers *archived* ones and decides whether their projection may leave memory.
+        """
+        from ..domain.projection import Candidate as ProjectionCandidate
+        return [
+            ProjectionCandidate(
+                session_id=sid,
+                status=live.state.session.status.value,
+                last_seen=live.last_seen or 0.0,
+                watchers=self.watchers(sid),
+                busy=live.state.running() is not None or (live.task is not None and not live.task.done()),
+            )
+            for sid, live in self._live.items()
+        ]
+
+    def evict_archived(self, now: float | None = None, *, grace_seconds: float | None = None) -> list[str]:
+        """Drop archived projections from memory. The journal is untouched.
+
+        Nothing used to remove an entry from `_live`, so a long-lived server grew by one conversation's
+        worth of memory per conversation. This is the fix, and it is deliberately *not* a size cap: a
+        cap would delete a projection a request is about to read and make behaviour depend on how many
+        sessions happened to be open. `domain/projection.py` holds the rule; this only obeys it.
+
+        Evicting is a cache miss, never data loss: `agent.session_snapshot` and `agent.session_event`
+        stay, and `restore()` rebuilds the projection on the next boot.
+        """
+        from ..domain.projection import evictable
+        now = now if now is not None else time.time()
+        kwargs = {} if grace_seconds is None else {"grace_seconds": grace_seconds}
+        gone: list[str] = []
+        for sid in evictable(self.projection_candidates(), now=now, **kwargs):
+            live = self._live.get(sid)
+            if live is None:
+                continue
+            # A last look under the door: a stream could have connected since the snapshot.
+            if self.watchers(sid) or (live.task is not None and not live.task.done()):
+                continue
+            self._live.pop(sid, None)
+            gone.append(sid)
+        return gone
+
+    async def record_blob_attached(self, session_id: str, _name: str, payload: dict) -> None:
+        """Put an attachment into the session's event stream.
+
+        `blob.attached` was in the event vocabulary and emitted by nobody: `BlobService` takes an
+        `emit` callback and `build()` constructed it without one, so an attachment left a row and a
+        file and no record. A transcript could show a chip whose provenance the journal never had.
+
+        A blob uploaded before its session exists lives under `pending:<user>` and has no session to
+        record against — `get` raises `KeyError` and the caller logs it. Its event belongs to the turn
+        that adopts it, which is where the chip appears.
+        """
+        self.get(session_id)          # KeyError when this blob has no session yet
+        await self._emit(Event(session_id, "blob.attached", dict(payload)))
+
+    async def record_sql_change(self, session_id: str, turn_id: str, draft_id: str,
+                                version: int, run_id: str = "") -> None:
+        await self._emit(Event(session_id, "sql.changed", {
+            "draftId": draft_id, "version": version, "runId": run_id,
+        }, turn_id=turn_id, actor="app"))
+
+    def attach_sql(self, service, workspace: str) -> None:
+        self._sql_service, self._sql_workspace = service, workspace
+
+    async def _cancel_agent_sql(self, live: Live) -> None:
+        service = getattr(self, "_sql_service", None)
+        if service is None:
+            return
+        from ..domain.sqlquery import SqlActor
+
+        try:
+            path = live.extra.get("token_file")
+            token = Path(path).read_text().strip() if path else None
+        except OSError:
+            token = None
+        actor = SqlActor(self._sql_workspace, live.state.session.user_id, token)
+        async def cancel_one(run_id):
+            try:
+                row = await service.observe(actor, run_id, cancel=True)
+                await self.record_sql_change(live.state.session.id, "", row["sourceRef"], 0, run_id)
+            except Exception as exc:
+                # Cancellation intent is recorded before contacting the provider; status can reconcile it.
+                logging.getLogger("app.sql").warning("agent SQL cancellation needs reconciliation: %s", type(exc).__name__)
+        try:
+            await asyncio.wait_for(asyncio.gather(*(cancel_one(r) for r in live.extra.get("sql_runs", set()))), 6)
+        except TimeoutError:
+            logging.getLogger("app.sql").warning("agent SQL cancellation is still pending")
+
+
+    async def compact(self, session_id: str, *, budget: int = 0, summary: str = "") -> dict:
+        """Summarise the middle of a conversation when it outgrows the window. `[R-11]`, `[F-10]`.
+
+        The PLAN is pure (`domain/compaction.py`); this only records it. `session.compacted` was one of
+        the 27 declared event types and emitted by nobody, so a long conversation had no way to shed
+        history — and at the window boundary the provider truncated, after which the supervisor reported
+        "requirements without verified evidence" for work that had been done.
+
+        `budget` is the context window minus what the next turn needs. `0` means "the model's declared
+        context", which is what a caller with no better number should pass.
+        """
+        live = self.get(session_id)
+        turns = [compaction.Turn(t.id, t.index, (t.input_tokens or 0) + (t.output_tokens or 0))
+                 for t in live.state.turns]
+        window = budget or (live.resolved.context if live.resolved else 0)
+        plan = compaction.plan(turns, budget=window)
+        if plan is None:
+            return {"changed": False, "reason": "nothing needs shedding"}
+        await self._emit(session_compacted(session_id, plan.to_event(), summary=summary))
+        # The record is the deliverable: the summary text itself is produced by the caller (a model call)
+        # and stored as a projection field by the API that owns the transcript. Recording first means a
+        # compaction is never silent, even if the summariser fails afterwards.
+        live.extra["compacted"] = plan.to_event()
+        return {"changed": True, **plan.to_event()}

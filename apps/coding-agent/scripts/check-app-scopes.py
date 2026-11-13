@@ -15,7 +15,14 @@ def check(live: dict, bundle: dict, name: str) -> tuple[set[str], set[str]]:
 if __name__ == '__main__':
     source = Path(__file__).resolve().parents[3] / 'databricks.yml'
     name = sys.argv[1] if len(sys.argv) > 1 else 'coding-agent'
-    missing, extra = check(json.load(sys.stdin), yaml.safe_load(source.read_text()), name)
+    live, bundle = json.load(sys.stdin), yaml.safe_load(source.read_text())
+    declared = set(bundle["resources"]["apps"][name].get("user_api_scopes") or [])
+    if len(sys.argv) > 2 and sys.argv[2] and set(sys.argv[2].split()) != declared:
+        sys.exit("Deployment environment scopes differ from databricks.yml")
+    missing, extra = check(live, bundle, name)
+    ineffective = declared - set(live.get("effective_user_api_scopes") or [])
+    if ineffective:
+        sys.exit("App scopes are not effective: " + ",".join(sorted(ineffective)))
     if missing or extra:
         print('App user scopes differ: missing=' + ','.join(sorted(missing)) + '; extra=' + ','.join(sorted(extra)))
         sys.exit(1)

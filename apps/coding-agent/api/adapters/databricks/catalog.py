@@ -138,6 +138,34 @@ class CatalogBrowser:
         }, timeout=wait_seconds + 15)
         return payload, pick.get("name", "")
 
+    async def pick_warehouse(self, token: str | None) -> dict[str, Any]:
+        """The warehouse a cell runs on (a running one if there is one). `LookupError` when there is none."""
+        return await self._pick_warehouse(token, "run this query")
+
+    async def submit_statement(self, warehouse_id: str, statement: str, token: str | None, *,
+                               limit: int, parameters: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        """Start one statement and return the raw response. It may already be finished.
+
+        The adapter only knows the API. `CONTINUE` is deliberate: a statement still running after the
+        short wait keeps running and is polled by id, instead of being cancelled at 50 seconds, which
+        is the platform's longest synchronous wait and nobody's idea of a query limit.
+        """
+        body: dict[str, Any] = {
+            "warehouse_id": warehouse_id, "statement": statement,
+            "wait_timeout": "5s", "on_wait_timeout": "CONTINUE", "row_limit": limit,
+        }
+        if parameters:
+            body["parameters"] = parameters   # named markers (`:name`); every value is a STRING, as a widget's is
+        return await self._http.post("/api/2.0/sql/statements", token, body, timeout=30.0)
+
+    async def statement(self, statement_id: str, token: str | None) -> dict[str, Any]:
+        _check(statement_id, "statement id")
+        return await self._http.get(f"/api/2.0/sql/statements/{statement_id}", token)
+
+    async def cancel_statement(self, statement_id: str, token: str | None) -> None:
+        _check(statement_id, "statement id")
+        await self._http.post(f"/api/2.0/sql/statements/{statement_id}/cancel", token, {})
+
     async def table_names(self, token: str | None) -> list[str]:
         """Every table name this user can see, for name search.
 

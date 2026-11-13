@@ -13,6 +13,10 @@ Everything a caller needs to know about a blob is in `BlobRow`; everything about
 from __future__ import annotations
 
 import base64
+import inspect
+import logging
+import inspect
+import logging
 from typing import Protocol
 
 from ..domain import blob as rules
@@ -119,12 +123,40 @@ def _pdf_text(raw: bytes) -> str | None:
     return text if text.strip() else None
 
 
+class _SheetReader:
+    """A workbook, converted to CSV text. `[R-21]`.
+
+    The conversion is in `domain/sheet.py` (pure, no dependency); this is the adapter that turns a failure
+    into a sentence instead of an exception, because an attachment that cannot be read must not fail the
+    message.
+    """
+
+    async def read(self, row: BlobRow, raw: bytes, *, offset: int = 0,
+                   max_chars: int = 0, unseen: bool = False) -> tuple[str, str]:
+        from ..domain import sheet
+
+        text, note = sheet.as_text(raw)
+        if not text:
+            return (f"an attached spreadsheet ({row.original_name}, {rules.human_size(row.size)}) that "
+                    f"could not be read: {note}"), "the file is attached but its cells are not readable"
+        window = max_chars or DEFAULT_WINDOW
+        start = max(0, offset)
+        end = min(len(text), start + window)
+        body = text[start:end]
+        cuts = [note] if note else []
+        if end < len(text):
+            cuts.append(f"truncated: {len(text) - end} more characters")
+        return (f"an attached spreadsheet, converted to CSV ({row.original_name})\n\n{body}",
+                "; ".join(cuts))
+
+
 #: family -> reader. One entry per family that can be read at all, and the map is the extension point.
 READERS: dict[str, BlobReader] = {
     Family.TEXT.value: _TextReader(),
     Family.NOTEBOOK.value: _TextReader(),
     Family.IMAGE.value: _ManifestReader(),
     Family.PDF.value: _PdfReader(),
+    Family.SHEET.value: _SheetReader(),
 }
 
 
@@ -140,16 +172,8 @@ class BlobService:
         #: usable without an event log; the router wires the real one.
         self.emit = emit
 
-    async def accept(
-        self,
-        session_id: str,
-        user_id: str,
-        name: str,
-        declared: str,
-        content_b64: str,
-        *,
-        model_sees_images: bool,
-    ) -> BlobRow:
+    async def accept(self, session_id: str, user_id: str, name: str, declared: str,
+                     content_b64: str, *, model_sees_images: bool) -> BlobRow:
         """Validate then store. The only method that can raise `BlobRefusal`."""
         try:
             raw = base64.b64decode(content_b64, validate=True)
@@ -158,17 +182,19 @@ class BlobService:
         spec = rules.validate(name, raw, declared, model_sees_images=model_sees_images)
         row = await self.store.put(session_id, user_id, spec, raw)
         if self.emit:
-            self.emit(
-                session_id,
-                "blob.attached",
-                {
-                    "blobId": row.id,
-                    "name": row.original_name,
-                    "mime": row.mime,
-                    "bytes": row.size,
-                    "family": row.family,
-                },
-            )
+            # Awaited when the sink is async, called when it is sync. The store has already accepted
+            # the bytes at this point, so a failing sink must not fail the upload: a user whose
+            # attachment was stored should not be told it was not because a journal write failed.
+            result = self.emit(session_id, "blob.attached", {
+                "blobId": row.id, "name": row.original_name, "mime": row.mime,
+                "bytes": row.size, "family": row.family,
+            })
+            if inspect.isawaitable(result):
+                try:
+                    await result
+                except Exception:  # noqa: BLE001 - the bytes are stored; a record is best-effort
+                    logging.getLogger("app.blobs").warning(
+                        "could not record blob.attached for %s", row.id, exc_info=True)
         return row
 
     async def describe(

@@ -1,0 +1,17 @@
+  ok    test_every_claim_has_a_source_that_exists
+  ok    test_the_headline_numbers_match_the_repository
+  ok    test_matches_make_tables
+  ok    test_rejected_batches_are_excluded
+  ok    test_a_repeat_trial_is_not_extra_evidence
+  ok    test_repeatability_reads_the_repeats_it_is_about
+  ok    test_an_empty_results_directory_reports_zero_rather_than_crashing
+  ok    test_a_rejected_only_directory_yields_no_accepted_runs
+  ok    test_an_unreadable_result_is_counted_not_dropped
+  ok    test_the_denominator_is_the_perfect_run_not_the_failed_one
+  ok    test_rounding_happens_once
+  ok    test_every_claim_has_a_non_empty_caveat
+  ok    test_a_count_is_not_rendered_as_a_percentage
+  ok    test_tokens_are_never_a_percentage
+  ok    test_invalid_app_qualifications_are_excluded_from_both_score_readers
+
+15 tests, 0 failed

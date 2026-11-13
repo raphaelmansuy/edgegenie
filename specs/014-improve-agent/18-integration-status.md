@@ -1,94 +1,62 @@
-# Integration and deployment status — 2026-11-13
+# Integration and deployment status — 2026-11-14
 
-The implementation checkpoint is commit `1f1d86b`. It was developed from
-`824158d`, while upstream main is now `d2d4754e05f15dc06f41d57fdeaaa8b9ae6415e8` (44 additional commits).
+The 50 upstream conflicts recorded on 13 November are resolved. The integrated branch includes
+upstream main `d2d4754e05f15dc06f41d57fdeaaa8b9ae6415e8` and preserves its SQL editor, notebook
+sessions, jobs/pipelines, Lakebase/App browsers and deployment environment selection. The spec 014
+facade, approval fence, durable work ledger and user identity boundary remain authoritative.
 
-## Merge qualification
+## Gaps closed during integration
 
-A normal three-way merge was attempted without committing. It produced 50
-conflicted paths, listed below. The attempt was then aborted, leaving the
-implementation commit intact. No upstream commits were discarded and main was
-not changed.
+- Repaired route composition, public compaction wiring, SQL draft event delivery and editor conflict
+  preservation. Centralized the legacy tool catalogue; asynchronous wrappers enforce the same mode
+  gate. Agent mutations cannot escape into the human SQL execution bridge.
+- Preserved exclusive Postgres writer ownership, added bounded independent recovery reads, and made
+  journal/normalized ledger/receipt updates transactional. Migration 006 upgrades the existing v5 SQL
+  journal without losing its encrypted rows. Browser recovery exposed and fixed session pagination
+  and import errors. Startup failure now releases child processes and credentials.
+- Kept streaming deltas on one bounded coalescer with constant-size append operations. Historical
+  transcript and result pages stay bounded; 200-turn fixture recovery is covered without claiming
+  200 real-model turns.
+- Restored upstream infrastructure styling. Retained failed screenshots and reran jobs, work and
+  asset screens after the correction. Preserved pending native outcomes across recovery rather than
+  inventing success or replaying mutations.
+- Removed inherited app service-principal agent execution. Personal/workspace AGENTS instructions
+  use bounded reads under the signed-in user; they cannot override the write fence.
+- Corrected deployment CLI arguments for the qualified client and pinned Git deployments to the
+  resolved remote commit. Compute preflight only starts the selected app. Verification cannot report
+  success when live HTTP checks were skipped. Documentation counts now describe the integrated tree.
 
-This is a semantic integration task, not just a conflict-marker cleanup. For
-example, upstream `api/main.py` wires kernels, SQL runs, infrastructure browsers,
-and jobs/pipelines routers absent from the implementation checkpoint's composition.
-It also provides the app service principal to the agent, while this specification
-requires a qualified execution identity and otherwise refuses that route.
-The merged implementation must preserve the upstream product surfaces while
-retaining the new agent identity boundary, then rerun both test suites and browser
-flows. This qualification has **not** been completed. Prior local E2E and screenshot
-results describe the implementation checkpoint, not an integrated main build.
+## Validation
 
-## Deployment preflight
+The combined application gate passes 2,312 Python tests (40 skipped), 1,246 frontend tests,
+TypeScript and undefined-name checks. The separate disposable real-Postgres integration run passes
+93 tests (one additional session-DSN test skipped); migration v5-to-v6 and owner-scoped pagination are
+included. Deployment command contracts pass for both transports. Site claim/count/build/link checks
+also pass. Logs are retained in [integration-logs](e2e/integration-logs/).
 
-The Databricks CLI authenticated as `raphael.mansuy@gmail.com` (user
-`78760067054768`) against the requested workspace. The required MCP identity and
-warehouse tools were unavailable, so the CLI was used. Warehouse
-`50b601f08d1a858d` (`Serverless Starter Warehouse`) reports `STOPPED`.
+Browser E2E covers review/apply/reject/undo, bundles, assets, capabilities, budgets, resources,
+cleanup, native-handle cancellation/recovery, questions, protocol replay, editor conflicts, SQL
+execution/history/promotion, storage failure/recovery, jobs/pipelines and Lakebase/App screens.
+It uses the real SPA and app HTTP/protocol/storage paths with deterministic native/model providers;
+infrastructure browser suites use recorded API fixtures. These are not deployed-model qualifications.
 
-The target `coding-agent` reports:
+All 135 new integration PNGs were visually inspected, together with the earlier 346 inspected PNGs:
+481 retained captures in [screenshots](e2e/screenshots/). Labeled inspection sheets and a SHA-256
+inventory are saved in [screenshot-inspections.json](e2e/screenshot-inspections.json). The initial
+jobs, operations and question iterations are marked superseded; their corrected reruns passed.
+No claim of pixel perfection or exhaustive accessibility certification follows from these checks.
 
-- Compute: `STOPPED`
-- Compute message: “App compute was stopped due to workspace or account status.”
-- App: `UNAVAILABLE`
-- Active deployment: none
+## Deployment target and remaining qualification
 
-No workspace source upload, deployment, account change, or permission change was
-performed. Deployment remains pending both a qualified merge and restored platform
-availability. The optional phase flags remain at their existing defaults.
+The authorized target is the existing `coding-agent` app in
+`https://dbc-cb61f1e1-bd8e.cloud.databricks.com`, organization `7474647158015570`, authenticated as
+`raphael.mansuy@gmail.com`. This workspace deploys from Git. The latest preflight reports compute
+STOPPED because of workspace or account status, app UNAVAILABLE and no active deployment.
+The release sequence is merge, push the tested source, then attempt the normal app deployment.
+No account, billing or permission workaround is part of this release.
 
-## Conflicted paths
-
-```text
-.gitignore
-apps/coding-agent/Makefile
-apps/coding-agent/api/adapters/acp/agent_config.py
-apps/coding-agent/api/adapters/acp/mapper.py
-apps/coding-agent/api/adapters/databricks/catalog.py
-apps/coding-agent/api/adapters/databricks/http.py
-apps/coding-agent/api/adapters/databricks/queries.py
-apps/coding-agent/api/adapters/durable/postgres.py
-apps/coding-agent/api/adapters/durable/query_sqlite.py
-apps/coding-agent/api/adapters/durable/sqlite.py
-apps/coding-agent/api/adapters/mcp/registry.py
-apps/coding-agent/api/adapters/memory/store.py
-apps/coding-agent/api/domain/context.py
-apps/coding-agent/api/domain/events.py
-apps/coding-agent/api/domain/scope.py
-apps/coding-agent/api/domain/sqlpolicy.py
-apps/coding-agent/api/domain/sqlquery.py
-apps/coding-agent/api/domain/supervisor.py
-apps/coding-agent/api/main.py
-apps/coding-agent/api/routers/api.py
-apps/coding-agent/api/routers/sql.py
-apps/coding-agent/api/services/blobs.py
-apps/coding-agent/api/services/context.py
-apps/coding-agent/api/services/orchestrator.py
-apps/coding-agent/api/services/run_bridge.py
-apps/coding-agent/api/services/sql_service.py
-apps/coding-agent/scripts/verify-deployed.sh
-apps/coding-agent/tests/test_sqlquery.py
-apps/coding-agent/tools/databricks_notebook_mcp.py
-apps/coding-agent/tools/skills/databricks-apps.md
-apps/coding-agent/tools/skills/lakebase-postgres.md
-apps/coding-agent/web/package.json
-apps/coding-agent/web/scripts/sql-query-e2e.mjs
-apps/coding-agent/web/src/App.tsx
-apps/coding-agent/web/src/api/client.ts
-apps/coding-agent/web/src/components/AssistantDock.tsx
-apps/coding-agent/web/src/components/Chrome.tsx
-apps/coding-agent/web/src/components/Composer.tsx
-apps/coding-agent/web/src/components/QueryEditor.tsx
-apps/coding-agent/web/src/domain/docs.ts
-apps/coding-agent/web/src/domain/event-parity.json
-apps/coding-agent/web/src/domain/events.ts
-apps/coding-agent/web/src/domain/links.ts
-apps/coding-agent/web/src/domain/query.ts
-apps/coding-agent/web/src/domain/recent.ts
-apps/coding-agent/web/src/domain/route.ts
-apps/coding-agent/web/src/domain/workingset.ts
-apps/coding-agent/web/src/sql.css
-apps/coding-agent/web/src/styles.css
-mcp/databricks_notebook_mcp.py
-```
+The live result will be reported separately after that attempt. Full two-model exam/noise,
+real-agent timed fault/rotation/long-run recordings and exhaustive crash/load/WCAG gates from
+[17](17-first-principles-closure.md) remain unqualified. Optional phases and a separate execution
+identity stay disabled pending their required qualification. Source integration and local E2E do
+not establish completion of those live release gates.

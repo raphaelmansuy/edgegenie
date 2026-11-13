@@ -74,6 +74,13 @@ class Session:
     # rather than inventing a time.
     created_at: float | None = None
     status: SessionStatus = SessionStatus.PROVISIONING
+    #: What this conversation may change (`[R-9]`). On the SESSION, not the tool server's environment
+    #: only: the mode is a decision the user made, so it must be readable, persist across a restart, and
+    #: appear in the transcript. `write_mode.DEFAULT` is `fenced`, which is today's intent.
+    write_mode: str = "fenced"
+    #: Why this session needs a restore (`[R-10]`): `mid_turn` after a restart, or empty. The
+    #: distinction is what stops an idle conversation asking the user to press Restore.
+    resume_reason: str = ""
     tools: int = 0
     agent: str = ""
     agent_version: str = ""
@@ -121,8 +128,21 @@ class Turn:
     def finish(
         self, status: TurnStatus, stop_reason: str = "", usage: dict | None = None, error: str = ""
     ) -> Turn:
+        """Move a turn to a terminal status. **A terminal turn cannot change** (`[R-26]`, `[F-12]`).
+
+        `start()` guards its source and this did not, so measured, a `COMPLETED` turn could be finished
+        as `INTERRUPTED` and a `CANCELLED` one as `COMPLETED`. The timeout handler at
+        `orchestrator.py:947` finishes a turn by id after unwinding, so a settle/timeout race could
+        rewrite a finished turn and emit `turn.interrupted` for work that succeeded — leaving two
+        terminal records for one turn, of which the reducer keeps the later.
+
+        A terminal state is the product's record of what happened. It is written once.
+        """
         if status not in TERMINAL:
             raise DomainError("finish needs a terminal status")
+        if self.status in TERMINAL:
+            raise DomainError(
+                f"this turn already finished as {self.status.value}; it cannot become {status.value}")
         u = usage or {}
         return replace(
             self,

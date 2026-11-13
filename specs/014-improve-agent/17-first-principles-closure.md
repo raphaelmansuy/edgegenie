@@ -1,5 +1,8 @@
 # 17 · First-principles gap closure
 
+Historical checkpoint: see [18](18-integration-status.md) for the subsequent upstream integration,
+current test counts and expanded screenshot inventory.
+
 13 November 2026. Reassessment against the eleven principles in [00](00-five-whys-first-principles.md)
 and the open gates in [16](16-gap-assessment.md). **Release qualification is still incomplete.**
 

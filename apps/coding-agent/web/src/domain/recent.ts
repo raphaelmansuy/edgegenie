@@ -60,7 +60,15 @@ export function forgetDocs(scope = ""): void {
   save();
 }
 
-/** Tables are named `catalog.schema.table`, so a "name" is the last part, not the last path segment. */
+/** Tables are named `catalog.schema.table`, so a "name" is the last part, not the last path segment.
+ *  A job and a run are named by their id (a job's *name* is not unique in a workspace, so it is not an
+ *  identity); a pipeline is its UUID's first segment. */
 export function nameOf(kind: RecentDoc["kind"], path: string): string {
-  return kind === "table" ? path.split(".").pop() ?? path : path.split("/").pop() ?? path;
+  if (kind === "table") return path.split(".").pop() ?? path;
+  if (kind === "lakebase") return path.split("/").pop() ?? path;
+  if (kind === "job") return `job ${path}`;
+  if (kind === "run") return `run ${path}`;
+  if (kind === "pipeline") return path.slice(0, 8);
+  if (kind === "app") return path;
+  return path.split("/").pop() ?? path;
 }

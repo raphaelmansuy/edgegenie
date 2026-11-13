@@ -5,5 +5,5 @@
     "noUnusedParameters": true, "noFallthroughCasesInSwitch": true, "skipLibCheck": true,
     "types": ["vitest/globals"], "allowImportingTsExtensions": true, "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src"], "resolveJsonModule": true
 }

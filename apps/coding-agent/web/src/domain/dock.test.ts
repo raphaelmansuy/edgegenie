@@ -106,3 +106,27 @@ describe("dockStateWord — the last turn's outcome", () => {
     expect(dockStateWord("empty", false, false)).toBe("new");
   });
 });
+
+// -- the two infrastructure kinds: suggestions must be about their SUBJECT ----------------------
+// Found by inspecting s2-project-1480.png: the dock offered "Explain this notebook" over a Lakebase
+// project, a plausible button that is wrong about what is on screen (spec 013 [UI-3]).
+describe("suggestionsFor, when the subject is infrastructure", () => {
+  it("offers project questions over a Lakebase project, never notebook ones", () => {
+    const items = suggestionsFor({ docId: "lakebase:projects/pg", doc: { kind: "lakebase", ref: "projects/pg", name: "pg" }, cell: null } as never);
+    const labels = items.map((s) => s.label).join(" ");
+    expect(labels).not.toMatch(/notebook/i);
+    expect(labels).toContain("pg");
+  });
+
+  it("offers health and logs over an app, never notebook ones", () => {
+    const items = suggestionsFor({ docId: "app:tickets", doc: { kind: "app", ref: "tickets", name: "tickets" }, cell: null } as never);
+    const labels = items.map((s) => s.label).join(" ");
+    expect(labels).not.toMatch(/notebook/i);
+    expect(labels).toMatch(/working|reads|Fix/i);
+  });
+
+  it("still offers notebook questions for a notebook", () => {
+    const items = suggestionsFor({ docId: "notebook:nb", doc: { kind: "notebook", ref: "nb", name: "nb" }, cell: null } as never);
+    expect(items.map((s) => s.label).join(" ")).toMatch(/notebook/i);
+  });
+});

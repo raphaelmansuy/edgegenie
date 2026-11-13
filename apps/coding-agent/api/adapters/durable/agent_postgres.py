@@ -11,6 +11,24 @@ def table(kind):
     return 'agent."' + kind + '"'
 
 
+from functools import wraps
+
+
+def _operation(read):
+    def decorate(method):
+        @wraps(method)
+        async def call(self, *args, **kwargs):
+            async def execute(conn):
+                return await method(self, conn, *args, **kwargs)
+            run = self.journal.read_operation if read else self.journal.run_operation
+            return await run(execute)
+        return call
+    return decorate
+
+
+_reader, _writer = _operation(True), _operation(False)
+
+
 class PostgresAgentLedgers:
     durable = True
 
@@ -25,8 +43,9 @@ class PostgresAgentLedgers:
             raise WorkError("No such ledger item.", 404)
         return self.codec.decode(row[0])
 
-    async def get(self, kind, key):
-        async with self.journal.transaction() as conn:
+    @_reader
+    async def get(self, conn, kind, key):
+        async with conn.transaction():
             async with conn.cursor() as cur:
                 return await self._get(cur, kind, key)
 
@@ -62,8 +81,9 @@ class PostgresAgentLedgers:
         )
         return saved
 
-    async def batch(self, writes):
-        async with self.journal.transaction() as conn:
+    @_writer
+    async def batch(self, conn, writes):
+        async with conn.transaction():
             async with conn.cursor() as cur:
                 return [await self._put(cur, k, r, v) for k, r, v in writes]
 
@@ -88,8 +108,9 @@ class PostgresAgentLedgers:
 
         return await journal.commit(event, snapshot, participant=participate)
 
-    async def reserve(self, kind, key, row):
-        async with self.journal.transaction() as conn:
+    @_writer
+    async def reserve(self, conn, kind, key, row):
+        async with conn.transaction():
             async with conn.cursor() as cur:
                 await cur.execute("SELECT id FROM agent.request WHERE kind=%s AND key=%s", (kind, key))
                 old = await cur.fetchone()
@@ -99,7 +120,8 @@ class PostgresAgentLedgers:
                 await cur.execute("INSERT INTO agent.request VALUES (%s,%s,%s)", (kind, key, row["id"]))
                 return saved, True
 
-    async def page(self, kind, *, session_id="", owner="", cursor="", limit=50, states=()):
+    @_reader
+    async def page(self, conn, kind, *, session_id="", owner="", cursor="", limit=50, states=()):
         limit = max(1, min(int(limit), 100))
         at, key = cursor_value(cursor)
         where = ["(created<%s OR (created=%s AND id<%s))"]
@@ -111,7 +133,7 @@ class PostgresAgentLedgers:
         if states:
             where.append("state=ANY(%s)")
             args.append(list(states))
-        async with self.journal.transaction() as conn:
+        async with conn.transaction():
             async with conn.cursor() as cur:
                 await cur.execute(
                     f"SELECT body FROM {table(kind)} WHERE "
@@ -124,8 +146,9 @@ class PostgresAgentLedgers:
         rows = rows[:limit]
         return {"items": rows, "nextCursor": next_cursor(rows, more)}
 
-    async def storage(self, sid):
-        async with self.journal.transaction() as conn:
+    @_reader
+    async def storage(self, conn, sid):
+        async with conn.transaction():
             async with conn.cursor() as cur:
                 result = {}
                 for kind in KINDS:
@@ -154,8 +177,9 @@ class PostgresAgentLedgers:
     async def close(self):
         pass  # journal owns the connection and its execution-owner lease
 
-    async def prune_previous(self, before, limit=100):
-        async with self.journal.transaction() as conn:
+    @_writer
+    async def prune_previous(self, conn, before, limit=100):
+        async with conn.transaction():
             async with conn.cursor() as cur:
                 await cur.execute(
                     "DELETE FROM agent.request WHERE kind='previous_content' AND id IN (SELECT id FROM agent.previous_content WHERE created<%s ORDER BY created,id LIMIT %s)",
@@ -167,8 +191,9 @@ class PostgresAgentLedgers:
                 )
                 return cur.rowcount
 
-    async def prune_wakeups(self, limit=100):
-        async with self.journal.transaction() as conn:
+    @_writer
+    async def prune_wakeups(self, conn, limit=100):
+        async with conn.transaction():
             async with conn.cursor() as cur:
                 await cur.execute(
                     "SELECT id,state,created FROM agent.wakeup WHERE state IN ('fired','cancelled') ORDER BY created,id LIMIT %s",

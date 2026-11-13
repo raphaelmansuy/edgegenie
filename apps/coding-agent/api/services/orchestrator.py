@@ -8,6 +8,7 @@ import os
 import time
 
 from ..domain.events import (
+    session_compacted,
     Event,
     turn_blocked,
     turn_completed,
@@ -21,7 +22,7 @@ from ..domain.session import (
 from ..ports import AgentRuntime, ToolRegistry
 
 
-from .session_state import Live
+from .session_state import Live, TOOL_COUNT_CORE
 
 from .provisioning import Provisioning
 from .session_service import SessionService
@@ -44,9 +45,13 @@ class Orchestrator(Provisioning, SessionService, TurnService):
         static_resolve=None,
         max_run_seconds=21600,
         max_concurrent=4,
+        max_turns=200,
     ) -> None:
         self._slots = asyncio.Semaphore(max_concurrent)
         self._max_run_seconds = max_run_seconds
+        # `settings.max_turns_per_session` had no reader at all ([F-10], [R-11]): the limit was a
+        # constant, so an operator who set the variable changed nothing.
+        self._max_turns = int(max_turns)
         self._shutting_down = False
         self._rt = runtime
         self._tools = tools
@@ -59,20 +64,18 @@ class Orchestrator(Provisioning, SessionService, TurnService):
         self._health = health
         self.static_resolve = static_resolve
         self._blobs = None
+        self.preferences = None
         self.work = None
         self.lazy_agents = False
         self.delegated_by_default = False
-        self.journal_writer = None
+        from .journal_writer import JournalWriter
+        self.journal_writer = JournalWriter(self._commit_event)
         self._hydrate_locks = {}
         self._live: dict[str, Live] = {}
 
     def attach_work(self, work, tools=None, *, lazy=False):
         self.work = work
         self.lazy_agents = lazy
-        if lazy:
-            from .journal_writer import JournalWriter
-
-            self.journal_writer = JournalWriter(self._commit_event)
         if tools is not None:
             self._tools = tools
 

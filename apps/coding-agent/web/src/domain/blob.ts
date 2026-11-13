@@ -39,12 +39,13 @@ export interface Refusal {
   message: string;
 }
 
-export type Family = "image" | "text" | "notebook" | "pdf" | "other";
+export type Family = "image" | "text" | "notebook" | "pdf" | "sheet" | "other";
 
 /** What the app takes, generated from the same idea as the server's CAPABILITY table. */
 export const ACCEPT = [
   "image/png", "image/jpeg", "image/webp", "image/gif",
   ".csv", ".tsv", ".md", ".txt", ".log", ".json", ".yaml", ".yml", ".py", ".sql", ".ipynb", ".pdf",
+  ".xlsx", ".xls",
 ].join(",");
 
 const IMAGE = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
@@ -70,6 +71,10 @@ export function familyOf(file: File): Family {
   const type = (file.type || "").toLowerCase();
   if (IMAGE.has(type)) return "image";
   if (type === "application/pdf" || /\.pdf$/i.test(file.name)) return "pdf";
+  // A workbook. `[R-21]`: accepted here so the picker does not refuse it in the same frame it is dropped;
+  // the server re-checks the BYTES, because a `.xlsx` is a ZIP and the name proves nothing.
+  if (SHEET_EXT.test(file.name) || type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      || type === "application/vnd.ms-excel") return "sheet";
   if (type.startsWith("text/") || TEXTUAL.has(type)) return "text";
   if (/\.ipynb$/i.test(file.name)) return "notebook";
   // No MIME reported by the OS. The extension is the only evidence left, and only a known text extension
@@ -79,6 +84,8 @@ export function familyOf(file: File): Family {
 }
 
 const TEXT_EXT = /\.(txt|md|csv|tsv|log|json|ya?ml|xml|html|css|jsx?|tsx?|py|sql|scala|r|sh|ini|toml|cfg)$/i;
+/** A workbook. The server verifies the bytes; this is only what the picker accepts. */
+const SHEET_EXT = /\.(xlsx|xls)$/i;
 
 /** Sanitised name, mirroring the server: basename, safe characters, collapsed runs, kept extension. */
 export function sanitiseName(name: string): string {

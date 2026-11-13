@@ -8,16 +8,17 @@ import hashlib
 import json
 import logging
 import os
+import re
 from contextlib import contextmanager
 from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ..adapters.databricks.http import normalize_host
-from ..domain import approval, scope as scope_mod, version
+from ..domain import approval, budget, journal_ops, scope as scope_mod, version, write_mode
 from ..domain.llm import ModelError
 from ..domain import context as ctx
 from ..domain import events
@@ -41,6 +42,8 @@ class CreateSession(BaseModel):
     schema_: str | None = Field(default=None, alias="schema")
     model: str | None = None
     title: str = "New session"
+    #: What this conversation may change ([R-9]). Absent means `fenced`, which is today's behaviour.
+    writeMode: str | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -72,6 +75,9 @@ def _session_json(s: Session, orch: Orchestrator | None = None) -> dict[str, Any
         "agentWork": bool(orch and orch.work),
         "questions": list(orch.get(s.id).extra.get("questions",{}).values()) if orch else [],
         "tools": s.tools,
+        # What this conversation may change ([R-9]), and why it needs a restore if it does ([R-10]).
+        "writeMode": s.write_mode,
+        **({"resumeReason": s.resume_reason} if s.resume_reason else {}),
         "agent": s.agent,
         "agentVersion": s.agent_version,
         "requiresResume": s.requires_resume,
@@ -116,6 +122,21 @@ def _model_error(exc: Exception) -> HTTPException:
     from .llm import map_error
 
     return map_error(exc)
+
+
+def plain_reason(exc: BaseException, limit: int = 300) -> str:
+    """An error as one short sentence a person can act on.
+
+    Drivers append to the same buffer on every failed call, so one wedged connection produced the same
+    sentence thirty times in a user's chat. Repeated lines collapse to one, and the length is bounded.
+    """
+    seen: list[str] = []
+    for line in str(exc).replace("\r", "\n").split("\n"):
+        line = line.strip()
+        if line and line not in seen:
+            seen.append(line)
+    text = "; ".join(seen) or type(exc).__name__
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
 def _user(request: Request) -> str:
@@ -207,7 +228,8 @@ async def create_session(request: Request, body: CreateSession) -> dict:
     model = body.model or _default_model(request)
     try:
         s = await _orch(request).create(_user(request), body.folder, model, body.schema_, body.title,
-                                        user_token=_user_token(request))
+                                        user_token=_user_token(request),
+                                        write_mode=write_mode.parse(body.writeMode).value, principal=request.state.home)
     except ModelError as exc:
         # A model the catalogue refuses is the caller's problem and has its own status and sentence.
         raise _model_error(exc) from exc
@@ -216,7 +238,7 @@ async def create_session(request: Request, body: CreateSession) -> dict:
     except Exception as exc:  # noqa: BLE001 - provisioning failures are 503, never a 200
         # Log it: in a deployed app the only diagnostic channel is stdout.
         log.exception("session provisioning failed")
-        raise HTTPException(503, f"the agent did not start: {exc}") from exc
+        raise HTTPException(503, f"the agent did not start: {plain_reason(exc)}") from exc
     _orch(request).set_principal(s.id,request.state.home)
     return _session_json(s, _orch(request))
 
@@ -435,6 +457,174 @@ async def stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
     )
+
+
+
+
+# -- search and fork: the journal is an ordered log, so both are cheap -----------------------------
+class ForkBody(BaseModel):
+    """Fork a conversation at a turn. `[R-16]`."""
+    turnId: str = Field(min_length=1, max_length=64)
+
+
+@router.get("/search")
+async def search_journal(request: Request, q: str, limit: int = 30) -> dict:
+    """Search inside conversations, across every session this user can see. `[R-15]`.
+
+    Over the COMMITTED events, which means a redacted secret cannot be found: the redaction happened before
+    the commit, and a search that could undo it would undo the reason it exists ([E-19]).
+    """
+    if not q.strip():
+        return {"hits": [], "more": False, "query": q}
+    orch = _orch(request)
+    store = request.app.state.store
+    limit = max(1, min(limit, 100))
+    hits: list[dict] = []
+    more = False
+    for session in orch.sessions_for(_user(request)):
+        rows = await store.since(session.id, 0, 2000)
+        events = [journal_ops.Event(
+            seq=int(r.get("seq", 0)), type=str(r.get("type", "")),
+            turn_id=str(r.get("turnId") or ""), text=_event_text(r)) for r in rows]
+        found, extra = journal_ops.search(events, q, session_id=session.id, limit=limit)
+        more = more or extra
+        hits += [{"sessionId": h.session_id, "turnId": h.turn_id, "seq": h.seq,
+                  "snippet": h.snippet, "kind": h.kind, "title": session.title} for h in found]
+    hits.sort(key=lambda h: h["seq"], reverse=True)
+    return {"hits": hits[:limit], "more": more or len(hits) > limit, "query": q}
+
+
+def _event_text(row: dict) -> str:
+    """The words an event carries, for search. Not the whole payload: an argument blob is not a sentence."""
+    payload = row.get("payload") or {}
+    for key in ("text", "prompt", "reason", "summary", "detail"):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
+@router.post("/sessions/{sid}/fork", status_code=201)
+async def fork_session(request: Request, sid: str, body: ForkBody) -> dict:
+    """Fork a conversation at a turn. `[R-16]`.
+
+    The new session keeps the prefix of the journal up to that turn's completion and nothing else, so a
+    user branching to try a different ending still sees the ending they had. The fence, the model and the
+    folder are inherited — a fork is the same work continued, not a new conversation.
+    """
+    orch = _orch(request)
+    try:
+        live = orch.get(sid)
+    except KeyError:
+        raise HTTPException(404, "no such session") from None
+    rows = await request.app.state.store.since(sid, 0, 2000)
+    events = [journal_ops.Event(seq=int(r.get("seq", 0)), type=str(r.get("type", "")),
+                                turn_id=str(r.get("turnId") or ""), text=_event_text(r)) for r in rows]
+    prefix = journal_ops.fork_prefix(events, turn_id=body.turnId)
+    if prefix is None:
+        raise HTTPException(422, f"turn {body.turnId} never finished, so it cannot be forked from")
+    s = live.state.session
+    try:
+        forked = await orch.create(_user(request), s.folder, s.model, s.schema,
+                                   title=f"{s.title} (fork)", user_token=_user_token(request),
+                                   write_mode=s.write_mode)
+    except Exception as exc:  # noqa: BLE001 - a failed fork is a 503, not a 500
+        raise HTTPException(503, f"the forked session did not start: {plain_reason(exc)}") from exc
+    # The prefix is COPIED, not referenced: a fork must survive the original being archived.
+    for row in rows[: prefix[-1].seq]:
+        try:
+            await _replay(request, forked.id, row)
+        except Exception:  # noqa: BLE001 - one event that cannot be replayed must not lose the fork
+            log.debug("fork: could not replay seq %s", row.get("seq"), exc_info=True)
+    return {"session": _session_json(forked, orch), "copied": prefix[-1].seq,
+            "from": sid, "turnId": body.turnId}
+
+
+async def _replay(request: Request, session_id: str, row: dict) -> None:
+    """Append one committed event to another session, keeping its type and payload."""
+    from ..domain.events import Event as DomainEvent
+
+    payload = dict(row.get("payload") or {})
+    payload.pop("seq", None)
+    await request.app.state.store.append(
+        DomainEvent(session_id, str(row.get("type", "session.checkpoint")), payload,
+                    turn_id=row.get("turnId") or None))
+
+
+
+@router.get("/docs/search")
+async def docs_search(q: str, limit: int = 5) -> dict:
+    """Search the product's own documentation, with citations. `[R-20]`.
+
+    Genie Code shows a *Searched documentation* step and can cite sources; this had no corpus at all, so an
+    answer about how this app works could not be checked. The corpus is this repository's `docs/` and
+    `specs/`, which is versioned with the code it describes — so a citation points at a file the same
+    commit guarantees.
+    """
+    from ..services import docsearch
+
+    return {"hits": [{"path": h.path, "title": h.title, "url": h.url, "score": h.score,
+                      "excerpt": h.excerpt} for h in docsearch.search(q, limit=max(1, min(limit, 20)))],
+            "query": q}
+
+
+# -- budget and compaction -------------------------------------------------------------------------
+@router.get("/sessions/{sid}/budget")
+async def session_budget(request: Request, sid: str) -> dict:
+    """What this conversation has spent, and whether the next turn may start. `[R-24]`.
+
+    Tokens, not money: a token count is a fact the turn pins record, and a dollar figure depends on a
+    price list this app does not own. `limit: 0` means no ceiling, which is the default.
+    """
+    orch = _orch(request)
+    try:
+        live = orch.get(sid)
+    except KeyError:
+        raise HTTPException(404, "no such session") from None
+    usage = budget.Usage(
+        input=sum(t.input_tokens or 0 for t in live.state.turns),
+        output=sum(t.output_tokens or 0 for t in live.state.turns),
+        cached=sum(t.cached_tokens or 0 for t in live.state.turns),
+        turns=len(live.state.turns),
+    )
+    limit = int(getattr(live.state.session, "budget_tokens", 0) or 0)
+    d = budget.decide(usage, limit=limit)
+    return {
+        "used": d.used, "limit": d.limit, "fraction": round(d.fraction, 3),
+        "allowed": d.allowed, "verdict": d.verdict.value,
+        "sentence": budget.sentence(d), "message": d.message,
+        "turns": usage.turns, "input": usage.input, "output": usage.output, "cached": usage.cached,
+    }
+
+
+@router.post("/sessions/{sid}/compact")
+async def session_compact(request: Request, sid: str) -> dict:
+    """Summarise the middle of a long conversation. `[R-11]`.
+
+    Returns what was planned and, when nothing needed shedding, says so rather than reporting a silent
+    success. The event `session.compacted` is committed, so the transcript records the decision.
+    """
+    orch = _orch(request)
+    try:
+        return await orch.compact(sid)
+    except KeyError:
+        raise HTTPException(404, "no such session") from None
+
+
+@router.get("/config")
+async def config_surface(request: Request) -> dict:
+    """The vocabulary a client must not re-invent: the write modes, and what each one means. `[R-9]`.
+
+    One endpoint rather than duplicated strings in the picker, the header and the fence probe — the same
+    argument `domain/commands.ts` makes for slash commands.
+    """
+    return {
+        "writeModes": [
+            {"id": m.value, "label": m.label, "sentence": m.sentence, "mutates": m.mutates}
+            for m in write_mode.WriteMode
+        ],
+        "defaultWriteMode": write_mode.DEFAULT.value,
+    }
 
 
 # -- workspace tree ----------------------------------------------------------
@@ -946,46 +1136,64 @@ async def catalog_preview(request: Request, name: str) -> dict:
         return await request.app.state.catalog.preview(name, _user_token(request))
 
 
+_WIDGET_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+
+
+def _widget_values(values: dict[str, str], *, marker: bool = False) -> dict[str, str]:
+    """Widget values from a browser. A value that is huge is refused, not written into a command file or sent to
+    a warehouse; a name that is to be a SQL marker must be one (a Python widget's name may be anything short)."""
+    for name, value in values.items():
+        if marker and not _WIDGET_NAME.match(name):
+            raise ValueError(f"{name!r} is not a SQL parameter name (letters, digits and _, not starting with a digit)")
+        if not name or len(name) > 64:
+            raise ValueError("a widget name is 1 to 64 characters")
+        if len(value) > 2000:
+            raise ValueError(f"the value of widget {name} is longer than 2,000 characters")
+    return values
+
+
 class RunCell(BaseModel):
     """A cell to execute. The text is the cell's source, which the client already holds."""
 
     language: str = Field(default="sql", max_length=24)
     source: str = Field(min_length=1, max_length=200_000)
+    #: Widget values by name, for the `:name` markers in a SQL cell.
+    params: dict[str, str] = Field(default_factory=dict, max_length=64)
+
+    @field_validator("params")
+    @classmethod
+    def _params(cls, v: dict[str, str]) -> dict[str, str]:
+        return _widget_values(v, marker=True)
 
 
-@router.post("/notebook/run-cell")
-async def notebook_run_cell(request: Request, body: RunCell) -> dict:
-    """Run one cell and return its result (spec 006 X1–X4).
+@router.post("/notebook/sql-runs")
+async def sql_run_start(request: Request, body: RunCell) -> dict:
+    """Start a SQL cell on a warehouse, as the signed-in user; returns a handle to poll (spec 006 X1–X4).
 
-    Deliberately narrow: **SQL only**, on a SQL warehouse, as the signed-in user. A Python cell needs
-    a cluster and a runtime this app does not own, and offering a control that cannot run would be the
-    inert-button bug again (00 P4, NB-2). The refusal is a *state with a reason*, not an error, so the
-    UI can say what would work instead.
+    Deliberately narrow: **SQL only**. A Python cell needs compute this endpoint does not own, and
+    offering a control that cannot run would be the inert-button bug again (00 P4, NB-2). A refusal is
+    a *state with a reason*, not an error, so the UI can say what would work instead. The answer is
+    `{"result": ...}` when it is already known, else `{"handle": ...}` to poll.
     """
-    from ..domain import cellrun
+    return await request.app.state.sqlruns.start(
+        _who_ran(request), _user_token(request), body.language, body.source, body.params)
 
-    ok, why = cellrun.is_runnable(body.language, body.source)
-    if not ok:
-        return cellrun.refused(why).to_dict()
-    _, statement = cellrun.without_skip(body.source)
-    clock = cellrun.Clock()
-    started = clock.start()
+
+@router.get("/notebook/sql-runs/{handle}")
+async def sql_run_poll(request: Request, handle: str) -> dict:
     try:
-        payload, warehouse = await request.app.state.catalog.run_sql(
-            statement, _user_token(request), limit=cellrun.MAX_ROWS,
-            wait_seconds=cellrun.MAX_WAIT_SECONDS)
-    except PermissionError as exc:
-        return cellrun.refused(str(exc)).to_dict()
+        return await request.app.state.sqlruns.poll(_who_ran(request), handle)
     except LookupError as exc:
-        return cellrun.refused(str(exc)).to_dict()
-    except RuntimeError as exc:
-        log.warning("cell run failed: %s", exc)
-        return cellrun.RunResult(state=cellrun.RunState.FAILED,
-                                 error=str(exc)[:400]).to_dict()
-    result = cellrun.result_from_statement(payload, waited=round(clock.since(started), 2))
-    # The warehouse is the adapter's knowledge, not the domain's: attach it here rather than teaching
-    # `result_from_statement` about a second parameter it would only ever pass through.
-    return dataclasses.replace(result, warehouse=warehouse).to_dict()
+        raise HTTPException(404, str(exc)) from exc
+
+
+@router.delete("/notebook/sql-runs/{handle}")
+async def sql_run_cancel(request: Request, handle: str) -> dict:
+    try:
+        await request.app.state.sqlruns.cancel(_who_ran(request), handle, _user_token(request))
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"cancelled": True}
 
 
 # -- Python cells, on serverless compute, as the app -------------------------
@@ -1001,7 +1209,9 @@ def python_run_policy(request: Request) -> dict:
         return {"enabled": False,
                 "reason": "Python cells run as the app's service principal, not as you, so only the app's "
                           "administrators can run them. Ask the agent to run it, or ask an administrator."}
-    return {"enabled": True, "reason": "Runs on serverless compute as the app, not as you."}
+    session = request.app.state.settings.python_session.strip().lower() != "off"
+    return {"enabled": True, "session": session,
+            "reason": "Runs on serverless compute as the app, not as you."}
 
 
 class PyCellIn(BaseModel):
@@ -1072,10 +1282,140 @@ async def python_run_cancel(request: Request, handle: str) -> dict:
     return {"cancelled": True}
 
 
+# -- Python sessions: one serverless job that stays up between cells -------------
+# (Routed as /notebook/kernels: a path with `/sessions/<x>` is an agent session to the ownership
+# middleware in main.py, and a notebook's kernel is not one.)
+class SessionRunIn(BaseModel):
+    """One cell, for the notebook's session. `path` names the notebook: there is one session per user
+    and notebook. `index` is the cell's position, so a traceback can say which cell."""
+
+    path: str = Field(min_length=1, max_length=2000)
+    language: str = Field(default="python", max_length=24)
+    source: str = Field(default="", max_length=200_000)
+    index: int | None = Field(default=None, ge=0, le=100_000)
+    #: The widget values to run with, by name.
+    widgets: dict[str, str] = Field(default_factory=dict, max_length=64)
+
+    @field_validator("widgets")
+    @classmethod
+    def _widgets(cls, v: dict[str, str]) -> dict[str, str]:
+        return _widget_values(v)
+
+
+def _kernels(request: Request):
+    policy = python_run_policy(request)
+    if not policy["enabled"]:
+        raise HTTPException(403, policy["reason"])
+    return request.app.state.kernels, policy
+
+
+def _run_expander(request: Request):
+    """`%run`, read with the signed-in user's token: they can run what they can read, and the app never
+    runs code it fetched with its own authority."""
+    from ..domain import kernel as kernel_domain
+    from ..domain import run_magic
+
+    token = _user_token(request)
+    browser = _browser(request)
+
+    async def read(path: str):
+        obj = await browser.read(path, token)
+        if obj.kind != "notebook":
+            raise ValueError("it is a file, not a notebook")
+        if obj.truncated or any(c.truncated for c in obj.cells):
+            raise ValueError("it is too large to run whole, and half of a notebook is not run")
+        return obj.cells
+
+    async def expand(notebook: str, ref: str):
+        try:
+            return await run_magic.expand(read, notebook, ref)
+        except run_magic.RunMagicError as exc:
+            return kernel_domain.Refusal(str(exc))
+
+    return expand
+
+
+@router.post("/notebook/kernels/run")
+async def session_run(request: Request, body: SessionRunIn) -> dict:
+    """Send a cell to the notebook's session, starting it if needed. Administrators only.
+
+    A session that cannot be used answers `{"unavailable": why}` (not an error): the client then runs the
+    cell the one-shot way and says why, so a missing volume costs fidelity, not the feature.
+    """
+    from ..services.kernel_service import Unavailable
+
+    kernels, policy = _kernels(request)
+    if not policy.get("session", True):
+        return {"unavailable": "persistent sessions are switched off for this app (APP_PYTHON_SESSION=off)"}
+    try:
+        return await kernels.run(_who_ran(request), body.path, body.language, body.source, index=body.index,
+                                 expand=_run_expander(request), widgets=body.widgets)
+    except Unavailable as exc:
+        return {"unavailable": str(exc)}
+    except Exception as exc:  # noqa: BLE001 - the platform's own words are the useful part
+        log.warning("session run could not start: %s", exc)
+        return {"unavailable": f"the session could not be used: {str(exc)[:300]}"}
+
+
+@router.get("/notebook/kernels/runs/{handle}")
+async def session_poll(request: Request, handle: str) -> dict:
+    kernels, _ = _kernels(request)
+    try:
+        return await kernels.poll(_who_ran(request), handle)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        log.warning("session poll failed: %s", exc)
+        raise HTTPException(502, f"could not read the run: {str(exc)[:400]}") from exc
+
+
+@router.delete("/notebook/kernels/runs/{handle}")
+async def session_interrupt(request: Request, handle: str) -> dict:
+    kernels, _ = _kernels(request)
+    try:
+        return await kernels.interrupt(_who_ran(request), handle)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@router.get("/notebook/kernels")
+async def session_status(request: Request, path: str) -> dict:
+    """The notebook's session, for the chip. Asking also keeps the session's lease fresh."""
+    kernels, policy = _kernels(request)
+    if not policy.get("session", True):
+        return {"state": "off"}
+    return await kernels.status(_who_ran(request), path)
+
+
+@router.delete("/notebook/kernels")
+async def session_stop(request: Request, path: str) -> dict:
+    """End the notebook's session. The next cell starts a new one (this is also how Restart works)."""
+    kernels, _ = _kernels(request)
+    return await kernels.stop(_who_ran(request), path)
+
+
 # -- misc --------------------------------------------------------------------
 @router.get("/health")
 async def health() -> dict:
     return {"ok": True}
+
+
+@router.get("/version")
+async def version_info(request: Request) -> dict:
+    """Which build is running, and where its documentation lives.
+
+    `/api/health` answers `{"ok": true}` for every build ever deployed, so it cannot tell a fresh
+    deployment from a stale one — and a stale one is exactly what `scripts/verify-deployed.sh` exists
+    to catch. This route is the fingerprint: a version read from the `VERSION` file that ships inside
+    the deployed tree, the commit the platform resolved (empty when there is none, never invented),
+    and the three links a reader wants next.
+
+    No identity is required beyond the proxy's own, and nothing here is secret: it is the same
+    information the page prints in its footer.
+    """
+    from .. import buildinfo
+
+    return buildinfo.BUILD.to_dict(extra={"agentMode": request.app.state.settings.agent_mode})
 
 
 @router.get("/ready")

@@ -45,8 +45,8 @@ before anything else. Both files are in `apps/coding-agent/`.
 | `APP_LLM_ADMINS` in `app.yaml` | the e-mails allowed to edit the model catalogue for everyone. Empty means nobody. |
 | `APP_DEFAULT_MODEL` in `app.yaml` | a model your workspace can reach, e.g. `databricks/databricks-llama-4-maverick` |
 | `LLM_VERTEX_PROJECT` and `APP_LLM_VERTEX_PROJECT` in `app.yaml` | your Google Cloud project &mdash; or remove them, and the `vertex-sa` resource in `databricks.yml`, if you do not use Vertex |
-| `APP_LLM_PG_ENDPOINT` in `app.yaml` | your Lakebase endpoint (step 2) |
-| `WS_SRC` in the `Makefile` | the workspace folder the app deploys from, e.g. `/Workspace/Users/you@company.com/coding-agent` |
+| `APP_LLM_PG_ENDPOINT` in `app.yaml` | your Lakebase endpoint (step 2). It is a *project name*, so the same value in two workspaces is two independent databases |
+| the `dev` branch of `scripts/env.sh` | your workspace's host and how its apps take their source — see below |
 
 ### 2. Create Lakebase and the encryption key
 
@@ -77,19 +77,23 @@ The app's service principal then needs a Postgres role on that project; the exac
 git clone https://github.com/raphaelmansuy/opengenie.git
 cd opengenie
 
-# create the app, its user scopes and its secret resources
-databricks bundle deploy -t dev
+# check the toolchain, the login, and which workspace + transport this environment uses
+make -C apps/coding-agent doctor ENV=dev
 
-# check the toolchain, the login, and what is deployed
-make -C apps/coding-agent doctor
-
-# sync the source, deploy, then verify the live URL serves this checkout
-make -C apps/coding-agent deploy
+# create the app, its scopes, its secret resources, and its Lakebase role
+make -C apps/coding-agent deploy ENV=dev
 ```
 
-`make deploy` ends by probing the live app, because &ldquo;SUCCEEDED&rdquo; from the platform means the
-process started, not that it is serving the code you just wrote. Run `make -C apps/coding-agent` for
-the other targets: `status`, `url`, `logs`, `stop`, `start`.
+`ENV` names an environment, and every environment's workspace and deployment transport are declared
+in `apps/coding-agent/scripts/env.sh`. That indirection is not ceremony: some workspaces let an app
+deploy only from Git, and others only from a Workspace folder, so the transport cannot be a flag.
+Add your own environment there rather than editing a script.
+
+`make deploy` ends by verifying, because &ldquo;SUCCEEDED&rdquo; from the platform means the process
+started, not that it is serving the code you just wrote. It reads the platform's view of the app, and
+through an in-workspace job it reads the app's own database — proof that it booted, authenticated as
+its service principal, and ran its migrations. With an OAuth login it probes the live URL too. Run
+`make -C apps/coding-agent` for the other targets: `status`, `url`, `logs`, `stop`, `start`.
 
 The bundle requests the user scopes the agent needs (SQL, files, model serving, AI Gateway, workspace,
 and read access to catalogues, schemas and tables). Requesting a scope is not granting it: grant them

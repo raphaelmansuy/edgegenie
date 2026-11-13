@@ -35,6 +35,16 @@ def run_wrapper(p: pyrun.Plan) -> dict:
     return json.loads(exited[0])
 
 
+def text_of(cell: dict, stream: str | None = None) -> str:
+    """The text a cell reported, in order, optionally from one stream."""
+    return "".join(o["text"] for o in cell.get("outputs", [])
+                   if o["type"] == "text" and (stream is None or o["stream"] == stream))
+
+
+def kinds(cell: dict) -> list[str]:
+    return [o["type"] if o["type"] != "text" else f"text:{o['stream']}" for o in cell.get("outputs", [])]
+
+
 # -- the plan ------------------------------------------------------------------------------------
 def test_python_cells_run_and_other_engines_do_not():
     assert pyrun.python_source("python", "x = 1")[0] == "x = 1"
@@ -75,7 +85,8 @@ def test_cells_share_variables_and_report_stdout_and_the_last_expression():
     out = run_wrapper(pyrun.plan(nb, upto=1, show={1}))
     first, second = out["cells"]
     assert first == {"i": 0, "ok": True}                   # ran, but its output was not asked for
-    assert second["stdout"] == "hello\n" and second["value"] == "42"
+    assert text_of(second, "stdout") == "hello\n" and text_of(second, "result") == "42"
+    assert kinds(second) == ["text:stdout", "text:result"]
 
 
 def test_an_error_stops_the_run_and_shows_the_cell_not_the_wrapper():
@@ -90,15 +101,16 @@ def test_user_code_cannot_break_out_of_the_string_it_travels_in():
     nasty = "print('\"\"\"; import os; print(\"pwned\") #')\n'''"
     nb = cells(("python", "print('''\"\"\" and ''' + \"'\" * 3)"), ("python", "print(1)"))
     out = run_wrapper(pyrun.plan(nb, upto=1, show=None))
-    assert out["cells"][1]["stdout"] == "1\n"
+    assert text_of(out["cells"][1]) == "1\n"
     assert nasty not in pyrun.wrapper_notebook(pyrun.plan(nb, upto=1, show=None))  # it is data, not source
 
 
 def test_a_chatty_cell_is_clipped_not_returned_whole():
     nb = cells(("python", "print('x' * 100000)"))
     out = run_wrapper(pyrun.plan(nb, upto=0, show=None))
-    assert len(out["cells"][0]["stdout"]) < pyrun.MAX_OUTPUT_CHARS + 100
-    assert "characters not shown" in out["cells"][0]["stdout"]
+    shown = text_of(out["cells"][0])
+    assert len(shown) < pyrun.MAX_OUTPUT_CHARS + 100
+    assert "characters not shown" in shown
 
 
 def test_a_dataframe_comes_back_as_a_table():
@@ -111,8 +123,125 @@ def test_a_dataframe_comes_back_as_a_table():
     ns = {"dbutils": SimpleNamespace(notebook=SimpleNamespace(exit=exited.append)), "make": Frame}
     # `make` stands in for spark.sql(...): the wrapper's globals are the cells' globals.
     exec(compile(pyrun.wrapper_notebook(pyrun.plan(nb, upto=0, show=None)), "<w>", "exec"), ns)
-    table = json.loads(exited[0])["cells"][0]["table"]
-    assert table["columns"] == ["n", "word"] and table["rows"] == [["1", "a"], ["2", ""]]
+    table = json.loads(exited[0])["cells"][0]["outputs"][0]
+    assert table["type"] == "table"
+    assert table["columns"] == ["n", "word"] and table["rows"] == [["1", "a"], ["2", None]]
+
+
+class Frame:
+    """A Spark DataFrame stand-in: it collects rows, names its columns and reports its dtypes."""
+
+    def __init__(self, columns, rows, dtypes=None):
+        self.columns, self._rows = columns, rows
+        self.dtypes = dtypes or [(c, "string") for c in columns]
+
+    def limit(self, k):
+        return Frame(self.columns, self._rows[:k], self.dtypes)
+
+    def collect(self):
+        return self._rows
+
+
+def run_with(nb, ns_extra=None, show=None):
+    exited: list[str] = []
+    ns = {"dbutils": SimpleNamespace(notebook=SimpleNamespace(exit=exited.append)), **(ns_extra or {})}
+    exec(compile(pyrun.wrapper_notebook(pyrun.plan(nb, upto=len(nb) - 1, show=show)), "<w>", "exec"), ns)
+    return json.loads(exited[0])
+
+
+def test_outputs_come_back_in_the_order_they_were_produced():
+    """Databricks shows a print between two tables between them. One flat stdout cannot."""
+    nb = cells(("python", "print('one')\ndisplay(a)\nprint('two')\ndisplay(b)\nprint('three')"))
+    a = Frame(["x"], [(1,)], [("x", "int")])
+    b = Frame(["y"], [("k",)], [("y", "string")])
+    cell = run_with(nb, {"a": a, "b": b})["cells"][0]
+    assert kinds(cell) == ["text:stdout", "table", "text:stdout", "table", "text:stdout"]
+    tables = [o for o in cell["outputs"] if o["type"] == "table"]
+    assert [t["columns"] for t in tables] == [["x"], ["y"]]
+    assert tables[0]["types"] == ["int"]
+
+
+def test_every_display_call_is_kept_not_just_the_first():
+    nb = cells(("python", "display(a)\ndisplay(a)\ndisplay(a)"))
+    cell = run_with(nb, {"a": Frame(["x"], [(1,)])})["cells"][0]
+    assert kinds(cell).count("table") == 3
+
+
+def test_stderr_is_its_own_block_apart_from_stdout():
+    nb = cells(("python", "import sys\nprint('out')\nprint('warn', file=sys.stderr)\nprint('out again')"))
+    cell = run_with(nb)["cells"][0]
+    assert kinds(cell) == ["text:stdout", "text:stderr", "text:stdout"]
+    assert text_of(cell, "stderr") == "warn\n"
+
+
+def test_displayhtml_and_repr_html_come_back_as_html():
+    nb = cells(("python", "displayHTML('<b>hi</b>')\nclass S:\n    def _repr_html_(self): return '<i>styled</i>'\nS()"))
+    cell = run_with(nb)["cells"][0]
+    assert [o["html"] for o in cell["outputs"] if o["type"] == "html"] == ["<b>hi</b>", "<i>styled</i>"]
+    assert "[HTML output is not shown" not in json.dumps(cell)
+
+
+def test_html_over_the_limit_is_replaced_by_a_sentence():
+    nb = cells(("python", f"displayHTML('x' * {pyrun.MAX_HTML + 1})"))
+    cell = run_with(nb)["cells"][0]
+    assert kinds(cell) == ["text:notice"] and "HTML output was not shown" in text_of(cell)
+
+
+def test_a_traceback_shows_the_line_that_failed():
+    nb = cells(("python", "def f(x):\n    return x / 0\n\nf(1)"))
+    err = run_with(nb)["cells"][0]["error"]
+    assert "cell 1, line 2, in f" in err and "return x / 0" in err and "ZeroDivisionError" in err
+    assert "cell 1, line 4" in err and "f(1)" in err
+
+
+def test_what_a_cell_printed_before_it_failed_is_still_shown():
+    nb = cells(("python", "print('before')\nraise ValueError('boom')"))
+    cell = run_with(nb)["cells"][0]
+    assert cell["ok"] is False and text_of(cell) == "before\n"
+
+
+def test_a_value_that_is_not_a_table_is_a_result_line_not_a_table():
+    cell = run_with(cells(("python", "{'a': 1}")))["cells"][0]
+    assert kinds(cell) == ["text:result"] and text_of(cell) == "{'a': 1}"
+
+
+def test_the_results_fit_the_jobs_api_limit_and_say_what_did_not():
+    """Thirty tables of 225 KB each is more than the budget: the last ones go, and the cell says so."""
+    wide = "display(a)\n" * 30
+    big = Frame(["x"], [("y" * 1500,)] * 150)           # ~225 KB as JSON
+    doc = run_with(cells(("python", wide)), {"a": big})
+    cell = doc["cells"][0]
+    assert len(json.dumps(doc)) < pyrun.HARD_LIMIT
+    assert 0 < kinds(cell).count("table") < 30
+    assert "not shown" in text_of(cell, "notice") and "MB" in text_of(cell, "notice")
+
+
+def test_the_budget_is_shared_across_cells_in_notebook_order():
+    big = Frame(["x"], [("y" * 1500,)] * 200)           # ~300 KB
+    nb = cells(*[("python", "display(a)")] * 14)
+    doc = run_with(nb, {"a": big})
+    shown = [kinds(c).count("table") for c in doc["cells"]]
+    assert shown[0] == 1 and shown[-1] == 0             # the early cells keep theirs, the late ones do not
+    assert len(json.dumps(doc)) < pyrun.HARD_LIMIT
+
+
+def test_a_cell_value_that_is_enormous_is_clipped_in_a_table():
+    cell = run_with(cells(("python", "display(a)")), {"a": Frame(["x"], [("z" * 50_000,)])})["cells"][0]
+    assert len(cell["outputs"][0]["rows"][0][0]) < 2100
+
+
+def test_a_figure_is_drawn_where_plt_show_is_called():
+    pytest.importorskip("matplotlib")
+    nb = cells(("python", "import matplotlib.pyplot as plt\nprint('a')\nplt.plot([1, 2])\nplt.show()\nprint('b')"))
+    cell = run_with(nb)["cells"][0]
+    assert kinds(cell) == ["text:stdout", "image", "text:stdout"]
+
+
+def test_a_figure_left_open_is_drawn_after_the_cell_and_display_fig_in_place():
+    pytest.importorskip("matplotlib")
+    nb = cells(("python", "import matplotlib.pyplot as plt\nfig, ax = plt.subplots()\nax.plot([1])\ndisplay(fig)\nprint('after')"))
+    cell = run_with(nb)["cells"][0]
+    assert kinds(cell) == ["image", "text:stdout"]      # drawn once, not again at the end of the cell
 
 
 # -- reading a run back --------------------------------------------------------------------------
@@ -147,6 +276,37 @@ def test_a_cell_after_a_failure_names_the_cell_that_failed_first():
     assert out[1].state is RunState.FAILED and "cell 1 failed" in out[1].error
 
 
+def test_ordered_outputs_are_kept_and_the_flat_copy_is_not_sent_twice():
+    p = pyrun.plan(cells(("python", "display(a)")), upto=0, show=None)
+    table = {"type": "table", "columns": ["n"], "rows": [["1"]], "truncated": False, "types": ["int"]}
+    doc = {"v": 2, "cells": [{"i": 0, "ok": True, "outputs": [
+        {"type": "text", "stream": "stdout", "text": "hi\n"}, table,
+        {"type": "image", "png": "iVBORw0KGgo="}]}]}
+    _, out = read(p, json.dumps(doc))
+    d = out[0].to_dict()
+    assert [o["type"] for o in d["outputs"]] == ["text", "table", "image"]
+    assert "rows" not in d and "images" not in d and "output" not in d
+    assert out[0].output == "hi\n" and out[0].rows == [["1"]] and out[0].images == ["iVBORw0KGgo="]
+
+
+def test_outputs_from_compute_are_checked_not_trusted():
+    junk = [1, "x", {"type": "evil"}, {"type": "image", "png": 5}, {"type": "table", "columns": "a", "rows": []},
+            {"type": "text", "stream": "weird", "text": "kept"},
+            {"type": "table", "columns": ["a"], "rows": [["1"], "bad", [None]], "types": ["int", "extra"]},
+            {"type": "html", "html": "x" * (pyrun.MAX_HTML + 1)}]
+    clean = pyrun.clean_outputs(junk)
+    assert [o["type"] for o in clean] == ["text", "table"]
+    assert clean[0]["stream"] == "stdout"                # an unknown stream is plain text
+    assert clean[1]["rows"] == [["1"], [None]] and "types" not in clean[1]   # a types list of the wrong length is dropped
+
+
+def test_a_result_cut_off_by_the_jobs_api_says_so_instead_of_blaming_the_compute():
+    p = pyrun.plan(cells(("python", "1")), upto=0, show=None)
+    done, out = read(p, '{"v": 2, "cells": [{"i": 0, "ok": tr')
+    assert done and out[0].state is RunState.FAILED
+    assert "5 MB" in out[0].error and "could not be read" in out[0].error
+
+
 def test_every_python_result_says_where_it_ran():
     p = pyrun.plan(cells(("python", "print(1)")), upto=0, show=None)
     doc = {"v": 1, "cells": [{"i": 0, "ok": True, "stdout": "1\n"}]}
@@ -167,7 +327,7 @@ def test_a_matplotlib_png_travels_on_the_result():
 
 def test_the_wrapper_mentions_matplotlib_and_image_caps():
     src = pyrun.wrapper_notebook(pyrun.plan(cells(("python", "1")), upto=0, show=None))
-    assert "matplotlib" in src and "_capture_figs" in src
+    assert "matplotlib" in src and "capture_figs" in src
     assert str(pyrun.MAX_IMAGES) in src and str(pyrun.MAX_IMAGE_B64) in src
 
 
@@ -188,7 +348,7 @@ class FakeRunner:
 def test_a_run_is_started_polled_to_the_end_and_cleaned_up():
     doc = json.dumps({"v": 1, "cells": [{"i": 0, "ok": True, "stdout": "hi\n"}]})
     runner = FakeRunner([("PENDING", ""), ("RUNNING", ""), ("TERMINATED", "SUCCESS")], doc)
-    runs = PythonRuns(runner)
+    runs = PythonRuns(runner, wall=lambda: "2026-11-12T00:00:00+00:00")
     async def go():
         started = await runs.start("a@x", cells(("python", "print('hi')")), upto=0, show={0})
         h = started["handle"]
@@ -198,6 +358,7 @@ def test_a_run_is_started_polled_to_the_end_and_cleaned_up():
     assert stages == ["running", "running", "done"]
     assert last["results"]["0"]["output"] == "hi\n" and last["results"]["0"]["state"] == "succeeded"
     assert runner.discarded == [f"/Users/sp/run_{h}"]        # the scratch notebook does not pile up
+    assert last["results"]["0"]["ranBy"] == "a@x" and last["results"]["0"]["finishedAt"].startswith("2026-11-12")
 
 
 def test_someone_elses_handle_is_not_found():
@@ -340,3 +501,12 @@ def test_without_the_app_run_service_the_denial_stands(monkeypatch):
     monkeypatch.setattr(mod, "_post", denied)
     with pytest.raises(PermissionError):
         mod.dbx_run_notebook("/Users/me/x/nb")
+
+
+def test_type_texts_survive_cleaning_only_when_they_match_the_columns():
+    table = {"type": "table", "columns": ["a", "b"], "rows": [["[1]", "x"]], "truncated": False,
+             "types": ["array", "string"]}
+    kept = pyrun.clean_outputs([{**table, "typeTexts": ["array<int>", "string"]}])[0]
+    assert kept["typeTexts"] == ["array<int>", "string"]
+    assert "typeTexts" not in pyrun.clean_outputs([{**table, "typeTexts": ["array<int>"]}])[0]
+    assert "typeTexts" not in pyrun.clean_outputs([{**table, "typeTexts": "nope"}])[0]

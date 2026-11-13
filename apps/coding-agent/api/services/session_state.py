@@ -46,7 +46,7 @@ class Live:
     #: The resolved model this process was started with. A switch compares protocols against it.
     resolved: ResolvedModel | None = None
 
-    def record(self, call_id: str, name: str, status: str, summary: str = "", args: str = "") -> None:
+    def record(self, call_id: str, name: str, status: str, summary: str = "", args: str = "", proof=None) -> None:
         c = self.state.calls.setdefault(call_id, {"name": name, "status": "running"})
         if name:
             c["name"] = name
@@ -56,6 +56,8 @@ class Live:
             c["summary"] = summary
         if args:
             c["args"] = args
+        if proof is not None:
+            c["proof"] = proof
 
     def tool_calls(self) -> list[ToolCall]:
         return [
@@ -64,6 +66,7 @@ class Live:
                 name=c.get("name", ""),
                 status=c.get("status", ""),
                 summary=c.get("summary", ""),
+                proof=c.get("proof"),
             )
             for cid, c in self.state.calls.items()
         ]

@@ -36,6 +36,9 @@ env:
   # Durable session history shares Lakebase; never falls back to container memory.
   - name: APP_SESSION_USE_LAKEBASE
     value: "true"
+  # User-authenticated, read-only SQL; encrypted intents share the existing Lakebase journal.
+  - name: APP_SQL_RUN
+    value: "true"
   - name: APP_LLM_ADMINS
     value: raphael.mansuy@gmail.com
   # The key-encryption key for stored provider keys. It is an app RESOURCE (a Databricks secret), so a
@@ -54,3 +57,10 @@ env:
     value: mobioos-506015
   - name: APP_LLM_VERTEX_PROJECT
     value: mobioos-506015
+  # Where a Python session exchanges its commands and results with the app: a Unity Catalog volume it
+  # must be able to read and write. `scripts/provision-session-volume.sh` creates it and grants that.
+  # `auto` tries a session and falls back, in words, to one-shot runs when one cannot start.
+  - name: APP_SESSION_VOLUME
+    value: /Volumes/workspace/agent_scratch/kernel_sessions
+  - name: APP_PYTHON_SESSION
+    value: auto

@@ -5,16 +5,24 @@
  *   #/notebook/Users/me@x.com/agent_scratch/etl?cell=3     a notebook, optionally at a cell
  *   #/file/Users/me@x.com/notes.py                         a workspace file
  *   #/table/main.sales.orders                              a Unity Catalog table
+ *   #/lakebase/projects/pg_tickets                         a Lakebase project
+ *   #/lakebase/projects/pg_tickets/branches/agent-4ff      one of its branches
+ *   #/app/tickets_app                                      a Databricks App
+ *   #/job/812345678901                                     a Lakeflow job
+ *   #/run/812345679                                        one of its runs
+ *   #/pipeline/f0e1c4a2-…-9a2b                             a Lakeflow pipeline
  *   #/session/<id>                                         a conversation
  *   #/settings/models   #/settings/providers               the settings screen, on a tab
  *   (empty)                                                 the start page
  *
  * Paths are written the way people write them, so a link can be read and typed: `/` and `@` stay,
  * everything else that matters is percent-encoded per segment. `parse(format(r))` is `r` for every
- * route (the tests hold that), and anything unrecognised parses to the empty route rather than throwing:
- * a stale link must open the app, not a blank page.
+ * route (the tests hold that), and anything unrecognised parses to the empty route rather than
+ * throwing: a stale link must open the app, not a blank page.
  */
-export type DocRouteKind = "notebook" | "file" | "table" | "query" | "query-draft";
+import { asId, isPipelineId } from "./jobs";
+
+export type DocRouteKind = "lakebase" | "app" | "job" | "run" | "pipeline" | "notebook" | "file" | "table" | "query" | "query-draft";
 
 export interface Route {
   sql?: "queries";
@@ -73,6 +81,27 @@ export function parseRoute(hash: string): Route {
   }
   if (head === "table" && rest.length === 1 && rest[0]) {
     return { ...EMPTY_ROUTE, session, doc: { kind: "table", ref: decodeSegment(rest[0]) } };
+  }
+  // A Lakebase route carries a resource path, so its segments are decoded one by one and re-joined
+  // with `/`. `projects/pg_tickets` is the canonical form; a bare id still opens the project.
+  if (head === "lakebase" && rest.length > 0 && rest.join("")) {
+    const ref = rest.map(decodeSegment).join("/");
+    return { ...EMPTY_ROUTE, doc: { kind: "lakebase", ref: ref.startsWith("projects/") ? ref : `projects/${ref}` } };
+  }
+  if (head === "app" && rest.length === 1 && rest[0]) {
+    return { ...EMPTY_ROUTE, doc: { kind: "app", ref: decodeSegment(rest[0]) } };
+  }
+  // A job and a run are numeric ids. A malformed one parses to the EMPTY route so a stale link opens the
+  // app rather than a page that asks the server for `/api/jobs/abc` (spec 014 [UI-7], [E-20]).
+  if ((head === "job" || head === "run") && rest.length === 1 && rest[0]) {
+    const id = asId(decodeSegment(rest[0]));
+    return id === null ? EMPTY_ROUTE : { ...EMPTY_ROUTE, doc: { kind: head, ref: String(id) } };
+  }
+  // A pipeline is a UUID. Anything else is a name, and a name is not an id ([E-17]) — so it parses to the
+  // empty route rather than a page that reads a 404 as a permission problem.
+  if (head === "pipeline" && rest.length === 1 && rest[0]) {
+    const id = decodeSegment(rest[0]);
+    return isPipelineId(id) ? { ...EMPTY_ROUTE, doc: { kind: "pipeline", ref: id } } : EMPTY_ROUTE;
   }
   return EMPTY_ROUTE;
 }

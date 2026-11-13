@@ -215,6 +215,21 @@ button { font: inherit; color: inherit; cursor: pointer; }
   border: 0; flex: none;
 }
 
+/* ---- the app's own version, beside its name ------------------------------------------------
+   A quiet, monospace label, not a badge: it must be findable when someone asks "what am I running"
+   and invisible when they are working. It inherits the bar's height, so it costs no layout.
+   Hidden below 620 px, where `.brand` already drops to the mark alone — one identity, not two. */
+.app-version {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.01em;
+  color: var(--ink-3); text-decoration: none; white-space: nowrap; flex: none;
+  padding: 2px 6px; border: 1px solid var(--line); border-radius: 999px;
+  transition: color var(--dur), border-color var(--dur), background var(--dur);
+}
+.app-version:hover, .app-version:focus-visible {
+  color: var(--blue-600); border-color: var(--blue-300); background: var(--blue-50);
+}
+@media (max-width: 620px) { .app-version { display: none; } }
+
 /* ---- edge handles: the way back to a hidden panel (007 ZN-7) ----
    Absolutely positioned in the centre pane's own padding, so a handle costs no layout and cannot
    push the code. They appear only while their panel is hidden, which is the moment they answer. */
@@ -448,6 +463,18 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .tool .args { color: var(--ink-3); font-family: var(--mono); font-size: 11.5px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 .tool .time { color: var(--ink-3); font-size: 11.5px; font-variant-numeric: tabular-nums; flex: none; }
+/* A reply that is one page of a larger result ([R-3]). Deliberately a quiet chip and not a warning: a
+   page is normal for a big catalogue, and colouring it red would teach people to ignore red. */
+/* The requirements a blocked turn could not prove, shown BESIDE the verified rows so the reader is not
+   told "3 of 3 verified" and "Blocked" in the same breath without the missing list. */
+.mission-evidence-gap { margin: 10px 0 0; padding: 9px 11px; border-radius: 8px; font-size: 12.5px;
+  color: var(--ink-2); background: color-mix(in srgb, var(--warn, #B7791F) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn, #B7791F) 28%, transparent); }
+.mission-evidence-gap strong { color: var(--ink); }
+
+.tool .page-count { flex: none; font-size: 11px; padding: 1px 6px; border-radius: 999px;
+  background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line);
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tool .chev { color: var(--ink-3); font-size: 10px; transition: transform 0.15s; flex: none; }
 .tool[data-open="true"] .chev { transform: rotate(90deg); }
 .tool-body { border-top: 1px solid var(--line); padding: 10px 12px; background: var(--surface-2);
@@ -2159,7 +2186,11 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
   background: var(--surface); }
 
 .dock-head {
-  display: flex; align-items: center; gap: 6px; height: 40px; flex: none;
+  /* `min-height`, not `height`. A fixed 40 px row could not hold a state word AND its action, so the
+     notice overflowed the header vertically when the session closed — measured at 66 px in a 40 px
+     box, starting 14 px above the header's own top edge, which is what made a header chip look like a
+     floating toast. The header grows by the few pixels the notice needs and stays one row. */
+  display: flex; align-items: center; gap: 6px; min-height: 40px; flex: none;
   padding: 0 6px 0 12px; border-bottom: 1px solid var(--line); background: var(--surface);
   min-width: 0;
 }
@@ -2379,6 +2410,7 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
 .cell-state.tone-muted { color: var(--ink-3); }
 .cell-output-when { font-variant-numeric: tabular-nums; flex: none; }
 .cell-output-where { flex: 0 1 auto; min-width: 4em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.85; }
+.cell-output-by { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.85; }
 .cell-output-spacer { flex: 1; min-width: 4px; }
 .cell-output-act {
   width: 20px; height: 20px; display: grid; place-items: center; border: 0; border-radius: 4px;
@@ -2389,6 +2421,9 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
 
 .cell-output-msg {
   margin: 0; padding: 8px 10px; font-size: 12px; line-height: 1.45;
+  /* An engine error carries line and position pointers on their own lines; collapsing them hides
+     where the statement went wrong. */
+  white-space: pre-wrap;
   font-family: var(--mono); color: var(--pink-700); word-break: break-word;
   border-left: 2px solid var(--pink-300);
 }
@@ -2400,6 +2435,15 @@ body:has(.pane.rail.is-drawer) .pane.assistant.is-drawer { width: min(420px, 52v
 .cell-output-grid { max-height: 320px; overflow: auto; overscroll-behavior: contain; border-radius: 0; }
 .cell-output-grid .grid { border: 0; }
 .cell-output-empty { text-align: center; color: var(--ink-3); font-style: italic; }
+/* Numbers line up on the right, as in Databricks; the type glyph says what the column holds. */
+.cell-output-grid table.grid th.is-num, .cell-output-grid table.grid td.is-num { text-align: right; font-variant-numeric: tabular-nums; }
+.cell-type { display: inline-block; margin-right: 5px; padding: 0 3px; border-radius: 3px; font-size: 9.5px; font-weight: 600;
+  line-height: 14px; letter-spacing: 0.02em; color: var(--ink-3); background: var(--surface-2); border: 1px solid var(--line); }
+.cell-null { color: var(--ink-3); font-style: italic; }
+.cell-output-note { margin: 0; padding: 6px 10px; font-size: 12px; color: var(--ink-3); border-top: 1px solid var(--line); background: var(--surface-2); }
+/* HTML output sits in its own frame: white, because the page inside was written for a white page. */
+.cell-output-html { border-top: 1px solid var(--line); background: #fff; }
+.cell-output-html iframe { display: block; width: 100%; border: 0; background: #fff; }
 
 /* A search that takes seconds must say so, with the query and a clock. Anonymous skeleton bars for
    four seconds read as "broken"; the sentence and the tick read as "working". */
@@ -2495,6 +2539,12 @@ h2.rail-group { margin: 0; text-transform: none; }
 .account-facts dt { color: var(--ink-3); }
 .account-facts dd { margin: 0; overflow-wrap: anywhere; }
 .account-facts code { font-family: var(--mono); font-size: 11.5px; }
+/* A version is read character by character, so it is monospace like a path — and the link carries the
+   only affordance, because the row already says "Version" on the left. */
+.version-link { font-family: var(--mono); font-size: 11.5px; }
+.version-note { color: var(--ink-3); font-size: 11px; }
+/* A menu item that is an anchor must look exactly like the buttons beside it: the two are one list. */
+a.account-item { text-decoration: none; color: var(--ink); }
 .copy-btn.quiet { color: var(--ink-3); }
 .copy-btn.quiet:hover { background: var(--surface-3); color: var(--ink); }
 .account-item { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 7px 8px;
@@ -2706,6 +2756,9 @@ h2.rail-group { margin: 0; text-transform: none; }
 .cell-output-text { margin: 0; padding: 8px 12px; font: 12.5px/1.5 var(--mono);
   white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; color: var(--ink);
   border-top: 1px solid var(--line); }
+.cell-output-text.is-stderr { background: color-mix(in srgb, var(--pink-100) 55%, var(--surface)); color: var(--ink-2); }
+.cell-output-text.is-notice { font-style: italic; color: var(--ink-3); background: var(--surface-2); }
+.cell-output-text + .cell-output-text { border-top-style: dashed; }
 /* Matplotlib (and friends) under the cell — Databricks/Jupyter inline figure: full width, natural
    height, download on hover in the corner. */
 .cell-output-images {
@@ -3259,3 +3312,391 @@ h2.rail-group { margin: 0; text-transform: none; }
 .session-storage p { color: var(--ink-3); line-height: 1.5; }
 .transcript-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-block: 10px; font-size: 12px; }
 .transcript-pages p { flex-basis: 100%; margin: 0; color: var(--ink-3); }
+
+/* ================================================================================================
+   A composer that cannot be written into — and says so  (specs/012 [FX-2] [FX-3])
+
+   `disabled` used to do this job, and it removed the field from the tab order and the accessibility
+   tree: the user could not focus the one place they were meant to type, which was the reported
+   defect. The box is now `readOnly`, so it stays reachable, and the difference is STATED rather than
+   withheld.
+
+   The visual contract, in priority order: it must be obvious at a glance that the box is closed, it
+   must still look like a text field (so its content is readable and selectable), and the focus ring
+   must still appear when it is focused — a blocked field a keyboard user cannot see is the same
+   failure with a nicer colour.
+   ================================================================================================ */
+.composer-box.is-blocked {
+  border-style: dashed;
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+  box-shadow: none;
+}
+.composer-box.is-blocked:focus-within {
+  border-color: var(--ink-3);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink-3) 12%, transparent);
+}
+.composer-box.is-blocked textarea { color: var(--ink-2); cursor: default; }
+.composer-box.is-blocked textarea::placeholder { color: var(--ink-2); opacity: 1; font-style: normal; }
+/* The reason is said ONCE.
+ *
+ * It is visible in the placeholder (where a sighted user already looks, and where it replaces the
+ * invitation), and this element carries the same sentence to assistive technology through
+ * `aria-describedby`. Rendering it visibly as well produced the sentence twice — a picture of that
+ * is what caught it — so this copy is for the accessibility tree only. One statement, two audiences,
+ * which is exactly what `aria-describedby` is for. */
+.composer-blocked-reason {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+/* The action row of a blocked composer recedes: the box is still usable as a place to read and
+   select text, but nothing in it invites a press. */
+.composer-box.is-blocked .composer-actions .btn.primary { opacity: 0.55; }
+
+/* ================================================================================================
+   The stream notice: state word + its action, one group  (specs/012 [ST-4] [ST-5] [ST-7])
+
+   It replaces a passive `.pill`. The old pill said "reconnecting…" and offered nothing, while every
+   control that could have helped was disabled by the same flag — a dead end dressed as a transition.
+   ================================================================================================ */
+/* A box, not a chip: in the dock body it holds a word, an action group and a sentence, and a pill
+   shape cannot. `align-self: stretch` so it lines up with the turns above and below it. */
+.stream-notice {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px;
+  padding: 7px 9px 7px 10px; border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 620; line-height: 1.5;
+  border: 1px solid transparent; flex: none;
+}
+.stream-notice.is-reconnecting { background: var(--yellow-100); color: var(--yellow-800); border-color: var(--yellow-300); }
+.stream-notice.is-closed { background: var(--pink-100); color: var(--pink-700); border-color: var(--pink-300); }
+.stream-notice.is-connecting { background: var(--surface-3); color: var(--ink-2); }
+.stream-notice-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.stream-notice.is-reconnecting .stream-notice-dot { animation: pulse 1.4s ease-in-out infinite; }
+.stream-notice-word { white-space: nowrap; }
+.stream-notice-actions { display: inline-flex; align-items: center; gap: 4px; }
+/* A button inside a tinted chip has to lose the chip's tint, or it reads as part of the label. */
+.stream-notice .btn.sm { min-height: 22px; padding: 0 8px; font-size: 11px; border-radius: var(--radius-xs, 6px); }
+.stream-notice .btn.sm.ghost { color: inherit; border-color: currentColor; background: transparent; }
+.stream-notice .btn.sm.primary { background: var(--ink); border-color: var(--ink); color: var(--on-accent); }
+.stream-notice-detail {
+  flex-basis: 100%; margin: 0; font-weight: 400; font-size: 11.5px; line-height: 1.5;
+  color: var(--ink-2); display: flex; align-items: flex-start; gap: 5px;
+}
+/* In the dock header the notice must not push the context label aside: compact drops the sentence and
+   keeps the word and the action, which is the half that can change anything.
+ *
+ * MEASURED: it must also be ONE LINE. `.dock-head` is a fixed-height 40 px flex row, and the first
+ * version let the chip wrap to 66 px — it then overflowed the header VERTICALLY (y=38 for a header
+ * starting at y=52) and drew over the panel above it, which is what made it read as a floating toast
+ * rather than part of the header. Nothing about the markup was wrong; the box simply could not fit.
+ * `nowrap` here and `align-self: center` below are the fix. */
+.stream-notice.is-compact {
+  flex: 0 1 auto; min-width: 0; flex-wrap: nowrap; align-self: center;
+  white-space: nowrap; overflow: hidden;
+}
+.stream-notice.is-compact .stream-notice-detail { display: none; }
+/* The action keeps its size while the word may be truncated: a chip that hides its own button on a
+   narrow dock is a chip that has lost the only useful half. */
+.stream-notice.is-compact .stream-notice-actions { flex: none; }
+.stream-notice.is-compact .stream-notice-word { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* The actions are NEVER hidden to make room. ST-4/ST-5 say the action lives beside the word, and
+   dropping "Retry" in the narrow dock would leave the one state that needs an action without one —
+   the defect this whole spec is about, reintroduced for layout reasons. The header grows instead
+   (its `height` is now a `min-height`). */
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* ==========================================================================
+   Spec 013: the two infrastructure pages (Lakebase project, Databricks App) and the Data tab.
+   Read-only surfaces. They reuse `.viewer-head`, `.kv` and `.pill`'s rhythm rather than inventing a
+   second chrome: a page that looks unlike the rest of the app is a bug even when every assertion
+   passes (spec 013 [11 §the rule for accepting one]).
+   ========================================================================== */
+
+.infra-body { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px 24px; }
+
+.infra-block {
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); min-width: 0;
+}
+.infra-block[data-state="error"] { border-color: var(--pink-100); background: var(--surface-2); }
+.infra-block-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-bottom: 1px solid var(--line);
+  min-height: 32px;             /* a fixed row, so a state change cannot shift the page */
+}
+.infra-block-title {
+  margin: 0; font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--ink-2); font-weight: 600;
+}
+.infra-block-note {
+  font-size: 11.5px; color: var(--ink-3); font-family: var(--mono);
+}
+.infra-block-spacer { flex: 1; }
+.infra-block-body { padding: 10px; }
+.infra-block-empty { margin: 0; font-size: 12.5px; color: var(--ink-3); }
+.infra-block-error { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--ink-2); }
+.infra-block-error > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.infra-block-error .btn { align-self: flex-start; }
+
+.infra-skeleton { display: flex; flex-direction: column; gap: 6px; }
+.infra-skeleton .sk { display: block; height: 10px; border-radius: 4px; background: var(--line); }
+.infra-skeleton .sk.a { width: 62%; }
+.infra-skeleton .sk.b { width: 38%; }
+
+.infra-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px 18px; }
+.infra-fact { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.infra-fact-label {
+  font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--ink-3); flex: 0 0 78px;
+}
+.infra-fact-value { font-size: 12.5px; color: var(--ink); min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.infra-fact-value.is-mono { font-family: var(--mono); font-size: 12px; }
+
+.infra-rows { display: flex; flex-direction: column; }
+.infra-row {
+  display: grid; grid-template-columns: minmax(70px, 1fr) 78px minmax(120px, 1.4fr) 58px minmax(80px, 1fr);
+  gap: 8px; align-items: center; padding: 5px 2px; border-bottom: 1px solid var(--line);
+  font-size: 12px; min-width: 0;
+}
+.infra-row:last-child { border-bottom: 0; }
+.infra-row-name { font-family: var(--mono); color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
+.infra-row-meta, .infra-row-host { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.infra-row-range { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); }
+.infra-row-range.is-bad { color: var(--pink-700); }
+
+.infra-list { margin: 0; padding: 0; list-style: none; }
+.infra-list.cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 14px; }
+.infra-list-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12.5px; }
+.infra-mono { font-family: var(--mono); font-size: 12px; }
+.infra-tag {
+  font-size: 10.5px; padding: 1px 6px; border-radius: 999px;
+  background: var(--green-100); color: var(--green-700);
+}
+.infra-tag.quiet { background: var(--surface-2); color: var(--ink-3); }
+
+.infra-pill {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 8px;
+  border-radius: 999px; font-size: 11px; letter-spacing: 0.02em; white-space: nowrap;
+  flex: none;
+}
+.infra-pill.tone-good { background: var(--green-100); color: var(--green-700); }
+.infra-pill.tone-busy { background: var(--yellow-100); color: var(--yellow-800); }
+.infra-pill.tone-bad { background: var(--pink-100); color: var(--pink-700); }
+.infra-pill.tone-quiet { background: var(--surface-2); color: var(--ink-3); border: 1px solid var(--line); }
+
+.infra-health {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line); background: var(--surface-2);
+  font-size: 12.5px;
+}
+.infra-health.tone-good { border-color: var(--green-100); }
+.infra-health.tone-bad { border-color: var(--pink-100); }
+.infra-health-sentence { flex: 1; min-width: 0; }
+.infra-health-code { font-family: var(--mono); font-size: 12px; color: var(--ink-2); flex: none; }
+
+.infra-fix { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; flex-wrap: wrap; }
+.infra-note { margin: 8px 0 0; font-size: 12px; color: var(--ink-3); }
+.infra-link { color: var(--teal-700); text-decoration: none; background: none; border: 0;
+  padding: 0; font: inherit; cursor: pointer; }
+.infra-link:hover { text-decoration: underline; }
+
+/* The Data tab's rows: one glyph, a name, a state. The state is always a word, never colour only. */
+.tree-group {
+  font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-3); padding: 10px 8px 4px; font-weight: 600;
+}
+.data-row { display: flex; align-items: center; gap: 8px; width: 100%;
+  border: 0; background: none; text-align: left; cursor: pointer; }
+.data-row:hover { background: var(--surface); }
+.data-row .tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-icon.kind-lakebase { color: var(--teal-700); }
+.tree-icon.kind-app { color: var(--purple-700); }
+
+/* ==========================================================================
+   Spec 014: the job, run and pipeline pages, and the two rail groups they add.
+   Same rhythm as spec 013's pages on purpose — a read-only surface that looks unlike the others
+   makes a user think it behaves unlike them (spec 014 [11 §the rule a picture has to pass]).
+   ========================================================================== */
+
+/* The task graph: a level index, its tasks, and the "after X" that carries the edges. A node-link
+   diagram is unreadable in a 470 px column; levels stay legible at 620 px and are selectable text. */
+.job-graph { display: flex; flex-direction: column; gap: 8px; }
+.job-graph.is-invalid { flex-direction: row; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--ink-2); }
+.job-graph.is-invalid > div { display: flex; flex-direction: column; min-width: 0; }
+.job-level { display: flex; gap: 10px; align-items: flex-start; }
+.job-level-index {
+  flex: 0 0 18px; height: 18px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10.5px; font-variant-numeric: tabular-nums;
+  background: var(--surface-2); color: var(--ink-3); border: 1px solid var(--line);
+}
+.job-level-tasks { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.job-task {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); min-width: 0;
+}
+.job-task-key { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+.job-task-kind { font-size: 11px; color: var(--ink-3); }
+.job-task-target {
+  font-family: var(--mono); font-size: 11.5px; color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.job-task-after { font-size: 11px; color: var(--ink-3); }
+
+/* A paused schedule is stated in a sentence, and the sentence carries a tone: this is the one field on
+   the page that costs money when read wrongly. */
+.infra-schedule { margin: 0; font-size: 12.5px; color: var(--ink-2); }
+.infra-schedule.is-paused { color: var(--ink); }
+
+/* A run's own error, quoted. Monospace and scrollable: an exception is text a person copies. */
+.infra-error-text {
+  margin: 8px 0 0; padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--surface-2); border: 1px solid var(--line);
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.5; color: var(--ink-2);
+  white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto;
+}
+.infra-details { margin-top: 6px; font-size: 12px; color: var(--ink-3); }
+.infra-details summary { cursor: pointer; }
+.infra-details summary:hover { color: var(--ink); }
+
+/* Which identity read the page. Quiet, present, and never the loudest thing on screen. */
+.infra-identity { margin: 10px 0 0; font-size: 11.5px; color: var(--ink-3); }
+
+/* Run and task rows: the same `.infra-row` grid, with the state word before the detail. A queued task
+   reading `not started` is the assertion that matters here, so the word must be a column, not a colour. */
+.run-tasks .infra-row, .pipeline-events .infra-row {
+  display: grid; grid-template-columns: minmax(90px, 1.1fr) auto minmax(60px, auto) minmax(0, 2fr);
+  gap: 10px; align-items: baseline;
+}
+.pipeline-events .infra-row { grid-template-columns: 52px minmax(90px, auto) minmax(0, 3fr); }
+.pipeline-events .infra-row.level-error .infra-row-name { color: var(--pink-700); }
+.pipeline-events .infra-row.level-warn .infra-row-name { color: var(--yellow-800); }
+
+/* The rail's four groups. A count beside the heading is a fact; the heading alone is a label. */
+.tree-group-block { display: flex; flex-direction: column; }
+.tree-group { display: flex; align-items: baseline; gap: 6px; }
+.tree-group-count { font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.tree-icon.kind-job { color: var(--blue-600); }
+.tree-icon.kind-pipeline { color: var(--purple-700); }
+
+/* At 620 px the task rows wrap rather than clip: a two-column grid with a fixed first column pushes the
+   detail out of the viewport, and a clipped graph reads as a graph with fewer tasks. */
+@media (max-width: 700px) {
+  .run-tasks .infra-row, .pipeline-events .infra-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 2px;
+  }
+  .run-tasks .infra-row .infra-row-host, .pipeline-events .infra-row .infra-row-host {
+    grid-column: 1 / -1;
+  }
+}
+
+/* One refusal for a page whose whole read failed. A block-level box is for a block-level denial; when
+   EVERY block was denied for one cause, the cause is stated once and the blocks say only that they could
+   not be read. Five copies of one sentence is the defect 013's [UI-6] recorded, found here by looking. */
+.infra-page-refusal {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--pink-100); background: var(--surface-2);
+  font-size: 12.5px; color: var(--ink-2);
+}
+.infra-page-refusal > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.infra-page-refusal strong { color: var(--ink); font-weight: 600; }
+.infra-page-refusal .btn { align-self: flex-start; }
+
+/* ---- phase 2 surfaces: write mode and budget ([R-9], [R-24]) ---------------------------------- */
+/* A read-only session is the mode in which a plausible request will be refused, so it is visible at a
+   glance rather than discovered by trying. `warn` is the only tone: a chip for the default mode would be
+   noise that hides the one that matters. */
+.pill.write-mode { margin: 6px 12px 0; font-size: 11px; }
+.pill.write-mode.warn { color: var(--warn-ink, #7A4A00); background: color-mix(in srgb, #B7791F 14%, transparent);
+  border: 1px solid color-mix(in srgb, #B7791F 32%, transparent); }
+
+.budget { margin: 10px 12px 4px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.budget-head { display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 11px; color: var(--ink-2); letter-spacing: .02em; text-transform: uppercase; }
+.budget-count { font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
+.budget-bar { height: 5px; margin: 6px 0 0; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.budget-bar > span { display: block; height: 100%; background: var(--ink-3); border-radius: 999px;
+  transition: width .25s ease; }
+.budget.warn .budget-bar > span { background: #B7791F; }
+.budget.bad  .budget-bar > span { background: var(--danger, #C0392B); }
+.budget-line { margin: 7px 0 0; font-size: 11.5px; color: var(--ink-2); line-height: 1.4; }
+.budget.bad .budget-line { color: var(--danger-ink, #A0301F); }
+
+/* The notebook's Python session chip, and the menu under it. */
+.nb-session { position: relative; display: inline-flex; flex: none; }
+.nb-session-chip { cursor: pointer; font: inherit; font-size: 12px; }
+.nb-session-chip:focus-visible { outline: 2px solid var(--focus, var(--ink-2)); outline-offset: 2px; }
+.nb-session-chip.is-ok .nb-bar-dot { background: var(--green-700); border-color: var(--green-700); }
+.nb-session-chip.is-busy .nb-bar-dot { background: var(--yellow-800); border-color: var(--yellow-800); animation: pulse 1.2s ease-in-out infinite; }
+.nb-session-chip.is-warn { border-color: var(--pink-300); color: var(--pink-700); }
+.nb-session-chip.is-warn .nb-bar-dot { background: var(--pink-700); border-color: var(--pink-700); }
+.nb-session-pop {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: var(--z-modal, 20);
+  display: flex; flex-direction: column; gap: 4px; width: min(300px, calc(100vw - 24px)); padding: 10px;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: var(--shadow-lg);
+}
+.nb-session-note { margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: var(--ink-2); white-space: normal; }
+.nb-session-pop .btn { justify-content: flex-start; }
+@media (prefers-reduced-motion: reduce) { .nb-session-chip.is-busy .nb-bar-dot { animation: none; } }
+.cell-output-md { padding: 6px 12px; font-size: 13px; }
+
+/* Nested and long values in a result table. */
+.cell-value { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; max-width: 100%; }
+.cell-value.is-nested .cell-value-text, .cell-value-full { font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; }
+.cell-value-full { margin: 0; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; flex: 1 1 100%; }
+.cell-value-act { border: 0; background: none; padding: 0; font: inherit; font-size: 11px; color: var(--accent, #2a5bd7); cursor: pointer; }
+.cell-value-act:hover { text-decoration: underline; }
+.cell-value-act:focus-visible { outline: 2px solid var(--focus, var(--ink-2)); outline-offset: 2px; border-radius: 2px; }
+
+/* Charts. Eight series colours that read on both themes; marks are fill/stroke from the series class. */
+:root { --chart-c0: #3b6fd4; --chart-c1: #e07a1f; --chart-c2: #2f9e6b; --chart-c3: #c2417a; --chart-c4: #7a5bd1; --chart-c5: #b09a1c; --chart-c6: #1f9bb0; --chart-c7: #8a8f98; }
+.chart { padding: 8px 12px 10px; }
+.chart-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 8px; font-size: 12px; color: var(--ink-2); }
+.chart-tools label { display: inline-flex; align-items: center; gap: 6px; }
+.chart-tools select { font: inherit; font-size: 12px; padding: 2px 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); max-width: 160px; }
+.chart-svg { display: block; width: 100%; max-height: 340px; }
+.chart-grid { stroke: var(--line); stroke-width: 1; }
+.chart-axis { stroke: var(--line-strong); stroke-width: 1; }
+.chart-tick { font-size: 11px; fill: var(--ink-3); }
+.chart-bar, .chart-slice { stroke: var(--surface); stroke-width: 1; }
+.chart-line { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.chart-area { stroke: none; opacity: 0.18; }
+.chart-dot { stroke: var(--surface); stroke-width: 1; }
+.chart-c0.chart-bar, .chart-c0.chart-dot, .chart-c0.chart-slice, .chart-c0.chart-area, .chart-c0.chart-key { fill: var(--chart-c0); background: var(--chart-c0); }
+.chart-c1.chart-bar, .chart-c1.chart-dot, .chart-c1.chart-slice, .chart-c1.chart-area, .chart-c1.chart-key { fill: var(--chart-c1); background: var(--chart-c1); }
+.chart-c2.chart-bar, .chart-c2.chart-dot, .chart-c2.chart-slice, .chart-c2.chart-area, .chart-c2.chart-key { fill: var(--chart-c2); background: var(--chart-c2); }
+.chart-c3.chart-bar, .chart-c3.chart-dot, .chart-c3.chart-slice, .chart-c3.chart-area, .chart-c3.chart-key { fill: var(--chart-c3); background: var(--chart-c3); }
+.chart-c4.chart-bar, .chart-c4.chart-dot, .chart-c4.chart-slice, .chart-c4.chart-area, .chart-c4.chart-key { fill: var(--chart-c4); background: var(--chart-c4); }
+.chart-c5.chart-bar, .chart-c5.chart-dot, .chart-c5.chart-slice, .chart-c5.chart-area, .chart-c5.chart-key { fill: var(--chart-c5); background: var(--chart-c5); }
+.chart-c6.chart-bar, .chart-c6.chart-dot, .chart-c6.chart-slice, .chart-c6.chart-area, .chart-c6.chart-key { fill: var(--chart-c6); background: var(--chart-c6); }
+.chart-c7.chart-bar, .chart-c7.chart-dot, .chart-c7.chart-slice, .chart-c7.chart-area, .chart-c7.chart-key { fill: var(--chart-c7); background: var(--chart-c7); }
+.chart-c0.chart-line { stroke: var(--chart-c0); } .chart-c1.chart-line { stroke: var(--chart-c1); } .chart-c2.chart-line { stroke: var(--chart-c2); }
+.chart-c3.chart-line { stroke: var(--chart-c3); } .chart-c4.chart-line { stroke: var(--chart-c4); } .chart-c5.chart-line { stroke: var(--chart-c5); }
+.chart-c6.chart-line { stroke: var(--chart-c6); } .chart-c7.chart-line { stroke: var(--chart-c7); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; list-style: none; margin: 6px 0 0; padding: 0; font-size: 12px; color: var(--ink-2); }
+.chart-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.chart-key { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.chart-detail { color: var(--ink-3); }
+.cell-view-switch { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+.cell-view-switch button { border: 0; background: var(--surface); color: var(--ink-2); font: inherit; font-size: 11px; padding: 2px 8px; cursor: pointer; }
+.cell-view-switch button[aria-pressed="true"] { background: var(--ink-2); color: var(--surface); }
+.cell-view-switch button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Widget bar. */
+.widget-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 16px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2, var(--surface)); }
+.widget-fields { display: flex; flex-wrap: wrap; gap: 8px 14px; min-width: 0; }
+.widget-field { display: inline-flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--ink-3); min-width: 0; }
+.widget-field input[type="text"], .widget-field select { font: inherit; font-size: 12px; color: var(--ink); padding: 3px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); min-width: 120px; max-width: 220px; }
+.widget-field input:focus-visible, .widget-field select:focus-visible { outline: 2px solid var(--focus, var(--ink-2)); outline-offset: 1px; }
+.widget-hint { font-style: normal; opacity: 0.8; }
+.widget-multi { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--ink); }
+.widget-multi label { display: inline-flex; align-items: center; gap: 4px; }
+.widget-note { font-size: 11px; color: var(--ink-3); margin-left: auto; align-self: center; }
+.widget-reset { font: inherit; font-size: 11px; padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink-2); cursor: pointer; }
+.widget-reset:disabled { opacity: 0.45; cursor: default; }

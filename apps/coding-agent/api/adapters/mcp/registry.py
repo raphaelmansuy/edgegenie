@@ -38,7 +38,17 @@ def free_port() -> int:
 
 
 class SubprocessToolRegistry:
-    def __init__(self, server: Path | None = None, python: str = "python3", bridge=None) -> None:
+    def __init__(self, server: Path | None = None, python: str = "python3", bridge=None,
+                 *, user_skills: str = "", workspace_skills: str = "", hooks_file: str = "",
+                 hooks_allow_run: bool = False) -> None:
+        #: The workspace's declarative rules ([R-13]). A PATH, not the rules: the tool server parses them,
+        #: so the policy lives with the process that enforces it.
+        self._hooks_file = hooks_file
+        self._hooks_allow_run = hooks_allow_run
+        #: Directories for user and workspace skills ([R-18]). Empty means "not configured", which is the
+        #: normal case: a laptop has no workspace, and the built-in four are enough there.
+        self._user_skills = user_skills
+        self._workspace_skills = workspace_skills
         self._server = server or TOOL_SERVER
         #: How a tool asks the app to run a notebook (services/run_bridge.py); None = it cannot.
         self._bridge = bridge
@@ -47,6 +57,10 @@ class SubprocessToolRegistry:
         self._stderr: str = ""
         self._logs: dict[str, str] = {}
         self._homes: dict[str, str] = {}
+        self._modes: dict[str, str] = {}
+
+    def set_write_mode(self, sid, mode):
+        self._modes[sid] = mode
 
     async def start(self, session_id: str, folder: str, schema: str | None,
                     token_file: str | None = None) -> str:
@@ -96,6 +110,8 @@ class SubprocessToolRegistry:
             "NBMCP_ALLOW_WRITES": "1",
             "NBMCP_WRITE_SCHEMAS": schema or "",
             "NBMCP_WRITE_PATHS": folder.rstrip("/") + "/",
+            "NBMCP_WRITE_MODE": self._modes.get(session_id, "fenced"),
+            "NBMCP_WRITE_APP_PREFIX": f"agent-{session_id[:8]}-",
             "NBMCP_WRITE_JOB_PREFIX": f"agent_{session_id[:8]}_",
             "NBMCP_WRITE_INSTANCE_PREFIX": f"agent-{session_id[:8]}-",
             "NBMCP_SKILLS_DIR": str(self._server.parent / "skills"),
@@ -104,6 +120,9 @@ class SubprocessToolRegistry:
             # Agent code must never run as the app identity (AG-34).
             # A separate, verified run adapter is required before offering a bridge.
         }
+        if self._bridge:
+            env.update({"NBMCP_QUERY_URL": f"{self._bridge.url}/internal/query",
+                        "NBMCP_RUN_SESSION": session_id, "NBMCP_RUN_KEY": self._bridge.key_for(session_id)})
         return env
 
     def _read_log(self, session_id: str) -> str:
@@ -135,11 +154,43 @@ class SubprocessToolRegistry:
                 proc.kill()
 
 
+def read_ledger(ledger_dir: str | None = None) -> list[dict]:
+    """Every object any session created, newest last, read from the ledger files.
+
+    The ledger is one JSONL file per session (spec 014 [RB-3]); this reads them all so a page can ask "did
+    this conversation make this pipeline?" by checking the session prefix in its own client. A missing
+    directory is an empty ledger: a fence that fails closed on a missing file refuses work the user can
+    see they did.
+    """
+    import json
+    from pathlib import Path
+
+    root = Path(ledger_dir or os.environ.get("APP_SESSION_LEDGER_DIR")
+                or os.path.join(tempfile.gettempdir(), "agent-ledgers"))
+    rows: list[dict] = []
+    try:
+        for path in sorted(root.glob("*.jsonl")):
+            session = path.stem
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(row, dict):
+                    rows.append({**row, "session": session})
+    except OSError:
+        return []
+    return rows
+
+
 class NullToolRegistry:
     """Demo mode: no tool server. The advertised count is 0 and the UI says writes are off."""
 
     async def start(self, session_id: str, folder: str, schema: str | None,
-                    token_file: str | None = None) -> str:
+                    token_file: str | None = None, sp_token_file: str | None = None,
+                    ledger_dir: str | None = None, write_mode: str = "fenced") -> str:
         return ""
 
     async def health(self, url: str) -> int:

@@ -23,6 +23,7 @@ import base64
 import json
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from .cellrun import RunResult, RunState, without_skip
@@ -31,13 +32,19 @@ from .cellrun import RunResult, RunState, without_skip
 WHERE = "Serverless · as the app"
 
 MAX_CELLS = 200
-MAX_ROWS = 200
+MAX_ROWS = 1000
 #: Per cell. A cell that prints a million lines gets its first and last lines, not a frozen page.
 MAX_OUTPUT_CHARS = 20_000
 #: Per cell. A KPI grid is one figure; a cell that opens dozens still returns a readable page.
 MAX_IMAGES = 8
 #: Base64 length. ~1 MB of PNG is plenty for a notebook plot; the exit payload has to stay small.
 MAX_IMAGE_B64 = 1_500_000
+#: One HTML output (`displayHTML`, a styled table). Larger is replaced by a sentence.
+MAX_HTML = 1_000_000
+#: Everything the notebook returns must fit the Jobs API's 5 MB `notebook.exit` limit. Outputs share this
+#: budget in notebook order; the hard limit is the check that runs once the document is built.
+TOTAL_BUDGET = 3_500_000
+HARD_LIMIT = 4_800_000
 
 _MAGIC = re.compile(r"^\s*%(\w+)[ \t]*(.*)$")
 _PYTHON_MAGICS = frozenset({"python", "py"})
@@ -88,6 +95,8 @@ def python_source(language: str, source: str) -> tuple[str | None, str]:
         return None, (f"%{name} cells cannot run here. Install libraries in the notebook's own "
                       "environment, or ask the agent")
     if (language or "").lower() not in {"python", "py", ""}:
+        if (language or "").lower() == "sql":
+            return None, "this is a SQL cell; it runs on a SQL warehouse, not as Python"
         return None, f"{language} cells do not run as Python"
     return text, ""
 
@@ -123,172 +132,51 @@ def plan(cells: list[PyCell], *, upto: int | None, show: set[int] | None = None)
 
 # -- the wrapper notebook -----------------------------------------------------------------------
 
-_WRAPPER = r'''# Databricks notebook source
-import ast, base64, contextlib, io, json, traceback
-
+# The code that runs the cells is `kernel_runtime.py`, embedded as text: the one-shot run and the session
+# produce the same outputs because they are the same code. Only the loop below is the one-shot's own.
+_WRAPPER_TAIL = r'''
+# COMMAND ----------
 _STEPS = json.loads(base64.b64decode("__STEPS__").decode("utf-8"))
 _SHOW = set(json.loads(base64.b64decode("__SHOW__").decode("utf-8")))
-_MAX_ROWS = __MAX_ROWS__
-_MAX_CHARS = __MAX_CHARS__
-_MAX_IMAGES = __MAX_IMAGES__
-_MAX_IMAGE_B64 = __MAX_IMAGE_B64__
-_tables = []
-_images = []
-
-# A headless backend: serverless has no display, and Agg is what turns a figure into PNG bytes.
-try:
-    import matplotlib
-    matplotlib.use("Agg")
-except Exception:
-    pass
-
-
-def _clip(text):
-    if len(text) <= _MAX_CHARS:
-        return text
-    half = _MAX_CHARS // 2
-    return text[:half] + "\n... [%d characters not shown] ...\n" % (len(text) - _MAX_CHARS) + text[-half:]
-
-
-def _as_table(value):
-    """A Spark or pandas DataFrame as {columns, rows, total}, or None for anything else."""
-    kind = type(value).__module__
-    if hasattr(value, "collect") and hasattr(value, "columns") and hasattr(value, "limit"):
-        rows = value.limit(_MAX_ROWS + 1).collect()
-        cols = list(value.columns)
-        data = [["" if v is None else str(v) for v in r] for r in rows[:_MAX_ROWS]]
-        return {"columns": cols, "rows": data, "truncated": len(rows) > _MAX_ROWS}
-    if kind.startswith("pandas") and hasattr(value, "head") and hasattr(value, "columns"):
-        head = value.head(_MAX_ROWS)
-        cols = [str(c) for c in head.columns]
-        data = [["" if v is None else str(v) for v in row] for row in head.itertuples(index=False, name=None)]
-        return {"columns": cols, "rows": data, "truncated": len(value) > _MAX_ROWS}
-    return None
-
-
-def _is_figure(value):
-    return (value is not None
-            and type(value).__name__ == "Figure"
-            and "matplotlib" in getattr(type(value), "__module__", ""))
-
-
-def _fig_png(fig):
-    """PNG bytes as base64. 144 dpi is the Jupyter retina compromise: sharp on a 2x screen, still small."""
-    buf = io.BytesIO()
-    try:
-        fig.savefig(buf, format="png", bbox_inches="tight", facecolor=fig.get_facecolor(), dpi=144)
-    except Exception:
-        return None
-    data = base64.b64encode(buf.getvalue()).decode("ascii")
-    return data if len(data) <= _MAX_IMAGE_B64 else None
-
-
-def _capture_figs():
-    """Every figure the cell left open, as PNG. Closed afterwards so the next cell starts clean."""
-    try:
-        import matplotlib.pyplot as plt
-    except Exception:
-        return
-    for num in list(plt.get_fignums()):
-        if len(_images) >= _MAX_IMAGES:
-            break
-        fig = plt.figure(num)
-        png = _fig_png(fig)
-        if png:
-            _images.append(png)
-        try:
-            plt.close(fig)
-        except Exception:
-            pass
-    # Anything past the cap is still closed: a leak into the next cell is worse than a missing plot.
-    try:
-        import matplotlib.pyplot as plt
-        for num in list(plt.get_fignums()):
-            plt.close(plt.figure(num))
-    except Exception:
-        pass
-
-
-def display(value=None, *args, **kwargs):
-    table = _as_table(value)
-    if table is not None:
-        _tables.append(table)
-    elif _is_figure(value):
-        # Left open on purpose: _capture_figs at the end of the cell turns it into a PNG.
-        pass
-    elif value is not None:
-        print(value if isinstance(value, str) else repr(value))
-
-
-def displayHTML(html=None, *args, **kwargs):
-    print("[HTML output is not shown here; open the notebook in Databricks to see it]")
-
-
-def _frames(exc):
-    """The traceback, from the user's cells only: the wrapper's own frames are noise."""
-    lines = []
-    for f in traceback.extract_tb(exc.__traceback__):
-        if f.filename.startswith("<cell"):
-            lines.append("  %s, line %d" % (f.filename.strip("<>"), f.lineno))
-    return ("Traceback (cells only):\n" + "\n".join(lines) + "\n" if lines else "") + "".join(
-        traceback.format_exception_only(type(exc), exc)).strip()
-
-
-_results = []
+_HARD_LIMIT = __HARD_LIMIT__
+_rt = CellRuntime(json.loads("__LIMITS__"))
 _g = globals()
+_g.update(_rt.builtins())
+_results = []
 for _step in _STEPS:
-    _i, _src = _step["i"], _step["src"]
-    _tables.clear()
-    _images.clear()
-    _out = io.StringIO()
-    _value = None
-    _error = ""
-    _name = "<cell %d>" % (_i + 1)
-    try:
-        _tree = ast.parse(_src, _name)
-        _last = ast.Expression(_tree.body.pop().value) if _tree.body and isinstance(_tree.body[-1], ast.Expr) else None
-        with contextlib.redirect_stdout(_out), contextlib.redirect_stderr(_out):
-            exec(compile(_tree, _name, "exec"), _g)
-            if _last is not None:
-                _v = eval(compile(_last, _name, "eval"), _g)
-                _t = _as_table(_v)
-                if _t is not None:
-                    _tables.append(_t)
-                elif _is_figure(_v):
-                    pass
-                elif _v is not None:
-                    _value = repr(_v)
-    except BaseException as _exc:  # a cell may raise anything, including SystemExit
-        _error = _frames(_exc)
-    _capture_figs()
-    _entry = {"i": _i, "ok": not _error}
-    if _error:
-        _entry["error"] = _clip(_error)
-    if _i in _SHOW:
-        _entry["stdout"] = _clip(_out.getvalue())
-        if _value is not None:
-            _entry["value"] = _clip(_value)
-        if _tables:
-            _entry["table"] = _tables[0]
-            _entry["tables"] = len(_tables)
-        if _images:
-            _entry["images"] = list(_images)
+    _entry = _rt.run(_step["i"], _step["src"], _g, keep_outputs=_step["i"] in _SHOW)
+    _entry.pop("interrupted", None)
     _results.append(_entry)
-    if _error:
+    if not _entry["ok"]:
         break
 
-dbutils.notebook.exit(json.dumps({"v": 1, "cells": _results}))
+_doc = json.dumps({"v": 2, "cells": _results})
+if len(_doc) > _HARD_LIMIT:
+    # Last resort: the budget counts what it can see, and a very wide table can still push past the
+    # cap. Keep every cell's words and say what went.
+    for _e in _results:
+        _kept = [o for o in _e.get("outputs", []) if o["type"] == "text"]
+        if len(_kept) != len(_e.get("outputs", [])):
+            _kept.append({"type": "text", "stream": "notice",
+                          "text": "tables, plots and HTML were not shown: the result was too large"})
+        _e["outputs"] = _kept
+    _doc = json.dumps({"v": 2, "cells": _results})
+dbutils.notebook.exit(_doc)
 '''
 
 
 def wrapper_notebook(p: Plan) -> str:
     """The generated notebook, in Databricks source format. The user's code travels as base64 data, so
     nothing in a cell can end the string it is in or change the wrapper around it."""
+    from . import kernel_runtime
+
     steps = [{"i": i, "src": src} for i, src in p.steps]
     b64 = lambda obj: base64.b64encode(json.dumps(obj).encode("utf-8")).decode("ascii")  # noqa: E731
-    return (_WRAPPER.replace("__STEPS__", b64(steps)).replace("__SHOW__", b64(sorted(p.show)))
-            .replace("__MAX_ROWS__", str(MAX_ROWS)).replace("__MAX_CHARS__", str(MAX_OUTPUT_CHARS))
-            .replace("__MAX_IMAGES__", str(MAX_IMAGES)).replace("__MAX_IMAGE_B64__", str(MAX_IMAGE_B64)))
+    limits = json.dumps({"max_rows": MAX_ROWS, "max_chars": MAX_OUTPUT_CHARS, "max_images": MAX_IMAGES,
+                         "max_image_b64": MAX_IMAGE_B64, "max_html": MAX_HTML, "budget": TOTAL_BUDGET})
+    tail = (_WRAPPER_TAIL.replace("__STEPS__", b64(steps)).replace("__SHOW__", b64(sorted(p.show)))
+            .replace("__LIMITS__", limits.replace('"', '\\"')).replace("__HARD_LIMIT__", str(HARD_LIMIT)))
+    return "# Databricks notebook source\n" + Path(kernel_runtime.__file__).read_text(encoding="utf-8") + tail
 
 
 # -- reading a run back -------------------------------------------------------------------------
@@ -318,14 +206,23 @@ def results_from_run(p: Plan, *, life_cycle: str, result_state: str, message: st
     if result in {"CANCELED", "CANCELLED"} or life == "SKIPPED":
         return True, everything(RunState.CANCELLED, "cancelled before it finished")
     doc: dict[str, Any] | None = None
+    unreadable = False
     if output:
         try:
             parsed = json.loads(output)
             doc = parsed if isinstance(parsed, dict) and "cells" in parsed else None
         except ValueError:
             doc = None
+        unreadable = doc is None
     if doc is None:
         # The wrapper never reported: the compute could not start, was refused, or the run timed out.
+        # Output that is there but is not JSON is the other case, and it is a different sentence: the
+        # Jobs API returns only the first 5 MB of a notebook's exit value, and a cut document is no document.
+        if unreadable:
+            return True, everything(RunState.FAILED, (
+                "the notebook finished, but its result could not be read. It was probably cut at the "
+                "5 MB the Jobs API returns. Show less per cell (fewer rows, smaller plots), or run fewer "
+                "cells at once."))
         detail = (error or message or "").strip()
         return True, everything(RunState.FAILED, detail[:600] or (
             f"the run ended as {result or life or 'unknown'} without reporting a result"))
@@ -362,18 +259,90 @@ def _cell_images(cell: dict[str, Any]) -> list[str]:
     return out
 
 
+_STREAMS = frozenset({"stdout", "stderr", "result", "notice"})
+
+
+def clean_outputs(raw: Any) -> list[dict[str, Any]]:
+    """The ordered outputs a cell reported, reduced to what the UI can draw and what is within bounds.
+
+    The document comes back from compute the app does not control, so every item is checked rather than
+    trusted: an unknown type, a non-string PNG or a table whose rows are not lists is dropped, not drawn.
+    """
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    images = 0
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("type")
+        if kind == "text" and isinstance(item.get("text"), str) and item["text"]:
+            stream = item.get("stream") if item.get("stream") in _STREAMS else "stdout"
+            out.append({"type": "text", "stream": stream, "text": item["text"][: 4 * MAX_OUTPUT_CHARS]})
+        elif kind == "table" and isinstance(item.get("columns"), list) and isinstance(item.get("rows"), list):
+            cols = [str(c) for c in item["columns"]]
+            rows = [[(None if v is None else str(v)) for v in r] for r in item["rows"][:MAX_ROWS]
+                    if isinstance(r, list)]
+            types = [str(t) for t in item["types"]] if isinstance(item.get("types"), list) else []
+            table: dict[str, Any] = {"type": "table", "columns": cols, "rows": rows,
+                                     "truncated": bool(item.get("truncated", False))}
+            if types and len(types) == len(cols):
+                table["types"] = types
+            texts = [str(t)[:2000] for t in item["typeTexts"]] if isinstance(item.get("typeTexts"), list) else []
+            if texts and len(texts) == len(cols):
+                table["typeTexts"] = texts
+            out.append(table)
+        elif kind == "image" and isinstance(item.get("png"), str) and item["png"]:
+            if len(item["png"]) <= MAX_IMAGE_B64 and images < MAX_IMAGES:
+                out.append({"type": "image", "png": item["png"]})
+                images += 1
+        elif kind == "html" and isinstance(item.get("html"), str) and item["html"]:
+            if len(item["html"]) <= MAX_HTML:
+                out.append({"type": "html", "html": item["html"]})
+        elif kind == "markdown" and isinstance(item.get("text"), str) and item["text"].strip():
+            out.append({"type": "markdown", "text": item["text"][:MAX_HTML]})
+    return out
+
+
+def _flat_text(outputs: list[dict[str, Any]]) -> str:
+    """The text outputs as one string, the way an older client reads `output`."""
+    parts: list[str] = []
+    for o in outputs:
+        if o["type"] != "text":
+            continue
+        if parts and not parts[-1].endswith("\n"):
+            parts.append("\n")
+        parts.append(o["text"])
+    return "".join(parts)
+
+
 def _cell_result(cell: dict[str, Any], seconds: float) -> RunResult:
-    table = cell.get("table") or {}
-    text = cell.get("stdout", "") or ""
-    value = cell.get("value", "") or ""
-    shown = text + (("" if not text or text.endswith("\n") else "\n") + value if value else "")
-    images = _cell_images(cell)
+    outputs = clean_outputs(cell.get("outputs")) if "outputs" in cell else []
+    if outputs or "outputs" in cell:
+        first = next((o for o in outputs if o["type"] == "table"), None)
+        shown = _flat_text(outputs)
+        images = [o["png"] for o in outputs if o["type"] == "image"]
+        flat: dict[str, Any] = dict(
+            output=shown, images=images, outputs=outputs,
+            columns=list(first["columns"]) if first else [], rows=list(first["rows"]) if first else [],
+            types=list(first.get("types", [])) if first else [],
+            truncated=bool(first and first["truncated"]),
+            total_rows=len(first["rows"]) if first else None)
+    else:
+        table = cell.get("table") or {}
+        text = cell.get("stdout", "") or ""
+        value = cell.get("value", "") or ""
+        shown = text + (("" if not text or text.endswith("\n") else "\n") + value if value else "")
+        flat = dict(
+            output=shown, images=_cell_images(cell),
+            columns=list(table.get("columns", [])), rows=list(table.get("rows", [])),
+            truncated=bool(table.get("truncated", False)),
+            total_rows=len(table.get("rows", [])) if table else None)
     if not cell.get("ok", True):
-        return RunResult(state=RunState.FAILED, seconds=seconds, warehouse=WHERE, output=shown,
-                         images=images, error=str(cell.get("error", "the cell failed"))[:2000])
-    return RunResult(
-        state=RunState.SUCCEEDED, seconds=seconds, warehouse=WHERE, output=shown, images=images,
-        columns=list(table.get("columns", [])), rows=list(table.get("rows", [])),
-        truncated=bool(table.get("truncated", False)),
-        total_rows=len(table.get("rows", [])) if table else None,
-    )
+        return RunResult(state=RunState.FAILED, seconds=seconds, warehouse=WHERE,
+                         error=str(cell.get("error", "the cell failed"))[:4000], **flat)
+    return RunResult(state=RunState.SUCCEEDED, seconds=seconds, warehouse=WHERE, **flat)
+
+
+#: One cell of a run document as a result. Public because a session reads the same shape.
+cell_result = _cell_result

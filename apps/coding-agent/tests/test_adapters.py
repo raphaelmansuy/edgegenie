@@ -347,11 +347,16 @@ async def test_agent_that_cannot_start_raises_a_typed_error(tmp_path):
 
 # ---------------------------------------------------------------- orchestrator end to end (fake agent)
 async def _orchestrator(tmp_path: Path, scenario: str = "notebook", delay: float = 0.0) -> Orchestrator:
-    """scenario is pinned with `fixed:` so a test never depends on prompt-based selection."""
+    """`scenario` is pinned with `fixed:` so a test never depends on prompt-based selection.
+
+    Pass `scenario=""` to run the agent in **prompt-selection** mode — no `fixed:` prefix — which is
+    how the demo really behaves and the only way to test that `[[scenario:x]]` picks a behaviour.
+    """
     from api.adapters.mcp.registry import NullToolRegistry
     from api.composition.model_registry import resolve_static
 
-    rt = AcpAgentRuntime(command=f"{sys.executable} -m api.adapters.fake.agent fixed:{scenario} {delay}")
+    name = f"fixed:{scenario}" if scenario else "demo"
+    rt = AcpAgentRuntime(command=f"{sys.executable} -m api.adapters.fake.agent {name} {delay}")
     cfg = Settings(allowed_models=["fake/model-a", "fake/model-b"], default_model="fake/model-a")
     models = SettingsModelCatalog(cfg)
     rt._extra_env = {"PYTHONPATH": str(ROOT)}  # noqa: SLF001
@@ -489,13 +494,30 @@ async def test_scenario_fixtures_are_valid_json():
 async def test_a_demo_hint_picks_the_scenario_but_is_never_stored(tmp_path):
     """The start cards send `[[scenario:x]]` to choose a behaviour. Stripping it from the STORED prompt
     is right; stripping it from the prompt the reference agent receives made every card play the same
-    notebook, so "investigate a number" answered with one. Both halves must hold."""
-    orch = await _orchestrator(tmp_path)
+    notebook, so "investigate a number" answered with one. Both halves must hold.
+
+    **This test used to assert `turn.status is BLOCKED` as a proxy for "the blocked scenario played",
+    against an orchestrator pinned with `fixed:notebook`.** It passed for the wrong reason: the pin
+    meant prompt selection never ran at all, and the turn was blocked only because the *notebook*
+    scenario's answer carries no EVIDENCE table — exactly the false negative `[F-17]`/`[R-31]`
+    removed. Correcting that turned the proxy green→red while nothing about hint selection had
+    changed, which is what a test measuring the wrong thing does.
+
+    So this now asserts the scenario's **own words**: the blocked fixture's answer is the one that
+    comes back, and its failed `dbx_describe_table` is the call that was made. Both are unique to
+    `blocked.json`, so neither can be satisfied by the default scenario.
+    """
+    orch = await _orchestrator(tmp_path, scenario="")   # no `fixed:` → the prompt chooses
     s = await orch.create("u", str(tmp_path), "fake/model-a", None)
     live = orch.get(s.id)
     await orch.submit(s.id, "Investigate why revenue dropped. [[scenario:blocked]]")
     await _wait(live, timeout=20)
     turn = live.state.turns[0]
-    assert "scenario:" not in turn.prompt                     # the user's words are clean
-    # …and the hint still reached the agent, so the blocked behaviour is the one that played.
+
+    assert "scenario:" not in turn.prompt           # the user's words are clean
+    # The hint reached the agent: `blocked.json`'s single tool call is what happened.
+    assert [c["name"] for c in live.state.calls.values()] == ["dbx_describe_table"], (
+        "the blocked scenario's tool sequence did not play")
+    assert next(iter(live.state.calls.values()))["status"] == "error"
+    # …and its answer is the one the user was given, not the notebook scenario's.
     assert turn.status is TurnStatus.BLOCKED

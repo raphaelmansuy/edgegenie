@@ -1,0 +1,108 @@
+{
+  "models": ["fake/model-a"],
+  "turn": {
+    "updates": [
+      {
+        "sessionUpdate": "agent_thought_chunk",
+        "messageId": "j1",
+        "content": {
+          "type": "text",
+          "text": "Two notebooks, a job with a dependency, then run it once and read the result."
+        }
+      },
+      {
+        "sessionUpdate": "plan",
+        "entries": [
+          { "content": "Write the two notebooks", "priority": "high", "status": "in_progress" },
+          { "content": "Create the job with a dependency", "priority": "high", "status": "pending" },
+          { "content": "Run it once and read the result", "priority": "high", "status": "pending" }
+        ]
+      },
+      {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "j-nb1",
+        "title": "dbx_write_notebook",
+        "kind": "edit",
+        "status": "pending",
+        "rawInput": {}
+      },
+      {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "j-nb1",
+        "status": "completed",
+        "rawInput": { "path": "/Users/you/agent_scratch/daily_revenue/silver" },
+        "content": {
+          "type": "text",
+          "text": "{\"path\": \"/Users/you/agent_scratch/daily_revenue/silver\", \"cells\": 2, \"markdown_cells\": 1, \"code_cells\": 1}"
+        }
+      },
+      {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "j-nb2",
+        "title": "dbx_write_notebook",
+        "kind": "edit",
+        "status": "pending",
+        "rawInput": {}
+      },
+      {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "j-nb2",
+        "status": "completed",
+        "rawInput": { "path": "/Users/you/agent_scratch/daily_revenue/gold" },
+        "content": {
+          "type": "text",
+          "text": "{\"path\": \"/Users/you/agent_scratch/daily_revenue/gold\", \"cells\": 2, \"markdown_cells\": 1, \"code_cells\": 1}"
+        }
+      },
+      {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "j-create",
+        "title": "dbx_create_job",
+        "kind": "other",
+        "status": "pending",
+        "rawInput": {}
+      },
+      {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "j-create",
+        "status": "completed",
+        "rawInput": {
+          "name": "agent_4ff4405d_daily_revenue",
+          "cron": "0 0 6 * * ?"
+        },
+        "content": {
+          "type": "text",
+          "text": "{\"job_id\": 812345678901, \"name\": \"agent_4ff4405d_daily_revenue\", \"tasks\": [\"silver\", \"gold\"], \"levels\": [[\"silver\"], [\"gold\"]], \"summary\": \"2 tasks in 2 levels\", \"schedule\": {\"cron\": \"0 0 6 * * ?\", \"timezone\": \"UTC\", \"pauseStatus\": \"PAUSED\"}, \"queueing\": \"on\", \"next\": \"call dbx_run_job(job_id=812345678901, purpose='first-run') to run it once\"}"
+        }
+      },
+      {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "j-run",
+        "title": "dbx_run_job",
+        "kind": "other",
+        "status": "pending",
+        "rawInput": {}
+      },
+      {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "j-run",
+        "status": "completed",
+        "rawInput": { "job_id": 812345678901, "purpose": "first-run" },
+        "content": {
+          "type": "text",
+          "text": "{\"run_id\": 812345679, \"life_cycle\": \"TERMINATED\", \"result\": \"FAILED\", \"finished\": true, \"tasks\": [{\"task_key\": \"silver\", \"state\": \"TERMINATED\", \"result\": \"SUCCESS\", \"exit_value\": \"1234 rows\"}, {\"task_key\": \"gold\", \"state\": \"TERMINATED\", \"result\": \"FAILED\", \"error\": \"AnalysisException: cannot resolve 'fare_amount'\"}], \"reused\": false}"
+        }
+      },
+      {
+        "sessionUpdate": "plan",
+        "entries": [
+          { "content": "Write the two notebooks", "priority": "high", "status": "completed" },
+          { "content": "Create the job with a dependency", "priority": "high", "status": "completed" },
+          { "content": "Run it once and read the result", "priority": "high", "status": "completed" }
+        ]
+      }
+    ],
+    "answer": "Created the job and ran it once. It **failed**, and the failure is a column that does not exist.\n\n- Job `agent_4ff4405d_daily_revenue` (id 812345678901): two tasks, `silver` then `gold`, at 06:00 UTC. The schedule is **PAUSED**, so nothing runs until you resume it.\n- Run 812345679: `silver` succeeded with 1234 rows; `gold` failed with `AnalysisException: cannot resolve 'fare_amount'`.\n\nEVIDENCE\n\n| requirement | tool | summary |\n|---|---|---|\n| create the job | dbx_create_job | job 812345678901, 2 tasks in 2 levels, PAUSED |\n| run it once | dbx_run_job | run 812345679 |\n| read the result | dbx_run_job | gold FAILED: cannot resolve 'fare_amount' |\n",
+    "usage": { "inputTokens": 18000, "outputTokens": 1500, "totalTokens": 19500 }
+  }
+}

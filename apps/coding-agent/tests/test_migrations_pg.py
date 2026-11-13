@@ -167,3 +167,30 @@ async def test_the_seed_upsert_never_clears_a_capability():
                   sees_images = llm.llm_model.sees_images OR EXCLUDED.sees_images""")
             await cur.execute("SELECT sees_images FROM llm.llm_model WHERE id = 'dbx/seen'")
             assert (await cur.fetchone())[0] is True
+
+
+async def test_upgrade_from_shipped_sql_v5_preserves_rows_and_adds_agent_ledgers(tmp_path):
+    from uuid import uuid4
+    from psycopg import sql
+    from psycopg.conninfo import make_conninfo
+    try:
+        admin = await psycopg.AsyncConnection.connect(DSN, autocommit=True)
+    except Exception as exc:
+        pytest.skip(f"no disposable Postgres at {DSN}: {exc}")
+    name = "agent014_upgrade_" + uuid4().hex
+    async with admin:
+        await admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+    legacy = tmp_path / "legacy"
+    legacy.mkdir()
+    for path in migrate.files():
+        if migrate._version_of(path) <= 5:
+            (legacy / path.name).write_text(path.read_text())
+    async with await psycopg.AsyncConnection.connect(make_conninfo(DSN, dbname=name), autocommit=True) as conn:
+        assert await migrate.apply(conn, legacy) == 5
+        await conn.execute("INSERT INTO agent.sql_item (scope,kind,id,created,version,state,body) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                           ("owner", "draft", "retained", 1.0, 1, "ready", b"encrypted-fixture"))
+        assert await migrate.apply(conn) == 6
+        row = await (await conn.execute("SELECT body FROM agent.sql_item WHERE scope=%s AND id=%s", ("owner", "retained"))).fetchone()
+        assert bytes(row[0]) == b"encrypted-fixture"
+        for table in ('agent.session', 'agent.turn', 'agent.session_index'):
+            assert (await (await conn.execute("SELECT to_regclass(%s)", (table,))).fetchone())[0]

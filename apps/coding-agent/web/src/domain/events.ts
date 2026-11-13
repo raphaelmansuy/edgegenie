@@ -35,10 +35,10 @@ export type EventType =
   | "commands.updated"
   | "config.updated"
   | "session.info"
-  | "agent.notice";
+  | "agent.notice" | "sql.changed";
 
 export const EVENT_TYPES: EventType[] = [
-  "question.requested", "question.decided",
+  "question.requested", "question.decided", "sql.changed",
   "session.recovery_required", "session.checkpoint",
   "session.created", "session.ready", "session.degraded", "session.archived", "document.saved",
   "turn.started", "turn.queued", "thought.delta", "message.delta",
@@ -168,6 +168,9 @@ export interface Turn {
 }
 
 export interface SessionView {
+  sqlChanges?: Record<string,import("./query").SqlChange>;
+  resumeReason?: string;
+  writeMode?: string;
   agentWork?: boolean;
   mode?: "plan" | "review" | "auto";
   workVersion?: number;
@@ -238,6 +241,11 @@ export function append(current: string, delta: string, max: number): string {
 export function reduce(state: SessionView, e: AgentEvent): SessionView {
   const s = state.turns ? state : { ...state, turns: [], approvals: state.approvals ?? [] };
   switch (e.type) {
+    case "sql.changed": {
+      const id=String(e.draftId??""),previous=s.sqlChanges?.[id];
+      if(!id||(previous&&previous.seq>=e.seq))return s;
+      return {...s,sqlChanges:{...s.sqlChanges,[id]:{version:Number(e.version),runId:String(e.runId??""),seq:e.seq}}};
+    }
     case "question.requested":
       return { ...s, questions: [...(s.questions ?? []).filter(q => q.id !== e.id), { ...e, state: "pending" } as unknown as AgentQuestion] };
     case "question.decided":

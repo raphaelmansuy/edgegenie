@@ -17,6 +17,14 @@ export interface Explained {
   detail: string;
   /** Retrying can help: a transient failure, not a refusal. */
   retryable: boolean;
+  /**
+   * A link that actually fixes it. The message told the user to "open a private window or clear
+   * this site's cookies", which is a bad instruction: it asks them to understand cookies and to lose
+   * every other session on the machine. `/.auth/logout` on the app redirects straight back into a
+   * fresh OAuth authorize with `approval_prompt=consent` (measured), which re-issues the token with
+   * the permissions as they are NOW — the one thing that resolves a stale sign-in.
+   */
+  action?: { label: string; href: string };
 }
 
 const ACL = /do not have access to (.+?)\.?$/i;
@@ -25,10 +33,19 @@ const UNREACHABLE = /cannot reach|failed to fetch|networkerror|server answered 5
 export function explain(message: string): Explained {
   const text = (message || "").trim();
   if (/app setting/i.test(text) && /granted/i.test(text)) {
+    // The app names the scope when the platform does (`ScopeMissing` carries `scopes`).
+    //
+    // There is deliberately NO action here. An earlier version offered "Sign in again", and the
+    // deployed app proved it a dead end: `postgres` is bound to the app's service principal and can
+    // never appear in a user token, so re-authenticating changes nothing (spec 013 [RB-10]). The
+    // fix is on the app side, so the only honest thing to say is who can make it.
+    const named = /\(`([^`]+)`\)/.exec(text)?.[1]?.trim();
     return {
       kind: "scope",
-      title: "Your sign-in needs refreshing",
-      detail: "It's not your access. This sign-in predates the app's current permissions. Sign in again: open the app in a private window, or clear this site's cookies. If it still fails, ask the app's owner to add the missing permission.",
+      title: "This app is missing a permission",
+      detail: named
+        ? `The app has not been granted \`${named}\`. This is an app setting, not your access, and signing in again will not change it: ask whoever owns this deployment to grant the scope and redeploy.`
+        : "This is an app setting, not your access. Ask whoever owns this deployment to grant the missing scope and redeploy.",
       retryable: false,
     };
   }

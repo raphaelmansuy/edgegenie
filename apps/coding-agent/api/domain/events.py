@@ -40,6 +40,7 @@ EventType = Literal[
     "usage.updated",
     "document.saved",
     "blob.attached",
+    "sql.changed",
     "capabilities.reported",
     "mode.changed",
     "budget.updated",
@@ -149,6 +150,7 @@ def tool_updated(
     error: str = "",
     args: str = "",
     table: dict[str, Any] | None = None,
+    proof: dict[str, Any] | None = None,
 ) -> Event:
     p: dict[str, Any] = {"callId": call_id}
     if status is not None:
@@ -249,6 +251,16 @@ def turn_ended(
 
 def usage_updated(sid: str, tid: str, usage: dict) -> Event:
     return Event(sid, "usage.updated", {"usage": usage}, turn_id=tid, actor="agent")
+
+
+def session_compacted(sid: str, plan: dict, *, summary: str = "") -> Event:
+    """History was summarised. `[R-11]`, `[F-10]`: this type existed for months and was emitted by nobody.
+
+    The payload carries what was kept, what was replaced, and both token counts, so a reader of the
+    transcript a week later can see that turns 2–8 became a summary and how much that saved. A
+    compaction nobody can audit is indistinguishable from lost history.
+    """
+    return Event(sid, "session.compacted", {**plan, "summary": summary}, actor="app")
 
 
 def document_saved(sid: str, path: str, size: int, *, by: str, actor: str = "app") -> Event:

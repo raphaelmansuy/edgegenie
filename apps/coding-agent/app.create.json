@@ -1,9 +1,19 @@
 {
+  "_note": [
+    "Reference body for `databricks apps create`. scripts/deploy.sh builds this body itself (see",
+    "app_body()) and is the source of truth; this file is here so the shape is readable, and so the",
+    "repository URL cannot drift unnoticed. It pointed at `edgegenie` — a different repository —",
+    "until 2026-11-10, which would have created an app that built code nobody in this repository wrote.",
+    "",
+    "The `git_repository` is required on a workspace that deploys apps from git only (measured on",
+    "dbc-cb61f1e1-bd8e: `apps create` refuses without it, and `apps deploy` refuses a Workspace",
+    "path). A workspace that accepts a Workspace-folder source does not need it."
+  ],
   "name": "coding-agent",
   "description": "Chat with a coding agent (ACP) that works in your workspace",
   "source_code_path": "apps/coding-agent",
   "git_repository": {
-    "url": "https://github.com/raphaelmansuy/edgegenie",
+    "url": "https://github.com/raphaelmansuy/opengenie",
     "provider": "gitHub"
   }
 }

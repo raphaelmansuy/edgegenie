@@ -10,6 +10,7 @@ import logging
 import time
 
 from ..domain import supervisor
+from ..domain.query_intent import attached_query, query_explanation_only
 from ..domain.events import (
     Event,
     approval_decided,
@@ -42,6 +43,7 @@ class TurnService:
         async with live.lock:
             # Stop means the entire accepted queue stops. It must not launch another write next.
             live.cancel = True
+            await self._cancel_agent_sql(live)
             if self.work:
                 await self.work.expire(session_id)
             live.extra["stopping"] = True
@@ -120,8 +122,8 @@ class TurnService:
             SessionStatus.BLOCKED,
         ):
             raise DomainError("this session is not ready")
-        if len(live.state.turns) >= MAX_TURNS:
-            raise DomainError(f"this session reached its limit of {MAX_TURNS} turns")
+        if len(live.state.turns) >= self._max_turns:
+            raise DomainError(f"this session reached its limit of {self._max_turns} turns")
         if live.extra.get("stopping"):
             raise DomainError("the agent is stopping; wait before sending another message")
         self._write_token(live, user_token, keep_in_app=bool(self.work))
@@ -447,6 +449,7 @@ class TurnService:
                     item.payload.get("status", ""),
                     item.payload.get("summary", ""),
                     item.payload.get("args", ""),
+                    proof=item.payload.get("proof"),
                 )
         return ended, usage, "".join(parts)
 
@@ -591,10 +594,12 @@ class TurnService:
         decision = supervisor.decide(
             supervisor.State(
                 requirements=requirements,
+                query_target=attached_query(turn.attachments),
                 evidence_rows=invocation_rows,
                 proof_floor=invocation_rows is not None and not says_no_tools(turn.prompt),
                 observed_effects=observed_effects,
-                read_only=is_read_only(requirements, bool(turn.context)) or says_no_tools(turn.prompt),
+                read_only=is_read_only(requirements, bool(turn.context)) or says_no_tools(turn.prompt)
+                    or bool(attached_query(turn.attachments) and query_explanation_only(turn.prompt)),
                 calls=live.tool_calls(),
                 answer=answer,
                 continuations=continuations,

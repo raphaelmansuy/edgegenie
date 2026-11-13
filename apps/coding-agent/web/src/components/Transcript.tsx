@@ -12,6 +12,7 @@ import { Chip } from "./Composer";
 import { CopyButton } from "./CopyButton";
 import { Markdown } from "./Markdown";
 import { missionProof } from "../domain/mission";
+import { pageLabel, pageOf } from "../domain/paging";
 
 const label = toolLabel;
 
@@ -49,17 +50,24 @@ export function ToolCard({ name, args, status, seconds, summary, error, table }:
   const openDoc = useContext(OpenDoc);
   const hit = touched(name, args, summary);
   const state = toolState(status);
+  /* A reply that is a PAGE of a larger result says so ([R-3]). Without this the card shows a list and a
+     reader has no way to know whether it is the whole list — which is the visual form of the defect the
+     payload window fixed on the server. `[F-2]` */
+  const page = pageOf(parseLoose(summary));
+  const pageText = pageLabel(page);
   // Drawn, not typed: a "✓" character sits on the font baseline and never centres in the badge.
   const glyph = state === "error" ? <Alert size={12} /> : state === "completed" ? <Check size={12} /> : state === "declined" ? <Ring size={12} /> : null;
   return (
     <div className="tool" data-open={open}>
       <button className="tool-row" onClick={() => setOpen((o) => !o)}
-        aria-expanded={open} aria-label={`${label(name)} ${state}`}>
+        aria-expanded={open} aria-label={`${label(name)} ${state}${pageText ? `, ${pageText}` : ""}`}>
         <span className={`icon state-${state}`} aria-hidden>
           {state === "running" ? <span className="spin" /> : glyph}
         </span>
         <span className="name">{label(name)}</span>
         <span className="args" title={args}>{subject(args)}</span>
+        {pageText && <span className="page-count" title="This reply is one page of a larger result">
+          {pageText}</span>}
         {seconds !== undefined && <span className="time">{seconds.toFixed(1)}s</span>}
         <span className="chev" aria-hidden>▶</span>
       </button>
@@ -83,6 +91,18 @@ export function ToolCard({ name, args, status, seconds, summary, error, table }:
       )}
     </div>
   );
+}
+
+/** A tool summary is JSON when the tool returned a structured reply, or prose when it did not.
+ *
+ *  A card needs the parsed form to read a window out of it ([R-3]). A summary that is not JSON is not an
+ *  error: most tools answer in prose, and a card must not fail because of it.
+ */
+function parseLoose(text?: string): unknown {
+  if (!text) return null;
+  const t = text.trim();
+  if (!t.startsWith("{") && !t.startsWith("[")) return null;
+  try { return JSON.parse(t); } catch { return null; }
 }
 
 /** Arguments in full, wrapped, for the one case where the detail matters. */

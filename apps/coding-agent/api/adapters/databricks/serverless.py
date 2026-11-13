@@ -49,11 +49,12 @@ class ServerlessRunner:
             self._home = f"/Users/{self._w().current_user.me().user_name}"
         return self._home
 
-    async def submit(self, name: str, source: str) -> tuple[int, str]:
-        """Upload the notebook and start a run. Returns (run id, notebook path)."""
-        return await asyncio.to_thread(self._submit, name, source)
+    async def submit(self, name: str, source: str, *, timeout_seconds: int | None = None) -> tuple[int, str]:
+        """Upload the notebook and start a run. Returns (run id, notebook path). A session passes the longest
+        it may live; a one-shot run keeps the short default."""
+        return await asyncio.to_thread(self._submit, name, source, timeout_seconds or RUN_TIMEOUT_SECONDS)
 
-    def _submit(self, name: str, source: str) -> tuple[int, str]:
+    def _submit(self, name: str, source: str, timeout_seconds: int = RUN_TIMEOUT_SECONDS) -> tuple[int, str]:
         import io
 
         from databricks.sdk.service import jobs, workspace
@@ -67,7 +68,7 @@ class ServerlessRunner:
                            overwrite=True)
         try:
             waiter = w.jobs.submit(
-                run_name=f"coding-agent {name}", timeout_seconds=RUN_TIMEOUT_SECONDS,
+                run_name=f"coding-agent {name}", timeout_seconds=timeout_seconds,
                 tasks=[jobs.SubmitTask(task_key="cells", notebook_task=jobs.NotebookTask(
                     notebook_path=path, source=jobs.Source.WORKSPACE))])
         except Exception:

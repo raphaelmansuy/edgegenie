@@ -36,7 +36,7 @@ async def main() -> None:
                DATABRICKS_TOKEN=TOKEN, NBMCP_ALLOW_WRITES="1", NBMCP_PROFILE="core",
                NBMCP_WRITE_SCHEMAS=SCHEMA, NBMCP_WRITE_PATHS=HOME + "/",
                NBMCP_WRITE_JOB_PREFIX=f"{RID}_", NBMCP_WRITE_INSTANCE_PREFIX=f"{RID}-")
-    params = StdioServerParameters(command=sys.executable, args=[str(ROOT / "mcp" / "databricks_notebook_mcp.py")], env=env)
+    params = StdioServerParameters(command=sys.executable, args=[str(ROOT / "apps" / "coding-agent" / "tools" / "databricks_notebook_mcp.py")], env=env)
     results: list[dict] = []
 
     async with stdio_client(params) as (r, w):

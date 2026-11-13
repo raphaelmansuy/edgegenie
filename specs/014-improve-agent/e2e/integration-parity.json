@@ -1,0 +1,20 @@
+{
+  "pass": true,
+  "captures": [
+    "01-parity-desktop",
+    "02-parity-replayed",
+    "03-parity-mobile",
+    "04-parity-mobile-expanded"
+  ],
+  "errors": [],
+  "checks": {
+    "warningDetailVisible": true,
+    "idBasedCompaction": true,
+    "appendSummary": true,
+    "omissionRetainsSummary": true,
+    "nullClearsError": true,
+    "replayKeepsOneCard": true,
+    "mobile": true
+  },
+  "scope": "Actual local HTTP/stdio ACP/SQLite journal/SSE/browser with synthetic schema-shaped agent frames. No model or workspace contacted."
+}

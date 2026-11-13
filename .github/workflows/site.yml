@@ -49,6 +49,12 @@ jobs:
       - name: claims must agree with the docs
         run: python site/tests/test_claims.py
 
+      - name: the counts the docs state must agree with the code
+        # Every count in docs/08, 09 and 10 is asserted against the source it describes: routers,
+        # routes, layer files, protocols, event types, tools, tables, migrations, attachment limits.
+        # A count typed into a sentence drifts the day someone adds a route; this makes it fail.
+        run: python site/tests/test_stated_counts.py
+
       - name: build
         run: python site/build.py
 

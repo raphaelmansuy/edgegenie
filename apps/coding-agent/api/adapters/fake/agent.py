@@ -97,10 +97,25 @@ class ScenarioAgent:
         # Fallback for hand-typed prompts: ordered, most specific first.
         if any(w in text for w in ("document the tables", "inject", "canary", "support ticket")):
             name = "injection"
+        elif any(w in text for w in ("lakebase", "postgres", "a small app that reads",
+                                     "database with one table")):
+            # The product's own card ("Lakebase and an app") must reach the scenario that shows the
+            # seven-step scaffold; without this it fell through to `notebook` and the card promised a
+            # workflow the demo could not show (spec 013 [SCF-3]).
+            name = "lakebase"
         elif any(w in text for w in ("investigate", "why did revenue", "failing job", "find the cause")):
             name = "blocked"
-        elif any(w in text for w in ("recompute daily revenue", "create a job")):
-            name = "slow"
+        elif any(w in text for w in ("build a pipeline", "medallion", "declarative", "streaming table",
+                                     "expectation", "lakeflow pipeline")):
+            # [PIPE-1]: "build me a pipeline" must reach a PIPELINE scenario, not the job one. Before spec
+            # 014 it fell through to `notebook`, which is the finding [F4] recorded in a different form.
+            name = "pipeline"
+        elif any(w in text for w in ("recompute daily revenue", "create a job", "daily job",
+                                     "run it once")):
+            # "Create a job" used to reach `slow`, a scenario that only streams filler text: the card
+            # promised a job and showed a typing animation. `jobs` replays the real tool sequence so the
+            # turn ends with two openable objects (spec 014 [F8]).
+            name = "jobs"
         else:
             name = "notebook"
         self._by_session[session_id] = load_scenario(name)

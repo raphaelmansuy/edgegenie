@@ -176,3 +176,7 @@ flowchart LR
   small. Treat the numbers as a strong signal, not a guarantee.
 
 Next: [02 Setup in the Databricks shell](02-setup-in-the-databricks-shell.md).
+
+If you are reading this to understand the *application* rather than the study, the shape of it is in
+[08 Architecture](08-architecture.md): one container, two child processes per conversation, a journal
+that outlives a restart. The study came first; the app is what it justified.

@@ -79,6 +79,22 @@ def _summarise(value: Any, limit: int = 140) -> str:
 MAX_COLS, MAX_ROWS = 24, 60
 
 
+def _proof_of(content: Any) -> dict | None:
+    import json
+
+    try:
+        data = json.loads(_text_of(content))
+    except (ValueError, TypeError):
+        data = content if isinstance(content, dict) else {}
+    proof = data.get("proof") if isinstance(data, dict) else None
+    if not isinstance(proof, dict) or proof.get("kind") not in {"sql-query", "sql-run"}:
+        return None
+    # Copy only receipt metadata, never source, bindings, arbitrary tool text or result rows.
+    keys = {"kind", "action", "draftId", "version", "sourceHash", "state", "runId",
+            "statementId", "warehouseId", "resultAvailable", "rowCount", "cancelRequested"}
+    return {k: v for k, v in proof.items() if k in keys and isinstance(v, (str, int, bool))}
+
+
 def _table_of(content: Any) -> dict | None:
     """A tool result that is a query answer (`{"columns": [...], "rows": [[...]]}`) becomes a grid.
 
@@ -125,6 +141,9 @@ def _tool_update(sid: str, tid: str | None, update: dict) -> list[Event]:
     event = tool_updated(sid, tid or "", str(update.get("toolCallId", "")),
         str(update["status"]) if "status" in update else None, update.get("seconds"), summary,
         err, _summarise(shown, 160) if shown else "", _table_of(update.get("content")) if not err else None)
+    proof = _proof_of(update.get("content"))
+    if proof is not None:
+        event.payload["proof"] = proof
     content = update.get("content") or []
     diffs = [c for c in content if isinstance(c, dict) and c.get("type") == "diff"] if isinstance(content, list) else []
     if diffs:

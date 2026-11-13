@@ -14,47 +14,55 @@ try:
 except ImportError:
     sqlglot = None
 
-# A deliberate small initial function vocabulary. Unknown/UDF/external calls are refused.
-FUNCTIONS = frozenset(
+# One registry binds reviewed AST classes to actual Databricks spellings. Parser-normalized
+# names (STR_TO_UNIX, TS_OR_DS_TO_DATE) are not themselves authority to call a workspace UDF.
+BUILTINS = (
     {
-        "COUNT",
-        "SUM",
-        "AVG",
-        "MIN",
-        "MAX",
-        "COALESCE",
-        "CAST",
-        "TRY_CAST",
-        "ABS",
-        "ROUND",
-        "LOWER",
-        "UPPER",
-        "LENGTH",
-        "CONCAT",
-        "SUBSTRING",
-        "TRIM",
-        "CURRENT_DATE",
-        "CURRENT_TIMESTAMP",
-        "DATE_TRUNC",
-        "YEAR",
-        "MONTH",
-        "DAY",
-        "ROW_NUMBER",
-        "RANK",
-        "DENSE_RANK",
-        "LAG",
-        "LEAD",
-        "IF",
-        "CASE",
+        exp.Count: ("COUNT",),
+        exp.Sum: ("SUM",),
+        exp.Avg: ("AVG",),
+        exp.Min: ("MIN",),
+        exp.Max: ("MAX",),
+        exp.Coalesce: ("COALESCE", "NVL", "IFNULL"),
+        exp.Cast: ("CAST", "DATE"),
+        exp.TryCast: ("TRY_CAST",),
+        exp.Abs: ("ABS",),
+        exp.Round: ("ROUND",),
+        exp.Lower: ("LOWER", "LCASE"),
+        exp.Upper: ("UPPER", "UCASE"),
+        exp.Length: ("LENGTH", "LEN", "CHAR_LENGTH", "CHARACTER_LENGTH"),
+        exp.Concat: ("CONCAT",),
+        exp.Substring: ("SUBSTRING", "SUBSTR"),
+        exp.Trim: ("TRIM",),
+        exp.CurrentDate: ("CURRENT_DATE", "CURDATE"),
+        exp.CurrentTimestamp: ("CURRENT_TIMESTAMP", "NOW"),
+        exp.DateTrunc: ("DATE_TRUNC",),
+        exp.TimestampTrunc: ("DATE_TRUNC",),
+        exp.TsOrDsToDate: ("TO_DATE",),
+        exp.StrToUnix: ("UNIX_TIMESTAMP", "TO_UNIX_TIMESTAMP"),
+        exp.Year: ("YEAR",),
+        exp.Month: ("MONTH",),
+        exp.Day: ("DAY",),
+        exp.RowNumber: ("ROW_NUMBER",),
+        exp.Rank: ("RANK",),
+        exp.DenseRank: ("DENSE_RANK",),
+        exp.Lag: ("LAG",),
+        exp.Lead: ("LEAD",),
+        exp.If: ("IF",),
+        exp.Case: ("CASE",),
     }
+    if sqlglot is not None
+    else {}
 )
 TYPE = re.compile(r"^(STRING|BIGINT|INT|INTEGER|DATE|TIMESTAMP|DECIMAL(?:\((\d{1,2}),(\d{1,2})\))?)$")
-DIALECT = "databricks"
 
 
 def available() -> bool:
     return sqlglot is not None
 
+
+DIALECT = "databricks"
+FUNCTIONS = frozenset(name for names in BUILTINS.values() for name in names)
 
 def validate(source: str, parameters: list[dict], *, dialect=None) -> list[dict]:
     dialect = dialect or DIALECT
@@ -89,10 +97,27 @@ def validate(source: str, parameters: list[dict], *, dialect=None) -> list[dict]
             ):
                 # Qualified columns also use Dot in some dialects; unsupported is safer than guessing.
                 raise ValueError("unsupported or mutating SQL construct")
-            if isinstance(node, exp.Func):
-                name = node.name.upper() if isinstance(node, exp.Anonymous) else node.sql_name().upper()
-                if name not in FUNCTIONS:
-                    raise ValueError(f"function {name} is not in the supported read-only set")
+            # AND/OR and EXISTS inherit Func in SQLGlot, but are structural operators.
+            # Their children are still visited, including nested writes and unknown calls.
+            if isinstance(node, exp.Func) and not isinstance(node, (exp.And, exp.Or, exp.Exists)):
+                names = BUILTINS.get(type(node))
+                if not names:
+                    name = (
+                        "Unrecognized or external function calls"
+                        if isinstance(node, exp.Anonymous)
+                        else "Function " + node.sql_name()
+                    )
+                    raise SqlError(
+                        "UNSUPPORTED_FUNCTION",
+                        name
+                        + " cannot run in SQL previews yet. Use supported built-ins or review the query in Databricks.",
+                    )
+                start, end = node.meta.get("start"), node.meta.get("end")
+                if start is not None and end is not None and source[start : end + 1].upper() not in names:
+                    raise SqlError(
+                        "UNSUPPORTED_FUNCTION",
+                        "This function spelling is not a supported Databricks built-in. Use its documented SQL name.",
+                    )
         required = {str(p.this) for p in tree.find_all(exp.Placeholder)}
     except SqlError:
         raise
@@ -101,7 +126,7 @@ def validate(source: str, parameters: list[dict], *, dialect=None) -> list[dict]
             "INVALID_SQL",
             "Use one supported read-only SELECT. Scripts, mutations and unverified functions cannot run here.",
         ) from exc
-    return bind(required,parameters)
+    return bind(required, parameters)
 
 
 def bind(required: set[str], parameters: list[dict]) -> list[dict]:

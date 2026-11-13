@@ -1,6 +1,7 @@
 /** Execution and observation are different states. A disconnected tab cannot claim fresh progress. */
 import { toolState, type EvidenceRow, type SessionView, type ToolCall, type Turn } from "./events";
 import { artifactsOf } from "./artifacts";
+import { isLive, isRecovering, type StreamState } from "./stream";
 
 export interface Execution {
   persistence: "durable" | "memory";
@@ -25,7 +26,7 @@ export function missionLabel(s: { status?: string; requiresResume?: boolean; exe
   }
 }
 
-export function missionStatus(s: SessionView, conn: string): { title: string; detail: string; tone: string } {
+export function missionStatus(s: SessionView, conn: StreamState): { title: string; detail: string; tone: string } {
   if (s.status === "archived") return {
     title: "Archived session", detail: "Saved work is available for review. Start a new conversation for another mission.", tone: "quiet",
   };
@@ -34,8 +35,17 @@ export function missionStatus(s: SessionView, conn: string): { title: string; de
     detail: "Restore the agent, then review progress before continuing. Unfinished actions were not repeated.",
     tone: "attention",
   };
-  if (conn === "lost" || conn === "reconnecting" || conn === "connecting") return {
-    title: conn === "lost" ? "You’re offline" : "Reconnecting to your session",
+  /* The connection branch reads the state machine, not a string. `closed` is a different animal
+     from `reconnecting`: one resolves, the other needs the user. They used to share a word, which is
+     specs/012 [F2]; `StreamNotice` now owns the announcement and the action, so this returns a plain
+     connection tone and lets that component say which. */
+  if (conn.kind === "closed") return {
+    title: "Session closed",
+    detail: "This conversation is no longer reachable. Start a new one, or retry below.",
+    tone: "attention",
+  };
+  if (isRecovering(conn)) return {
+    title: conn.kind === "reconnecting" ? "Reconnecting to your session" : "Connecting to your session",
     detail: "The server runs independently. We’ll catch up on saved progress when the connection returns.",
     tone: "connection",
   };
@@ -141,7 +151,7 @@ export const MISSION_STATES: Record<MissionState, { label: string; tone: string;
 /** Strip only the local demo selector; the full real request remains available in the UI. */
 export const missionRequest = (prompt: string): string => prompt.replace(/\s*\[\[scenario:\w+\]\]/g, "").trim();
 
-export function missionView(s: SessionView, turn: Turn | undefined, conn: string) {
+export function missionView(s: SessionView, turn: Turn | undefined, conn: StreamState) {
   const current = currentMission(s);
   const isCurrent = !turn || turn.id === current?.id;
   let state: MissionState = !turn ? (s.status === "ready" ? "ready" : "starting") : turn.status === "completed"
@@ -161,11 +171,16 @@ export function missionView(s: SessionView, turn: Turn | undefined, conn: string
   const proof = turn ? missionProof(turn) : [];
   return {
     state, ...presentation, isCurrent, request, title,
-    paused: isCurrent && conn !== "live" && conn !== "idle",
+    paused: isCurrent && !isLive(conn) && conn.kind !== "idle",
     queued: s.turns.filter((t) => t.status === "queued").length,
     plan: turn?.plan ?? [],
     planDone: turn?.plan?.filter((p) => p.status === "completed").length ?? 0,
     proof, proven: proof.filter((p) => p.verified).length,
+    /* What the turn could not prove. The mission header says "blocked" because of this list, so the
+       evidence panel must be able to show the same list — otherwise a reader sees "Blocked" above
+       "3 of 3 verified" and has no way to tell what is missing. Found by inspecting a screenshot. */
+    missing: turn?.blocked?.missing ?? [],
+    blockedReason: turn?.blocked?.reason ?? "",
     failedCalls: turn?.tools.filter((c) => toolState(c.status) === "error").length ?? 0,
     artifacts: turn ? artifactsOf([turn]) : [],
     model: turn?.model || s.model,

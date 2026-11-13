@@ -13,6 +13,12 @@ export interface SqlRun {
 }
 export interface SqlCapabilities { demo: boolean; read: boolean; create: boolean; run: boolean; update: boolean; durable: boolean; reason: string; createReason: string }
 export interface SqlParameter { name: string; type: string; value: string | null }
+export interface SqlChange { version:number; runId:string; seq:number }
+/** Apply remote source only while every local authoring input matches the captured snapshot. */
+export function acceptsAgentQuery(local:{text:string;name:string;warehouseId:string;catalog:string;schema:string},saved:SqlQuery):boolean {
+  return local.text===(saved.text??"")&&local.name===saved.name&&local.warehouseId===(saved.warehouseId??"")
+    &&local.catalog===(saved.catalog??"")&&local.schema===(saved.schema??"");
+}
 /** Recovered bindings are deliberately absent, so do not imply their inputs still match. */
 export function recoveredSqlInputsChanged(run:SqlRun,text:string,warehouse:string,catalog:string,schema:string):boolean {
   return text.trim()!==run.text?.trim()||warehouse!==run.warehouseId||catalog!==(run.catalog??"")||schema!==(run.schema??"")||!!run.parameterNames?.length;

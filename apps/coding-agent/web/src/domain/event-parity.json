@@ -50,6 +50,7 @@
     "resource.updated",
     "approval.linked",
     "question.requested",
-    "question.decided"
+    "question.decided",
+    "sql.changed"
   ]
 }

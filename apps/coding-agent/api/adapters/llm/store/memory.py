@@ -12,9 +12,8 @@ from __future__ import annotations
 
 import time
 from dataclasses import replace
-from typing import Any
 
-from ....domain.llm import Grant, LimitEvidence, Limits, ModelId, ModelSpec, ModelState
+from ....domain.llm import Grant, LimitEvidence, Limits, ModelSpec, ModelState
 
 
 class MemoryRegistryStore:

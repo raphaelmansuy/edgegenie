@@ -84,6 +84,11 @@ class MemoryEventStore(Broadcast):
             else "",
         }
 
+    async def checkpoint(self, session_id: str, seq: int, body: dict) -> None:
+        """Rewrite the projection only, without appending. `[R-5]`."""
+        import copy
+        self._snapshots[session_id] = copy.deepcopy(body)
+
     async def snapshots(self) -> list[dict]:
         import copy
 

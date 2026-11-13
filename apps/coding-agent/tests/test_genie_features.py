@@ -459,13 +459,54 @@ def test_the_users_token_reaches_the_tool_server_by_private_file_and_is_removed(
     from api.services.orchestrator import Live, Orchestrator
     from api.domain.session import Session, SessionState
     live = Live(state=SessionState(session=Session(id="s1", user_id="u", folder="/Users/u/", schema=None, model="m")))
-    Orchestrator._write_token(live, "tok-1")
+    # `_write_token` is an instance method now: it also writes the app's own service-principal token,
+    # because the Postgres API cannot be called as the user (spec 013 [RB-10]). These tests pass no
+    # orchestrator state, so only the user-token half runs — which is exactly what they assert.
+    orch = object.__new__(Orchestrator)
+    orch._write_token(live, "tok-1")
     path = live.extra["token_file"]
     assert open(path).read() == "tok-1" and stat.S_IMODE(os.stat(path).st_mode) == 0o600
-    Orchestrator._write_token(live, "tok-2")                    # a later turn refreshes it in place
+    orch._write_token(live, "tok-2")                    # a later turn refreshes it in place
     assert open(path).read() == "tok-2" and live.extra["token_file"] == path
-    Orchestrator._write_token(live, None)                       # no token: leave the file alone
+    orch._write_token(live, None)                       # no token: leave the file alone
     assert open(path).read() == "tok-2"
+
+
+def test_the_agent_never_receives_a_service_principal_token_even_when_available():
+    """[RB-10] The Lakebase tools need the app's identity; they cannot use the user's token.
+
+    Asserted at the writer, because the alternative — a tool server that silently uses the user's
+    token — is what produced a 403 the agent could only report as "permission denied".
+    """
+    import os, stat
+    from api.services.orchestrator import Live, Orchestrator
+    from api.domain.session import Session, SessionState
+    live = Live(state=SessionState(session=Session(id="s2", user_id="u", folder="/Users/u/", schema=None, model="m")))
+
+    class Source:
+        available = staticmethod(lambda: True)
+        get = staticmethod(lambda: "sp-token-value")
+
+    orch = object.__new__(Orchestrator)
+    orch._sp_token = Source()
+    orch._write_token(live, "user-token")
+    assert "sp_token_file" not in live.extra
+    assert open(live.extra["token_file"]).read() == "user-token"
+
+
+def test_without_a_service_principal_no_second_file_is_written():
+    """A laptop has no SP, so the tools fall back to the user token as before."""
+    from api.services.orchestrator import Live, Orchestrator
+    from api.domain.session import Session, SessionState
+    live = Live(state=SessionState(session=Session(id="s3", user_id="u", folder="/Users/u/", schema=None, model="m")))
+
+    class Absent:
+        available = staticmethod(lambda: False)
+
+    orch = object.__new__(Orchestrator)
+    orch._sp_token = Absent()
+    orch._write_token(live, "user-token")
+    assert "sp_token_file" not in live.extra
 
 
 def test_builtin_shell_and_file_tools_are_denied_but_planning_stays(tmp_path):

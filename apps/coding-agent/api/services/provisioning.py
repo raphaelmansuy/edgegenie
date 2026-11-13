@@ -100,8 +100,9 @@ class Provisioning:
         live.agent_cwd = cwd
         live.workspace_folder = live.workspace_folder or s.folder
 
-        if self.work and not self._demo:
-            live.extra["workspace_preferences"] = await self.work.preferences.instructions(self.actor(s.id))
+        preferences = self.work.preferences if self.work else self.preferences
+        if preferences and not self._demo:
+            live.extra["workspace_preferences"] = await preferences.instructions(self.actor(s.id))
         # 1. The agent needs a provider config and its working rules, or it starts and never answers.
         #    The config names an environment VARIABLE; the value never touches the disk.
         try:
@@ -115,6 +116,9 @@ class Provisioning:
             await self.work.prepare(s.id)
         user_token = live.extra.get("user_token") or os.environ.get("DATABRICKS_TOKEN", "")
         self._write_token(live, user_token, keep_in_app=bool(self.work))
+        set_mode = getattr(self._tools, "set_write_mode", None)
+        if set_mode:
+            set_mode(s.id, s.write_mode)
         live.mcp_url = await self._tools.start(
             s.id, live.workspace_folder, s.schema, live.extra.get("token_file")
         )

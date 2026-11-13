@@ -202,10 +202,11 @@ def test_write_inside_the_schema_is_allowed():
     assert d.verdict is Verdict.ALLOW
 
 
-def test_write_outside_the_schema_is_denied():
-    d = check_sql(_scope(), "create table workspace.default.t as select 1")
-    assert d.verdict is Verdict.DENY
-    assert "outside allowed schemas" in d.reason
+def test_human_sql_outside_the_schema_requires_a_decision_and_agent_sql_is_denied():
+    from api.domain.policy.sql import check_scope
+    sql = "create table workspace.default.t as select 1"
+    assert check_sql(_scope(), sql).verdict is Verdict.ASK
+    assert check_scope(sql, [_scope().schema])
 
 
 def test_destructive_sql_always_asks_even_inside_the_schema():

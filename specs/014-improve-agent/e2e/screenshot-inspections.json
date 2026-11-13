@@ -1,7 +1,7 @@
 {
-  "date": "2026-11-13",
-  "method": "Each retained screenshot individually opened with view_image; findings and iterative corrections described in 15-implementation-status.md. Failed and intermediate captures retained.",
-  "count": 346,
+  "date": "2026-11-14",
+  "method": "Original 346 captures retain their prior individual inspection records. All 135 integration captures visually inspected in labeled contact sheets; detailed full-size review of jobs failure and notebook diff informed corrections. Failed iterations retained and marked superseded.",
+  "count": 481,
   "screenshots": [
     {
       "path": "screenshots/assets-01/01-native-single-review.png",
@@ -1732,6 +1732,1086 @@
       "path": "screenshots/work-final/08-mobile-capabilities.png",
       "sha256": "8277768fb23c1700a5e13fe227accba0803138ca55ee25194b85c2ab41710d81",
       "inspected": true
+    },
+    {
+      "path": "screenshots/integration-assets/01-native-single-review.png",
+      "sha256": "6c4f2a8d250c00eead4868b6abcc28bcbbb831df9373beb674e82c20c0040ffc",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/00.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/02-native-verified-once.png",
+      "sha256": "fd003de3c9b45fd6a2660b731661cece3fa7c4acf26144ee47e9ed9b0a758cc3",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/00.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/03-native-rejected.png",
+      "sha256": "12d45854e185dba39098a9666dfa203372659b1418aaed7a9817f2bd83f7167a",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/00.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/04-bundle-review.png",
+      "sha256": "73c20c817f3bc0f62e7ec2c4f8a36945a63f9d739539c5b8005bc5bedd33c55c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/00.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/05-bundle-inspected.png",
+      "sha256": "b97f55b50e0823ba9c62797f9620436446ca26fda442ee5e659ad0c5dcf61aca",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/00.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/06-asset-attached.png",
+      "sha256": "33baeb5ab97de3389f71b0a6cb7e375670f232e3639d70806e39709995eee0b2",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/00.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/07-as-code-capabilities.png",
+      "sha256": "94befa33c99394def17c55b5791fd6e5658ba9d521b6ec4b24e476f490f51e3b",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/01.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/08-created-resource.png",
+      "sha256": "0b7b462ab5dbfbb65a4d0d9dc47a49f333fa8da956311ecf5f58995472d3e9f4",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/01.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/09-archive-resources.png",
+      "sha256": "eac4f5755b10660959468269260b5121dd6938b909a17c3985e711b6cd1a4288",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/01.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/10-cleanup-review.png",
+      "sha256": "4925985f5d19850a07d7b7bf3b58674a289347c670a250ee4dbc874bdd5f9b4c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/01.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/11-cleanup-deleted.png",
+      "sha256": "94a38243637a3859b871f4e0a4487d3c7a249dde4f187f016a5dd39584c830f7",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/01.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/12-stop-native-runs.png",
+      "sha256": "239d87a71cc248bc5c8cafaf9060cd236b6dd9a8d8c55ae63b85ee61fbc5b4d5",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/01.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/13-stopped-native-cancelled.png",
+      "sha256": "ce6a09d861e1af87ab2450574d00fb7aedccc0726064d4eb0ad0b07ff450b446",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/02.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/14-resource-kept-acknowledged.png",
+      "sha256": "14aee34617467acefd25482c20f3136692e5425541f9ddc9cb1d312c85f7dfa4",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/02.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/01-native-single-review.png",
+      "sha256": "c90f1772deaf3ef820390fc83aa3860f5aaeb26ac771c0c56acc2f36b9c342d7",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/02.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/02-native-verified-once.png",
+      "sha256": "fd003de3c9b45fd6a2660b731661cece3fa7c4acf26144ee47e9ed9b0a758cc3",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/02.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/03-native-rejected.png",
+      "sha256": "12d45854e185dba39098a9666dfa203372659b1418aaed7a9817f2bd83f7167a",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/02.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/04-bundle-review.png",
+      "sha256": "73c20c817f3bc0f62e7ec2c4f8a36945a63f9d739539c5b8005bc5bedd33c55c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/02.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/05-bundle-inspected.png",
+      "sha256": "44facf7b293eb9bfb39db4d4a6e5e030377b6856feb6b564da257c5bb8aa5e4b",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/03.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/06-asset-attached.png",
+      "sha256": "ec877488782bd6b117cff8b4276b33a7b6d631625051840857a8391b34faa037",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/03.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/07-as-code-capabilities.png",
+      "sha256": "94befa33c99394def17c55b5791fd6e5658ba9d521b6ec4b24e476f490f51e3b",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/03.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/08-created-resource.png",
+      "sha256": "7d5ca27ae1cf33ada04ffe2fc348c359cc642ef5dd8b76141a973f12e19333bd",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/03.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/09-archive-resources.png",
+      "sha256": "8e79ff33de2ae20dcd77260af9816bedd9751fb84dac8fda9ad8a81f61578807",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/03.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/10-cleanup-review.png",
+      "sha256": "8c1c9bb491de524775952fb57a3e4355315d5ed1528c38ccc697eb90ab0983fb",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/03.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/11-cleanup-deleted.png",
+      "sha256": "aa09371533c46a8732c08c51f7c38cad8140cda16e6a3dce39020661f5c687cc",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/04.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/12-stop-native-runs.png",
+      "sha256": "69b061350c0d498d4f52a7013f1fccbb05d193e4800348cf8f513759e0bcbed2",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/04.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/13-stopped-native-cancelled.png",
+      "sha256": "f89ace1b89b1f647930603fc22ad51a78d75402f7c0ca0b63d847134a5f0b8e7",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/04.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/14-resource-kept-acknowledged.png",
+      "sha256": "70b6204e55526c33399ec0fc719a15466df44fdff7f42abe0afd16a5c5b12de5",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/04.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-editor/01-unsaved-local.png",
+      "sha256": "c03c734d433880e18b4a55f1a1b32c4f6bdc9d99f1c3a6cec958067d2dc49729",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/04.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-editor/02-incoming-preserves-local.png",
+      "sha256": "dc035e6c8eb7fd2cb68389cd4dff7493991b0fa94ca2c5f3e680393e6b854202",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/04.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-editor/03-local-recovered.png",
+      "sha256": "e2484f84088496bd24d77b887e921b59a55b17a907ff04a9537adc072988b2dc",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/05.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-editor/04-live-editor-refreshed.png",
+      "sha256": "1c4e4d91e07352e0815d93c7cdfbb662e4881ecb90ed6921beb1568102101750",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/05.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s1-shell-data-1480.png",
+      "sha256": "f86f74f645e7ff5e8997e0133bb38cd2cd5d6e81f56e2d0ef327854d58ca0454",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/05.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s2-job-1480.png",
+      "sha256": "f97633597d21731936f86439be09d70bdf04f7d9685db03f27ade31aaa846b33",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/05.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s3-run-failed-1480.png",
+      "sha256": "2314d6da35b3c89609d93fd67bd34575863c04488538007d37ed37756eaaf3c8",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/05.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s4-run-live-1480.png",
+      "sha256": "07222d6c96b2b9364c584001eea9dd89d57c6b949335724d7bb0e2373a3bc45b",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/05.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s5-pipeline-1480.png",
+      "sha256": "c7e2f326a1f316e05abadca3af6e6c4f9d2945a364d1bda0e2b37cd3a228baba",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/06.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s6-refused-1480.png",
+      "sha256": "5f6ba9e9eb655817d4339bc910a5fc657b95cb75eaebc2898f9bd57bedcfdbb9",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/06.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s7-agent-turn-1480.png",
+      "sha256": "c933f7e5be9c9dbfb228f2583997d1a62787bae837ef2fa95d3cf7a8c4d43793",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/06.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s8-narrow-620.png",
+      "sha256": "bb3d726b1be8ab0d588ee85261ebcd25b32c9c91ddfdd6a019e7ed6cea13a6f0",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/06.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s9-palette-1480.png",
+      "sha256": "d3eaccf716173b9dd7693f03944c0ed80f447e0f5664e43cdc97064cddac76a4",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/06.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s1-shell-data-1480.png",
+      "sha256": "7dabb8ef6868624500b631ff04a971257081c919971366b7a0f375d75397261d",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/06.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s2-job-1480.png",
+      "sha256": "86645f1683a98d58207d7ee71fa2959e65a32a658d8ace1442b11e6b6507ac17",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/07.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s3-run-failed-1480.png",
+      "sha256": "b7389a6c8499f53abef362a42a0ac4920b7d74193ecbc90f1e787722ccb85e9a",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/07.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s4-run-live-1480.png",
+      "sha256": "7fa7b5d0f1026c44d5eff6583b8b9a205cb5d06fe2fe460f8fcf218ce61f55b0",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/07.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s5-pipeline-1480.png",
+      "sha256": "d08653ee5c9eeb165a58c66335d0e032563bfa5ac0752775b613f16dee1d9bb3",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/07.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s6-refused-1480.png",
+      "sha256": "dd1e6234d30b6aa7a47c2931a633d8beb435c833423a41fab02a2c6cf1af3eaf",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/07.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s7-agent-turn-1480.png",
+      "sha256": "c933f7e5be9c9dbfb228f2583997d1a62787bae837ef2fa95d3cf7a8c4d43793",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/07.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s8-narrow-620.png",
+      "sha256": "715865314414951d87f81418df945e0380ea773deb55810a0919acc546856957",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/08.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s9-palette-1480.png",
+      "sha256": "a8472ab17bd3b51eff53baf5cb51c7ae540a4c57af6a311f67a16e312bf6e9cd",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/08.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s1-shell-data-1480.png",
+      "sha256": "2b9783b87637b4f1395d0c0f5b155bd75cdda001543eac2c8425aada41620f68",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/08.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s2-project-1480.png",
+      "sha256": "66aeba009b95d8e17addcef57ad6db2f124a23cb84e45e82a68bdaa733825529",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/08.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s3-app-1480.png",
+      "sha256": "f20155ce24f4d5ed1f776047c569e8d30733bc9c6732ccdc05a327dc9eae6004",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/08.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s4-app-cold-1480.png",
+      "sha256": "08455c2b780c0afbb43898db64647c92551215b9f0ce95627196357229a1903a",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/08.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s5-refused-1480.png",
+      "sha256": "2a32daa239cf642aa1a1a21b3cdaafc4ff6a99583aaaeae8950d3bf2c3ab5054",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/09.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s6-scaffold-running-1480.png",
+      "sha256": "895d84b459db5f0fdb402825cf20c49f4449fd55df01f0323f1a9bbaf1922e3b",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/09.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s7-mid-900.png",
+      "sha256": "b8ada02c5e1ceb20089dfbf2b1d20ea6fbfb8c11bab2ad50e7991216baf93c4c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/09.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s8-palette-1480.png",
+      "sha256": "0c947b709866817af7daf3213c356b83dbfc48caaf3e9c19cfcc3aaf17dddd6a",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/09.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-operations/01-run-review.png",
+      "sha256": "337dd747c4223743120abe60ae8d8dd5a71ed6447ee01d5881dfa34796ae972c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/09.jpg",
+      "status": "superseded",
+      "finding": "Postgres session pagination closure failed; replaced by integration-operations-fixed."
+    },
+    {
+      "path": "screenshots/integration-operations/02-running.png",
+      "sha256": "5d5093c425228e0dd32ad2db436476cdb90ad7d45fc436975747b058e0a9eecf",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/09.jpg",
+      "status": "superseded",
+      "finding": "Postgres session pagination closure failed; replaced by integration-operations-fixed."
+    },
+    {
+      "path": "screenshots/integration-operations/03-settled-return.png",
+      "sha256": "86cff3aba0bd0b07b18766f0dd8d23a48a124532d695cfff8b97c3f40ef108df",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/10.jpg",
+      "status": "superseded",
+      "finding": "Postgres session pagination closure failed; replaced by integration-operations-fixed."
+    },
+    {
+      "path": "screenshots/integration-operations/04-recovered.png",
+      "sha256": "93a9a7c43e26ee5c1dec96bef025b108932301b593d968b81b3cb3bccba52943",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/10.jpg",
+      "status": "superseded",
+      "finding": "Postgres session pagination closure failed; replaced by integration-operations-fixed."
+    },
+    {
+      "path": "screenshots/integration-operations/05-cancelled.png",
+      "sha256": "81d950425b5e57a17e0aeecb64104a8481ed6d35a1a46c743884cf68f251daec",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/10.jpg",
+      "status": "superseded",
+      "finding": "Postgres session pagination closure failed; replaced by integration-operations-fixed."
+    },
+    {
+      "path": "screenshots/integration-operations/06-mobile-cancelled.png",
+      "sha256": "2ae49e86cd95664a80abb60a2782b4724d0caa01619ba4570720d4a729d75146",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/10.jpg",
+      "status": "superseded",
+      "finding": "Postgres session pagination closure failed; replaced by integration-operations-fixed."
+    },
+    {
+      "path": "screenshots/integration-operations-fixed/01-run-review.png",
+      "sha256": "4f6302497f5b3889d8224475ca30b2e13afe8786da6cc7f89f6dd9c343000eb4",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/10.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-operations-fixed/02-running.png",
+      "sha256": "9904c62cd8c7cbae6b81e73fd66477b5c3462b451f77cd8e96a04ee88c7f2fab",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/10.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-operations-fixed/03-settled-return.png",
+      "sha256": "59501ff5e661fe03f8a5c0950c5634d54fe06d4ca778bc06c525fb145de0ec9c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/11.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-operations-fixed/04-recovered.png",
+      "sha256": "1ae7a1782cc5c598e382df4c6e6e85e72e0195741c3e0eb160dafd68ce886d20",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/11.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-operations-fixed/05-cancelled.png",
+      "sha256": "61971097351f5db8e04a1c8afe3fe4508fe98baa9d4fa821e2598bba7d4ae39d",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/11.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-operations-fixed/06-mobile-cancelled.png",
+      "sha256": "03bbdeb4f6bd5e264be22c483f142d9fe9734ed2a8ebdf5f9a0634776a5c280f",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/11.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-parity/01-parity-desktop.png",
+      "sha256": "fa6db589d07c7123ee88d255fd4184101b7133c5710b83caf9bf31cc013de5ad",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/11.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-parity/02-parity-replayed.png",
+      "sha256": "3a3b0761283f2c4871d795f7a1e61e49391536373710bc2c6116b52d8ab7ece2",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/11.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-parity/03-parity-mobile.png",
+      "sha256": "11e3470cb5ec20fdc896928571d89f8670ddc4656f3c555717fc4eaeaa3cd6a7",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/12.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-parity/04-parity-mobile-expanded.png",
+      "sha256": "ec0dcc636091dc2455895857ddcea455910476caf3a6c7905ad32a78bc0b90b6",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/12.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-questions/01-question.png",
+      "sha256": "6a1d6bc953c06d7f978195faa30d6fb8d803a1053a62df03bc6dcfa513dedde1",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/12.jpg",
+      "status": "superseded",
+      "finding": "Session recovery missed dataclasses import; replaced by integration-questions-fixed."
+    },
+    {
+      "path": "screenshots/integration-questions/02-answered.png",
+      "sha256": "2af92b93ce2f73e63adf645f6b0a28edb19c66c1e62b08b7ea5c6ebcb594c7f6",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/12.jpg",
+      "status": "superseded",
+      "finding": "Session recovery missed dataclasses import; replaced by integration-questions-fixed."
+    },
+    {
+      "path": "screenshots/integration-questions/03-skipped.png",
+      "sha256": "a18aa9e70e232ba4d50e0001460685b42c72620d85d94a94d43ee25b4c7fe98c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/12.jpg",
+      "status": "superseded",
+      "finding": "Session recovery missed dataclasses import; replaced by integration-questions-fixed."
+    },
+    {
+      "path": "screenshots/integration-questions/04-expired.png",
+      "sha256": "89a69df0be547c3be626d9ca0b3884033af6eb2ce0ca63b9297b03903b74b3e3",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/12.jpg",
+      "status": "superseded",
+      "finding": "Session recovery missed dataclasses import; replaced by integration-questions-fixed."
+    },
+    {
+      "path": "screenshots/integration-questions/05-mobile-question.png",
+      "sha256": "c24b09ed282efc6d7bbc8e9b83dab56459d484c25017858fa88ca7fa3304dc09",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/13.jpg",
+      "status": "superseded",
+      "finding": "Session recovery missed dataclasses import; replaced by integration-questions-fixed."
+    },
+    {
+      "path": "screenshots/integration-questions-fixed/01-question.png",
+      "sha256": "f52f100bea5abebc7774dc5363d0aa60095f7e74635fbb3dbd74bcc55fdede64",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/13.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-questions-fixed/02-answered.png",
+      "sha256": "8534b2f3f1f12187e3018c9a2f01682f9f9cbcf105c83c4b4aec1713f334ab6f",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/13.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-questions-fixed/03-skipped.png",
+      "sha256": "3f942f4f51ee0394b5e19b1e68cb315468efbeaefed782063dba6d25d496827a",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/13.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-questions-fixed/04-expired.png",
+      "sha256": "677cbb622fc766f9df2a26e81ec9d6099cdfb367b654ccaf20a1b91352f38fd3",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/13.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-questions-fixed/05-mobile-question.png",
+      "sha256": "d1e8b516ec07bd0e2335676c84da432ce77e3e1fc6d6c5f6c2db3b8389b475ab",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/13.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-scale/01-recovered-200-turns.png",
+      "sha256": "89d2fd2a259abe026e2f263f98f02d389f74c221dfa986a3095e8683700a09c8",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/14.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-scale/02-earlier-results.png",
+      "sha256": "0f6b2b29796145f5224ad8c5b02e1fd6c3c8a1034862e64250e541a251f44241",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/14.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-scale/03-mobile-recovered.png",
+      "sha256": "557423f8088ae9d4df52fd432d3ee0bb77a0852ea678e9ee5c9ba6030ef926a2",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/14.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-scale/04-oldest-history-page.png",
+      "sha256": "bbb79bb59c02c53d1f62b1c7cfecfebcad23b1ee4bc3099a1c096f11e1a5b853",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/14.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-scale/05-result-row-page.png",
+      "sha256": "15fd15b4d262a8d170775ecc7b9819024a2d1a31b1ca0178869435a975fe8260",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/14.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/01-library-light.png",
+      "sha256": "35c12ce1aed0dcd4a46a95b75f844867633161d2408652769e2586993ee7c338",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/14.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/02-query-editor-light.png",
+      "sha256": "591ef12b124a1f0a2848177f88306b8bc78b1229be3e7e35f3a9d8e1b673d846",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/15.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/03-query-running.png",
+      "sha256": "13b5ab787c234ec72d285f4361cb6804b8b9395d136ceb1c9899bc9fab1889da",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/15.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/04-query-results.png",
+      "sha256": "9dbca04a35c3956d75420d02853e361b0caf3a5e0ed7b5814f60dbae1b6965c9",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/15.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/05-run-provenance.png",
+      "sha256": "ec379f7de303f940894b79643b814e1e60859dfeea2bb615bd409159e4aa3d45",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/15.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/06-parameters-and-null.png",
+      "sha256": "92cf42b2f3307233ddc6ee8bc58c14eddda4375aa6cf3bfc8520bf6873f4ce7d",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/15.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/07-policy-refusal.png",
+      "sha256": "46ecaf737989d939cc48f204040372ccba1d34bba485a435cd64badd265ff731",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/15.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/08-canceled.png",
+      "sha256": "40112233273da41ec7ec34e8071735a723fc10fc01d23237cb974755b285741f",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/16.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/09-own-history.png",
+      "sha256": "07248f2b245c3c82dbcde1a5ae525f24f9bff761bce56e1aca7197a2a13e1747",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/16.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/10-query-dark.png",
+      "sha256": "f57011bb8496aa81c554a65bbc4467af793359cfe510e3dfba3b783ff90817a3",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/16.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/11-mobile-editor.png",
+      "sha256": "4f2dfa16c4e0051020696cee8518df655c2f6bed1e6e5e41e0a12fc351e9c1af",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/16.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/12-mobile-results.png",
+      "sha256": "0bcf24718d75bae4128e3750fce0ac6e06f161569b60ae5a52e8cf91898110a5",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/16.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/13-tablet-editor.png",
+      "sha256": "7b53724cab8b34ed654b7ae749b420eac87749295663ec259a724e1b3822ca60",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/16.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/14-query-chat-context.png",
+      "sha256": "4b1d340bc1267b85fd633500ffd257c9a4c89c2decbe7a18ecdc66286d72a6e4",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/17.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/15-save-copy-dialog.png",
+      "sha256": "25b1dffa07fbb466d93a38e6983455feb7d535e1508d6082052b118a3a4f2918",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/17.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/16-assistant-sql-proposal.png",
+      "sha256": "3572d849888183afa42cdaa5fd4d395ffb50c031d0b404e57c90d96a7a864b8d",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/17.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/17-promoted-sql-draft.png",
+      "sha256": "f2e0f1ea7946a62fc3a44abf3a6e381cbd1aa0acf2b50cf4b1081adc281bf0b2",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/17.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/18-save-response-lost.png",
+      "sha256": "26936e04e1d2587ef218e559a57a79e910228c0e67f778aab6c5cd30eb4f7cb4",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/17.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-storage/01-storage-desktop.png",
+      "sha256": "54fb09fb003fd25a1a8a17ab6775e919f93d2c3fe213338c313b4759b833fd33",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/17.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-storage/02-storage-mobile.png",
+      "sha256": "132a1c36975ab4ee7550cfd64acab2c303862ba6bd2e2c3e025d9882ec23d65f",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/18.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-storage/03-storage-unavailable.png",
+      "sha256": "420f0cffba204c48c25acca36f3c5017dea3876275c7954350bf47e3b9ba08eb",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/18.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-storage/04-storage-recovered.png",
+      "sha256": "132a1c36975ab4ee7550cfd64acab2c303862ba6bd2e2c3e025d9882ec23d65f",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/18.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/01-review-diff.png",
+      "sha256": "4c7000d06d7b8646a6d7235f2f3ca898fbfec534d0782488ab5e6f7c060c5bab",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/18.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/02-changes.png",
+      "sha256": "b6353b6cb88c743ac31c2551a006c4059380b9b4e2719038fb1a3792977e2d5e",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/18.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/03-applied.png",
+      "sha256": "e9924a5b8b09c71dd946c9d0a054f5124dd7df6b879642b50ef0e3997e109371",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/18.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/04-assets.png",
+      "sha256": "f1979cfd039703453168e14ad9cf533253636a9e4538dfcd94e70a420ca90d99",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/19.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/04-budget.png",
+      "sha256": "2284305bbc0fd5081a11e982d0dab4b736d8158061503614a86170e8e0858f30",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/19.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/04-capabilities.png",
+      "sha256": "22c07e41f1f1dec23b78513f21fdafb5e0e59fa30fa31c36d9fd1a5b96d257b9",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/19.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/04-resources.png",
+      "sha256": "6d2faa103582a1911cca3467079735fa60db1d8fd4b54821673813a47b74510c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/19.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/04-runs.png",
+      "sha256": "97e9108ad55b741ae034599a4a2d1b2440fae9c8d95f80928ef0b757587a0426",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/19.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/05-plan-budget.png",
+      "sha256": "97546ed1fbb7d8bb0b0e18dda4e534f4d2e6ce11d4fff3b041a431dfeed79f04",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/19.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/06-reverted.png",
+      "sha256": "48a4a14ab9dba5ded796bb38f9067c464266e164668c32612a223a98dc9d96bf",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/20.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/07-rejected.png",
+      "sha256": "4a0bc1703e99dcb97dfd4d94f60826dcbd1c2373d3fcfbebe4be6fdd3c607341",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/20.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/08-mobile-capabilities.png",
+      "sha256": "8277768fb23c1700a5e13fe227accba0803138ca55ee25194b85c2ab41710d81",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/20.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/01-review-diff.png",
+      "sha256": "ad65b322642666d4e4e424441068b07b9b29a42bcfcab7958f02b7468346a13b",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/20.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/02-changes.png",
+      "sha256": "1323e6dc3c7ab8874f8e1dc025a24c562631ac052d90208e87c964437f9e9e38",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/20.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/03-applied.png",
+      "sha256": "29f854e425f158847f3a66a9685b9b757e6c2020350b9c9a1fb178ab6c4c3fc0",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/20.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/04-assets.png",
+      "sha256": "720b37178607a98791a8dcab0deecf89a3b85eab2c92ef5801ecb6b2be7b1cd8",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/21.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/04-budget.png",
+      "sha256": "fa2d794509afe8c00b2603be9271e9455366225741c246b52aa1b1877ae244d6",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/21.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/04-capabilities.png",
+      "sha256": "7e226603d3d0f3fd3340cf31710852f1e8170c483651e8e8fdfe71465011e842",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/21.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/04-resources.png",
+      "sha256": "f53a1d12e1593426d5a1ae0a6179d49e5769ecc422a212babdb56eb43299fd82",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/21.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/04-runs.png",
+      "sha256": "0f5e4933af30a38e81b54f0bc801ad31f98e1d2a7c664e86c61ace1c8b517e3f",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/21.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/05-plan-budget.png",
+      "sha256": "97546ed1fbb7d8bb0b0e18dda4e534f4d2e6ce11d4fff3b041a431dfeed79f04",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/21.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/06-reverted.png",
+      "sha256": "0be821645d80186a55f2162417fe836704c209f24484270b0b18653da2c47a5a",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/22.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/07-rejected.png",
+      "sha256": "4a0bc1703e99dcb97dfd4d94f60826dcbd1c2373d3fcfbebe4be6fdd3c607341",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/22.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/08-mobile-capabilities.png",
+      "sha256": "38583c3401da03ac7af8d06e74fb3e476d6040d321a7e8c19efd2b0be41bf4cb",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/22.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
     }
   ]
 }

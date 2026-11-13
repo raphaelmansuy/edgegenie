@@ -1,0 +1,20 @@
+{
+  "pass": true,
+  "captures": [
+    "01-recovered-200-turns",
+    "02-earlier-results",
+    "04-oldest-history-page",
+    "05-result-row-page",
+    "03-mobile-recovered"
+  ],
+  "errors": [],
+  "turns": 200,
+  "rowsPerResult": 100,
+  "columns": 12,
+  "mountedTurnLimit": 30,
+  "mountedRowsPerResult": 20,
+  "scrollFrameP95Ms": 17.600000023841858,
+  "worstTaskMs": 51,
+  "elapsedMs": 2673,
+  "scope": "Actual local durable journal, HTTP/SSE replay, bounded history pages, result row pages, continuous scroll measurement and mobile."
+}

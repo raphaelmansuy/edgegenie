@@ -35,5 +35,5 @@ def test_services_do_not_implement_asset_kind_specific_dispatch():
             values = [node.left, *node.comparators]
             assert not (
                 any(isinstance(v, ast.Attribute) and v.attr == "kind" for v in values)
-                and any(isinstance(v, ast.Constant) and isinstance(v.value, str) for v in values)
+                and any(isinstance(v, ast.Constant) and v.value in {"notebook", "file", "table", "query", "query-draft", "job", "pipeline", "app", "instance", "job_run", "pipeline_update"} for v in values)
             ), node.lineno

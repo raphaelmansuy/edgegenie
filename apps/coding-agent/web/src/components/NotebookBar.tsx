@@ -8,10 +8,50 @@
  * There is no cluster picker: SQL runs on a serverless SQL warehouse as the signed-in user, and the
  * bar says which one once it has run. A control for a choice the app does not offer would be a lie.
  */
+import { useEffect, useRef, useState } from "react";
 import { runAllLabel, type CellRun, type RunPlan } from "../domain/cellrun";
+import { chipFor, type SessionStatus } from "../domain/session";
 import { Close, PlayAll, Stop } from "./Icons";
 
-export function NotebookBar({ plan, runs, runningAll, batch, onRunAll, onStop, onClear }: {
+/** The notebook's Python session: a chip that says what state it is in, and a small menu to restart or
+ *  stop it. Variables live in it, and it costs compute while it is up, so both controls are one click. */
+function SessionChip({ status, fallback, onRestart, onStop }: {
+  status: SessionStatus; fallback: string | null; onRestart: () => void; onStop: () => void;
+}) {
+  const chip = chipFor(status, fallback);
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  return (
+    <span className="nb-session" ref={box}>
+      <button type="button" className={`nb-bar-compute nb-session-chip is-${chip.tone}`} aria-expanded={open}
+        aria-haspopup="menu" onClick={() => setOpen((o) => !o)} title={chip.title}>
+        <span className="nb-bar-dot" aria-hidden />
+        {chip.label}
+      </button>
+      {open && (
+        <div className="nb-session-pop" role="menu" aria-label="Python session">
+          <p className="nb-session-note">{chip.title}</p>
+          <button type="button" role="menuitem" className="btn sm ghost" disabled={!chip.canRestart}
+            onClick={() => { setOpen(false); onRestart(); }}>Restart session</button>
+          <button type="button" role="menuitem" className="btn sm ghost" disabled={!chip.canStop}
+            onClick={() => { setOpen(false); onStop(); }}>Stop session</button>
+        </div>
+      )}
+    </span>
+  );
+}
+
+export function NotebookBar({ plan, runs, runningAll, batch, session, onRunAll, onStop, onClear }: {
+  /** Present when the app can keep a Python session; absent means one-shot runs only. */
+  session?: { status: SessionStatus; fallback: string | null; onRestart: () => void; onStop: () => void };
   plan: RunPlan;
   runs: Record<string, CellRun>;
   runningAll: boolean;
@@ -34,7 +74,9 @@ export function NotebookBar({ plan, runs, runningAll, batch, onRunAll, onStop, o
       ) : (
         <button type="button" className="btn sm primary" onClick={onRunAll} disabled={plan.runnable.length === 0}
           title={plan.runnable.length ? (plan.python.length
-            ? "Run every cell. SQL runs in order on a warehouse as you; Python runs as one serverless job as the app"
+            ? (session && !session.fallback
+            ? "Run every cell in order. SQL runs on a warehouse as you; Python runs in this notebook's session as the app"
+            : "Run every cell. SQL runs in order on a warehouse as you; Python runs as one serverless job as the app")
             : "Run every SQL cell in order; stops at the first failure") : (plan.skipped[0]?.reason ?? "No cell here can run in the app")}>
           <PlayAll size={13} /> Run all
         </button>
@@ -51,6 +93,10 @@ export function NotebookBar({ plan, runs, runningAll, batch, onRunAll, onStop, o
             <span className="nb-bar-dot" aria-hidden />
             Python · as the app
           </span>
+        )}
+        {plan.python.length > 0 && session && (
+          <SessionChip status={session.status} fallback={session.fallback}
+            onRestart={session.onRestart} onStop={session.onStop} />
         )}
         {hasOutputs && !runningAll && (
           <button type="button" className="btn sm ghost" onClick={onClear} title="Clear every output">

@@ -9,13 +9,15 @@ class WorkPreferences:
         self.files, self.bundled = files, bundled
 
     async def instructions(self, who):
-        paths = [f"/Users/{who.run_as}/AGENTS.md", "/Workspace/AGENTS.md"]
+        paths = [f"/Users/{who.run_as}/AGENTS.md",
+                 f"/Users/{who.run_as}/.assistant/instructions.md",
+                 "/Workspace/AGENTS.md", "/Workspace/.assistant/instructions.md"]
         folder = who.scope.folder.rstrip("/")
         parents = []
         while folder:
             parents.append(folder + "/AGENTS.md")
             folder = folder.rsplit("/", 1)[0]
-        paths += list(reversed(parents))[-18:]
+        paths += list(reversed(parents))[-16:]
         items = []
         budget = 16000
         for path in dict.fromkeys(paths):

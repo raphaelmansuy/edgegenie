@@ -8,9 +8,11 @@ reveals nothing.
 
 from __future__ import annotations
 
+import dataclasses
 import secrets
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Protocol
 
 from ..domain import pyrun
@@ -42,9 +44,11 @@ KEEP_SECONDS = 600
 
 
 class PythonRuns:
-    def __init__(self, runner: Runner, *, clock=time.monotonic) -> None:
+    def __init__(self, runner: Runner, *, clock=time.monotonic,
+                 wall=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")) -> None:
         self._runner = runner
         self._now = clock
+        self._wall = wall
         self._handles: dict[str, _Handle] = {}
 
     async def start(
@@ -103,7 +107,11 @@ class PythonRuns:
             )
             if not finished:
                 return {"state": "running", "seconds": seconds, "stage": _stage(info.life_cycle)}
-            h.done, h.finished_at = results, self._now()
+            # Databricks prints when a command finished and who ran it under the cell. The person is the one
+            # who asked, even though the compute is the app's: the label beside it says so.
+            stamped = self._wall()
+            h.done = {i: dataclasses.replace(r, finished_at=stamped, ran_by=owner) for i, r in results.items()}
+            h.finished_at = self._now()
             await self._runner.discard(h.path)
         return {
             "state": "done",

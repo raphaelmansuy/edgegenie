@@ -1,0 +1,21 @@
+{
+  "pass": true,
+  "captures": [
+    "01-native-single-review",
+    "02-native-verified-once",
+    "03-native-rejected",
+    "04-bundle-review",
+    "05-bundle-inspected",
+    "06-asset-attached",
+    "07-as-code-capabilities",
+    "08-created-resource",
+    "09-archive-resources",
+    "10-cleanup-review",
+    "11-cleanup-deleted",
+    "12-stop-native-runs",
+    "13-stopped-native-cancelled",
+    "14-resource-kept-acknowledged"
+  ],
+  "errors": [],
+  "scope": "Local actual HTTP/ACP/MCP with deterministic workspace/native runner and scope-limited as-code tier."
+}

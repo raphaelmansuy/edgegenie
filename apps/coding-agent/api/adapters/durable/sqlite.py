@@ -106,11 +106,8 @@ class SqliteSessionStore(Broadcast):
         return stored
 
     async def append(self, event: Event) -> Event:
-        db = self._connection()
-        row = db.execute(
-            "SELECT body FROM session_snapshot WHERE session_id=?", (event.session_id,)
-        ).fetchone()
-        return await self.commit(event, json.loads(row[0]) if row else {})
+        """Append one event. O(1): no snapshot is read or written ([R-5], `[F-4]`)."""
+        return await self.commit(event, None)
 
     async def snapshot(self, sid):
         row = (

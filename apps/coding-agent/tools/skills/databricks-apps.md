@@ -23,3 +23,9 @@ A platform refusal is final. Say that the app was not deployed; do not invent a 
 
 Stop through a reviewed run action, and delete only a session-created resource through Resources
 cleanup. Existing apps that can read app secrets/databases cannot receive model-written code.
+
+Operator-managed deployments may declare resources with CAN_CONNECT_AND_CREATE for a database.
+That is an administrator's deployment configuration; agent-created apps must still have no database
+or secret resources. Some workspaces require git_repository source. dbx_app_health can observe an
+existing app in the standalone MCP profile; runtime diagnostics use the app logz endpoint. Keep
+credential values out of diagnostics, and report refused or unavailable logs explicitly.

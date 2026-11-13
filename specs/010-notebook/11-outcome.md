@@ -47,8 +47,8 @@ driven by `apps/coding-agent/web/scripts/plot-e2e.mjs`.
 
 These were refused in [01](01-five-whys.md) and [06](06-lenses.md), and the pictures do not pretend otherwise.
 
-- No cluster picker. Python still runs as the app.
-- No debugger, widgets, comments, schedule, or share.
+- No cluster picker. Python still runs as the app. Sessions, magics, charts and widgets now exist: see [12](12-session-and-gaps.md).
+- No debugger, comments, schedule, or share.
 - No notebook-wide find and replace.
 - Cell titles are derived. SOURCE has no title field, so the map does not invent one that would vanish on save.
 - `%skip` is a batch directive. Running that cell on its own still runs the statement under it.

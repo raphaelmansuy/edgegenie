@@ -2,12 +2,17 @@ import { describe, expect, it } from "vitest";
 import { explain } from "./errors";
 
 describe("explain", () => {
-  it("tells a missing app scope apart from the user's own access", () => {
+  it("tells a missing app scope apart from the user's own access, and does not blame the sign-in", () => {
     const e = explain("this app has not been granted the permission it needs (`workspace`). This is an app setting, not your access: ask the app's owner to add the scope and redeploy.");
     expect(e.kind).toBe("scope");
-    expect(e.title).toMatch(/sign-in/i);
-    expect(e.detail).toMatch(/sign in again/i);
-    expect(e.detail).toMatch(/app's owner/);
+    expect(e.title).toMatch(/missing a permission/i);
+    // The deployed app offered "Sign in again" and it could not work: `postgres` is bound to the
+    // app's service principal and never reaches a user token (spec 013 [RB-10]). The message must
+    // point at the app, and must NOT suggest re-authenticating.
+    expect(e.detail).toMatch(/not your access/i);
+    expect(e.detail).toMatch(/signing in again will not change it/i);
+    expect(e.detail).not.toMatch(/sign in again to get/i);
+    expect(e.action).toBeUndefined();
     expect(e.retryable).toBe(false);
   });
 

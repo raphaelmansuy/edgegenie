@@ -1,0 +1,221 @@
+{
+  "_note": [
+    "RECORDED payloads for spec 014's scenes, in the shapes `api/adapters/databricks/jobs.py` and",
+    "`pipelines.py` produce. A page is photographed against these rather than a live workspace: a scene",
+    "that needs a real job cannot run in CI.",
+    "",
+    "Each value is a fact the platform documents (spec 014 [02 §What the platform says]), not an",
+    "invention: `TERMINATED`+`FAILED` is a failed run, `IDLE`+`FAILED` is a pipeline whose last update",
+    "failed, and `runsUnread` is a job whose history was denied."
+  ],
+  "jobs_list": {
+    "identity": "the app's service principal",
+    "items": [
+      { "job_id": 812345678901, "name": "agent_4ff4405d_daily_revenue", "owner": "me@example.com",
+        "schedule": { "cron": "0 0 6 * * ?", "timezone": "UTC", "paused": true }, "paused": true },
+      { "job_id": 812345678902, "name": "agent_4ff4405d_nightly_silver", "owner": "me@example.com",
+        "schedule": null, "paused": false }
+    ]
+  },
+  "job": {
+    "identity": "the app's service principal",
+    "job": {
+      "job_id": 812345678901,
+      "name": "agent_4ff4405d_daily_revenue",
+      "owner": "me@example.com",
+      "created": 1760000000000,
+      "schedule": { "cron": "0 0 6 * * ?", "timezone": "UTC", "paused": true },
+      "tasks": [
+        { "task_key": "silver", "depends_on": [], "timeout_seconds": 0, "max_retries": 0,
+          "notebook_path": "/Users/me/agent_scratch/daily_revenue/silver" },
+        { "task_key": "gold", "depends_on": ["silver"], "timeout_seconds": 3600, "max_retries": 2,
+          "notebook_path": "/Users/me/agent_scratch/daily_revenue/gold" },
+        { "task_key": "audit", "depends_on": ["silver"], "timeout_seconds": 0, "max_retries": 0,
+          "notebook_path": "/Users/me/agent_scratch/daily_revenue/audit" }
+      ],
+      "queueing": true,
+      "timeoutSeconds": 0,
+      "maxRetries": 0,
+      "tags": { "agent": "opengenie", "session": "4ff4405d" },
+      "performanceTarget": "STANDARD"
+    },
+    "levels": [["silver"], ["gold", "audit"]],
+    "graphProblem": null,
+    "summary": "3 tasks in 2 levels",
+    "runs": [
+      { "run_id": 812345679, "job_id": 812345678901, "lifeCycle": "TERMINATED", "result": "FAILED",
+        "word": "failed", "tone": "bad", "startTime": 1760000100000, "endTime": 1760000202000,
+        "duration": "1 m 42 s", "active": false, "cancel": false, "repair": true },
+      { "run_id": 812345670, "job_id": 812345678901, "lifeCycle": "TERMINATED", "result": "SUCCESS",
+        "word": "succeeded", "tone": "good", "startTime": 1759900100000, "endTime": 1759900088000,
+        "duration": "1 m 28 s", "active": false, "cancel": false, "repair": false }
+    ],
+    "latestRun": {
+      "run_id": 812345679, "job_id": 812345678901, "lifeCycle": "TERMINATED", "result": "FAILED",
+      "word": "failed", "tone": "bad", "startTime": 1760000100000, "endTime": 1760000202000,
+      "duration": "1 m 42 s", "active": false, "cancel": false, "repair": true, "trigger": "manual",
+      "tasks": [
+        { "taskKey": "silver", "taskRunId": 1, "lifeCycle": "TERMINATED", "result": "SUCCESS",
+          "word": "succeeded", "tone": "good", "duration": "38 s" },
+        { "taskKey": "gold", "taskRunId": 2, "lifeCycle": "TERMINATED", "result": "FAILED",
+          "word": "failed", "tone": "bad", "duration": "64 s" },
+        { "taskKey": "audit", "taskRunId": 3, "lifeCycle": "SKIPPED", "result": null,
+          "word": "skipped", "tone": "quiet", "duration": "—" }
+      ],
+      "output": {
+        "taskKey": "gold",
+        "error": "AnalysisException: cannot resolve 'fare_amount' given input columns: [trip_id, pickup_at, dropoff_at, total]\n   line 12   select fare_amount from main.silver.trips",
+        "traceTail": "at org.apache.spark.sql.catalyst.analysis.package$AnalysisErrorAt.failAnalysis(package.scala:42)"
+      }
+    }
+  },
+  "job_never_run": {
+    "identity": "the app's service principal",
+    "job": {
+      "job_id": 812345678901, "name": "agent_4ff4405d_daily_revenue", "owner": "me@example.com",
+      "created": 1760000000000,
+      "schedule": { "cron": "0 0 6 * * ?", "timezone": "UTC", "paused": true },
+      "tasks": [{ "task_key": "silver", "depends_on": [],
+                  "notebook_path": "/Users/me/agent_scratch/daily_revenue/silver" }],
+      "queueing": true, "timeoutSeconds": 0, "maxRetries": 0, "tags": {},
+      "performanceTarget": "STANDARD"
+    },
+    "levels": [["silver"]], "graphProblem": null, "summary": "1 task, all independent",
+    "runs": [], "latestRun": null
+  },
+  "job_refused": {
+    "identity": "the app's service principal",
+    "job": { "error": "PERMISSION_DENIED: user does not have CAN_MANAGE_RUN on job 812345678901" },
+    "runs": { "error": "PERMISSION_DENIED: user does not have CAN_MANAGE_RUN on job 812345678901" },
+    "latestRun": { "error": "PERMISSION_DENIED: user does not have CAN_MANAGE_RUN on job 812345678901" },
+    "levels": [], "graphProblem": null, "summary": "no tasks"
+  },
+  "run_failed": {
+    "run_id": 812345679, "job_id": 812345678901,
+    "lifeCycle": "TERMINATED", "result": "FAILED", "word": "failed", "tone": "bad",
+    "startTime": 1760000100000, "endTime": 1760000202000, "duration": "1 m 42 s",
+    "active": false, "cancel": false, "repair": true, "trigger": "manual",
+    "tasks": [
+      { "taskKey": "silver", "taskRunId": 1, "lifeCycle": "TERMINATED", "result": "SUCCESS",
+        "word": "succeeded", "tone": "good", "duration": "38 s" },
+      { "taskKey": "gold", "taskRunId": 2, "lifeCycle": "TERMINATED", "result": "FAILED",
+        "word": "failed", "tone": "bad", "duration": "64 s" },
+      { "taskKey": "audit", "taskRunId": 3, "lifeCycle": "SKIPPED", "result": null,
+        "word": "skipped", "tone": "quiet", "duration": "—" }
+    ],
+    "output": {
+      "taskKey": "gold",
+      "error": "AnalysisException: cannot resolve 'fare_amount' given input columns: [trip_id, pickup_at, dropoff_at, total]",
+      "traceTail": "at org.apache.spark.sql.catalyst.analysis.package$AnalysisErrorAt.failAnalysis"
+    }
+  },
+  "run_live": {
+    "run_id": 812345680, "job_id": 812345678901,
+    "lifeCycle": "RUNNING", "result": null, "word": "running", "tone": "busy",
+    "startTime": 1760000100000, "endTime": null, "duration": "12 s",
+    "active": true, "cancel": true, "repair": false, "trigger": "manual",
+    "tasks": [
+      { "taskKey": "silver", "taskRunId": 1, "lifeCycle": "TERMINATED", "result": "SUCCESS",
+        "word": "succeeded", "tone": "good", "duration": "38 s" },
+      { "taskKey": "gold", "taskRunId": 2, "lifeCycle": "RUNNING", "result": null,
+        "word": "running", "tone": "busy", "duration": "12 s" },
+      { "taskKey": "audit", "taskRunId": 3, "lifeCycle": "BLOCKED", "result": null,
+        "word": "blocked", "tone": "busy", "duration": "—" }
+    ]
+  },
+  "pipelines_list": {
+    "identity": "the app's service principal",
+    "items": [
+      { "pipeline_id": "f0e1c4a2-0000-11ee-be56-0242ac120002", "name": "sales_medallion",
+        "state": "IDLE", "word": "succeeded", "tone": "good",
+        "lastUpdate": { "update_id": "8a0b6d02", "state": "COMPLETED", "creationTime": 1760000000000 },
+        "catalog": "main", "creator": "me@example.com" },
+      { "pipeline_id": "f0e1c4a2-0000-11ee-be56-0242ac120003", "name": "orders_stream",
+        "state": "IDLE", "word": "failed", "tone": "bad",
+        "lastUpdate": { "update_id": "9c1d7e03", "state": "FAILED", "creationTime": 1759990000000 },
+        "catalog": "main", "creator": "me@example.com" }
+    ]
+  },
+  "pipeline": {
+    "identity": "the app's service principal",
+    "pipeline": {
+      "pipeline_id": "f0e1c4a2-0000-11ee-be56-0242ac120002",
+      "name": "sales_medallion",
+      "state": "IDLE",
+      "catalog": "main",
+      "schema": "sales",
+      "serverless": true,
+      "edition": "ADVANCED",
+      "channel": "CURRENT",
+      "continuous": false,
+      "development": false,
+      "libraries": [
+        { "kind": "notebook", "path": "/Users/me/agent_scratch/sales_medallion/bronze_orders" },
+        { "kind": "notebook", "path": "/Users/me/agent_scratch/sales_medallion/silver_orders" },
+        { "kind": "notebook", "path": "/Users/me/agent_scratch/sales_medallion/gold_revenue" }
+      ],
+      "creator": "me@example.com",
+      "storage": ""
+    },
+    "updates": [
+      { "updateId": "8a0b6d02", "state": "COMPLETED", "word": "succeeded", "tone": "good",
+        "creationTime": 1760000000000, "fullRefresh": false, "cause": "api_call", "active": false },
+      { "updateId": "8a0b6c01", "state": "COMPLETED", "word": "succeeded", "tone": "good",
+        "creationTime": 1759913600000, "fullRefresh": false, "cause": "api_call", "active": false }
+    ],
+    "lastUpdate": { "updateId": "8a0b6d02", "state": "COMPLETED", "word": "succeeded", "tone": "good",
+      "creationTime": 1760000000000, "fullRefresh": false, "cause": "api_call", "active": false },
+    "events": [
+      { "level": "ERROR", "message": "Expectation 'valid_total' failed on 12 rows (warn threshold)",
+        "timestamp": 1760000100000, "stackTrace": "" },
+      { "level": "INFO", "message": "Update 8a0b6d02 started by API_CALL", "timestamp": 1759999900000,
+        "stackTrace": "" }
+    ],
+    "word": "succeeded",
+    "tone": "good",
+    "activeUpdate": null
+  },
+  "pipeline_never_run": {
+    "identity": "the app's service principal",
+    "pipeline": {
+      "pipeline_id": "f0e1c4a2-0000-11ee-be56-0242ac120002", "name": "sales_medallion",
+      "state": "IDLE", "catalog": "main", "schema": "sales", "serverless": true,
+      "edition": "ADVANCED", "channel": "CURRENT", "continuous": false, "development": false,
+      "libraries": [{ "kind": "notebook", "path": "/Users/me/agent_scratch/sales_medallion/bronze_orders" }],
+      "creator": "me@example.com", "storage": ""
+    },
+    "updates": [], "lastUpdate": null, "events": [], "word": "idle", "tone": "quiet",
+    "activeUpdate": null
+  },
+  "pipeline_failed": {
+    "identity": "the app's service principal",
+    "pipeline": {
+      "pipeline_id": "f0e1c4a2-0000-11ee-be56-0242ac120002", "name": "sales_medallion",
+      "state": "IDLE", "catalog": "main", "schema": "sales", "serverless": true,
+      "edition": "ADVANCED", "channel": "CURRENT", "continuous": false, "development": false,
+      "libraries": [{ "kind": "notebook", "path": "/Users/me/agent_scratch/sales_medallion/bronze_orders" }],
+      "creator": "me@example.com", "storage": ""
+    },
+    "updates": [{ "updateId": "9c1d7e03", "state": "FAILED", "word": "failed", "tone": "bad",
+      "creationTime": 1759990000000, "fullRefresh": false, "cause": "api_call", "active": false }],
+    "lastUpdate": { "updateId": "9c1d7e03", "state": "FAILED", "word": "failed", "tone": "bad",
+      "creationTime": 1759990000000, "fullRefresh": false, "cause": "api_call", "active": false },
+    "events": [{ "level": "ERROR",
+      "message": "Flow bronze_orders failed: TABLE_OR_VIEW_NOT_FOUND main.raw.orders",
+      "timestamp": 1759990100000, "stackTrace": "" }],
+    "word": "failed", "tone": "bad", "activeUpdate": null
+  },
+  "lakebase_projects": {
+    "items": [
+      { "ref": "projects/pg_tickets", "name": "pg_tickets", "displayName": "Tickets",
+        "pgVersion": 17, "owner": "me@example.com" }
+    ]
+  },
+  "apps": {
+    "items": [
+      { "name": "tickets-app", "url": "https://tickets-app-1.aws.databricksapps.com",
+        "state": "running", "stateRaw": "RUNNING", "lakebase": "pg_tickets", "resources": [],
+        "creator": "me@example.com" }
+    ]
+  }
+}

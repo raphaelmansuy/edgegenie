@@ -13,3 +13,8 @@ If the advertised tool catalogue has no database SQL capability, report that lim
 
 Instances created by this session appear in Resources. Review cleanup there. A renamed or changed
 instance is refused for automatic cleanup, and archiving alone does not stop its ongoing cost.
+
+For a separately authorized application runtime, configure PGHOST and LAKEBASE_ENDPOINT and use
+psycopg with TLS. Operator capacity sizing must account for max − min, not just the maximum.
+Standalone full-profile MCP exposes dbx_lakebase_database, dbx_lakebase_role and dbx_lakebase_tables;
+these administrative tools are not a fallback permission path when the agent capability is absent.

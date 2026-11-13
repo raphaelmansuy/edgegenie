@@ -20,6 +20,8 @@ apps/coding-agent/web/node_modules/
 apps/coding-agent/web/dist/
 # tsc's incremental state: a build artifact that churns on every compile and conflicts on merge.
 apps/coding-agent/web/tsconfig.tsbuildinfo
+# vitest's json report, written by the test runner
+apps/coding-agent/web/.vitest/
 apps/coding-agent/web/shots/
 __pycache__/
 .pytest_cache/
@@ -34,6 +36,11 @@ specs/001-databricks-coding-agents/e2e/screenshots/*.png
 .venv2
 .env
 *.tok
+
+# A FILE named .venv used to hold a plaintext Databricks PAT (someone's shorthand for "credentials
+# for this server"). `.venv/` above is a DIRECTORY pattern and does not match a file, so a `git add
+# -A` would have committed a live token. Both spellings are ignored now.
+.venv
 
 # the site build output: CI rebuilds it, and a committed copy is a second thing to drift
 site/dist/
