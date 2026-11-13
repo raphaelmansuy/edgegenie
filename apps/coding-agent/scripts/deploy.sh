@@ -209,6 +209,23 @@ provision_session_volume() {
 # ---------------------------------------------------------------- deploy
 deploy() {
   say "7/8 Deploy"
+  # Starting an app may resume its old deployment. Both compute and that deployment must settle
+  # before a new submission; accepting the start request does not make deployment ready.
+  local ready=0 compute previous i
+  for i in $(seq 1 60); do
+    read -r compute previous <<<"$(databricks apps get "$APP_NAME" -o json | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+print((d.get("compute_status") or {}).get("state", "unknown"),
+      ((d.get("active_deployment") or {}).get("status") or {}).get("state", "none"))')"
+    if [ "$compute" = "ACTIVE" ] && [ "$previous" != "IN_PROGRESS" ]; then
+      ready=1; break
+    fi
+    [ "$compute" != "STOPPED" ] || die "app compute stopped before deployment"
+    echo "  waiting for deployment readiness: compute=$compute previous=$previous"
+    sleep 10
+  done
+  [ "$ready" = "1" ] || die "app did not become ready for deployment within 10 minutes"
   local out
   if [ "$DEPLOY_SOURCE" = "git" ]; then
     # Resolve once and pin the remote commit; a branch moving during deployment cannot change it.
