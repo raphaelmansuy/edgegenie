@@ -7,7 +7,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import net from 'node:net';
 import { expect } from '@playwright/test';
-export async function localApp() {
+export async function localApp(options = {}) {
   const web = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const app = resolve(web, '..');
   const scratch = mkdtempSync(resolve(tmpdir(), 'opengenie-mission-'));
@@ -18,6 +18,10 @@ export async function localApp() {
   Object.assign(env, { APP_AGENT_MODE: 'fake', APP_DEFAULT_MODEL: 'fake/model-a', APP_ALLOWED_MODELS: '["fake/model-a"]',
     APP_TOOL_MODE: 'none', APP_DEMO_SCENARIO: 'longrun', APP_DEMO_EVENT_DELAY: process.env.MISSION_EVENT_DELAY ?? '.12', APP_SESSION_DB_PATH: resolve(scratch, 'journal.sqlite'),
     APP_BLOB_DIR: resolve(scratch, 'blobs'), APP_STREAM_HEARTBEAT_SECONDS: '1', APP_DEV_USER: 'mission@example.test', DATABRICKS_HOST: '', APP_DEV_TOKEN_AUTO: '0' });
+  if (options.agentWork) Object.assign(env, { APP_CHANGES:'1', APP_OPERATIONS:'1', APP_ASSETS:'1', APP_EVIDENCE_V2:'1',
+    APP_JOURNAL_V2:'1', APP_AGENT_WORKSPACE_DEMO:'1', APP_TOOL_MODE:'subprocess', APP_INTERNAL_URL:url, APP_AGENT_POLL_SECONDS:'.1' });
+  if (options.pgDsn) Object.assign(env,{ APP_SESSION_DATABASE_URL:options.pgDsn, APP_AGENT_KEY:Buffer.from("t".repeat(32)).toString("base64") });
+  if (options.asCode) env.APP_AGENT_ASCODE_DEMO="1";
   let processHandle;
   process.once('exit', () => { if (processHandle?.exitCode === null) processHandle.kill('SIGTERM'); });
   async function start() {
@@ -26,7 +30,7 @@ export async function localApp() {
     await expect.poll(async () => { try { return (await fetch(`${url}/api/ready`)).status; } catch { return 0; } }, { timeout: 20000 }).toBe(200);
   }
   async function stop() {
-    if (!processHandle || processHandle.exitCode !== null) return;
+    if (!processHandle || processHandle.exitCode !== null || processHandle.signalCode !== null) return;
     const ended = once(processHandle, 'exit'); processHandle.kill('SIGTERM');
     await Promise.race([ended, new Promise((_, reject) => setTimeout(() => reject(new Error('Local app shutdown exceeded 12 seconds')), 12000).unref())]);
   }

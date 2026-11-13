@@ -49,6 +49,7 @@ Tools
 """
 from __future__ import annotations
 
+import functools
 import base64
 import functools
 import json
@@ -56,6 +57,12 @@ import os
 import re
 import sys
 from typing import Any
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from api.adapters.mcp.deadline import invoke
+from api.domain.policy.paths import inside
+from api.domain.policy.sql import check_scope, classify
+from api.domain.policy.verdict import ActionClass
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -67,6 +74,14 @@ TOKEN = os.environ.get("DATABRICKS_TOKEN", "")
 ALLOW_WRITES = os.environ.get("NBMCP_ALLOW_WRITES", "0") == "1"
 MAX_CHARS = int(os.environ.get("NBMCP_MAX_CHARS", "6000"))
 WAREHOUSE_ID = os.environ.get("NBMCP_WAREHOUSE_ID", "")
+
+WRITE_MODE = os.environ.get("NBMCP_WRITE_MODE", "fenced").strip().lower() or "fenced"
+_READ_ONLY_ALIASES = {"read-only", "read_only", "readonly", "ro"}
+_ASK_ALIASES = {"ask", "approve", "approval"}
+RUN_SESSION = os.environ.get("NBMCP_RUN_SESSION", "")
+RUN_KEY = os.environ.get("NBMCP_RUN_KEY", "")
+QUERY_URL = os.environ.get("NBMCP_QUERY_URL", "")
+APP_PREFIX = os.environ.get("NBMCP_WRITE_APP_PREFIX", "")
 
 mcp = FastMCP("databricks-notebook-tools")
 
@@ -80,20 +95,7 @@ mcp = FastMCP("databricks-notebook-tools")
 # added for jobs and five for pipelines. `07 §6` of spec 014 carries the arithmetic and the two merges
 # that were considered and rejected. Every member must be reachable from a page or a skill.
 PROFILE = os.environ.get("NBMCP_PROFILE", "full")
-_CORE = {
-    "dbx_whoami", "dbx_list_tables", "dbx_describe_table", "dbx_search_tables", "dbx_run_sql",
-    "dbx_list_notebooks", "dbx_read_notebook", "dbx_grep_notebook", "dbx_write_notebook",
-    "dbx_write_file", "dbx_run_notebook", "dbx_run_notebook_status", "dbx_skill",
-    # jobs (spec 014). `dbx_list_jobs` was missing until 014: an agent could create a job and never
-    # enumerate one, which is [F6].
-    "dbx_list_jobs", "dbx_create_job", "dbx_run_job", "dbx_job_run_status", "dbx_job_failure_context",
-    # pipelines (spec 014). There was one read-only pipeline tool before; a pipeline could not be built.
-    "dbx_create_pipeline", "dbx_pipeline_status", "dbx_start_pipeline", "dbx_stop_pipeline",
-    # Lakebase (spec 013). The scaffold trio left `core` in 014 and stays registered in `full`.
-    "dbx_lakebase_create", "dbx_lakebase_status", "dbx_lakebase_branch", "dbx_lakebase_sql",
-    "dbx_create_app", "dbx_app_health",
-    "dbx_read_query", "dbx_update_query", "dbx_run_query", "dbx_query_run_status",
-}
+from api.domain.tool_catalogue import CORE_TOOLS as _CORE
 
 
 def tool():
@@ -114,7 +116,11 @@ def tool():
                 # A hook is evaluated BEFORE the mode gate as well as before the call: a platform rule that
                 # forbids an operation must not be masked by a session that would have asked anyway.
                 raise PermissionError(f"refused by hook '{verdict.rule}': {verdict.say}")
-            if _mode_is_ask() and fn.__name__ in _MUTATING:
+            mutates = fn.__name__ in _MUTATING
+            if fn.__name__ == "dbx_run_sql":
+                source = kwargs.get("sql", args[0] if args else "")
+                mutates = classify(source).action is not ActionClass.READ
+            if _mode_is_ask() and mutates:
                 return _needs_human({
                     "tool": fn.__name__,
                     "arguments": _ask_arguments(fn, args, kwargs),
@@ -126,7 +132,12 @@ def tool():
         _ORIGINALS[fn.__name__] = fn
         functools.update_wrapper(wrapped, fn)
         if PROFILE == "full" or fn.__name__ in _CORE:
-            return mcp.tool()(wrapped)
+            @functools.wraps(fn)
+            async def bounded(*args, **kwargs):
+                return await invoke(wrapped, *args, **kwargs)
+            mcp.tool()(bounded)
+            # Direct Python callers retain the sync API; MCP calls use the bounded adapter.
+            return wrapped
         return wrapped
     return deco
 
@@ -197,7 +208,7 @@ _MUTATING = frozenset({
     "dbx_create_pipeline", "dbx_start_pipeline", "dbx_stop_pipeline", "dbx_pipeline_edit",
     "dbx_lakebase_create", "dbx_lakebase_branch", "dbx_lakebase_database",
     "dbx_lakebase_compute", "dbx_lakebase_sql", "dbx_create_app",
-    "dbx_update_query",
+    "dbx_update_query", "dbx_run_sql",
 })
 
 
@@ -535,103 +546,8 @@ def _need_writes(what: str = "change anything") -> None:
 WRITE_SCHEMAS = [s.strip().lower() for s in os.environ.get("NBMCP_WRITE_SCHEMAS", "").split(",") if s.strip()]
 WRITE_PATHS = [p.strip() for p in os.environ.get("NBMCP_WRITE_PATHS", "").split(",") if p.strip()]
 
-#: An empty allow-list is **no permission**, never a wildcard ([R-1]). This one predicate is the
-#: tool server's half of `api/domain/fence_rules.py`; the two run in different processes and cannot
-#: share a module, so `tests/test_fence_parity.py` holds both to one table of cases.
-#:
-#: The defect it closes: `if not WRITE_SCHEMAS: return None` below meant "no schema" read as
-#: "any schema", and `NBMCP_WRITE_PATHS="/"` (what the old registry produced for a session with no
-#: folder) made every absolute path a prefix match. Measured: `/Users/victim/x.py` was in scope.
-def _scope_unset(values: list[str]) -> bool:
-    """True when a parsed allow-list grants nothing.
-
-    A list of `[""]` or `["/"]` is as empty as `[]`: the first is what an unset variable parses to and
-    the second is a root, and a root is a wildcard. Both mean "no permission".
-    """
-    return not values or all(v.strip().strip("/") == "" for v in values)
-
-
-#: What this session may change ([R-9]). Read here, applied by `_check_write_mode` below.
-#:   read-only  every mutating tool refused, with the reason
-#:   fenced     mutations inside the fence execute      (the default, and today's intent)
-#:   ask        a mutation returns a needs-human result the app turns into an approval
-WRITE_MODE = os.environ.get("NBMCP_WRITE_MODE", "fenced").strip().lower() or "fenced"
-_READ_ONLY_ALIASES = {"read-only", "read_only", "readonly", "ro"}
-_ASK_ALIASES = {"ask", "approve", "approval"}
-
-
-def _mode_is_read_only() -> bool:
-    return WRITE_MODE in _READ_ONLY_ALIASES
-
-
-def _mode_is_ask() -> bool:
-    return WRITE_MODE in _ASK_ALIASES
-
-
-def _refuse_if_read_only(what: str) -> None:
-    """`read-only` refuses every mutation, and says which mode did it.
-
-    Applied at the top of each mutating tool, before the fence: a read-only session must not even reveal
-    whether a target would have been inside the fence, because the answer is the same either way and the
-    refusal should say the real reason.
-    """
-    if _mode_is_read_only():
-        raise PermissionError(
-            f"write blocked: this session is read-only, so it cannot {what}. "
-            "Start a conversation with a write mode to make changes.")
-
-
-def _needs_human(payload: dict) -> str:
-    """The structured 'ask a human' result `ask` mode returns instead of mutating.
-
-    The app turns this into an approval ([R-9]); the tool server cannot ask a human itself, so it returns
-    a value the caller can act on. `needsHuman: true` is the marker, and it is deliberately part of the
-    payload rather than an exception: an exception reads as a failure, and this is not one.
-    """
-    return _trim({"needsHuman": True, "mode": WRITE_MODE, **payload,
-                  "note": "This session asks before changing anything. Approve it to run this call."})
-
-
-_ID = r"`?[A-Za-z_][\w-]*`?"
-_NAME = rf"({_ID})(?:\.({_ID}))?(?:\.({_ID}))?"
-# Write *targets* only: sources of a CTAS (FROM/JOIN) are reads and stay free.
-_TARGETS = re.compile(
-    r"(?i)\b(?:"
-    r"create\s+(?:or\s+replace\s+)?(?:temp(?:orary)?\s+)?(?:external\s+)?(?:table|view|materialized\s+view|streaming\s+table|schema|volume|function)"
-    r"(?:\s+if\s+not\s+exists)?"
-    r"|insert\s+(?:into|overwrite)(?:\s+table)?"
-    r"|merge\s+into|update|delete\s+from|truncate\s+table|copy\s+into"
-    r"|drop\s+(?:table|view|schema|volume|function)(?:\s+if\s+exists)?"
-    r"|alter\s+(?:table|view|schema)"
-    r"|comment\s+on\s+(?:table|schema|column)"
-    r"|optimize|vacuum"
-    r")\s+" + _NAME
-)
-
-
 def _check_sql_scope(sql: str) -> str | None:
-    """Return an error string if any write target is outside the write scope.
-
-    **No writable schema means no write** ([R-1]). It used to mean "no restriction", because the guard
-    was `if not WRITE_SCHEMAS: return None` — so a session created without a schema could drop any table
-    the signed-in user could reach. The app's own rule said ASK for exactly this case; the two now agree.
-    """
-    if _scope_unset(WRITE_SCHEMAS):
-        return ("write blocked: this session has no writable schema, so it cannot change tables. "
-                "Choose a schema when you start a conversation.")
-    targets = _TARGETS.findall(sql)
-    if not targets:
-        return "write blocked: could not identify a write target; use plain CREATE/INSERT/MERGE/ALTER statements"
-    for a, b, c in targets:
-        parts = [x.strip("`").lower() for x in (a, b, c) if x]
-        if len(parts) == 2 and f"{parts[0]}.{parts[1]}" in WRITE_SCHEMAS:
-            continue  # schema-level target e.g. CREATE SCHEMA cat.sch
-        if len(parts) == 3 and f"{parts[0]}.{parts[1]}" in WRITE_SCHEMAS:
-            continue
-        # COMMENT ON COLUMN cat.sch.tbl.col is matched as 3 parts, still fine.
-        return (f"write blocked: target {'.'.join(parts)} is not inside allowed schemas "
-                f"{WRITE_SCHEMAS}; use fully qualified catalog.schema.name")
-    return None
+    return check_scope(sql, WRITE_SCHEMAS)
 
 
 JOB_PREFIX = os.environ.get("NBMCP_WRITE_JOB_PREFIX", "")
@@ -658,34 +574,82 @@ def _check_prefix(kind: str, name: str, prefix: str) -> None:
 
 
 def _check_path_scope(path: str) -> None:
-    """Refuse a path outside the session's folder — and refuse a `..` escape inside it.
-
-    A prefix test alone accepts `/fence/../elsewhere/x`, because the STRING starts with the fence.
-    The app's own `scope.check_path` normalises and rejects `..` (spec 013's own F4/E-27); this is the
-    tool server's half of the same rule, and `tests/test_tools_fence.py` holds both sides to one table.
-
-    **No writable folder means no write** ([R-1]). The guard used to be
-    `if WRITE_PATHS and not any(...)`, which for an empty list is no check at all — and the old registry
-    produced `["/"]` for a session with no folder, a prefix every path matches. Measured before the fix:
-    `/Users/victim/x.py` was accepted.
-    """
-    normalised = path.replace("\\", "/")
-    while "//" in normalised:
-        normalised = normalised.replace("//", "/")
-    if ".." in normalised.split("/"):
-        raise PermissionError(f"write blocked: {path} contains '..' and is not a real location "
-                              f"inside {WRITE_PATHS}")
-    if _scope_unset(WRITE_PATHS):
-        raise PermissionError(
-            "write blocked: this session has no writable folder, so it cannot change files. "
-            "Choose a working folder when you start a conversation.")
-    if not any(normalised.startswith(p) for p in WRITE_PATHS):
+    if not any(inside(path, p) for p in WRITE_PATHS):
         raise PermissionError(f"write blocked: {path} outside allowed paths {WRITE_PATHS}")
 
 
 # --------------------------------------------------------------------------
 # identity & catalog
 # --------------------------------------------------------------------------
+def _scope_unset(values: list[str]) -> bool:
+    """True when a parsed allow-list grants nothing.
+
+    A list of `[""]` or `["/"]` is as empty as `[]`: the first is what an unset variable parses to and
+    the second is a root, and a root is a wildcard. Both mean "no permission".
+    """
+    return not values or all(v.strip().strip("/") == "" for v in values)
+
+def _mode_is_read_only() -> bool:
+    return WRITE_MODE in _READ_ONLY_ALIASES
+
+def _mode_is_ask() -> bool:
+    return WRITE_MODE in _ASK_ALIASES
+
+def _refuse_if_read_only(what: str) -> None:
+    """`read-only` refuses every mutation, and says which mode did it.
+
+    Applied at the top of each mutating tool, before the fence: a read-only session must not even reveal
+    whether a target would have been inside the fence, because the answer is the same either way and the
+    refusal should say the real reason.
+    """
+    if _mode_is_read_only():
+        raise PermissionError(
+            f"write blocked: this session is read-only, so it cannot {what}. "
+            "Start a conversation with a write mode to make changes.")
+
+def _needs_human(payload: dict) -> str:
+    """The structured 'ask a human' result `ask` mode returns instead of mutating.
+
+    The app turns this into an approval ([R-9]); the tool server cannot ask a human itself, so it returns
+    a value the caller can act on. `needsHuman: true` is the marker, and it is deliberately part of the
+    payload rather than an exception: an exception reads as a failure, and this is not one.
+    """
+    return _trim({"needsHuman": True, "mode": WRITE_MODE, **payload,
+                  "note": "This session asks before changing anything. Approve it to run this call."})
+
+_TASK_BODY: dict[str, tuple[str, str | None]] = {
+    "notebook_path": ("notebook_task", "notebook_path"),
+    "python_file": ("spark_python_task", "python_file"),
+    "sql_file": ("sql_task", "file"),
+    "pipeline_id": ("pipeline_task", "pipeline_id"),
+    "job_id": ("run_job_task", "job_id"),
+}
+
+
+def _task_body(task: dict, default_retries: int) -> dict:
+    """One task as the Jobs API 2.2 wants it. `task` has already passed `job_graph.problems()`.
+
+    The shape is `{task_key, <one task type field>, depends_on[], max_retries?, timeout_seconds?}`. The
+    task type is looked up, never guessed: `problems()` guarantees exactly one is present.
+    """
+    kind = next(k for k in _TASK_BODY if task.get(k))
+    field, inner = _TASK_BODY[kind]
+    value = task[kind]
+    if kind in ("notebook_path", "python_file", "sql_file"):
+        _check_path_scope(value)             # the fence, on the write targets only
+    item: dict = {
+        "task_key": task["task_key"],
+        field: {inner: value} if inner else value,
+    }
+    if task.get("depends_on"):
+        item["depends_on"] = [{"task_key": k} for k in task["depends_on"]]
+    retries = task.get("max_retries", default_retries)
+    if retries:
+        item["max_retries"] = int(retries)
+    if task.get("timeout_seconds"):
+        item["timeout_seconds"] = int(task["timeout_seconds"])
+    return item
+
 @tool()
 def dbx_whoami() -> str:
     """Return the authenticated identity and workspace host."""
@@ -907,26 +871,17 @@ def dbx_query_run_status(run_id: str, cancel: bool = False) -> str:
 def dbx_run_sql(sql: str, warehouse_id: str = "", limit: int = 100) -> str:
     """Execute SQL on a SQL warehouse and return rows.
 
-    For an attached editor query use dbx_read_query/update_query/run_query/query_run_status instead:
-    this generic tool does NOT update the editor or its run history.
-    Read-only by convention: statements that are not SELECT/SHOW/DESCRIBE are
-    rejected unless NBMCP_ALLOW_WRITES=1. Uses the Statements API (synchronous
-    wait, so the agent does not have to poll).
+    Parser-validated reads; mutations require a writable schema and NBMCP_ALLOW_WRITES=1.
+    Waits at most 20 seconds, then returns a statement_id to poll without submitting again.
     """
     if QUERY_URL and json.loads(_query_call("bindings")).get("draftIds"):
-        raise PermissionError("An SQL editor query is attached. Use dbx_read_query, dbx_update_query, "
-                              "dbx_run_query and dbx_query_run_status so the editor and history show the work.")
-    head = sql.strip().split(None, 1)[0].upper() if sql.strip() else ""
-    if head not in ("SELECT", "SHOW", "DESCRIBE", "DESC", "WITH", "EXPLAIN") and not ALLOW_WRITES:
-        return json.dumps({"error": f"statement type {head} blocked (read-only server)"})
-    if head not in ("SELECT", "SHOW", "DESCRIBE", "DESC", "EXPLAIN"):
-        # WITH ... SELECT is read-only, but WITH ... INSERT is not; scope-check
-        # anything that is not an obvious read.
-        is_read = head == "WITH" and not re.search(r"(?i)\b(insert|merge|update|delete)\b", sql)
-        if not is_read:
-            err = _check_sql_scope(sql)
-            if err:
-                return json.dumps({"error": err})
+        raise PermissionError("An SQL editor query is attached. Use dbx_read_query, dbx_update_query, dbx_run_query and dbx_query_run_status.")
+    classification = classify(sql)
+    err = _check_sql_scope(sql)
+    if err:
+        raise PermissionError(err)
+    if classification.action is not ActionClass.READ:
+        _need_writes()
     wh = warehouse_id or WAREHOUSE_ID
     if not wh:
         whs = _get("/api/2.0/sql/warehouses").get("warehouses", [])
@@ -940,7 +895,7 @@ def dbx_run_sql(sql: str, warehouse_id: str = "", limit: int = 100) -> str:
         {
             "warehouse_id": wh,
             "statement": sql,
-            "wait_timeout": "50s",
+            "wait_timeout": "20s",
             "on_wait_timeout": "CONTINUE",
             "format": "JSON_ARRAY",
             "disposition": "INLINE",
@@ -948,11 +903,18 @@ def dbx_run_sql(sql: str, warehouse_id: str = "", limit: int = 100) -> str:
     )
     state = (data.get("status") or {}).get("state")
     if state != "SUCCEEDED":
-        return _trim({"state": state, "error": (data.get("status") or {}).get("error")})
+        error = (data.get("status") or {}).get("error")
+        if error:
+            raise RuntimeError(json.dumps(error))
+        return _trim({"state": state, "statement_id": data.get("statement_id"), "finished": False,
+                      "hint": "Poll the statement_id; do not submit the statement again."})
     result = data.get("result") or {}
     cols = [c["name"] for c in (data.get("manifest") or {}).get("schema", {}).get("columns", [])]
     rows = result.get("data_array") or []
-    return _trim({"columns": cols, "rows": rows[:limit], "row_count": len(rows)})
+    return json.dumps({"columns": cols, "rows": rows[:max(1, min(limit, 100))],
+                       "statement_id": data.get("statement_id"),
+                       "row_count": (data.get("manifest") or {}).get("total_row_count", len(rows)),
+                       "truncated": bool((data.get("manifest") or {}).get("truncated")) or len(rows) > limit})
 
 
 @tool()
@@ -1300,6 +1262,7 @@ def _task_outputs(run: dict) -> list[dict]:
 
 def _wait_run(run_id: int, wait_seconds: int) -> dict:
     import time
+    wait_seconds = min(max(wait_seconds, 0), 20)
     t0 = time.time()
     while True:
         d = _get("/api/2.2/jobs/runs/get", {"run_id": run_id})
@@ -1362,10 +1325,11 @@ def _run_via_app(path: str, wait_seconds: int) -> str:
 
 def _poll_app_run(handle: str, wait_seconds: int) -> str:
     import time
+    wait_seconds = min(max(wait_seconds, 0), 20)
     t0 = time.time()
     while True:
         d = _app_call("GET", f"{RUN_URL}/{handle}", params={"session": RUN_SESSION, "key": RUN_KEY})
-        if d.get("state") == "done" or time.time() - t0 >= min(wait_seconds, 55):
+        if d.get("state") == "done" or time.time() - t0 >= min(max(wait_seconds, 0), 20):
             break
         time.sleep(3)
     if d.get("state") != "done":
@@ -1388,7 +1352,7 @@ def _poll_app_run(handle: str, wait_seconds: int) -> str:
 
 
 @tool()
-def dbx_run_notebook_status(handle: str, wait_seconds: int = 45) -> str:
+def dbx_run_notebook_status(handle: str, wait_seconds: int = 20) -> str:
     """Wait for (or read) a notebook run that dbx_run_notebook left running as the app.
 
     Pass the `handle` it returned. Same output as dbx_run_notebook: each Python cell's printed output,
@@ -1400,7 +1364,7 @@ def dbx_run_notebook_status(handle: str, wait_seconds: int = 45) -> str:
 
 
 @tool()
-def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int = 45) -> str:
+def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int = 20) -> str:
     """Run a notebook ONCE on serverless compute and wait for the result.
 
     Returns the state, the dbutils.notebook.exit() value and, on failure, the
@@ -1408,9 +1372,8 @@ def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int =
     wait_seconds you get finished=false and a run_id to poll with
     dbx_job_run_status.
 
-    In a deployed Databricks App the user's token cannot submit runs; then the notebook is run by the
-    app itself as its own service principal (only for administrators). The result says `ran_as`, and
-    you must tell the user it did not run as them. If finished=false, call dbx_run_notebook_status(handle).
+    This runs only as the user. If this deployment cannot submit as the user, execution is refused.
+    Run the SQL cells or open the notebook in Databricks instead.
 
     Kept short on purpose: a tool that blocks for minutes produces no ACP events, so the turn looks
     dead and the app's idle guard fires. Poll instead.
@@ -1424,11 +1387,9 @@ def dbx_run_notebook(path: str, parameters_json: str = "{}", wait_seconds: int =
     try:
         run_id = _post("/api/2.2/jobs/runs/submit", {"run_name": "nbmcp-run", "tasks": [task]})["run_id"]
     except PermissionError:
-        # A Databricks App's user authorization has no jobs scope, so the user's token cannot submit a
-        # run. When the host app offers to run it itself (as the app, for administrators), ask it to.
-        if RUN_URL:
-            return _run_via_app(path, wait_seconds)
-        raise
+        # Never substitute another identity for a user-scoped permission refusal.
+        raise PermissionError("Cannot run this notebook as you from here. Agent code never runs as the app. "
+                              "Run SQL cells as you, or open the notebook in Databricks.") from None
     summary = _run_summary(run_id, _wait_run(run_id, wait_seconds))
     # On failure, hand back the tables the notebook reads and their real columns: a failed run is
     # exactly when the agent needs the truth, and making it guess again wastes a whole turn.
@@ -1532,43 +1493,6 @@ def dbx_create_job(name: str, tasks: list[dict] | None = None, cron: str = "", t
                  f"the schedule is PAUSED; call dbx_run_job(job_id={data.get('job_id')}) to prove it "
                  "works now, and tell the user nothing runs on a schedule until they resume it"),
     })
-
-
-#: How one task type becomes the platform's task body. ONE table, so a new type is a row and the two
-#: maps the first draft used (a key and an inner field, kept in step by hand) cannot drift. `None` as the
-#: inner field means the id IS the inner value; `notebook_path` is the nested common case.
-_TASK_BODY: dict[str, tuple[str, str | None]] = {
-    "notebook_path": ("notebook_task", "notebook_path"),
-    "python_file": ("spark_python_task", "python_file"),
-    "sql_file": ("sql_task", "file"),
-    "pipeline_id": ("pipeline_task", "pipeline_id"),
-    "job_id": ("run_job_task", "job_id"),
-}
-
-
-def _task_body(task: dict, default_retries: int) -> dict:
-    """One task as the Jobs API 2.2 wants it. `task` has already passed `job_graph.problems()`.
-
-    The shape is `{task_key, <one task type field>, depends_on[], max_retries?, timeout_seconds?}`. The
-    task type is looked up, never guessed: `problems()` guarantees exactly one is present.
-    """
-    kind = next(k for k in _TASK_BODY if task.get(k))
-    field, inner = _TASK_BODY[kind]
-    value = task[kind]
-    if kind in ("notebook_path", "python_file", "sql_file"):
-        _check_path_scope(value)             # the fence, on the write targets only
-    item: dict = {
-        "task_key": task["task_key"],
-        field: {inner: value} if inner else value,
-    }
-    if task.get("depends_on"):
-        item["depends_on"] = [{"task_key": k} for k in task["depends_on"]]
-    retries = task.get("max_retries", default_retries)
-    if retries:
-        item["max_retries"] = int(retries)
-    if task.get("timeout_seconds"):
-        item["timeout_seconds"] = int(task["timeout_seconds"])
-    return item
 
 
 @tool()
@@ -2170,20 +2094,10 @@ def dbx_write_file(path: str, content: str, overwrite: bool = True) -> str:
 
 
 @tool()
-def dbx_lakebase_create(name: str, capacity: str = "CU_1", wait_seconds: int = 45,
+def dbx_lakebase_create(name: str, capacity: str = "CU_1", wait_seconds: int = 20,
                         min_cu: float = 0, max_cu: float = 0) -> str:
-    """Create a Lakebase Autoscaling project and wait until it is ready.
-
-    A project is the container: it arrives with a `production` branch and a `primary` read-write
-    compute. Idempotent — if it exists, its state is returned. The name must start with the session's
-    allowed prefix and is the project id, so it must be lowercase letters, digits and hyphens.
-
-    `capacity` is the Provisioned spelling and is accepted for compatibility: `CU_1` means 1 CU. Pass
-    `min_cu`/`max_cu` for an autoscaling range (max − min ≤ 16, max ≤ 64; scale-to-zero needs max ≤ 32).
-
-    Returns the project path, its `production` branch and the `next` call, because a model should copy
-    an identity it was just given rather than remember one (spec 013 [LB-2], [LB-4]).
-    """
+    """Create a Lakebase (managed Postgres) instance and wait until AVAILABLE.
+    Idempotent: if it exists, returns its state. Name must start with the allowed prefix."""
     _need_writes()
     _check_prefix("instance", name, INSTANCE_PREFIX)
     problem = _capacity_problem(min_cu, max_cu)

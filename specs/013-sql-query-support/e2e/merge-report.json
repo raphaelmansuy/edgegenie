@@ -1,0 +1,221 @@
+{
+  "success": true,
+  "version": "1.2.0-rc.4",
+  "gitCommit": "d2d4754e05f15dc06f41d57fdeaaa8b9ae6415e8",
+  "deploymentId": "01f1de70fb671ee4b550c1f685eb3a56",
+  "initialWarehouseState": "STOPPED",
+  "checks": [
+    "Exact dev release, identity and capability gates verified; warehouse initially STOPPED",
+    "Exact CTE source succeeds natively: 60 daily rows, unique ordered dates, positive trip counts/distance/fare",
+    "Reload preserves the same CTE statement/result without another submission",
+    "Unknown function and CTE mutation are refused before native submission; history still has one run",
+    "CTE results and recovery controls render in light, dark and phone layouts",
+    "Actual model inspects schema, authors the date/time CTE and executes the exact editor source successfully",
+    "Original user draft remains unchanged; only new test drafts were edited",
+    "No browser runtime or authenticated transport errors"
+  ],
+  "runs": [
+    {
+      "id": "9211437a-0724-4fce-adfb-bffd579087b5",
+      "sourceRef": "843eb8c7-5da2-4b06-b6eb-00dda57ba45f",
+      "statementId": "01f1de71-2568-1170-bbb7-741f25c44575",
+      "sourceHash": "ad9d8c31031c7d44c2b4ea3adafa79e983ad7b7ef2a1080223f8b24f42666122"
+    },
+    {
+      "id": "747fdc15-8dd9-459a-9325-5f6b1a010908",
+      "sourceRef": "9792ba53-87d4-451d-a70e-199d8f6f3a26",
+      "statementId": "01f1de71-3e04-1000-90d7-2a1d4245ac07",
+      "sourceHash": "05c8f403acafb0211b912025340400848e8b100a11f263f24dd1461bb8cb9f77"
+    }
+  ],
+  "agent": {
+    "sid": "98e9935fc7fa4747",
+    "tid": "aa1eaae571d4",
+    "qid": "9792ba53-87d4-451d-a70e-199d8f6f3a26",
+    "status": "completed",
+    "model": "google_vertex/google/gemini-3.8-flash",
+    "tools": [
+      "db_dbx_describe_table",
+      "db_dbx_read_query",
+      "db_dbx_update_query",
+      "db_dbx_run_query",
+      "db_dbx_query_run_status",
+      "db_dbx_read_query",
+      "db_dbx_query_run_status"
+    ],
+    "receipts": [
+      {
+        "name": "db_dbx_read_query",
+        "proof": {
+          "kind": "sql-query",
+          "action": "read",
+          "draftId": "9792ba53-87d4-451d-a70e-199d8f6f3a26",
+          "version": 2,
+          "sourceHash": "44c9baf3fbc2e4f6f0d0b4301cbf36afbd3e815cf6dc4d4213c781ca7d78c870"
+        }
+      },
+      {
+        "name": "db_dbx_update_query",
+        "proof": {
+          "kind": "sql-query",
+          "action": "updated",
+          "draftId": "9792ba53-87d4-451d-a70e-199d8f6f3a26",
+          "version": 3,
+          "sourceHash": "05c8f403acafb0211b912025340400848e8b100a11f263f24dd1461bb8cb9f77"
+        }
+      },
+      {
+        "name": "db_dbx_run_query",
+        "proof": {
+          "kind": "sql-run",
+          "runId": "747fdc15-8dd9-459a-9325-5f6b1a010908",
+          "state": "pending",
+          "draftId": "9792ba53-87d4-451d-a70e-199d8f6f3a26",
+          "sourceHash": "05c8f403acafb0211b912025340400848e8b100a11f263f24dd1461bb8cb9f77",
+          "statementId": "01f1de71-3e04-1000-90d7-2a1d4245ac07",
+          "warehouseId": "50b601f08d1a858d",
+          "cancelRequested": false,
+          "resultAvailable": false
+        }
+      },
+      {
+        "name": "db_dbx_query_run_status",
+        "proof": {
+          "kind": "sql-run",
+          "runId": "747fdc15-8dd9-459a-9325-5f6b1a010908",
+          "state": "succeeded",
+          "draftId": "9792ba53-87d4-451d-a70e-199d8f6f3a26",
+          "rowCount": 60,
+          "sourceHash": "05c8f403acafb0211b912025340400848e8b100a11f263f24dd1461bb8cb9f77",
+          "statementId": "01f1de71-3e04-1000-90d7-2a1d4245ac07",
+          "warehouseId": "50b601f08d1a858d",
+          "cancelRequested": false,
+          "resultAvailable": true
+        }
+      },
+      {
+        "name": "db_dbx_read_query",
+        "proof": {
+          "kind": "sql-query",
+          "action": "read",
+          "draftId": "9792ba53-87d4-451d-a70e-199d8f6f3a26",
+          "version": 3,
+          "sourceHash": "05c8f403acafb0211b912025340400848e8b100a11f263f24dd1461bb8cb9f77"
+        }
+      },
+      {
+        "name": "db_dbx_query_run_status",
+        "proof": {
+          "kind": "sql-run",
+          "runId": "747fdc15-8dd9-459a-9325-5f6b1a010908",
+          "state": "succeeded",
+          "draftId": "9792ba53-87d4-451d-a70e-199d8f6f3a26",
+          "rowCount": 60,
+          "sourceHash": "05c8f403acafb0211b912025340400848e8b100a11f263f24dd1461bb8cb9f77",
+          "statementId": "01f1de71-3e04-1000-90d7-2a1d4245ac07",
+          "warehouseId": "50b601f08d1a858d",
+          "cancelRequested": false,
+          "resultAvailable": true
+        }
+      }
+    ],
+    "evidence": [
+      {
+        "tool": "db_dbx_describe_table",
+        "summary": "Inspected table `samples.nyctaxi.trips`, confirming columns `tpep_pickup_datetime`, `tpep_dropoff_datetime`, `trip_distance`, `fare_amount`; grain is one row per taxi trip",
+        "verified": true,
+        "toolCallId": "call_5234242488058545430",
+        "requirement": "Inspect `samples.nyctaxi.trips` schema first and state the grain"
+      },
+      {
+        "tool": "db_dbx_read_query",
+        "summary": "SQL draft read; version 2; source 44c9baf3fbc2e4f6f0d0b4301cbf36afbd3e815cf6dc4d4213c781ca7d78c870",
+        "verified": true,
+        "toolCallId": "call_8032196854266240355",
+        "requirement": "Replace the attached query with one CTE named `trip_metrics` with pickup_date using `date()`, trip_distance, fare_amount, and duration_minutes using `ROUND((unix_timestamp(tpep_dropoff_datetime)-unix_"
+      },
+      {
+        "tool": "db_dbx_read_query",
+        "summary": "SQL draft read; version 2; source 44c9baf3fbc2e4f6f0d0b4301cbf36afbd3e815cf6dc4d4213c781ca7d78c870",
+        "verified": true,
+        "toolCallId": "call_8032196854266240355",
+        "requirement": "Keep only `trip_distance > 0 AND fare_amount > 0"
+      },
+      {
+        "tool": "db_dbx_read_query",
+        "summary": "SQL draft read; version 2; source 44c9baf3fbc2e4f6f0d0b4301cbf36afbd3e815cf6dc4d4213c781ca7d78c870",
+        "verified": true,
+        "toolCallId": "call_8032196854266240355",
+        "requirement": "Group by pickup_date to return `COUNT(*) total_trips` and `ROUND(AVG(...),2)` for the three metrics, ordered by pickup_date"
+      },
+      {
+        "tool": "db_dbx_query_run_status",
+        "summary": "SQL succeeded; run 747fdc15-8dd9-459a-9325-5f6b1a010908; source 05c8f403acafb0211b912025340400848e8b100a11f263f24dd1461bb8cb9f77; preview rows 60",
+        "verified": true,
+        "toolCallId": "call_8633120104720944409",
+        "requirement": "Run the open query on the selected warehouse and report actual results"
+      },
+      {
+        "tool": "db_dbx_describe_table",
+        "summary": "Inspected columns: `tpep_pickup_datetime`, `tpep_dropoff_datetime`, `trip_distance`, `fare_amount`, `pickup_zip`, `dropoff_zip`; grain identified as one row per taxi trip",
+        "verified": true,
+        "toolCallId": "call_5234242488058545430",
+        "requirement": "Inspect `samples.nyctaxi.trips` schema & state grain"
+      },
+      {
+        "tool": "db_dbx_read_query",
+        "summary": "SQL draft read; version 2; source 44c9baf3fbc2e4f6f0d0b4301cbf36afbd3e815cf6dc4d4213c781ca7d78c870",
+        "verified": true,
+        "toolCallId": "call_8032196854266240355",
+        "requirement": "Read attached query draft"
+      }
+    ]
+  },
+  "originalDraftUnchanged": true,
+  "mobileLastColumnVerified": true,
+  "mobileCheckResubmissions": 0,
+  "firstResult": {
+    "rowCount": 60,
+    "columns": [
+      "pickup_date",
+      "total_trips",
+      "avg_distance_miles",
+      "avg_fare_amount",
+      "avg_duration_minutes"
+    ],
+    "grain": "one row per pickup date"
+  },
+  "screenshots": [
+    {
+      "file": "screenshots/50-cte-native-submitted.png",
+      "sha256": "e16e95d6d7ed1a65299ea14f21ce4d263ce74517e71c85711cd23245fbe6d319"
+    },
+    {
+      "file": "screenshots/51-cte-native-daily-results.png",
+      "sha256": "41416223debef4689ca78ef8ce0b413c86da2f866580c9a364499baa925f8505"
+    },
+    {
+      "file": "screenshots/52-cte-native-dark.png",
+      "sha256": "7d8ad5a1b7f6168674de288b9052d154cead50bd786d4cdfb86ec7d945897287"
+    },
+    {
+      "file": "screenshots/53-cte-actionable-function-refusal.png",
+      "sha256": "45468d2ecb91e3a3e467749da7304574326decce4c64196de18f7cfb0b3e9486"
+    },
+    {
+      "file": "screenshots/54-cte-recovered-source-and-result.png",
+      "sha256": "d258e9ffcbfa3e2b1b26b7e73d988989b705552139723ddb7c4fd99ffe6aa247"
+    },
+    {
+      "file": "screenshots/56-cte-mobile-results.png",
+      "sha256": "edc30f9cb3aa7b7b88fb3ff706a9c1f7842b949f2317fd4b158fa75445a16ede"
+    },
+    {
+      "file": "screenshots/55-agent-cte-native-results.png",
+      "sha256": "927bdfd82da6398e34b8e79909e1e7d0dfac51e6e5399cca56a86c7f80a0caf7"
+    }
+  ],
+  "browserErrors": [],
+  "transportErrors": [],
+  "operations": "Original query read only; two native read-only CTE runs on new drafts; unknown function and mutation refused before native submission. No native Query asset writes."
+}

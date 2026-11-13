@@ -1,0 +1,148 @@
+
+ok   S1 the shell with four rail groups
+      ✓ still exactly four rail tabs, named
+      ✓ four group headings, in order
+      ✓ the job row names the job and says it is paused
+      ✓ the pipeline row carries its LAST update's word, not IDLE
+      ✓ no horizontal overflow at 1480
+      ✓ ⌘4 selects Data
+      ✓ no console errors
+      → s1-shell-data-1480.png
+
+ok   S2 a job page
+      ✓ the header pill says failed (the LAST run's word)
+      ✓ the pill is not the busy tone
+      ✓ the five blocks are on screen, by their accessible names
+      ✓ the failing task and its error are quoted
+      ✓ the graph is drawn in 2 levels
+      ✓ the schedule says PAUSED and that nothing will run
+      ✓ Run now states the last run's duration
+      ✓ the page says which identity read it
+      ✓ no horizontal overflow
+      ✓ no console errors
+      → s2-job-1480.png
+
+ok   S3 a run whose task failed
+      ✓ three task rows, each with its own word
+      ✓ gold failed and silver succeeded
+      ✓ a skipped task reads skipped, never failed
+      ✓ the error is quoted, not paraphrased
+      ✓ Cancel is absent on a finished run
+      ✓ Repair is offered
+      ✓ no console errors
+      → s3-run-failed-1480.png
+
+ok   S4 a run in flight
+      ✓ the header says running
+      ✓ a blocked task says it is waiting, not failed
+      ✓ Cancel is offered while active
+      ✓ the page says it re-reads every 3 s
+      ✓ no red tone for a run that is merely working
+      ✓ no console errors
+      → s4-run-live-1480.png
+
+ok   S5 a pipeline page
+      ✓ the header follows the last update: succeeded
+      ✓ the last update names its id
+      ✓ three libraries, by name
+      ✓ the three start modes are labelled
+      ✓ Stop is absent with no active update
+      ✓ an ERROR event is above the INFO event
+      ✓ no console errors
+      → s5-pipeline-1480.png
+
+ok   S6 a refusal, in the platform's words
+      ✓ PERMISSION_DENIED appears verbatim
+      ✓ CAN_MANAGE_RUN is named
+      ✓ NO Try again button
+      ✓ one refusal is stated once, not once per block
+      ✓ no block repeats the same sentence
+      ✓ an unread page makes no claim about the data
+      ✓ the composer still accepts a keystroke
+      ✓ no console errors
+      → s6-refused-1480.png
+
+ok   S7 a job-creating turn ends with an openable object
+      ✓ the scenario ran: the job and the run are named
+      ✓ the answer says the schedule is PAUSED
+      ✓ the answer quotes the failing task's error
+      ✓ the job is an openable OUTPUT, not only text
+      ✓ the dock offers job suggestions, not notebook ones
+      ✓ no console errors
+      → s7-agent-turn-1480.png
+
+ok   S8 narrow, 620 px
+      ✓ no horizontal overflow
+      ✓ the state word survives at this width
+      ✓ the five blocks are still there
+      ✓ nothing is clipped past the viewport
+      ✓ no console errors
+      → s8-narrow-620.png
+
+ok   S9 the palette finds the new objects
+      ✓ typing 'daily' finds the job
+      ✓ typing 'medallion' finds the pipeline
+      ✓ the pipeline is filed under Pipelines
+      ✓ no console errors
+      → s9-palette-1480.png
+
+9/9 scenes pass
+
+ok   S1 shell with the Data tab
+      ✓ four rail tabs, named
+      ✓ the project and the app are both listed
+      ✓ no horizontal overflow at 1480
+      ✓ ⌘4 selects Data
+      ✓ no console errors
+      → s1-shell-data-1480.png
+
+ok   S2 a Lakebase project
+      ✓ shows the autoscaling rule evaluated
+      ✓ default branch is marked
+      ✓ the host is on screen
+      ✓ tables are listed
+      ✓ no horizontal overflow
+      ✓ no console errors
+      → s2-project-1480.png
+
+ok   S3 a Databricks App, running
+      ✓ the health check is the headline
+      ✓ the URL is shown
+      ✓ the resource and its permission are named
+      ✓ the logs link is a real link to /logz
+      ✓ no console errors
+      → s3-app-1480.png
+
+ok   S4 a cold start reads as starting, not down
+      ✓ says cold start and that it is normal
+      ✓ does not say down or broken
+      ✓ the rest of the page is still there
+      ✓ no red state is used for this
+      → s4-app-cold-1480.png
+
+ok   S5 a refusal, in the platform's words
+      ✓ the platform's sentence is verbatim
+      ✓ no retry is offered for a permission wall
+      ✓ the composer still accepts a keystroke
+      → s5-refused-1480.png
+
+ok   S6 the scaffold's tool rows
+      ✓ the Lakebase scenario ran: a database, a branch and an app were created
+      ✓ the plan reports all seven steps complete
+      ✓ the app is proven by an HTTP 200, not merely deployed
+      ✓ the centre is not showing a taxi notebook
+      ✓ no console errors
+      → s6-scaffold-running-1480.png
+
+ok   S7 at 900 px (mid: the rail keeps a column)
+      ✓ no horizontal overflow at 900
+      ✓ the app page still renders its health
+      ✓ the rail is a column at this width, as the layout rule says
+      ✓ the centre keeps its minimum
+      → s7-mid-900.png
+
+ok   S8 the palette finds the new panel
+      ✓ the Data panel is findable by name
+      → s8-palette-1480.png
+
+8/8 scenes pass

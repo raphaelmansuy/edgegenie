@@ -31,29 +31,29 @@ APP = Path(__file__).resolve().parents[1]
 
 # =============================================================== layer 1: the config file
 
-def test_every_builtin_tool_that_touches_the_machine_is_denied():
-    """The list is the specification. A tool that reads, writes, globs, greps or shells is denied."""
-    dangerous = {"bash", "edit", "read", "glob", "grep", "list", "external_directory"}
-    missing = dangerous - set(agent_config.DENIED_BUILTINS)
-    assert not missing, f"these built-ins reach the container and are not denied: {sorted(missing)}"
+DANGEROUS = {"bash", "edit", "read", "glob", "grep", "list", "external_directory", "webfetch", "websearch", "future_builtin"}
+
+
+def test_every_builtin_tool_that_touches_the_machine_is_denied(tmp_path):
+    cfg = agent_config.AgentConfig.from_resolved(_resolved(), host="https://example.invalid")
+    permissions = json.loads(cfg.write(tmp_path, session_rules="").read_text())["permission"]
+    assert permissions["*"] == "deny"
+    for tool in DANGEROUS:
+        assert permissions.get(tool, permissions["*"]) == "deny"
 
 
 def test_the_config_file_actually_carries_the_denials(tmp_path):
-    """The list is a constant; this asserts the file the agent reads is built from it."""
     cfg = agent_config.AgentConfig.from_resolved(_resolved(), host="https://example.invalid")
-    path = cfg.write(tmp_path, session_rules="")
-    written = json.loads(path.read_text())
-    permissions = written["permission"]
-    for tool in agent_config.DENIED_BUILTINS:
-        assert permissions.get(tool) == "deny", f"{tool} is not denied in opencode.json"
-    # Planning stays on: it drives the checklist the user sees, and it touches nothing.
-    assert "todowrite" not in permissions or permissions["todowrite"] != "deny"
+    permissions = json.loads(cfg.write(tmp_path, session_rules="").read_text())["permission"]
+    assert permissions["*"] == "deny"
+    assert permissions["todowrite"] == "allow"
 
 
-def test_network_fetch_tools_are_denied():
-    """An egress tool is G-6's gap made reachable from a prompt: `webfetch` can POST a token out."""
+def test_network_fetch_tools_are_denied(tmp_path):
+    cfg = agent_config.AgentConfig.from_resolved(_resolved(), host="https://example.invalid")
+    permissions = json.loads(cfg.write(tmp_path, session_rules="").read_text())["permission"]
     for tool in ("webfetch", "websearch"):
-        assert tool in agent_config.DENIED_BUILTINS, f"{tool} would let a prompt reach the internet"
+        assert permissions.get(tool, permissions["*"]) == "deny"
 
 
 # =============================================================== layer 2: the protocol
@@ -92,7 +92,9 @@ def test_the_token_file_is_not_in_the_agent_working_directory():
     is a different `mkdtemp`. This asserts the two are produced by separate calls, so "the agent's cwd
     contains the token" cannot become true by a refactor that passes one path to both.
     """
-    orch = (APP / "api" / "services" / "orchestrator.py").read_text(encoding="utf-8")
+    import inspect
+    from api.services.orchestrator import Orchestrator
+    orch = inspect.getsource(Orchestrator._provision) + inspect.getsource(Orchestrator._write_token)
     # the token's folder
     assert 'tempfile.mkdtemp(prefix="nbmcp-")' in orch
     # the agent's own folder

@@ -1,0 +1,69 @@
+diff --git a/apps/coding-agent/api/adapters/databricks/http.py b/apps/coding-agent/api/adapters/databricks/http.py
+index 4d7021f..f528e36 100644
+--- a/apps/coding-agent/api/adapters/databricks/http.py
++++ b/apps/coding-agent/api/adapters/databricks/http.py
+@@ -92,7 +92,13 @@ class DbxHttp:
+                         if size > self._max_response_bytes:
+                             raise RuntimeError("workspace response exceeds this app's bounded preview limit")
+                         chunks.append(chunk)
+-                    r = httpx.Response(upstream.status_code, headers=upstream.headers, content=b"".join(chunks))
++                    # aiter_bytes already decoded compression. Retaining Content-Encoding would
++                    # make the reconstructed response try to decompress the JSON a second time.
++                    decoded_headers = {
++                        key: value for key, value in upstream.headers.items()
++                        if key.lower() not in {"content-encoding", "content-length", "transfer-encoding"}
++                    }
++                    r = httpx.Response(upstream.status_code, headers=decoded_headers, content=b"".join(chunks))
+             else:
+                 r = await client.request(method, f"{self._host}{path}", params=params, json=body, headers=headers)
+         if r.status_code == 404:
+diff --git a/apps/coding-agent/tests/test_sqlquery.py b/apps/coding-agent/tests/test_sqlquery.py
+index 58eef62..d1d29d1 100644
+--- a/apps/coding-agent/tests/test_sqlquery.py
++++ b/apps/coding-agent/tests/test_sqlquery.py
+@@ -430,3 +430,45 @@ def test_cancel_intent_survives_authorization_failure_and_resumes_on_observation
+     monkeypatch.setattr(provider, "cancel", original)
+     recovered = client.get(f"/api/sql/runs/{attempt['id']}").json()
+     assert recovered["cancelRequested"] and recovered["state"] == "canceled"
++
++
++async def test_bounded_transport_decodes_gzipped_json_once(monkeypatch):
++    import gzip
++    import json
++
++    import httpx
++
++    from api.adapters.databricks.http import DbxHttp
++
++    expected = {"warehouses": [{"id": "w", "name": "SQL", "state": "STOPPED"}]}
++    compressed = gzip.compress(json.dumps(expected).encode())
++    transport = httpx.MockTransport(
++        lambda request: httpx.Response(
++            200,
++            headers={"content-encoding": "gzip", "content-type": "application/json"},
++            content=compressed,
++        )
++    )
++    client = httpx.AsyncClient
++    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: client(transport=transport, **kw))
++    api = DbxHttp("https://workspace.test", lambda: None, max_response_bytes=1024)
++    assert await api.get("/api/2.0/sql/warehouses", "user-token") == expected
++
++
++async def test_bounded_transport_applies_limit_after_decompression(monkeypatch):
++    import gzip
++
++    import httpx
++
++    from api.adapters.databricks.http import DbxHttp
++
++    compressed = gzip.compress(b'{"padding":"' + b"x" * 4096 + b'"}')
++    assert len(compressed) < 256
++    transport = httpx.MockTransport(
++        lambda request: httpx.Response(200, headers={"content-encoding": "gzip"}, content=compressed)
++    )
++    client = httpx.AsyncClient
++    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: client(transport=transport, **kw))
++    api = DbxHttp("https://workspace.test", lambda: None, max_response_bytes=256)
++    with pytest.raises(RuntimeError, match="bounded preview limit"):
++        await api.get("/api/2.0/sql/warehouses", "user-token")

@@ -6,6 +6,6 @@
     "build": "bash scripts/prepare-app.sh"
   },
   "dependencies": {
-    "opencode-ai": "^1.18.19"
+    "opencode-ai": "1.18.19"
   }
 }

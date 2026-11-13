@@ -1,0 +1,197 @@
+{
+  "profile": "opengenie-dev",
+  "host": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "workspaceId": "7474647158015570",
+  "user": "raphael.mansuy@gmail.com",
+  "app": "coding-agent",
+  "sourceCodePath": "/Workspace/Users/raphael.mansuy@gmail.com/opengenie-dev/sql-query-support-20261112T043203Z",
+  "previousDeploymentId": "01f1de3ebf311f5fb5c4c1728004ff38",
+  "status": "dev-slice-verified",
+  "startedAt": "2026-11-12T04:32:03.843862+00:00",
+  "localCommit": "824158dd9d54c8ff04cacfe40a4788ecf2b3b65d",
+  "includesWorkingTreeChanges": true,
+  "sourceChecks": [
+    {
+      "path": "api/domain/sqlquery.py",
+      "sha256": "f3b430c84c770c68077b364ca1f8c4f80460d2f7003cd6092893e6a1fdc0e009",
+      "matchesLocal": true
+    },
+    {
+      "path": "api/domain/sqlpolicy.py",
+      "sha256": "1ac7936c18db69960f1cf8216adf87bbe6c2094e5637f17e0490a67fde9f7e7a",
+      "matchesLocal": true
+    },
+    {
+      "path": "api/services/sql_service.py",
+      "sha256": "f480e37f531834eca0bc82dbfc585804e861f73d2f7716e77a10c33fc8b0d128",
+      "matchesLocal": true
+    },
+    {
+      "path": "api/routers/sql.py",
+      "sha256": "3966fc799bc2921e011c3d043b99f094c44946ecac27ef3db4d4115e08c1b637",
+      "matchesLocal": true
+    },
+    {
+      "path": "web/src/components/QueryEditor.tsx",
+      "sha256": "fe4f03a1ecb7ed5992a91e34aa187bff549ab78b705af77a79fdb1539dbd82e2",
+      "matchesLocal": true
+    },
+    {
+      "path": "requirements.txt",
+      "sha256": "e339cb462c1ad8a8f2081366a0767ec2fe9d7863e13e07c61f9c6a3e2050cbb5",
+      "matchesLocal": true
+    },
+    {
+      "path": "api/domain/blob.py",
+      "sha256": "fbf134c8bbd65714c141c0a5998ba479369593c1510b177ad4810ba7507e7ac6",
+      "matchesLocal": true
+    },
+    {
+      "path": "api/main.py",
+      "sha256": "7497a96a2992f720de6b16c06da155568b01324af8fbab624ede4794ba067139",
+      "matchesLocal": true
+    },
+    {
+      "path": "app.yaml",
+      "sha256": "c35954a2167370eb30948a8e011b2c76dabafe9cb946c2a2da28de5651797a71",
+      "matchesLocal": true
+    },
+    {
+      "path": "web/src/App.tsx",
+      "sha256": "66408461b8e4f80d8825c98fca8888618ab649f48218d6365414c6803664a8a8",
+      "matchesLocal": true
+    },
+    {
+      "path": "web/src/components/AssetIcon.tsx",
+      "sha256": "34c448285bb046a05646e9b30db72fb938a97cc29dd79cfeb6dd1932448e123e",
+      "matchesLocal": true
+    }
+  ],
+  "gitBranch": "codex/sql-query-support-dev-20261112",
+  "gitCommit": "8e9e520fb0a0a244a758f13daab96c08517161f5",
+  "deploymentWorktree": "/private/tmp/opengenie-dev-git-fuce8rn5",
+  "workspaceSourceDeploymentRejected": "Workspace allows Git deployments only; uploaded source was not activated.",
+  "publicRepository": "https://github.com/raphaelmansuy/opengenie",
+  "changedAppFiles": 58,
+  "patchSha256": "4207af744aedeab09aebf27625a783374d24c3050827ae90adbce5afc7296681",
+  "addedLineCredentialPatternFindings": [],
+  "publicPushApproved": true,
+  "publicPushApprovedCommit": "8e9e520fb0a0a244a758f13daab96c08517161f5",
+  "publicPushApprovedAt": "2026-11-12T04:42:19.956076+00:00",
+  "deploymentId": "01f1de58bbcb18228bf8d92ed9b8e056",
+  "deployment": {
+    "deployment_id": "01f1de58bbcb18228bf8d92ed9b8e056",
+    "git_source": {
+      "git_repository": {
+        "url": "https://github.com/raphaelmansuy/opengenie",
+        "provider": "gitHub"
+      },
+      "commit": "8e9e520fb0a0a244a758f13daab96c08517161f5",
+      "source_code_path": "apps/coding-agent",
+      "resolved_commit": "8e9e520fb0a0a244a758f13daab96c08517161f5"
+    },
+    "mode": "SNAPSHOT",
+    "status": {
+      "state": "SUCCEEDED",
+      "message": "App started successfully"
+    },
+    "create_time": "2026-11-12T05:20:11Z",
+    "creator": "raphael.mansuy@gmail.com",
+    "update_time": "2026-11-12T05:20:44Z",
+    "scan_status": "APP_DEPLOYMENT_SCAN_STATUS_FINDINGS",
+    "scan_omitted_findings_count": 0,
+    "scan_omitted_count_is_lower_bound": false
+  },
+  "gitSource": {
+    "commit": "8e9e520fb0a0a244a758f13daab96c08517161f5",
+    "source_code_path": "apps/coding-agent"
+  },
+  "url": "https://coding-agent-7474647158015570.aws.databricksapps.com",
+  "failedRuntimeDeploymentId": "01f1de53a66b149491481056e245dc0c",
+  "startupFailure": "Saved session has write_mode from a newer deployed baseline; older Session model rejected it.",
+  "rollbackDeploymentId": "01f1de5444621c07801b0fce09d5df86",
+  "rollbackStatus": {
+    "state": "SUCCEEDED",
+    "message": "App started successfully"
+  },
+  "rollbackAppState": {
+    "state": "RUNNING",
+    "message": "App has status: App is running"
+  },
+  "initialPublishedCommit": "9c6d7d0e20d8794ad7c31035740e16e982857de5",
+  "compatibilityBaseCommit": "dd98164b3148753c54463128d99ba263d6bab8d5",
+  "mergeValidation": {
+    "backendPassed": 1934,
+    "backendSkipped": 18,
+    "frontendPassed": 1231,
+    "frontendFiles": 83,
+    "buildPassed": true,
+    "localSqlE2eChecks": 16
+  },
+  "compatiblePatchSha256": "d1058432541c6360ebcf21824e69ccacfab3a3990aa44590f094cbad4f5993b4",
+  "compatiblePublicPushApproved": true,
+  "compatiblePublicPushApprovedAt": "2026-11-12T04:59:58.015414+00:00",
+  "appState": "RUNNING",
+  "effectiveUserApiScopes": [
+    "ai-gateway",
+    "apps",
+    "catalog.catalogs:read",
+    "catalog.schemas:read",
+    "catalog.tables:read",
+    "files",
+    "genie",
+    "iam.access-control:read",
+    "iam.current-user:read",
+    "model-serving",
+    "postgres",
+    "sql",
+    "workspace.workspace"
+  ],
+  "resourcesPreserved": true,
+  "sourceRevisionVerified": true,
+  "transportFixCommit": "0f63b194216f5ef0b653ed94961451d11965e877",
+  "transportFixPublicPushApproved": true,
+  "transportFixPublicPushApprovedAt": "2026-11-12T05:12:10.456378+00:00",
+  "furtherTestedDevAppFixesPublicPushApproved": true,
+  "publicationScope": "Same public dev branch; necessary tested app fixes only; credentials, documents, screenshots and unrelated changes excluded.",
+  "finalBackendValidation": {
+    "passed": 1936,
+    "skipped": 18,
+    "warnings": 7,
+    "sqlPassed": 53
+  },
+  "compatibleDeploymentId": "01f1de55f19e1465a6e5b86a463278da",
+  "transportFixDeployStartedAt": "2026-11-12T05:12:26.082892+00:00",
+  "revisionVerifiedAt": "2026-11-12T05:20:53.712009+00:00",
+  "version": "1.2.0-rc.1",
+  "releaseTag": "v1.2.0-rc.1",
+  "versionCommit": "8e9e520fb0a0a244a758f13daab96c08517161f5",
+  "wordingFixCommit": "dff5e22",
+  "versionCutRequested": true,
+  "transportFixDeploymentId": "01f1de57a64f19a58dbe5c5dd8842ce0",
+  "versionDeployStartedAt": "2026-11-12T05:20:11.613418+00:00",
+  "finalFrontendValidation": {
+    "passed": 1231,
+    "files": 83,
+    "buildPassed": true
+  },
+  "finalLocalE2eChecks": 16,
+  "liveSmokeChecks": 10,
+  "liveSmokePassed": true,
+  "deployedScreenshotsInspected": 4,
+  "localScreenshotsInspected": 18,
+  "visualReviewManifest": "deployed-screenshots-manifest.json",
+  "liveVerifiedAt": "2026-11-12T05:22:11.644159+00:00",
+  "releasePublished": true,
+  "releaseUrl": "https://github.com/raphaelmansuy/opengenie/releases/tag/v1.2.0-rc.1",
+  "releasePrerelease": true,
+  "releasePublishedAt": "2026-11-12T05:22:31Z",
+  "completedAt": "2026-11-12T05:23:20.787889+00:00",
+  "historicalApprovalBlocks": [
+    {
+      "action": "Push the prepared app snapshot to the public GitHub deployment branch.",
+      "reason": "Deployment authorization did not specifically authorize public disclosure of the uncommitted app snapshot, including existing working-tree changes.",
+      "resolvedBy": "Explicit user approval, followed by bounded approval for necessary tested dev app fixes."
+    }
+  ]
+}

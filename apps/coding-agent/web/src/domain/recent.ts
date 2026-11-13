@@ -31,9 +31,8 @@ function load(scope = ""): void {
 
 function valid(v: unknown): v is RecentDoc {
   const d = v as RecentDoc;
-  const kinds = ["notebook", "file", "table", "lakebase", "app", "job", "pipeline", "run", "query", "query-draft"];
-  return !!d && typeof d.path === "string" && d.path.length > 0
-    && typeof d.name === "string" && kinds.includes(d.kind);
+  return !!d && typeof d.path === "string" && (d.path.startsWith("/") || d.kind === "query" || d.kind === "query-draft")
+    && typeof d.name === "string" && ["notebook","file","table","query","query-draft"].includes(d.kind);
 }
 
 function save(): void {

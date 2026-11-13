@@ -33,6 +33,7 @@ class ScenarioAgent:
         self.delay = delay
         self._by_session: dict[str, dict] = {}
         self._prompted: dict[str, int] = {}
+        self.mcp_urls: dict[str,str] = {}
         # The working folder this agent was started for. Scenarios name files with the placeholder
         # `/Users/you/…`, which is not a real path: the app opens what a tool reports, so every demo
         # turn navigated to `/Users/you/agent_scratch/taxi_hours`, the view 404'd, and the console
@@ -135,7 +136,8 @@ class ScenarioAgent:
                 },
                 [],
             )
-        if method in ("session/new", "session/load"):
+        if method in ("session/new", "session/load", "session/resume"):
+            self.mcp_urls['ses_fake_1']=next((v.get('url','') for v in params.get('mcpServers',[]) if v.get('type')=='http'),'')
             opts = ["fake/model-a", "fake/model-b"]
             return (
                 {
@@ -288,20 +290,63 @@ async def serve_stdio(scenario: dict | str, delay: float = 0.0) -> None:
         sid = params.get("sessionId", "")
         try:
             result, notes = agent.handle(method, params)
+            if method=='session/prompt':
+                turn=agent.scenario_for(sid).get('turn',{})
+                if turn.get('question') and agent._prompted.get(sid,0)==1:
+                    rid='question_'+str(msg['id']);future=asyncio.get_running_loop().create_future();permissions[rid]=future
+                    send({'jsonrpc':'2.0','id':rid,'method':'elicitation/create','params':{'sessionId':sid,**turn['question']}})
+                    try:decision=await future
+                    finally:permissions.pop(rid,None)
+                    notes=[{'method':'session/update','params':{'sessionId':sid,'update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'Your response was '+decision.get('action','cancel')+'. No workspace changes were made.'}}}}]
+                    result={'stopReason':'end_turn'}
+                actions=turn.get('actions',[]) if agent._prompted.get(sid,0)==1 else turn.get('followupActions',[])
+                if actions:
+                    from .actions import run_actions
+                    async def permit(cid,name,args,update):
+                        rid='native_'+cid
+                        future=asyncio.get_running_loop().create_future();permissions[rid]=future
+                        options=[{'optionId':'once','kind':'allow_once','name':'Allow once'},{'optionId':'reject','kind':'reject_once','name':'Reject'}]
+                        send({'jsonrpc':'2.0','id':rid,'method':'session/request_permission','params':{'sessionId':sid,
+                            'toolCall':{'toolCallId':cid,'title':'db_'+name,'kind':'other','status':'pending','rawInput':{}},'options':options}})
+                        update({'sessionUpdate':'tool_call_update','toolCallId':cid,'status':'in_progress','rawInput':args})
+                        try:decision=await future
+                        finally:permissions.pop(rid,None)
+                        return decision.get('outcome',{}).get('optionId')=='once'
+                    answer,denied=await run_actions(agent.mcp_urls[sid],sid,actions,
+                        turn.get('answer','') if agent._prompted.get(sid,0)==1 else turn.get('followupAnswer',turn.get('answer','')),
+                        agent._root,send,permit,str(msg['id']),{'operation':next(iter(__import__('re').findall(r'op_[0-9a-f]{20}',json.dumps(params))), '')})
+                    notes=[]
+                    if answer:send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':sid,'update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':answer}}}})
+                    result={'stopReason':'end_turn','usage':{'inputTokens':150,'outputTokens':50}}
             if method == "session/prompt":
                 permission = agent.scenario_for(sid).get("turn", {}).get("permission")
                 if permission:
                     rid = f"permission_{msg['id']}"
                     future = asyncio.get_running_loop().create_future()
                     permissions[rid] = future
+                    for note in notes:
+                        if (note.get("params") or {}).get("update", {}).get("sessionUpdate") in ("tool_call", "tool_call_update"):
+                            send({"jsonrpc": "2.0", **note})
+                    notes = [n for n in notes if (n.get("params") or {}).get("update", {}).get("sessionUpdate") not in ("tool_call", "tool_call_update")]
                     send({"jsonrpc": "2.0", "id": rid, "method": "session/request_permission",
                           "params": {"sessionId": sid, **permission}})
                     try:
                         decision = await future
                     finally:
                         permissions.pop(rid, None)
-                    if decision.get("outcome", {}).get("outcome") != "selected":
+                    selected = decision.get("outcome", {})
+                    denied = next((o for o in permission.get("options", []) if o.get("optionId") == selected.get("optionId")), {}).get("kind", "").startswith("reject")
+                    if denied:
+                        send({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": sid,
+                              "update": {"sessionUpdate": "tool_call_update", "toolCallId": permission["toolCall"]["toolCallId"],
+                                         "status": "failed", "rawOutput": {"error": "The user rejected permission"}}}})
+                        notes, result = [], {"stopReason": "end_turn"}
+                    elif selected.get("outcome") != "selected":
                         notes, result = [], {"stopReason": "cancelled"}
+                    else:
+                        send({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": sid,
+                              "update": {"sessionUpdate": "tool_call_update", "toolCallId": permission["toolCall"]["toolCallId"],
+                                         "status": "completed", "content": [{"type": "content", "content": {"type": "text", "text": "Scripted permission check only; no workspace operation executed."}}]}}})
             for n in notes:
                 if delay:
                     await asyncio.sleep(delay)

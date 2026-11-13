@@ -83,7 +83,6 @@ def test_the_refusal_says_why(sql):
 
 INSIDE = [
     "CREATE TABLE workspace.mine.t (x INT)",
-    "CREATE OR REPLACE TABLE workspace.mine.t AS SELECT 1",
     "CREATE TABLE IF NOT EXISTS workspace.mine.t (x INT)",
     "CREATE VIEW workspace.mine.v AS SELECT 1",
     "CREATE MATERIALIZED VIEW workspace.mine.mv AS SELECT 1",
@@ -180,6 +179,7 @@ def test_a_two_part_schema_accepts_a_two_part_target():
 # =============================================================== destructive, wherever it points
 
 DESTRUCTIVE = [
+    "CREATE OR REPLACE TABLE workspace.mine.t AS SELECT 1",
     "DROP TABLE workspace.mine.t",
     "DROP TABLE workspace.other.t",
     "DROP TABLE t",

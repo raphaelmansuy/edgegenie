@@ -67,19 +67,19 @@ preflight() {
 # ---------------------------------------------------------------- quota
 check_quota() {
   say "2/8 App compute"
-  # A stopped app is the only reliable probe, and the platform states the reason.
-  local stopped
-  stopped="$(databricks apps list -o json 2>/dev/null | python3 -c '
+  # Probe only the app selected by this environment; another app is outside this deployment.
+  local stopped state
+  state="$(databricks apps get "$APP_NAME" -o json | python3 -c '
 import json,sys
-apps = json.load(sys.stdin) or []
-print(next((a["name"] for a in apps if (a.get("compute_status") or {}).get("state") == "STOPPED"), ""))
-')"
-  if [ -z "$stopped" ]; then
-    echo "  no stopped app to probe with; continuing"
+print((json.load(sys.stdin).get("compute_status") or {}).get("state", ""))')" \
+    || die "cannot read compute status for '$APP_NAME'"
+  if [ "$state" != "STOPPED" ]; then
+    echo "  $APP_NAME compute is $state; continuing"
     return
   fi
+  stopped="$APP_NAME"
   local out
-  if ! out="$(databricks apps start "$stopped" 2>&1)"; then
+  if ! out="$(databricks apps start "$stopped" --no-wait -o json 2>&1)"; then
     case "$out" in
       *"free daily limit"*)
         die "this workspace has hit its free daily app-compute limit (probe: starting '$stopped').
@@ -211,11 +211,17 @@ deploy() {
   say "7/8 Deploy"
   local out
   if [ "$DEPLOY_SOURCE" = "git" ]; then
-    # Build from the COMMITTED tree on the remote branch. The commit is reported so a deployment can
-    # be tied to a revision rather than to "whatever was there".
-    out="$(databricks apps deploy "$APP_NAME" \
-      --git-branch "$DEPLOY_GIT_BRANCH" --git-source-code-path "$DEPLOY_GIT_PATH" \
-      --auto-approve --no-wait -o json 2>&1)" \
+    # Resolve once and pin the remote commit; a branch moving during deployment cannot change it.
+    local remote_commit body
+    remote_commit="$(git -C "$APP_DIR" ls-remote "$DEPLOY_GIT_URL" "refs/heads/$DEPLOY_GIT_BRANCH" | cut -f1)" \
+      || die "cannot resolve the deployment branch"
+    [[ "$remote_commit" =~ ^[0-9a-f]{40}$ ]] || die "deployment branch has no valid commit"
+    body="$(python3 - "$remote_commit" "$DEPLOY_GIT_PATH" <<'PYDEPLOY'
+import json, sys
+print(json.dumps({"git_source": {"commit": sys.argv[1], "source_code_path": sys.argv[2]}}))
+PYDEPLOY
+)"
+    out="$(databricks apps deploy "$APP_NAME" --json "$body" --no-wait -o json 2>&1)" \
       || die "deploy failed: $(printf '%s' "$out" | head -5)"
     printf '%s' "$out" | python3 -c 'import json,sys
 d = json.load(sys.stdin)
@@ -227,7 +233,7 @@ print("  commit    ", g.get("resolved_commit"), "on", g.get("branch"))' 2>/dev/n
     # ships a snapshot: measured three times, a "SUCCEEDED" deploy serving code from days earlier.
     "$HERE/sync-app-source.sh" "$DEPLOY_WS_SRC" || die "could not sync the source into $DEPLOY_WS_SRC"
     out="$(databricks apps deploy "$APP_NAME" --source-code-path "$DEPLOY_WS_SRC" \
-      --auto-approve --no-wait -o json 2>&1)" \
+      --no-wait -o json 2>&1)" \
       || die "deploy failed: $(printf '%s' "$out" | head -5)"
     printf '%s' "$out" | python3 -c 'import json,sys
 print("  deployment", json.load(sys.stdin).get("deployment_id"))' 2>/dev/null

@@ -284,3 +284,23 @@ async def test_the_model_registry_pool_survives_its_backends_being_killed():
         assert len(await registry.all_models()) == before
     finally:
         await registry.close()
+
+
+async def test_session_index_pages_are_bounded_owner_scoped_and_exhaustive(store):
+    owner = "page-owner-" + _sid()
+    mine = [_sid() for _ in range(3)]
+    for sid in [*mine, _sid()]:
+        await store.commit(Event(sid, "session.created"), {"session": {
+            "id": sid, "user_id": owner if sid in mine else "another-owner",
+            "status": "ready", "folder": "/Users/test/agent", "model": "fake/model-a", "schema": None,
+        }})
+    seen, cursor = [], ""
+    while True:
+        page = await store.session_page(owner, cursor, limit=1)
+        assert len(page["items"]) <= 1
+        seen.extend(item["id"] for item in page["items"])
+        cursor = page["nextCursor"]
+        if not cursor:
+            break
+    assert set(seen) == set(mine) and len(seen) == 3
+    assert (await store.session_page("absent-owner"))["items"] == []

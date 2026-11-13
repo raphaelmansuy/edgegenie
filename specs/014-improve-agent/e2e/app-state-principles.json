@@ -1,0 +1,11 @@
+{
+  "name": "coding-agent",
+  "workspace": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "identity": "raphael.mansuy@gmail.com",
+  "computeStatus": {
+    "state": "STOPPED",
+    "message": "App compute was stopped due to workspace or account status."
+  },
+  "deploymentStatus": null,
+  "scope": "Read-only apps get; no start, deployment, grant change or identity fallback attempted."
+}

@@ -6,8 +6,7 @@
  */
 export interface Workspace { host: string; orgId?: string }
 
-export type LinkKind = "notebook" | "file" | "directory" | "repo" | "library" | "table"
-  | "lakebase" | "app" | "job" | "run" | "pipeline" | "query" | "query-draft";
+export type LinkKind = "lakebase" | "app" | "job" | "run" | "pipeline" | "notebook" | "file" | "directory" | "repo" | "library" | "table" | "query" | "query-draft";
 
 export interface LinkTarget { kind: LinkKind; ref: string; objectId?: string }
 

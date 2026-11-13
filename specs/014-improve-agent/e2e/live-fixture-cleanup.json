@@ -1,0 +1,23 @@
+[
+  {
+    "folder": "/Users/raphael.mansuy@gmail.com/agent_scratch/agent014-e2e-6faae377",
+    "status": "moved to workspace trash"
+  },
+  {
+    "folder": "/Users/raphael.mansuy@gmail.com/agent_scratch/agent014-e2e-69a2df25",
+    "status": "moved to workspace trash"
+  },
+  {
+    "folder": "/Users/raphael.mansuy@gmail.com/agent_scratch/agent014-e2e-47ee6ae8",
+    "status": "moved to workspace trash"
+  },
+  {
+    "folder": "/Users/raphael.mansuy@gmail.com/agent_scratch/agent014-e2e-e4d40421",
+    "status": "moved to workspace trash"
+  },
+  {
+    "folder": "/Users/raphael.mansuy@gmail.com/agent_scratch/agent014-e2e-cb952137",
+    "status": "moved to workspace trash",
+    "reason": "isolated inherited-mode fixture; sole object and 60-cell fixture content verified before cleanup"
+  }
+]

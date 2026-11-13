@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from ...domain.sqlquery import SqlError, native_id
 from .http import DbxHttp
 
@@ -40,6 +42,7 @@ class DatabricksQueries:
             "name": q.get("display_name") or "Untitled query",
             "description": q.get("description", "")[:4000],
             "owner": q.get("owner_user_name", ""),
+            "parent": q.get("parent_path", ""),
             "modifiedAt": q.get("update_time", ""),
             "warehouseId": q.get("warehouse_id", ""),
             "catalog": q.get("catalog", ""),
@@ -87,6 +90,9 @@ class DatabricksQueries:
         )
         return self.normalize(result)
 
+    async def delete(self, actor, query_id):
+        await self.http.request("DELETE", f"/api/2.0/sql/queries/{native_id(query_id)}", actor.token)
+
     async def warehouses(self, actor):
         data = await self.http.get("/api/2.0/sql/warehouses", actor.token)
         return [
@@ -99,6 +105,55 @@ class DatabricksQueries:
 
     async def status(self, actor, statement_id):
         return await self.http.get(f"/api/2.0/sql/statements/{native_id(statement_id)}", actor.token)
+
+    async def lookup_statement(self, actor, intent):
+        """Read history only. An absent, ambiguous or capped search never authorizes a retry.
+
+        API shape: https://docs.databricks.com/api/query-history/v1/list-queries
+        Require the complete tagged source and both user identities, not a tag substring.
+        """
+        key = intent.get("operationKey", "")
+        text = intent.get("text", "")
+        if not key or not text.startswith("/* opengenie-operation:" + key + " */\n"):
+            return None
+        created = intent["createdAt"]
+        if time.time() - created > 29 * 86400:
+            return None
+        start, end = int((created - 60) * 1000), int((created + 300) * 1000)
+        params = {
+            "max_results": 100,
+            "include_metrics": "false",
+            "filter_by.query_start_time_range.start_time_ms": start,
+            "filter_by.query_start_time_range.end_time_ms": end,
+            "filter_by.warehouse_ids": intent["warehouseId"],
+        }
+        matches, seen = set(), set()
+        for _ in range(10):
+            page = await self.http.get("/api/2.0/sql/history/queries", actor.token, params)
+            for row in page.get("res", []):
+                if (
+                    row.get("query_text") == text
+                    and row.get("user_name") == actor.run_as
+                    and row.get("executed_as_user_name", actor.run_as) == actor.run_as
+                    and row.get("warehouse_id", row.get("endpoint_id")) == intent["warehouseId"]
+                    and start <= row.get("query_start_time_ms", 0) <= end
+                ):
+                    matches.add(native_id(row["query_id"]))
+            if len(matches) > 1:
+                return None
+            cursor = page.get("next_page_token", "")
+            if not cursor and not page.get("has_next_page"):
+                return next(iter(matches), None)
+            if not cursor or cursor in seen:
+                return None
+            seen.add(cursor)
+            params = {**params, "page_token": cursor}
+        return None
+
+    async def chunk(self, actor, statement_id, index):
+        return await self.http.get(
+            f"/api/2.0/sql/statements/{native_id(statement_id)}/result/chunks/{index}", actor.token
+        )
 
     async def cancel(self, actor, statement_id):
         await self.http.post(f"/api/2.0/sql/statements/{native_id(statement_id)}/cancel", actor.token)
@@ -171,7 +226,10 @@ class DemoQueries:
 
     async def get(self, actor, query_id):
         await self._seed(actor)
-        return await self.store.get(actor.scope, "native", native_id(query_id))
+        row = await self.store.get(actor.scope, "native", native_id(query_id))
+        if row.get("state") == "trashed":
+            raise LookupError("Query is unavailable")
+        return row
 
     async def create(self, actor, query):
         import time
@@ -192,6 +250,10 @@ class DemoQueries:
                 "createdAt": time.time(),
             },
         )
+
+    async def delete(self, actor, query_id):
+        row = await self.get(actor, query_id)
+        await self.store.put(actor.scope, "native", query_id, {**row, "state": "trashed"}, row["version"])
 
     async def warehouses(self, actor):
         return [{"id": "demo-warehouse", "name": "Analytics warehouse", "state": "RUNNING"}]

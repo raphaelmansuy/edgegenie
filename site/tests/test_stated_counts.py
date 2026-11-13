@@ -14,6 +14,7 @@ in it (`site/check.py` makes the same argument for itself).
 from __future__ import annotations
 
 import re
+import runpy
 import sys
 from pathlib import Path
 
@@ -42,7 +43,8 @@ def count_routes() -> int:
 
 
 def count_protocols() -> int:
-    return len(re.findall(r"^class \w+\(Protocol\):", (API / "ports" / "__init__.py").read_text(), re.M))
+    return sum(len(re.findall(r"^class \w+\(Protocol\):", p.read_text(), re.M))
+               for p in (API / "ports").glob("*.py"))
 
 
 def count_layer(glob: str) -> int:
@@ -59,8 +61,7 @@ def count_tools() -> tuple[int, int]:
     """(all tools, the `core` set) from the tool server itself."""
     text = (APP / "tools" / "databricks_notebook_mcp.py").read_text()
     total = len(re.findall(r"^@tool\(\)\s*\n(?:async\s+)?def dbx_\w+", text, re.M))
-    block = re.search(r"^_CORE = \{(.*?)\}", text, re.M | re.S)
-    core = len(re.findall(r'"dbx_\w+"', block.group(1))) if block else 0
+    core = len(runpy.run_path(str(API / "domain/tool_catalogue.py"))["CORE_TOOLS"])
     return total, core
 
 
@@ -94,8 +95,7 @@ def test_protocol_count():
 @case
 def test_layer_file_counts():
     doc = DOC.read_text(encoding="utf-8")
-    domain = (len([p for p in (API / "domain").glob("*.py") if p.name != "__init__.py"])
-              + len([p for p in (API / "domain" / "llm").glob("*.py") if p.name != "__init__.py"]))
+    domain = len([p for p in (API / "domain").rglob("*.py") if p.name != "__init__.py"])
     services = len([p for p in (API / "services").glob("*.py") if p.name != "__init__.py"])
     adapters = len([p for p in (API / "adapters").rglob("*.py") if p.name != "__init__.py"])
     for layer, n in (("domain", domain), ("services", services), ("adapters", adapters)):
@@ -173,16 +173,15 @@ def test_schema_table_count():
     llm = len(re.findall(r"CREATE TABLE IF NOT EXISTS llm\.", sql))
     agent = len(re.findall(r"CREATE TABLE IF NOT EXISTS agent\.", sql))
     data = DATA.read_text(encoding="utf-8")
-    assert agent == 4, f"the agent schema should hold 4 tables, found {agent}"
-    assert "Four tables" in data, "docs/10 must describe the session and SQL tables"
-    assert set(re.findall(r"CREATE TABLE IF NOT EXISTS agent\.(\w+)", sql)) == {
-        "session_snapshot", "session_event", "sql_item", "sql_operation",
-    }
-    assert llm == 9, f"the llm schema should hold 9 tables, found {llm}"
-    assert f"Nine tables in `llm`" in data or "Nine tables" in data, (
-        f"the llm schema has {llm} tables; docs/10 must state that count")
-    assert count_migrations() == 5, f"{count_migrations()} migrations; docs/10 lists five"
-    assert "005_sql_journal.sql" in data, "docs/10 must include the SQL journal migration"
+    names = set(re.findall(r'CREATE TABLE IF NOT EXISTS agent\."?(\w+)"?', sql))
+    assert agent == len(names), "duplicate agent table declarations"
+    assert f"{agent} tables in `agent`" in data
+    for name in names:
+        assert f"`agent.{name}`" in data, f"undocumented agent table: {name}"
+    assert llm == 9 and "Nine tables in `llm`" in data
+    for migration in (API / "adapters/llm/store/migrations").glob("*.sql"):
+        assert migration.name in data, f"undocumented migration: {migration.name}"
+
 
 
 @case

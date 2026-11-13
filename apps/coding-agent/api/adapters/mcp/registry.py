@@ -10,6 +10,8 @@ import asyncio
 import os
 import socket
 import tempfile
+
+from ..child_env import child_env
 from pathlib import Path
 
 # Look in the app's own tree first (a deployment ships only its source folder), then in the
@@ -54,58 +56,20 @@ class SubprocessToolRegistry:
         self._procs: dict[str, tuple[asyncio.subprocess.Process, str]] = {}
         self._stderr: str = ""
         self._logs: dict[str, str] = {}
+        self._homes: dict[str, str] = {}
+        self._modes: dict[str, str] = {}
+
+    def set_write_mode(self, sid, mode):
+        self._modes[sid] = mode
 
     async def start(self, session_id: str, folder: str, schema: str | None,
-                    token_file: str | None = None, sp_token_file: str | None = None,
-                    ledger_dir: str | None = None, write_mode: str = "fenced") -> str:
+                    token_file: str | None = None) -> str:
+        existing = self._procs.get(session_id)
+        if existing and existing[0].returncode is None:
+            return existing[1]
         port = free_port()
-        # The session ledger: what THIS conversation created. A pipeline id is a platform UUID with no
-        # session prefix, so the fence for it cannot be a prefix; it is "in this ledger" (spec 014
-        # [TOOL-6]). The file is owned by the app, not by the tool server, because the tool server is a
-        # subprocess and 010's durable sessions make a restart routine ([RB-3], [E-16]).
-        ledger = os.path.join(ledger_dir, f"{session_id}.jsonl") if ledger_dir else ""
-        # The write scope comes from `fence_rules`, not from string arithmetic in this method. The old
-        # `folder.rstrip("/") + "/"` turned both "" and "/" into "/", which is a wildcard every path
-        # matches — so a session with no folder could write anywhere ([F-1], [R-1]).
-        from ...domain.fence_rules import writable_folder, writable_schema
-
-        env = {
-            **os.environ,
-            "NBMCP_TRANSPORT": "http",
-            "NBMCP_PORT": str(port),
-            "NBMCP_HOST": "127.0.0.1",
-            "NBMCP_PROFILE": "core",
-            "NBMCP_ALLOW_WRITES": "1",
-            # What this session may change ([R-9]). `read-only` refuses every mutation in the tool
-            # server; `ask` returns a needs-human result the app turns into an approval. The mode is a
-            # decision the user made, so it travels with the session rather than being a constant here.
-            "NBMCP_WRITE_MODE": write_mode,
-            "NBMCP_WRITE_SCHEMAS": writable_schema(schema),
-            "NBMCP_WRITE_PATHS": writable_folder(folder),
-            "NBMCP_WRITE_JOB_PREFIX": f"agent_{session_id[:8]}_",
-            "NBMCP_WRITE_INSTANCE_PREFIX": f"agent-{session_id[:8]}-",
-            # The app prefix is passed separately even though it currently equals the instance one:
-            # a fence that works only because two strings happen to match is not a fence
-            # (spec 013 [F3], [AP-2], [E-6]).
-            "NBMCP_WRITE_APP_PREFIX": f"agent-{session_id[:8]}-",
-            # No pipeline prefix: a pipeline id is a UUID, so the ledger is the fence ([TOOL-6]).
-            "NBMCP_WRITE_PIPELINE_PREFIX": "",
-            **({"NBMCP_SESSION_LEDGER": ledger} if ledger else {}),
-            "NBMCP_SKILLS_DIR": str(self._server.parent / "skills"),
-            # User and workspace skills ([R-18]). The same conventions Genie Code reads, so a skill
-            # written for one is a skill for the other. Empty when the caller does not know the home.
-            **({"NBMCP_SKILLS_USER_DIR": self._user_skills} if self._user_skills else {}),
-            **({"NBMCP_SKILLS_WORKSPACE_DIR": self._workspace_skills} if self._workspace_skills else {}),
-            # Where the server reads the user's current token; never the agent's working folder.
-            **({"NBMCP_TOKEN_FILE": token_file} if token_file else {}),
-            # The app's own identity, for the one API a user token can never call ([RB-10]).
-            **({"NBMCP_SP_TOKEN_FILE": sp_token_file} if sp_token_file else {}),
-            **(self._bridge.env_for(session_id) if self._bridge else {}),
-            # A platform team's rules ([R-13]). `NBMCP_HOOKS_ALLOW_RUN` is an administrator's switch: a
-            # `then: run` rule executes a program inside this process, which holds the user's token.
-            **({"NBMCP_HOOKS_FILE": self._hooks_file} if self._hooks_file else {}),
-            "NBMCP_HOOKS_ALLOW_RUN": "1" if self._hooks_allow_run else "0",
-        }
+        home = self._homes.setdefault(session_id, tempfile.mkdtemp(prefix="tool-home-", dir="/tmp"))
+        env = self.environment(session_id, folder, schema, token_file, port, home)
         # stderr goes to a file, not a pipe nobody reads and not /dev/null: when the server cannot
         # start, its own message is the only useful diagnostic, and a full pipe would block it.
         log = tempfile.NamedTemporaryFile(prefix=f"toolserver-{session_id[:8]}-", suffix=".log", delete=False)
@@ -124,13 +88,42 @@ class SubprocessToolRegistry:
             if proc.returncode is not None:
                 break
             if await self.health(url) > 0:
-                return url
+                # A successful TCP connect may belong to an unrelated listener that won the
+                # free-port race. Check that our child survived before reporting readiness.
+                await asyncio.sleep(0.05)
+                if proc.returncode is None:
+                    return url
             await asyncio.sleep(0.25)
         stderr_tail = self._read_log(session_id)
         await self.stop(session_id)
         raise RuntimeError(
             f"the tool server did not start (server={self._server}, exists={self._server.exists()}). "
             f"Last output: {stderr_tail.strip()[:300] or '(none)'}")
+
+    def environment(self, session_id, folder, schema, token_file, port, home):
+        env = {
+            **child_env({"DATABRICKS_HOST": os.environ.get("DATABRICKS_HOST", "")}, home=home),
+            "NBMCP_TRANSPORT": "http",
+            "NBMCP_PORT": str(port),
+            "NBMCP_HOST": "127.0.0.1",
+            "NBMCP_PROFILE": "core",
+            "NBMCP_ALLOW_WRITES": "1",
+            "NBMCP_WRITE_SCHEMAS": schema or "",
+            "NBMCP_WRITE_PATHS": folder.rstrip("/") + "/",
+            "NBMCP_WRITE_MODE": self._modes.get(session_id, "fenced"),
+            "NBMCP_WRITE_APP_PREFIX": f"agent-{session_id[:8]}-",
+            "NBMCP_WRITE_JOB_PREFIX": f"agent_{session_id[:8]}_",
+            "NBMCP_WRITE_INSTANCE_PREFIX": f"agent-{session_id[:8]}-",
+            "NBMCP_SKILLS_DIR": str(self._server.parent / "skills"),
+            # Where the server reads the user's current token; never the agent's working folder.
+            **({"NBMCP_TOKEN_FILE": token_file} if token_file else {}),
+            # Agent code must never run as the app identity (AG-34).
+            # A separate, verified run adapter is required before offering a bridge.
+        }
+        if self._bridge:
+            env.update({"NBMCP_QUERY_URL": f"{self._bridge.url}/internal/query",
+                        "NBMCP_RUN_SESSION": session_id, "NBMCP_RUN_KEY": self._bridge.key_for(session_id)})
+        return env
 
     def _read_log(self, session_id: str) -> str:
         try:
@@ -205,3 +198,16 @@ class NullToolRegistry:
 
     async def stop(self, session_id: str) -> None:
         return None
+
+
+class FacadeToolRegistry(SubprocessToolRegistry):
+    """No user token, provider credential or workspace client is passed to this child."""
+    def __init__(self, access, app_url, python):
+        super().__init__(server=Path(__file__).with_name('facade.py'),python=python)
+        self.access,self.app_url=access,app_url
+    def environment(self,sid,folder,schema,token_file,port,home):
+        return child_env({'NBMCP_PORT':str(port),'TOOL_SESSION':sid,'TOOL_KEY':self.access.issue(sid),
+                          'TOOL_APP_URL':self.app_url},home=home)
+    async def stop(self,sid):
+        self.access.revoke(sid)
+        await super().stop(sid)

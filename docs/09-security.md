@@ -137,9 +137,8 @@ Three details that make this safe rather than convenient:
 | `available()` is false on a laptop | there is no injected client id, so callers decide not to attempt an SP call instead of discovering it as a confusing 403 |
 | A missing SP token is a `warning`, not a `debug` | a missing file makes every `/api/2.0/postgres` call a 403 that reads like a user permission problem, three layers away from the real cause |
 
-The tool server gets a **second** token file for exactly this reason. `NBMCP_SP_TOKEN_FILE` is
-written beside `NBMCP_TOKEN_FILE`, same `0600`, only when the process actually has a service
-principal; the tool server falls back to the user token on a laptop.
+The app keeps this credential inside the server for its infrastructure browser. It is never
+written beside the agent's user-token file and is never forwarded to an agent or MCP child.
 
 > **The consequence, stated plainly.** The Lakebase, Apps, Jobs and Pipelines panes show what the
 > **app** may see, not what the viewer may see. That is the right model for a management surface —
@@ -149,20 +148,13 @@ principal; the tool server falls back to the user token on a laptop.
 
 ### Identity 3 — the per-session bridge key
 
-A tool server cannot submit a serverless run as the user (no compute scope). The app can, as its
-service principal. `services/run_bridge.py` mints a key for exactly one session:
+The compatibility SQL editor bridge uses a per-session HMAC key. It additionally requires an
+active owned turn and an attached owned query draft; execution uses the user's credential.
+The historical notebook bridge refuses all agent execution as the app identity, even when an
+administrator created the session. Human notebook execution is separately authorized.
 
-```python
-key = HMAC-SHA256(boot_secret, session_id)
-```
-
-| Property | How |
-|---|---|
-| A key opens one session and no other | the HMAC message *is* the session id |
-| It is never guessable | 32 random bytes at boot, never written to disk |
-| It is useless without a grant | `granted(session_id)` is set only when the creator is an administrator |
-| Replay across sessions fails | `hmac.compare_digest` against a key derived from *that* session |
-| A restart invalidates every key | the secret is regenerated, and the tool server is restarted with a new one |
+A separately isolated agent execution identity stays disabled until its qualification passes.
+A missing capability or permission is reported; it never triggers an app-identity fallback.
 
 ---
 
@@ -668,7 +660,7 @@ named next step — none is unexamined.
 
 | # | Gap | Consequence | Status |
 |---|---|---|---|
-| **G-1** | The agent's own file and shell tools exist in the protocol | if enabled, a shell would bypass the fence with the user's token | **defended in two layers, and both are tested.** `agent_config.py` denies 12 built-ins in `opencode.json`, and the ACP handshake declares `fs: {readTextFile: false, writeTextFile: false}, terminal: false` so the agent is told the client cannot serve a file or a terminal at all. `tests/test_agent_isolation.py` asserts both, mutation-tested. The residual is a compromised agent build, which no config reaches |
+| **G-1** | The agent's own file and shell tools exist in the protocol | if enabled, a shell would bypass the fence with the user's token | **defended in two layers, and both are tested.** `agent_config.py` denies tools by default in `opencode.json`, and the ACP handshake declares `fs: {readTextFile: false, writeTextFile: false}, terminal: false` so the agent is told the client cannot serve a file or a terminal at all. `tests/test_agent_isolation.py` asserts both, mutation-tested. The residual is a compromised agent build, which no config reaches |
 | **G-2** | The fence classifies SQL with a pattern, not a parser | a dialect or a nested write could be misread | **bounded and tested.** `tests/test_scope_targets.py` holds 146 cases and the invariant "a write it cannot place is never allowed". A pattern alone was found to fail open (`OPTIMIZE <outside table>` was ALLOW) and the fallback, not the pattern, is now the guarantee. Unity Catalog still applies |
 | **G-3** | Reads are not fenced | an injection can read anything the user can read | **open by design.** An agent that cannot read the catalogue is useless. Exfiltration needs a model call; the user can see their own token scopes on `/api/me` |
 | **G-4** | Python cells run as the app's service principal | anyone who may run them could read whatever the app can | **open, restricted.** Administrators only, `APP_PYTHON_RUN` is a hard off switch, every result labels where it ran |

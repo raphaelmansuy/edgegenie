@@ -61,7 +61,11 @@ def available() -> bool:
     return sqlglot is not None
 
 
+DIALECT = "databricks"
+FUNCTIONS = frozenset(name for names in BUILTINS.values() for name in names)
+
 def validate(source: str, parameters: list[dict], *, dialect=None) -> list[dict]:
+    dialect = dialect or DIALECT
     if sqlglot is None:
         raise SqlError(
             "PARSER_UNAVAILABLE", "SQL execution is unavailable: the SQL parser must be installed.", 503
@@ -122,6 +126,10 @@ def validate(source: str, parameters: list[dict], *, dialect=None) -> list[dict]
             "INVALID_SQL",
             "Use one supported read-only SELECT. Scripts, mutations and unverified functions cannot run here.",
         ) from exc
+    return bind(required, parameters)
+
+
+def bind(required: set[str], parameters: list[dict]) -> list[dict]:
     if len(parameters) > 100:
         raise SqlError("INVALID_PARAMETER", "At most 100 named parameters are supported.")
     bindings = {}

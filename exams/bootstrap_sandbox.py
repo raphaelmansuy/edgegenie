@@ -30,9 +30,9 @@ set -u
 mkdir -p ~/.npm-global ~/proj ~/exam
 npm config set prefix ~/.npm-global >/dev/null 2>&1
 export PATH="$HOME/.npm-global/bin:$PATH"
-command -v opencode >/dev/null || npm install -g opencode-ai 2>&1 | tail -2
+command -v opencode >/dev/null && [ "$(opencode --version)" = "1.18.19" ] || npm install -g opencode-ai@1.18.19 2>&1 | tail -2
 [ -x ~/pyenv/bin/python ] || uv venv --system-site-packages ~/pyenv -q
-uv pip install -q --python ~/pyenv/bin/python psycopg2-binary requests "mcp<2" httpx 2>&1 | tail -2
+uv pip install -q --python ~/pyenv/bin/python psycopg2-binary requests "mcp<2" httpx "sqlglot==28.10.1" 2>&1 | tail -2
 echo "opencode: $(opencode --version 2>&1 | tail -1)"
 ~/pyenv/bin/python -c "import mcp,httpx,psycopg2;print('py deps ok')"
 """
@@ -68,7 +68,7 @@ def main() -> None:
     upload(str(tok), "/tmp/dbx_token.txt", sid)
     tok.unlink()
     for local, remote in [
-        (HERE.parent / "mcp" / "databricks_notebook_mcp.py", "/tmp/databricks_notebook_mcp.py"),
+        (HERE.parent / "mcp" / "kit_entry.py", "/tmp/databricks_notebook_mcp.py"),
         (HERE.parent / "mcp" / "legacy" / "nbmcp_v1.py", "/tmp/nbmcp_v1.py"),
         (HERE.parent / "mcp" / "legacy" / "nbmcp_v2.py", "/tmp/nbmcp_v2.py"),
         (HERE.parent / "mcp" / "legacy" / "nbmcp_v3.py", "/tmp/nbmcp_v3.py"),
@@ -76,7 +76,17 @@ def main() -> None:
         (HERE.parent / "AGENTS.md", "/tmp/AGENTS.md"),
     ]:
         upload(str(local), remote, sid)
-    skills = HERE.parent / "mcp" / "skills"
+    app_source=HERE.parent / 'apps/coding-agent'
+    package_files=[
+        'tools/databricks_notebook_mcp.py','api/__init__.py','api/adapters/__init__.py',
+        'api/adapters/mcp/__init__.py','api/adapters/mcp/deadline.py','api/domain/__init__.py',
+        'api/domain/sqlpolicy.py','api/domain/sqlquery.py','api/domain/policy/__init__.py',
+        'api/domain/policy/paths.py','api/domain/policy/sql.py','api/domain/policy/verdict.py',
+    ]
+    run('mkdir -p /tmp/agentkit/tools /tmp/agentkit/api/adapters/mcp /tmp/agentkit/api/domain/policy',sid,30)
+    for relative in package_files:
+        upload(str(app_source / relative),'/tmp/agentkit/'+relative,sid)
+    skills = app_source / "tools/skills"
     run("mkdir -p /tmp/skills", sid, 30)
     for f in sorted(skills.glob("*.md")):
         upload(str(f), f"/tmp/skills/{f.name}", sid)

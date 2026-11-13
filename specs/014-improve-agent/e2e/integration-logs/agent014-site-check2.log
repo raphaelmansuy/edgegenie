@@ -1,0 +1,2 @@
+check: 30 pages in site/dist
+check: clean

@@ -37,13 +37,22 @@ class HealthService:
     def rebind(self, store) -> None:
         self._store = store
 
-    def __init__(self, store, credentials, *, interval: float = DEFAULT_INTERVAL,
-                 host: str = "", enabled: bool = True) -> None:
+    def __init__(
+        self,
+        store,
+        credentials,
+        *,
+        providers,
+        interval: float = DEFAULT_INTERVAL,
+        host: str = "",
+        enabled: bool = True,
+    ) -> None:
         self._store = store
         self._credentials = credentials
         self._interval = interval
         self._host = host
         self._enabled = enabled
+        self.providers = providers
         self._last_probe: dict[str, float] = {}
 
     # -- reads ----------------------------------------------------------------
@@ -62,17 +71,18 @@ class HealthService:
             return (row[0], row[1]) if row else ("unknown", "")
         self._last_probe[spec.id.value] = time.time()
 
-        from ..adapters.llm.providers import adapter_for
-
-        adapter = adapter_for(spec.id.provider)
+        adapter = self.providers(spec.id.provider)
         secret = None
         ref = None
         if spec.credential_kind is not CredentialKind.NONE:
             ref = await self._credentials.find(spec.id.provider, user_id=user_id)
             if ref is None:
-                return await self._record(spec, "unauthorised",
-                                          f"{spec.provider_name} needs a key before this model can run.",
-                                          source="probe")
+                return await self._record(
+                    spec,
+                    "unauthorised",
+                    f"{spec.provider_name} needs a key before this model can run.",
+                    source="probe",
+                )
             try:
                 secret = await self._credentials.open_ref(ref.id, user_id=user_id)
             except Exception as exc:  # noqa: BLE001 - a vault refusal is a health fact
@@ -82,8 +92,9 @@ class HealthService:
             try:
                 secret = await self._credentials.open_for(ProviderKind.DATABRICKS, user_id=user_id)
             except Exception:  # noqa: BLE001
-                return await self._record(spec, "unknown",
-                                          "no workspace token to probe with", source="probe")
+                return await self._record(
+                    spec, "unknown", "no workspace token to probe with", source="probe"
+                )
 
         # The credential handle already knows the project (it is how the settings screen names it).
         # The opened secret often does not: `Secret` has no project field, and parsing the JSON again
@@ -111,8 +122,7 @@ class HealthService:
         if result.cause is Cause.CAP_EXCEEDED:
             cap = cap_from_error(text)
             if cap:
-                await self._store.note_limits(spec.id.value, cap,
-                                              f"observed at {turn_id or 'a turn'}")
+                await self._store.note_limits(spec.id.value, cap, f"observed at {turn_id or 'a turn'}")
                 detail = f"the endpoint caps output at {cap}; the stored cap was lowered"
         await self._record(spec, result.state, detail, source="turn")
         return result.state

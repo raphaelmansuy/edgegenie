@@ -24,7 +24,9 @@ class SettingsModelCatalog:
     whole catalogue and no store exists.
     """
 
-    def __init__(self, cfg: Settings, service=None, extra_allowed: dict[str, list[str]] | None = None) -> None:
+    def __init__(
+        self, cfg: Settings, service=None, extra_allowed: dict[str, list[str]] | None = None
+    ) -> None:
         self._cfg = cfg
         self._service = service
         self._extra = extra_allowed or {}
@@ -40,7 +42,11 @@ class SettingsModelCatalog:
             cached = self._service.last()
             if cached is not None:
                 return [
-                    {"id": m.id.value, "name": m.display_name, "default": m.id.value == cached.default_model}
+                    {
+                        "id": m.id.value,
+                        "name": m.display_name,
+                        "default": m.id.value == cached.default_model,
+                    }
                     for m in cached.models
                     if m.selectable or m.state is ModelState.NOT_ENABLED
                 ]

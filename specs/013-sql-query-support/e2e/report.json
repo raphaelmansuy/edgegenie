@@ -1,0 +1,318 @@
+{
+  "success": true,
+  "assertions": [
+    "T01 library is reachable from the actual navigator",
+    "T01 favorite and filtered-empty states",
+    "T02 native asset opens in query document tabs",
+    "T09 API restart resumes the known statement without resubmission",
+    "T06 real submit, status polling and result rendering",
+    "T09 reload recovers the same execution and results without resubmitting",
+    "T05/T11 typed parameter and NULL survive the complete stack",
+    "T05 server rejects a SQL mutation from the real editor",
+    "T08 cancel waits for an observed terminal state",
+    "T04 lost create acknowledgment survives reload and reuses the exact operation key",
+    "T04 create Query copy, verify native asset and reopen in a tab",
+    "T09/SQ-16 own SQL history is independent from chat sessions",
+    "T16 responsive workspace has no page-wide overflow at five widths",
+    "T13 authorized query snapshot attaches to the shared assistant dock",
+    "T13 assistant SQL promotion opens an editable draft without execution",
+    "No browser runtime errors"
+  ],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/sql/queries"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/queries/00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/capabilities"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sql/drafts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sql/runs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs/99ceb372-67d1-4c70-90ac-70d5c982e574"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs/99ceb372-67d1-4c70-90ac-70d5c982e574"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs/99ceb372-67d1-4c70-90ac-70d5c982e574"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/queries/00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/capabilities"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs/99ceb372-67d1-4c70-90ac-70d5c982e574"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sql/drafts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sql/runs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs/fd141a20-b3df-41f1-984e-5f7bc86bcb8b"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs/fd141a20-b3df-41f1-984e-5f7bc86bcb8b"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs/fd141a20-b3df-41f1-984e-5f7bc86bcb8b"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/sql/drafts/2cb8cfa9-b77d-4fd4-bfea-88b32b99fc4b"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sql/runs"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/sql/drafts/2cb8cfa9-b77d-4fd4-bfea-88b32b99fc4b"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sql/runs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sql/runs/7c8d727d-c7e2-4bbb-a160-95eeedc10495/cancel"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/sql/drafts/2cb8cfa9-b77d-4fd4-bfea-88b32b99fc4b"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sql/queries"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/queries/00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/capabilities"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs/7c8d727d-c7e2-4bbb-a160-95eeedc10495"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sql/queries"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/queries/4a3c93b4-e4ce-4bdd-b89e-a2ac84da9105"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/capabilities"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/queries"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/queries/4a3c93b4-e4ce-4bdd-b89e-a2ac84da9105"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/capabilities"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sql/drafts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sql/runs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs/a0dd8f56-3972-479b-a154-0fd2d4b2d310"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs/a0dd8f56-3972-479b-a154-0fd2d4b2d310"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs/a0dd8f56-3972-479b-a154-0fd2d4b2d310"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/sql/drafts/6e8ac1fb-de8f-4d23-a1de-55e8087de098"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/sql/drafts/6e8ac1fb-de8f-4d23-a1de-55e8087de098"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sql/drafts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/drafts/5c79f5d6-b141-4fed-9022-1b17fe6b43d1"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/warehouses"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/capabilities"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sql/runs"
+    }
+  ],
+  "screenshots": [
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/01-library-light.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/02-query-editor-light.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/03-query-running.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/04-query-results.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/05-run-provenance.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/06-parameters-and-null.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/07-policy-refusal.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/08-canceled.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/15-save-copy-dialog.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/18-save-response-lost.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/09-own-history.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/10-query-dark.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/11-mobile-editor.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/12-mobile-results.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/13-tablet-editor.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/14-query-chat-context.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/16-assistant-sql-proposal.png",
+    "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/013-sql-query-support/e2e/screenshots/17-promoted-sql-draft.png"
+  ],
+  "screenshotMode": "retained from the last visually inspected capture",
+  "browserErrors": [],
+  "provider": "deterministic local provider; live Databricks not contacted"
+}

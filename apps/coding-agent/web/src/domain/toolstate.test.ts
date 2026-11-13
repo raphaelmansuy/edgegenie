@@ -5,6 +5,8 @@ describe("toolState", () => {
   it("maps the protocol's words to the card's three states", () => {
     expect(toolState("completed")).toBe("completed");
     expect(toolState("failed")).toBe("error");
+    expect(toolState("declined")).toBe("declined");
+    expect(toolState("rejected")).toBe("declined");
     expect(toolState("error")).toBe("error");
     expect(toolState("in_progress")).toBe("running");
     expect(toolState("running")).toBe("running");

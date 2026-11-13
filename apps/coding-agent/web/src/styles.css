@@ -599,7 +599,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* blocked */
 .blocked { margin-top: 16px; border: 1px solid var(--pink-300); border-radius: var(--radius);
-  background: var(--pink-100); padding: 14px 16px; }
+  background: var(--pink-100); padding: 14px 16px; overflow-wrap: anywhere; min-width: 0; }
 .blocked h3 { margin: 0 0 6px; font-size: 14px; color: var(--pink-700); }
 .blocked dd, .blocked p { margin: 4px 0; color: var(--ink-2); }
 .blocked ul { margin: 6px 0; padding-left: 18px; }
@@ -3296,6 +3296,23 @@ a.account-item { text-decoration: none; color: var(--ink); }
 .mission-picker > .icon { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--ink-3); }
 .dock-state.tone-archived { color: var(--ink-3); }
 
+/* Spec 014: structured decisions and a stable, non-animated usage meter. */
+.approval-input { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.5;
+  max-height: 200px; overflow: auto; padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
+.agent-meter { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:6px 12px;
+  color:var(--ink-2); font-size:11px; font-variant-numeric:tabular-nums; }
+.agent-meter meter { width:64px; height:6px; }
+
+.decision-stopped { padding:14px; border:1px solid var(--line); border-radius:8px; background:var(--surface-2); color:var(--ink-2); }
+.decision-stopped p { margin:8px 0 0; line-height:1.5; }
+.session-storage { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 16px; font-size: 12px; overflow-wrap: anywhere; }
+.session-storage summary { cursor: pointer; font-weight: 600; padding-block: 8px; }
+.session-storage dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-block: 16px; }
+.session-storage dd { margin: 0; text-align: right; }
+.session-storage p { color: var(--ink-3); line-height: 1.5; }
+.transcript-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-block: 10px; font-size: 12px; }
+.transcript-pages p { flex-basis: 100%; margin: 0; color: var(--ink-3); }
+
 /* ================================================================================================
    A composer that cannot be written into — and says so  (specs/012 [FX-2] [FX-3])
 
@@ -3636,40 +3653,6 @@ a.account-item { text-decoration: none; color: var(--ink); }
 .cell-value-act { border: 0; background: none; padding: 0; font: inherit; font-size: 11px; color: var(--accent, #2a5bd7); cursor: pointer; }
 .cell-value-act:hover { text-decoration: underline; }
 .cell-value-act:focus-visible { outline: 2px solid var(--focus, var(--ink-2)); outline-offset: 2px; border-radius: 2px; }
-
-/* Charts. Eight series colours that read on both themes; marks are fill/stroke from the series class. */
-:root { --chart-c0: #3b6fd4; --chart-c1: #e07a1f; --chart-c2: #2f9e6b; --chart-c3: #c2417a; --chart-c4: #7a5bd1; --chart-c5: #b09a1c; --chart-c6: #1f9bb0; --chart-c7: #8a8f98; }
-.chart { padding: 8px 12px 10px; }
-.chart-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 8px; font-size: 12px; color: var(--ink-2); }
-.chart-tools label { display: inline-flex; align-items: center; gap: 6px; }
-.chart-tools select { font: inherit; font-size: 12px; padding: 2px 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); max-width: 160px; }
-.chart-svg { display: block; width: 100%; max-height: 340px; }
-.chart-grid { stroke: var(--line); stroke-width: 1; }
-.chart-axis { stroke: var(--line-strong); stroke-width: 1; }
-.chart-tick { font-size: 11px; fill: var(--ink-3); }
-.chart-bar, .chart-slice { stroke: var(--surface); stroke-width: 1; }
-.chart-line { fill: none; stroke-width: 2; stroke-linejoin: round; }
-.chart-area { stroke: none; opacity: 0.18; }
-.chart-dot { stroke: var(--surface); stroke-width: 1; }
-.chart-c0.chart-bar, .chart-c0.chart-dot, .chart-c0.chart-slice, .chart-c0.chart-area, .chart-c0.chart-key { fill: var(--chart-c0); background: var(--chart-c0); }
-.chart-c1.chart-bar, .chart-c1.chart-dot, .chart-c1.chart-slice, .chart-c1.chart-area, .chart-c1.chart-key { fill: var(--chart-c1); background: var(--chart-c1); }
-.chart-c2.chart-bar, .chart-c2.chart-dot, .chart-c2.chart-slice, .chart-c2.chart-area, .chart-c2.chart-key { fill: var(--chart-c2); background: var(--chart-c2); }
-.chart-c3.chart-bar, .chart-c3.chart-dot, .chart-c3.chart-slice, .chart-c3.chart-area, .chart-c3.chart-key { fill: var(--chart-c3); background: var(--chart-c3); }
-.chart-c4.chart-bar, .chart-c4.chart-dot, .chart-c4.chart-slice, .chart-c4.chart-area, .chart-c4.chart-key { fill: var(--chart-c4); background: var(--chart-c4); }
-.chart-c5.chart-bar, .chart-c5.chart-dot, .chart-c5.chart-slice, .chart-c5.chart-area, .chart-c5.chart-key { fill: var(--chart-c5); background: var(--chart-c5); }
-.chart-c6.chart-bar, .chart-c6.chart-dot, .chart-c6.chart-slice, .chart-c6.chart-area, .chart-c6.chart-key { fill: var(--chart-c6); background: var(--chart-c6); }
-.chart-c7.chart-bar, .chart-c7.chart-dot, .chart-c7.chart-slice, .chart-c7.chart-area, .chart-c7.chart-key { fill: var(--chart-c7); background: var(--chart-c7); }
-.chart-c0.chart-line { stroke: var(--chart-c0); } .chart-c1.chart-line { stroke: var(--chart-c1); } .chart-c2.chart-line { stroke: var(--chart-c2); }
-.chart-c3.chart-line { stroke: var(--chart-c3); } .chart-c4.chart-line { stroke: var(--chart-c4); } .chart-c5.chart-line { stroke: var(--chart-c5); }
-.chart-c6.chart-line { stroke: var(--chart-c6); } .chart-c7.chart-line { stroke: var(--chart-c7); }
-.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; list-style: none; margin: 6px 0 0; padding: 0; font-size: 12px; color: var(--ink-2); }
-.chart-legend li { display: inline-flex; align-items: center; gap: 6px; }
-.chart-key { width: 10px; height: 10px; border-radius: 2px; flex: none; }
-.chart-detail { color: var(--ink-3); }
-.cell-view-switch { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
-.cell-view-switch button { border: 0; background: var(--surface); color: var(--ink-2); font: inherit; font-size: 11px; padding: 2px 8px; cursor: pointer; }
-.cell-view-switch button[aria-pressed="true"] { background: var(--ink-2); color: var(--surface); }
-.cell-view-switch button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Charts. Eight series colours that read on both themes; marks are fill/stroke from the series class. */
 :root { --chart-c0: #3b6fd4; --chart-c1: #e07a1f; --chart-c2: #2f9e6b; --chart-c3: #c2417a; --chart-c4: #7a5bd1; --chart-c5: #b09a1c; --chart-c6: #1f9bb0; --chart-c7: #8a8f98; }

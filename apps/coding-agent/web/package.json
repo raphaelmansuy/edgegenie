@@ -43,9 +43,17 @@
     "e2e:sql": "node scripts/sql-query-e2e.mjs",
     "e2e:mission": "node scripts/mission-e2e.mjs",
     "verify:spec-011": "node scripts/verify-spec-links.mjs ../../../specs/011-ux-coding-mission && node scripts/verify-spec-ascii.mjs ../../../specs/011-ux-coding-mission && node scripts/verify-mission-wireframes.mjs",
-    "e2e:infra": "node scripts/lakebase-e2e.mjs",
-    "e2e:jobs": "node scripts/jobs-e2e.mjs",
-    "verify:spec-014": "node scripts/verify-spec-links.mjs ../../../specs/014-jobs-pipelines && node scripts/verify-spec-ascii.mjs ../../../specs/014-jobs-pipelines"
+    "e2e:agent": "node scripts/acp-conformance-e2e.mjs",
+    "e2e:agent-work": "node scripts/agent-work-e2e.mjs",
+    "e2e:agent-operations": "node scripts/agent-operations-e2e.mjs",
+    "e2e:agent-assets": "node scripts/agent-assets-e2e.mjs",
+    "e2e:agent-questions": "node scripts/agent-questions-e2e.mjs",
+    "e2e:agent-editor": "node scripts/agent-editor-e2e.mjs",
+    "e2e:agent-scale": "node scripts/agent-scale-e2e.mjs",
+    "e2e:agent-live-edit": "node scripts/agent-live-edit-e2e.mjs",
+    "e2e:agent-storage": "node scripts/agent-storage-e2e.mjs",
+    "e2e:agent-live-table": "node scripts/agent-live-table-e2e.mjs",
+    "e2e:agent-parity": "node scripts/agent-parity-e2e.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",

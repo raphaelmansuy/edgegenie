@@ -1,0 +1,15 @@
+
+> e2e:agent-operations
+> node scripts/agent-operations-e2e.mjs
+
+{
+  pass: true,
+  captures: [
+    '01-run-review',
+    '02-running',
+    '03-settled-return',
+    '04-recovered',
+    '05-cancelled',
+    '06-mobile-cancelled'
+  ]
+}

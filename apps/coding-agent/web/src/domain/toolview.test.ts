@@ -49,3 +49,7 @@ describe("stripEvidence", () => {
     expect(performance.now() - t0).toBeLessThan(500);
   });
 });
+
+it("recognizes the plain Evidence colon heading without rendering a second proof table", () => {
+  expect(stripEvidence("Done\n\nEvidence:\n| requirement | tool | summary |\n| count | inv_1 | 42 |")).toBe("Done");
+});

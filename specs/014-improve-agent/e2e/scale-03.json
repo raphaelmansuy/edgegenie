@@ -1,0 +1,15 @@
+{
+  "pass": true,
+  "captures": [
+    "01-recovered-200-turns",
+    "02-earlier-results",
+    "03-mobile-recovered"
+  ],
+  "errors": [],
+  "turns": 200,
+  "rowsPerResult": 100,
+  "columns": 12,
+  "worstTaskMs": 151,
+  "elapsedMs": 1144,
+  "scope": "Actual local durable journal, HTTP/SSE replay, windowed transcript, wide results, expansion and mobile."
+}

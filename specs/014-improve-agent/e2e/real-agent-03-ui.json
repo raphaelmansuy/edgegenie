@@ -1,0 +1,11 @@
+{
+  "pass": true,
+  "errors": [],
+  "captures": [
+    "databricks-llama-4-maverick",
+    "databricks-gpt-oss-120b",
+    "capabilities-desktop",
+    "capabilities-dark-390"
+  ],
+  "scope": "Two real models, local app linked to the verified Databricks workspace; read-only capability proof."
+}

@@ -1,0 +1,29 @@
+{
+  "turn": {
+    "actions": [
+      {
+        "id": "run",
+        "tool": "dbx_run",
+        "arguments": {
+          "kind": "notebook",
+          "id": "$folder/revenue",
+          "params": {
+            "seconds": 30
+          }
+        },
+        "ask": true
+      }
+    ],
+    "answer": "The notebook run is waiting for your decision.",
+    "followupActions": [
+      {
+        "id": "read",
+        "tool": "dbx_operation",
+        "arguments": {
+          "id": "$operation"
+        }
+      }
+    ],
+    "followupAnswer": "Observed the successful native operation.\n\n| requirement | tool | summary |\n|---|---|---|\n| Verify the result | ${read.invocationId} | 300 |"
+  }
+}

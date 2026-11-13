@@ -9,15 +9,17 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+python3 scripts/check-run-identity.py
+
 echo "[prepare] installing the coding agent"
 mkdir -p .bin
-if [ ! -x .bin/.installed ]; then
-  npm install --no-save --no-audit --no-fund opencode-ai >/dev/null 2>&1 || {
-    echo "[prepare] WARNING: could not install opencode-ai; the app will start without an agent" >&2
-  }
-  touch .bin/.installed
-fi
-echo "[prepare] agent: $(command -v opencode || echo 'not installed')"
+# Install from the exact dependency and lockfile. A missing agent is a failed build.
+npm ci --ignore-scripts --no-audit --no-fund
+agent_version=$(node_modules/.bin/opencode --version)
+[ "$agent_version" = "1.18.19" ] || { echo "Unsupported agent: $agent_version" >&2; exit 1; }
+
+echo "[prepare] installing the qualified app-log client"
+python3 scripts/install-databricks-cli.py
 
 echo "[prepare] building the front end"
 # ALWAYS rebuild. This used to be `if [ ! -f web/dist/index.html ]`, which was correct only on the very

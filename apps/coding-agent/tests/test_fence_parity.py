@@ -70,7 +70,7 @@ PATH_CASES = [
     (f"{FOLDER}/a/../../etc/passwd", False),
     ("/Shared/x.py", False),
     ("/Users/someone_else/x.py", False),
-    (f"{FOLDER}/", True),
+    (f"{FOLDER}/", False),
 ]
 
 
@@ -86,6 +86,7 @@ def test_path_fence_agrees(tools, scope, path, allowed):
     assert tool_side is allowed, f"the tool server's _check_path_scope disagrees for {path}"
 
 
+# Commands unsupported by the agent parser remain refused even when an editor human could approve them.
 # -- SQL write targets -------------------------------------------------------------------------
 # The table now includes the statements that used to fall through to ALLOW. A parity test that
 # accepts "ALLOW or ASK" accepts every verdict except DENY, so it could not fail on the bug where a
@@ -114,11 +115,11 @@ SQL_CASES = [
     # asks. This is the one row where the two columns disagree on purpose.
     ("DROP TABLE main.agent_scratch.t", "ask", True),
     ("OPTIMIZE main.other.t", "ask", False),             # was ALLOW before the fix
-    ("OPTIMIZE main.agent_scratch.t", "allow", True),
+    ("OPTIMIZE main.agent_scratch.t", "allow", False),
     ("VACUUM main.other.t", "ask", False),               # was ALLOW before the fix
-    ("VACUUM main.agent_scratch.t", "allow", True),
+    ("VACUUM main.agent_scratch.t", "allow", False),
     ("COMMENT ON TABLE main.other.t IS 'x'", "ask", False),   # was READ, never reached the fence
-    ("COMMENT ON TABLE main.agent_scratch.t IS 'x'", "allow", True),
+    ("COMMENT ON TABLE main.agent_scratch.t IS 'x'", "allow", False),
     ("INSERT INTO t VALUES (1)", "ask", False),          # unplaceable, so unprovable
 ]
 
@@ -131,10 +132,11 @@ def test_sql_fence_agrees(tools, scope, sql, expected, tool_scope):
         f"the tool server says in-scope={tool_in_scope} for {sql!r}, the table says {tool_scope}")
     assert (app_verdict is server_scope.Verdict.ALLOW) is (expected == "allow"), (
         f"the app says {app_verdict.value} for {sql!r}, the table says {expected}")
-    # The invariant, independent of the table: the app may be stricter, never looser.
-    if app_verdict is server_scope.Verdict.ALLOW:
-        assert tool_in_scope, (
-            f"the app ALLOWED {sql!r} while the tool server refuses it out of scope")
+    # The editor's human approval vocabulary supports commands outside the agent's
+    # reviewed parser subset. Such commands must stay explicitly unsupported by the agent.
+    if app_verdict is server_scope.Verdict.ALLOW and not tool_scope:
+        assert "unsupported" in tools._check_sql_scope(sql)
+
 
 
 @pytest.mark.parametrize("sql", [

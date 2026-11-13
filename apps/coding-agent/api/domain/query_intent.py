@@ -44,3 +44,7 @@ def forbidden_query_action(prompt: str, action: str) -> bool:
             re.I,
         )
     )
+
+
+def attached_query(attachments):
+    return next((a.get("ref", "") for a in attachments if a.get("kind") == "query-draft"), "")

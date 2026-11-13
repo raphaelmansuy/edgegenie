@@ -1,0 +1,1 @@
+{"turn":{"updates":[{"sessionUpdate":"usage_update","used":20598,"size":1000000,"cost":{"amount":0.0215,"currency":"USD"}}],"answer":"The context meter reflects 20,598 tokens. No workspace operation was executed.","stopReason":"end_turn"}}

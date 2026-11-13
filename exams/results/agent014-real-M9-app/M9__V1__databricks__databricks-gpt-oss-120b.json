@@ -1,0 +1,61 @@
+{
+  "mission": "M9",
+  "title": "One-cell edit in a long notebook",
+  "variant": "V1",
+  "model": "databricks/databricks-gpt-oss-120b",
+  "agent": "opencode",
+  "via": "app",
+  "tag": "databricks__databricks-gpt-oss-120b",
+  "run_id": "x9643f",
+  "batch": "agent014-real-M9",
+  "session_id": "7891bd870b1d4cd8",
+  "turn_id": "03b82c5be3fa",
+  "turn_status": "completed",
+  "tool_calls": 3,
+  "steps": 1,
+  "tokens": 26031,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "db_dbx_edit",
+    "db_dbx_read"
+  ],
+  "tool_errors": 0,
+  "answer": "**Solution Summary**  \nReplaced the literal `BROKEN` with `FIXED` in zero\u2011based cell\u202f37 of the notebook **/Users/raphael.mansuy@gmail.com/exams/x9643f/long_notebook** while preserving every other cell and separator byte\u2011identical.\n\n**Evidence**  \n\n| requirement | tool | summary |\n|---|---|---|\n| Read current notebook revision | `dbx_read` (invocationId `inv_1c36e9ce20844f73a41b`) | Revision `26819b7bb5d6deb4dbcaac152743099e06b74c3e5ee5266223da86977c6bde3b` retrieved. |\n| Replace cell\u202f37 content | `dbx_edit` (invocationId `inv_f129ce00d529451c9bdc`) | Applied replace\u2011cell operation; new revision `b1189db0fbb3e84e3fb48d015170732da1586f5d012e19525938365dc79c94e3`. |\n| Verify final notebook revision | `dbx_read` (invocationId `inv_a9c747b6590e4ed0bab8`) | Notebook now at revision `b1189db0fbb3e84e3fb48d015170732da1586f5d012e19525938365dc79c94e3` with cell\u202f37 source containing `print(\"cell-37-FIXED\")`. |\n\nAll other cells and separators remain unchanged.",
+  "score": 12,
+  "total": 12,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "same notebook path and 60 cells",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "exactly cell 37 changed",
+      "passed": true,
+      "weight": 3,
+      "detail": "[37]"
+    },
+    {
+      "name": "target replacement only",
+      "passed": true,
+      "weight": 3,
+      "detail": ""
+    },
+    {
+      "name": "all other 59 raw segments byte-identical",
+      "passed": true,
+      "weight": 3,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 36
+}

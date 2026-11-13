@@ -36,7 +36,7 @@ FROM {s}.x2_orders o LEFT JOIN {s}.x2_customers c ON o.customer_id = c.customer_
 
 
 def job_name(ctx: Ctx) -> str:
-    return f"{ctx.run_id}_x2_revenue"
+    return ctx.extra.get("jobPrefix", f"{ctx.run_id}_") + "x2_revenue"
 
 
 def nb_path(ctx: Ctx) -> str:

@@ -1,0 +1,12 @@
+{
+  "pass": false,
+  "captures": [
+    "01-native-single-review",
+    "02-native-verified-once",
+    "03-native-rejected",
+    "04-bundle-review",
+    "05-bundle-inspected",
+    "06-asset-attached"
+  ],
+  "error": "Error: expect(received).toContain(expected) // indexOf\n\nMatcher error: received value must not be null nor undefined\n\nReceived has value: undefined"
+}

@@ -1,3 +1,5 @@
+import { useStopWork, useArchiveReview } from "./components/WorkDialogs";
+import { AgentWorkProvider, SessionIdContext, WorkComposerBar, PendingWork } from "./components/AgentWork";
 /** App shell: navigator, mission/document work area and assistant dock.
  * Spec 011 projects the active session into a mission overview when no document is selected.
  * The existing stream owns state; the dock and selected-turn Activity reuse the conversation.
@@ -66,7 +68,6 @@ import {
 } from "./domain/docs";
 import { focusFor, NO_FOCUS, sameFocus, withCell, withoutDoc, type Focus } from "./domain/focus";
 import { canDecide, canSend } from "./domain/compose";
-import { escapeTarget } from "./domain/keys";
 import { useScrollHandoff } from "./hooks/useScrollHandoff";
 import { attachmentsFor, autoAttachment } from "./domain/binding";
 import { searchRoot as computeSearchRoot } from "./domain/searchroot";
@@ -260,7 +261,9 @@ export function App() {
   const composerBox = useRef<HTMLTextAreaElement | null>(null);
   const dockComposer = useRef<HTMLTextAreaElement | null>(null);
 
-  const { session, conn, error, send, stop, restore, retry: retryConnection, setSession } = useSessionStream(active);
+  const { session, conn, error, send, stop: stopTurn, restore, retry: retryConnection, setSession } = useSessionStream(active);
+  const {stop,dialog:stopDialog}=useStopWork(active,session.agentWork,stopTurn);
+  const archiveReview=useArchiveReview();
   // The active stream is fresher than the visibility-aware history poll.
   const sessions = savedSessions.map((s) => s.id !== session.id || session.status === "provisioning" ? s : {
     ...s, status: session.status, requiresResume: session.requiresResume,
@@ -353,7 +356,6 @@ export function App() {
     openDoc(next);
     documentDirty(old, false);
   };
-  openDocRef.current = openDoc;
   const selectTab = (id: string) => {
     setView(id);
     if (id === CHAT) { setFocus(withoutDoc()); return; }
@@ -422,7 +424,7 @@ export function App() {
     if (settingsOpen) return { ...EMPTY_ROUTE, settings: settingsTab };
     if (view === SQL_LIBRARY) return { ...EMPTY_ROUTE, sql: "queries" };
     if (viewDoc) {
-      return { ...EMPTY_ROUTE, doc: { kind: viewDoc.kind, ref: viewDoc.ref },
+      return { ...EMPTY_ROUTE, session: active, doc: { kind: viewDoc.kind, ref: viewDoc.ref },
                cell: viewDoc.kind === "notebook" && focus.docId === viewDoc.id ? focus.cell : null };
     }
     if (view === CHAT && active) return { ...EMPTY_ROUTE, session: active };
@@ -433,6 +435,7 @@ export function App() {
     setSettingsOpen(false);
     if (r.sql) { setView(SQL_LIBRARY); setFocus(withoutDoc()); return; }
     if (r.doc) {
+      if (r.session) setActive(r.session);
       const d = makeDoc(r.doc.kind, r.doc.ref);
       openDoc(d);
       if (r.cell) { setFocus(withCell(focusFor(d), r.cell)); setAttachments([]); }
@@ -475,6 +478,16 @@ export function App() {
     // Spec 011: refresh open results, but keep the reader on their mission until they choose Open.
   }, [session.turns]);
   useEffect(() => { seen.current = new Set(); }, [active]);
+
+  // Ledger events are authoritative for facade writes; ACP summaries can be missing or truncated.
+  const seenAssetChanges = useRef(new Set<string>());
+  useEffect(() => {
+    const changed = (session.changedAssets ?? []).filter(a => !seenAssetChanges.current.has(`${session.id}:${a.key}`));
+    if (!changed.length) return;
+    changed.forEach(a => seenAssetChanges.current.add(`${session.id}:${a.key}`));
+    setTreeRev(n => n + 1);
+    setDocs(cur => cur.map(d => changed.some(a => a.kind === d.kind && makeDoc(d.kind, a.id).ref === d.ref) ? { ...d, rev: d.rev + 1 } : d));
+  }, [session.changedAssets, session.id]);
 
   // -- sending ----------------------------------------------------------------------------
   const starting = useRef(false);
@@ -553,6 +566,7 @@ export function App() {
 
   /** Delete is archive on the server. Leaving the open conversation returns to the start screen. */
   const deleteSession = async (s: { id: string }) => {
+    if(!await archiveReview.review(s.id))return;
     await api.archive(s.id);
     if (s.id === active) { setActive(null); setView(CHAT); setFocus(withoutDoc()); setAttachments([]); }
     await refresh();
@@ -782,26 +796,17 @@ export function App() {
        * A `switch` over the union is exhaustive: adding an `EscapeTarget` is now a compile error
        * rather than a silent fall-through. */
       stop: () => {
-        const target = escapeTarget({
-          dialog: settingsOpen || paletteOpen || keysOpen,
-          popover: modelOpen > 0,
-          drawer: panels.escape === "dock" || inspectorDrawer || panels.escape === "rail",
-          editing: false,
-          running: session.status === "streaming",
-          composerFocused: document.activeElement === dockComposer.current
-            || document.activeElement === composerBox.current,
-        });
-        switch (target) {
-          case "dialog": setSettingsOpen(false); setPaletteOpen(false); setKeysOpen(false); return true;
-          case "popover": setModelOpen(0); return true;
-          case "drawer":
-            if (panels.escape === "dock") { setDockDrawer(false); toggle("assistant", false); }
-            else if (inspectorDrawer) { toggle("inspector", false); }
-            else { setDrawer(null); toggle("rail", false); }
-            return true;
-          case "edit": return false;                  // the editor owns its own Escape
-          case "stop-agent": void stop(); return true;
-          case "nothing": return false;               // never steal the browser's meaning [KB-D]
+        if (settingsOpen) { setSettingsOpen(false); return true; }
+        if (paletteOpen || keysOpen) { setPaletteOpen(false); setKeysOpen(false); return true; }
+        /* Escape dismisses a TRANSIENT overlay, never a panel that has a column. The dock used to answer
+           to the raw flag, so with focus anywhere in a dock that was a column (the focus form at
+           860–1135 px, or any width after ⌘J) Escape hid the conversation — in the middle of a run. */
+        if (panels.escape === "dock") { setDockDrawer(false); toggle("assistant", false); return true; }
+        if (inspectorDrawer) { toggle("inspector", false); return true; }
+        if (panels.escape === "rail") {
+          setDrawer(null);
+          toggle("rail", false);
+          return true;
         }
       },
     };
@@ -1001,13 +1006,13 @@ export function App() {
   );
 
   return (
-    <WorkspaceLinks.Provider value={workspace}>
+    <AgentWorkProvider session={session} onAttach={asset => { addContext(asset); reveal(); }}><SessionIdContext.Provider value={session.id}><WorkspaceLinks.Provider value={workspace}>
       <OpenDoc.Provider value={openDoc}>
       <OpenSqlQuery.Provider value={text => void openSql(text)}>
         {/* `--dock-w` lives on `.app` because a drawer is rendered as a SIBLING of `.layout`, not inside
             it. It is the dock's own width, so the inspector drawer can open to its left instead of on
             top of it: the facts must never cover the conversation they describe (007 ZN-2). */}
-        <div className="app" style={{ "--dock-w": dockColumn ? `${layout.assistantWidth}px` : "0px" } as React.CSSProperties}>
+        {stopDialog}{archiveReview.dialog}<div className="app" style={{ "--dock-w": dockColumn ? `${layout.assistantWidth}px` : "0px" } as React.CSSProperties}>
           <header className="topbar">
             <SkipLinks />
             <h1 className="brand"><LogoBadge size={21} tone="accent" /> <Wordmark /></h1>
@@ -1029,7 +1034,7 @@ export function App() {
                   aria-label={`Conversation: ${peek.headline}`}>
                   <span className="session-chip-dot" aria-hidden />
                   {peek.state === "working" ? "working" : peek.state === "waiting" ? "needs you"
-                    : peek.state === "failed" ? "stopped" : peek.state === "idle" ? "starting" : "ready"}
+                    : peek.state === "failed" ? "stopped" : peek.state === "idle" && session.status === "provisioning" ? "starting" : "ready"}
                 </button>
               )}
               {/* The write mode lives HERE, not only in the inspector: the inspector is closed by default,
@@ -1121,10 +1126,9 @@ export function App() {
                   onSnapshot={text => void openSql(text)} onOpen={q => openDoc({ ...makeDoc("query", q.id), name: q.name })} />
               ) : viewDoc ? (
                 viewDoc.kind === "query" || viewDoc.kind === "query-draft"
-                  ? <QueryEditor key={`${workspaceScope}|${viewDoc.id}`} doc={viewDoc} scope={workspaceScope || user} theme={theme.effective}
+                  ? <QueryEditor agentChanges={session.sqlChanges} key={`${workspaceScope}|${viewDoc.id}`} doc={viewDoc} scope={workspaceScope || user} theme={theme.effective}
                     folder={folder || scratch} onDirty={documentDirty} onRename={renameSql} onSaved={savedSql}
                     onCapture={capture => { queryCapture.current = capture; }}
-                    agentChanges={session.sqlChanges}
                     onAttach={a => { addContext(a); reveal(); }} />
                   : viewDoc.kind === "table"
                   ? <TableViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
@@ -1187,7 +1191,7 @@ export function App() {
                   `conn !== "live"` here was specs/012 [F3] — the control disabled by the symptom. */}
               {pending && <InlineApproval approval={pending} disabled={!canDecide({ status: session.status, requiresResume: session.requiresResume })}
                 onDecide={(a, outcome) => decide(a.approvalId, outcome)} />}
-              <Composer compact
+              <PendingWork /><WorkComposerBar /><Composer compact
                 inputRef={composerBox}
                 blockedReason={sendDecision.canSend ? null : sendDecision.reason} busy={busy} onSend={message} onStop={stop}
                 attachments={attachments} auto={viewDoc ? asAttachment(viewDoc) : null}
@@ -1278,7 +1282,7 @@ export function App() {
         </div>
       </OpenSqlQuery.Provider>
       </OpenDoc.Provider>
-    </WorkspaceLinks.Provider>
+    </WorkspaceLinks.Provider></SessionIdContext.Provider></AgentWorkProvider>
   );
 }
 

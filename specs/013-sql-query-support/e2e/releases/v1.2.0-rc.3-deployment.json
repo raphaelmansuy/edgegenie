@@ -1,0 +1,90 @@
+{
+  "profile": "opengenie-dev",
+  "host": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "workspaceId": "7474647158015570",
+  "user": "raphael.mansuy@gmail.com",
+  "app": "coding-agent",
+  "url": "https://coding-agent-7474647158015570.aws.databricksapps.com",
+  "version": "1.2.0-rc.3",
+  "gitCommit": "7f104c78d859f42a8ef0ab764fc4adf1907e89fe",
+  "gitBranch": "codex/sql-query-support-dev-20261112",
+  "deploymentId": "01f1de694b321347a8d654ebb982a162",
+  "deployment": {
+    "deployment_id": "01f1de694b321347a8d654ebb982a162",
+    "git_source": {
+      "git_repository": {
+        "url": "https://github.com/raphaelmansuy/opengenie",
+        "provider": "gitHub"
+      },
+      "commit": "7f104c78d859f42a8ef0ab764fc4adf1907e89fe",
+      "source_code_path": "apps/coding-agent",
+      "resolved_commit": "7f104c78d859f42a8ef0ab764fc4adf1907e89fe"
+    },
+    "mode": "SNAPSHOT",
+    "status": {
+      "state": "SUCCEEDED",
+      "message": "App started successfully"
+    },
+    "create_time": "2026-11-12T07:18:43Z",
+    "creator": "raphael.mansuy@gmail.com",
+    "update_time": "2026-11-12T07:19:26Z",
+    "scan_status": "APP_DEPLOYMENT_SCAN_STATUS_FINDINGS",
+    "scan_omitted_findings_count": 0,
+    "scan_omitted_count_is_lower_bound": false
+  },
+  "appState": "RUNNING",
+  "status": "ai-query-integration-verified",
+  "sourceRevisionVerified": true,
+  "resourcesPreserved": true,
+  "effectiveUserApiScopes": [
+    "ai-gateway",
+    "apps",
+    "catalog.catalogs:read",
+    "catalog.schemas:read",
+    "catalog.tables:read",
+    "files",
+    "genie",
+    "iam.access-control:read",
+    "iam.current-user:read",
+    "model-serving",
+    "postgres",
+    "sql",
+    "workspace.workspace"
+  ],
+  "releaseTag": "v1.2.0-rc.3",
+  "releaseUrl": "https://github.com/raphaelmansuy/opengenie/releases/tag/v1.2.0-rc.3",
+  "releasePublished": true,
+  "releasePrerelease": true,
+  "releasePublishedAt": "2026-11-12T07:23:44Z",
+  "publicationAuthorized": true,
+  "publicationScope": "Necessary tested app fixes on approved public dev branch; credentials, documents, screenshots and unrelated changes excluded. Version cut explicitly requested.",
+  "changedAppFiles": 31,
+  "patchSha256": "5b78e09b6d821cd86e009c8fc89ce2b8df5b6b7a08ef3b7b42c74929e5b4b8a2",
+  "addedLineCredentialPatternFindings": [],
+  "finalBackendValidation": {
+    "passed": 1994,
+    "skipped": 4,
+    "warnings": 7,
+    "realPostgresEnabled": true
+  },
+  "finalFrontendValidation": {
+    "passed": 1233,
+    "files": 84,
+    "buildPassed": true
+  },
+  "finalLocalE2eChecks": 16,
+  "liveAiChecks": 7,
+  "liveAiMissions": 4,
+  "liveAiReport": "agent-report.json",
+  "deployedScreenshotsInspected": 9,
+  "visualReviewManifest": "agent-screenshots-manifest.json",
+  "totalScreenshotsInspected": 42,
+  "nativeSqlRunEnabled": true,
+  "sqlJournalDurable": true,
+  "nativeSavedQueryOriginRunEnabled": false,
+  "nativeQueryWritesEnabled": false,
+  "previousReleaseEvidence": "releases/v1.2.0-rc.2-deployment.json",
+  "coldStartAndServerRestartEvidence": "releases/v1.2.0-rc.2-deployed-report.json",
+  "deploymentWorktree": "/private/tmp/opengenie-dev-git-fuce8rn5",
+  "completedAt": "2026-11-12T07:24:29.773771+00:00"
+}

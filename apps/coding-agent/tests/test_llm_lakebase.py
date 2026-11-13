@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from api.adapters.llm.store import lakebase
-from api.services.model_registry import has_database
+from api.composition.model_registry import has_database
 from api.config import Settings
 
 
@@ -77,7 +77,7 @@ LIVE = os.environ.get("LAKEBASE_TEST_ENDPOINT", "")
 @pytest.mark.skipif(not LIVE, reason="set LAKEBASE_TEST_ENDPOINT to run against a real Lakebase")
 async def test_the_postgres_store_keeps_administrators_choices():
     from api.domain.llm import ProviderKind, custom_model
-    from api.services.model_registry import connect_database
+    from api.composition.model_registry import connect_database
 
     store = await connect_database(Settings(llm_pg_endpoint=LIVE,
                                             llm_pg_user=os.environ.get("LAKEBASE_TEST_USER", "")))

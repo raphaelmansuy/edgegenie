@@ -39,7 +39,6 @@ class StdioChannel:
         self._handlers: dict[str, Handler] = {}
         self._notifications: asyncio.Queue[dict] = asyncio.Queue(maxsize=10_000)
         self._reader_task = asyncio.create_task(self._read_loop())
-        self._notify_task = asyncio.create_task(self._dispatch_notifications())
         self.closed = False
         self._discard_history = False
 
@@ -71,7 +70,9 @@ class StdioChannel:
         self._discard_history = enabled
 
     async def enqueue_notification(self, message: dict) -> None:
-        await self._notifications.put(message)
+        if self._notifications.full():
+            self._notifications.get_nowait()
+        self._notifications.put_nowait(message)
 
     def next_notification_nowait(self) -> dict:
         """Non-blocking read of an already-delivered notification. Raises LookupError when empty."""
@@ -87,7 +88,7 @@ class StdioChannel:
 
     async def close(self) -> None:
         self.closed = True
-        for t in (self._reader_task, self._notify_task):
+        for t in (self._reader_task,):
             t.cancel()
         try:
             self._w.close()
@@ -108,10 +109,30 @@ class StdioChannel:
         except (ConnectionResetError, BrokenPipeError):
             self.closed = True
 
+    async def _read_frame(self) -> bytes:
+        """Discard only the offending frame, even when it arrives in multiple chunks."""
+        oversized = False
+        while True:
+            try:
+                line = await self._r.readuntil(b"\n")
+            except asyncio.LimitOverrunError as exc:
+                await self._r.readexactly(exc.consumed)
+                oversized = True
+                continue
+            except asyncio.IncompleteReadError:
+                return b""
+            if oversized or len(line) > MAX_LINE:
+                await self.enqueue_notification(
+                    {"method": "$/notice", "params": {"message": "Skipped an over-limit ACP frame"}}
+                )
+                oversized = False
+                continue
+            return line
+
     async def _read_loop(self) -> None:
         try:
             while True:
-                line = await self._r.readline()
+                line = await self._read_frame()
                 if not line:
                     break
                 if len(line) > MAX_LINE:
@@ -123,7 +144,8 @@ class StdioChannel:
                     msg = json.loads(text)
                 except json.JSONDecodeError:
                     continue  # agent noise on stdout must never kill the session
-                await self._route(msg)
+                if isinstance(msg, dict):
+                    await self._route(msg)
         except asyncio.CancelledError:
             pass
         finally:
@@ -131,7 +153,7 @@ class StdioChannel:
             for fut in self._pending.values():
                 if not fut.done():
                     fut.set_exception(TransportError("agent process ended"))
-            await self._notifications.put({"method": "$/closed", "params": {}})
+            await self.enqueue_notification({"method": "$/closed", "params": {}})
 
     async def _route(self, msg: dict) -> None:
         if "id" in msg and ("result" in msg or "error" in msg):
@@ -145,7 +167,7 @@ class StdioChannel:
         if "method" in msg:  # notification
             if self._discard_history and msg["method"] == "session/update":
                 return
-            await self._notifications.put(msg)
+            await self.enqueue_notification(msg)
 
     async def _serve_request(self, msg: dict) -> None:
         handler = self._handlers.get(msg["method"])
@@ -160,16 +182,19 @@ class StdioChannel:
             return
         try:
             result = await handler(msg.get("params", {}))
+            if self.closed:
+                return
             self._write({"jsonrpc": "2.0", "id": msg["id"], "result": result})
         except Exception as exc:  # noqa: BLE001 - never leave the agent waiting
+            if self.closed:
+                return
             self._write(
-                {"jsonrpc": "2.0", "id": msg["id"], "error": {"code": -32603, "message": str(exc)[:200]}}
+                {
+                    "jsonrpc": "2.0",
+                    "id": msg["id"],
+                    "error": {
+                        "code": -32602 if isinstance(exc, ValueError) else -32603,
+                        "message": str(exc)[:200],
+                    },
+                }
             )
-
-    async def _dispatch_notifications(self) -> None:
-        """Keep reader order: notifications are consumed by events(); this task exists so
-        the queue is never blocked by an idle consumer. Consumers call next_notification."""
-        try:
-            await asyncio.Event().wait()  # parked; next_notification pulls directly
-        except asyncio.CancelledError:
-            pass

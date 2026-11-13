@@ -1,10 +1,11 @@
+import { SessionFeatures } from "./AgentWork";
 /** Composer: message box, context chips, and the "@" picker for notebooks, files, tables.
  *
  * Context chips are references. Typing "@" searches the workspace by name; the files and catalog
  * trees add chips too. A chip marked "open" is the document on screen: it rides along with the
  * message automatically, the way Genie Code knows which notebook you are looking at.
  */
-import { createElement, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createElement, useId, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, type CatalogItem, type WsHit } from "../api/client";
 import { applyCommand, commandAt, matchCommands, pushHistory, stepHistory, type Command } from "../domain/commands";
 import type { Attachment } from "../domain/events";
@@ -60,6 +61,9 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
   /** The model's own name, for the refusal sentence. */
   modelName?: string;
 }) {
+  const features=useContext(SessionFeatures);
+  const [skillCommands,setSkillCommands]=useState<Command[]>([]);
+  const skillsLoaded=useRef("");
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   /** `blocked` is DERIVED, never passed as a boolean: one reason in, one presentation out. */
@@ -109,7 +113,16 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
   const open = query !== null && dismissed !== `${caret}:${text}`;
   const cmd = commandAt(text, caret);
   const cmdOpen = cmd.open && dismissed !== `c:${caret}:${text}`;
-  const commands: Command[] = cmdOpen ? matchCommands(cmd.query) : [];
+  useEffect(()=>{
+    if(!cmdOpen || !sessionId || !features.agentWork || skillsLoaded.current===sessionId)return;
+    const controller=new AbortController();
+    fetch(`/api/sessions/${sessionId}/skills`,{signal:controller.signal}).then(r=>{if(!r.ok)throw new Error();return r.json();}).then(result=>{
+      skillsLoaded.current=sessionId;
+      setSkillCommands((result.skills ?? []).map((s:{name:string;description:string})=>({name:"/"+s.name,hint:s.description,insert:`Load dbx_skill(name=${JSON.stringify(s.name)}) and use this skill for the task: `,source:"Skill"})));
+    }).catch(()=>{});
+    return()=>controller.abort();
+  },[cmdOpen,sessionId,features.agentWork]);
+  const commands: Command[] = cmdOpen ? matchCommands(cmd.query, [...skillCommands,...(features.commands ?? []).map(c => ({ name: "/"+c.name.replace(/^\//,""), hint:c.description || "Agent command", insert:"/"+c.name.replace(/^\//,""), source:"Agent" as const }))]) : [];
 
   useEffect(() => {
     if (query === null || query.length < 2) { setFound([]); return; }
@@ -364,7 +377,7 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
                   onMouseDown={(e) => { e.preventDefault(); pickCommand(c); }}>
                   <span aria-hidden>/</span>
                   <span className="mention-name">{c.name.slice(1)}</span>
-                  <span className="mention-hint is-cmd">{c.hint}</span>
+                  <span className="mention-hint is-cmd">{c.hint} <small>{c.source}</small></span>
                 </button>
               ))}
             </div>

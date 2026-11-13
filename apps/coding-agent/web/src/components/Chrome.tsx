@@ -8,9 +8,9 @@ import { FolderPicker } from "./FolderPicker";
 import { LogoMark } from "./Logo";
 import { ModelFacts } from "./ModelFacts";
 import { BudgetMeter } from "./Budget";
-import { DOCS_URL, versionLabel, versionTitle } from "../domain/version";
-import { ArrowUpRight, Bug, ChevronRight, Clock, Database, FileIcon, Layers, ListIcon, Monitor, Notebook, Play, Search, Sparkle, Table } from "./Icons";
-import type { RecentDoc } from "../domain/recent";
+import { DOCS_URL, versionTitle, versionLabel } from "../domain/version";
+import { SessionStorage } from "./SessionStorage";
+import { ArrowUpRight, Monitor, Play, Layers, Bug, ChevronRight, Clock, Database, FileIcon, ListIcon, Notebook, Search, Sparkle, Table } from "./Icons";
 
 export function ApprovalSheet({ approval, sessionId, onDecided }: {
   approval: Approval; sessionId: string; onDecided: () => void;
@@ -22,7 +22,7 @@ export function ApprovalSheet({ approval, sessionId, onDecided }: {
   if (approval.outcome) return null;
 
   const decide = async (outcome: "allow_once" | "allow_session" | "deny") => {
-    const pick = approval.options.find((o) => o.kind === (outcome === "deny" ? "reject_once" : "allow_once"))
+    const pick = approval.options.find((o) => o.kind === (outcome === "deny" ? "reject_once" : outcome === "allow_session" ? "allow_always" : "allow_once"))
       ?? approval.options[0];
     await api.decide(sessionId, approval.approvalId, outcome, pick?.optionId);
     onDecided();
@@ -33,21 +33,22 @@ export function ApprovalSheet({ approval, sessionId, onDecided }: {
       <div className="sheet" ref={ref} tabIndex={-1}>
         <header>
           <h2 id="approval-title">⏸ The agent is waiting for your decision</h2>
-          <p>It wants to {approval.action} something outside your working scope.</p>
+          <p>The agent requested {approval.action}.</p>
         </header>
         <div className="body">
           <div className="target">{approval.target}</div>
+          {approval.input && <pre className="approval-input">{JSON.stringify(approval.input, null, 2)}</pre>}
           <dl>
             <dt>Why</dt><dd>{approval.reason || "the agent asked for permission"}</dd>
             {approval.blastRadius && (<><dt>Blast radius</dt><dd>{approval.blastRadius}</dd></>)}
           </dl>
           <p style={{ color: "var(--ink-3)", fontSize: 12.5, margin: 0 }}>
-            If you deny, the agent gets a clear refusal and will try another way.
+            If you deny, this turn ends with your decision.
           </p>
         </div>
         <div className="actions">
-          <button className="btn" onClick={() => void decide("allow_once")}>Allow once</button>
-          <button className="btn" onClick={() => void decide("allow_session")}>Allow this session</button>
+          <button className="btn" disabled={approval.argumentsKnown === false} onClick={() => void decide("allow_once")}>Allow once</button>
+          <button className="btn" disabled={approval.argumentsKnown === false} onClick={() => void decide("allow_session")}>Allow this session</button>
           <button className="btn primary" onClick={() => void decide("deny")}>Deny</button>
         </div>
         <p className="note">ⓘ Recorded in the audit log with your name, the session and the object.</p>
@@ -158,6 +159,7 @@ export function Inspector({ session, edge, onHide, className = "", activeId, onA
                 <span className={`pill ${c.status === "error" ? "blocked" : "ready"}`}>{c.status}</span>
               </div>
             ))}
+            {activeId && session.agentWork && <SessionStorage key={activeId} sid={activeId} />}
           </div>
         )}
       </div>
@@ -206,12 +208,10 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
   onStart: (prompt: string) => Promise<void>;
   /** Who is signed in, so the screen can say whose workspace this is. */
   user?: string;
-  /** Notebooks, tables and the objects the agent built, so the first screen is a way IN rather than only
-   *  a way to start: the most common task is "change something I already have". The kind is `RecentDoc`'s
-   *  own union, imported rather than restated — a second copy of it silently stopped three kinds from
-   *  reaching this screen when spec 014 added them. */
-  recent?: RecentDoc[];
-  onOpenRecent?: (path: string, kind: RecentDoc["kind"]) => void;
+  /** Notebooks and tables that already exist, so the first screen is a way IN rather than only a way
+   *  to start: the most common task is "change something I already have". */
+  recent?: { name: string; path: string; kind: import("../domain/docs").DocKind }[];
+  onOpenRecent?: (path: string, kind: import("../domain/docs").DocKind) => void;
   onOpenSearch?: () => void;
   onNewSql?: () => void;
   onOpenQueries?: () => void;

@@ -187,7 +187,7 @@ def test_scope_prefixes_derive_from_the_session():
     "sql,expected",
     [
         ("select * from t", Action.READ),
-        ("CREATE OR REPLACE TABLE workspace.agent_scratch.t AS SELECT 1", Action.WRITE),
+        ("CREATE OR REPLACE TABLE workspace.agent_scratch.t AS SELECT 1", Action.DESTRUCTIVE),
         ("drop table workspace.agent_scratch.t", Action.DESTRUCTIVE),
         ("DELETE FROM t", Action.DESTRUCTIVE),
         ("truncate table t", Action.DESTRUCTIVE),
@@ -198,14 +198,15 @@ def test_classifies_sql(sql, expected):
 
 
 def test_write_inside_the_schema_is_allowed():
-    d = check_sql(_scope(), "create or replace table workspace.agent_scratch.t as select 1")
+    d = check_sql(_scope(), "create table workspace.agent_scratch.t as select 1")
     assert d.verdict is Verdict.ALLOW
 
 
-def test_write_outside_the_schema_must_ask():
-    d = check_sql(_scope(), "create table workspace.default.t as select 1")
-    assert d.verdict is Verdict.ASK
-    assert "outside the writable schema" in d.reason
+def test_human_sql_outside_the_schema_requires_a_decision_and_agent_sql_is_denied():
+    from api.domain.policy.sql import check_scope
+    sql = "create table workspace.default.t as select 1"
+    assert check_sql(_scope(), sql).verdict is Verdict.ASK
+    assert check_scope(sql, [_scope().schema])
 
 
 def test_destructive_sql_always_asks_even_inside_the_schema():

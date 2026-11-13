@@ -1,0 +1,62 @@
+{
+  "mission": "M9",
+  "title": "One-cell edit in a long notebook",
+  "variant": "V1",
+  "model": "databricks/databricks-gpt-oss-120b",
+  "agent": "opencode",
+  "via": "app",
+  "tag": "databricks__databricks-gpt-oss-120b",
+  "run_id": "xed167",
+  "batch": "agent014-focused-M9",
+  "session_id": "80b1185ef84d41a7",
+  "turn_id": "12d3951e3553",
+  "turn_status": "completed",
+  "tool_calls": 4,
+  "steps": 1,
+  "tokens": 22213,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "db_dbx_edit",
+    "db_dbx_read",
+    "dbx_read"
+  ],
+  "tool_errors": 1,
+  "answer": "**Result**  \nThe literal `BROKEN` in zero\u2011based cell\u202f37 of the notebook **/Users/raphael.mansuy@gmail.com/exams/xed167/long_notebook** has been replaced with `FIXED`. All other cells and byte\u2011level separators remain unchanged.\n\n**Evidence**\n\n| tool | invocationId | summary |\n|------|--------------|---------|\n| `db_dbx_read` (cell\u202f37) | `inv_8719bfc8fee041749b93` | Returned SHA\u202f`1c804984d6ad17bc93f923e8b273ab35e44c724f8e55da3d47595de59da97e92` and source containing `print(\"cell-37\u2011BROKEN\")`. |\n| `db_dbx_edit` (replace_cell) | `inv_4d1d99d73b634ecabf28` | Applied replace\u2011cell operation; new revision\u202f`c192800d41fbb21a7e991ed561f7d74ade65ead19f2408e4cb37f5242a240d95`. |\n| `db_dbx_read` (full notebook) | `inv_34cc03bd33764340ad42` | Confirmed notebook revision matches the new revision and cell\u202f37 now contains `print(\"cell-37\u2011FIXED\")`. |\n\nThe change complies with the stated constraint: only the target literal was altered, preserving all other content byte\u2011for\u2011byte.",
+  "score": 12,
+  "total": 12,
+  "pct": 100.0,
+  "checks": [
+    {
+      "name": "same notebook path and 60 cells",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "exactly cell 37 changed",
+      "passed": true,
+      "weight": 3,
+      "detail": "[37]"
+    },
+    {
+      "name": "target replacement only",
+      "passed": true,
+      "weight": 3,
+      "detail": ""
+    },
+    {
+      "name": "all other 59 raw segments byte-identical",
+      "passed": true,
+      "weight": 3,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 30
+}

@@ -1,0 +1,139 @@
+{
+  "success": true,
+  "version": "1.2.0-rc.2",
+  "deploymentId": "01f1de5e4a341e8293928592df9ddbf7",
+  "gitCommit": "fe4e1109a18495a1bcb0e58908655c1dea3ed908",
+  "origin": "https://coding-agent-7474647158015570.aws.databricksapps.com",
+  "checks": [
+    "Health, readiness and release version agree",
+    "Verified dev workspace and principal",
+    "Native execution and durable recovery are enabled; asset-write gates preserved",
+    "Native Query metadata remains readable",
+    "Selected serverless warehouse is accessible (initial state STOPPED)",
+    "Versioned native Queries library renders",
+    "Private draft Run is enabled independently of warehouse idle state",
+    "Mobile SQL editor fits without horizontal overflow",
+    "Enabled editor supports the existing dark and light themes",
+    "Native SELECT 1 succeeds from STOPPED, using the returned statement handle",
+    "Native named binding and NULL render through the full stack",
+    "Server refuses multiple statements before native submission",
+    "Cancellation request reconciles to native terminal canceled",
+    "Reload recovers native results without another submission; mobile results fit",
+    "Durable owner-scoped native run history is available",
+    "No browser runtime or authenticated transport errors",
+    "Actual app redeployment recovers the same draft, statement handle and result without submission"
+  ],
+  "runs": [
+    {
+      "id": "016c50ec-c241-4998-b92d-95582a69da34",
+      "statementId": "01f1de5d-ca85-1ad0-8ded-38a856c9c0ce",
+      "sourceRef": "da120b73-bbc7-4135-8714-4352e11ceb11",
+      "warehouseId": "50b601f08d1a858d"
+    },
+    {
+      "id": "d777a624-ae3a-45ee-a01f-ee2f0012f8f3",
+      "statementId": "01f1de5d-ce2a-1e81-91be-fac064ab5037",
+      "sourceRef": "da120b73-bbc7-4135-8714-4352e11ceb11",
+      "warehouseId": "50b601f08d1a858d"
+    },
+    {
+      "id": "290730f9-c0ff-4d18-a629-46a87db2bfda",
+      "statementId": "01f1de5d-d060-15b8-bca4-f4c7f2e4767f",
+      "sourceRef": "da120b73-bbc7-4135-8714-4352e11ceb11",
+      "warehouseId": "50b601f08d1a858d"
+    },
+    {
+      "id": "26a301a9-cc8f-46fa-907c-25092b7411ac",
+      "statementId": "01f1de5d-d19a-11a6-9f60-37088cf1c833",
+      "sourceRef": "da120b73-bbc7-4135-8714-4352e11ceb11",
+      "warehouseId": "50b601f08d1a858d"
+    }
+  ],
+  "recovery": {
+    "id": "26a301a9-cc8f-46fa-907c-25092b7411ac",
+    "statementId": "01f1de5d-d19a-11a6-9f60-37088cf1c833",
+    "sourceRef": "da120b73-bbc7-4135-8714-4352e11ceb11",
+    "warehouseId": "50b601f08d1a858d",
+    "route": "https://coding-agent-7474647158015570.aws.databricksapps.com/#/query-draft/da120b73-bbc7-4135-8714-4352e11ceb11"
+  },
+  "screenshots": [
+    {
+      "file": "screenshots/23-sql-enabled-library.png",
+      "sha256": "511faeca4bca3fa846221bb3118ee6b69b83b965b35c8a5b20de3301515e483c"
+    },
+    {
+      "file": "screenshots/24-sql-enabled-draft.png",
+      "sha256": "d7d26f791bb49e03c40f4fccb35bebaa78d3760dec4617cca78bfd6e2f3aac14"
+    },
+    {
+      "file": "screenshots/25-sql-enabled-mobile.png",
+      "sha256": "64d8fe4cad62915fe16a395c306bc6dd27647c94bd031c4903217fdd74929d54"
+    },
+    {
+      "file": "screenshots/26-sql-enabled-dark.png",
+      "sha256": "4b80244ce137ebc466478ad2ad5fbc21c7af6b0d16317aa6ad0f70bb838d32cd"
+    },
+    {
+      "file": "screenshots/27-native-on-demand-submitted.png",
+      "sha256": "1bc60ce783420aeec6e290ac7b27a4cf4b661207446dc2e50616fb9fc63eff4e"
+    },
+    {
+      "file": "screenshots/28-native-query-result.png",
+      "sha256": "1495b8dbe9972e8bb01de8489e3081e0e508310045966d87b99aaa22cd0cd8aa"
+    },
+    {
+      "file": "screenshots/29-native-parameters-null.png",
+      "sha256": "b184170c564eccb0cf3c686072e8c7ba3bfeea7041988abf8a4c1f68cbc39769"
+    },
+    {
+      "file": "screenshots/30-native-cancel-terminal.png",
+      "sha256": "a600e602a7444da2fa33a334d2aaba8e91370119f7d584263da0cbaac6215d3d"
+    },
+    {
+      "file": "screenshots/31-native-mobile-results.png",
+      "sha256": "45bccba49853c35d9d218d8d750d2c35d44747d36e21ba36fa6567fad36d3b3d"
+    },
+    {
+      "file": "screenshots/32-native-own-history.png",
+      "sha256": "0feb6b0deab2d367712de1ece133d4df8b67c0d97adfd9bbeb58ec22609289f4"
+    },
+    {
+      "file": "screenshots/33-native-server-restart-recovery.png",
+      "sha256": "5cbe247544b2c604cdaa245fb026bdb4f1fb77269459887fe77a690ff864addd"
+    }
+  ],
+  "browserErrors": [],
+  "transportErrors": [],
+  "harnessIterations": [
+    {
+      "error": "TimeoutError: locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Results', exact: true })\u001b[22m\n",
+      "correction": "Results gains a checkmark after success; scope the mobile button to SQL workspace panels and match its Results prefix.",
+      "resolved": true,
+      "remainingChecksRepeated": true
+    }
+  ],
+  "capabilities": {
+    "demo": false,
+    "read": true,
+    "create": false,
+    "run": true,
+    "update": false,
+    "durable": true,
+    "reason": "",
+    "createReason": "Saving a new Query is unavailable in this workspace."
+  },
+  "initialWarehouseState": "STOPPED",
+  "coldStartVerified": true,
+  "completionResubmissions": 0,
+  "operations": "Four native table-free read-only statements, one policy refusal, one cancellation and reload recovery; no data-table reads, native Query writes or manual warehouse start/stop.",
+  "restartRecovery": {
+    "fromDeploymentId": "01f1de5d6611146288d303e8d55ba1e8",
+    "toDeploymentId": "01f1de5e4a341e8293928592df9ddbf7",
+    "runId": "26a301a9-cc8f-46fa-907c-25092b7411ac",
+    "statementId": "01f1de5d-d19a-11a6-9f60-37088cf1c833",
+    "draftId": "da120b73-bbc7-4135-8714-4352e11ceb11",
+    "resubmissions": 0,
+    "verified": true
+  },
+  "executionDeploymentId": "01f1de5d6611146288d303e8d55ba1e8"
+}

@@ -1,8 +1,7 @@
 """The write fence: what a session may touch. Pure and total — every target is classified.
 
-This is a policy function, not the boundary itself. The boundary is that the tool server
-only receives requests that passed here, and that approval is required for anything the
-rules cannot prove safe. See specs/001 04 and 09.
+Policy adapters for legacy editor callers. Agent authorization uses the same pure policy package;
+editor saves outside the working folder retain their explicit human approval flow.
 """
 
 from __future__ import annotations
@@ -81,28 +80,12 @@ class Decision:
         return self.verdict is Verdict.ALLOW
 
 
-def _norm(path: str) -> str:
-    p = path.replace("\\", "/").strip("`\"'")
-    while "//" in p:
-        p = p.replace("//", "/")
-    return p
-
-
-def _inside(path: str, folder: str) -> bool:
-    p = _norm(path)
-    if ".." in p.split("/"):
-        return False
-    f = _norm(folder)
-    # An empty folder means "there is no writable folder", NOT "every folder is writable".
-    # `"anything".startswith("")` is True, so without this guard a session-less save would be
-    # classified as inside the fence and silently allowed — a real widening of the write boundary.
-    if not f or f == "/":
-        return False
-    return p.startswith(f) and len(p) > len(f) - 1
+# Compatibility exports for editor callers; implementation lives in one policy module.
+from .policy.paths import inside as _inside, normalize as _norm
 
 
 def classify_sql(sql: str) -> Action:
-    if DESTRUCTIVE.search(sql):
+    if DESTRUCTIVE.search(sql) or re.search(r"\bcreate\s+or\s+replace\b", sql, re.I):
         return Action.DESTRUCTIVE
     if WRITE_SQL.search(sql):
         return Action.WRITE

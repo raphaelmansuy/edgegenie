@@ -1,0 +1,71 @@
+{
+  "version": "1.2.0-rc.4",
+  "sourceRevision": "717c6216f51b951b21aa9cff34dd434cfd4b245e",
+  "deploymentId": "01f1de6df52e1627b40c7ea0d70516c8",
+  "reviewedAt": "2026-11-12T07:56:59.424436+00:00",
+  "images": [
+    {
+      "file": "screenshots/43-cte-native-submitted.png",
+      "sha256": "84dcbfcde598bb109a0c2c2f83603b4cd31a70604c164f519a2cbe749e4a330e",
+      "width": 1920,
+      "height": 1100,
+      "visuallyInspected": true,
+      "observation": "Exact original SQL is visible in a new private test draft. The stopped warehouse is selectable, native waiting state and cancel actions are clear; no generic policy refusal remains.",
+      "captureDeploymentId": "01f1de6df52e1627b40c7ea0d70516c8"
+    },
+    {
+      "file": "screenshots/44-cte-native-daily-results.png",
+      "sha256": "58fa98e619e01ef6a9c84427101f33ed70ff5f1e8525410a081952c07082bd44",
+      "width": 1920,
+      "height": 1100,
+      "visuallyInspected": true,
+      "observation": "Native success shows 60 rows with pickup date, trip count and three averages. All five result columns align in the desktop viewport; source and result remain visible together.",
+      "captureDeploymentId": "01f1de6df52e1627b40c7ea0d70516c8"
+    },
+    {
+      "file": "screenshots/45-cte-native-dark.png",
+      "sha256": "372bd756029dfdfcad8c89cc066bbae970db6c7f1921bea9b1405484c53b4755",
+      "width": 1920,
+      "height": 1100,
+      "visuallyInspected": true,
+      "observation": "Dark editor and result table preserve readable date/time SQL, all five result headers and the native success/count labels using existing theme tokens.",
+      "captureDeploymentId": "01f1de6df52e1627b40c7ea0d70516c8"
+    },
+    {
+      "file": "screenshots/46-cte-actionable-function-refusal.png",
+      "sha256": "7f0ae91605739d132e897f68bf6e34b5910d702bae6049b1d6c62b26611d8c1e",
+      "width": 1920,
+      "height": 1100,
+      "visuallyInspected": true,
+      "observation": "Unknown function receives a specific policy error; earlier successful results remain explicitly labeled as belonging to the previous source snapshot. No new run was created.",
+      "captureDeploymentId": "01f1de6df52e1627b40c7ea0d70516c8"
+    },
+    {
+      "file": "screenshots/47-cte-recovered-source-and-result.png",
+      "sha256": "aeec8716cde221acffb42183b1c52ab3f76268b6f7b117e6161d3561e275eaa2",
+      "width": 1920,
+      "height": 1100,
+      "visuallyInspected": true,
+      "observation": "Restored exact CTE source and the same 60-row native result survive reload; no duplicate execution was submitted.",
+      "captureDeploymentId": "01f1de6df52e1627b40c7ea0d70516c8"
+    },
+    {
+      "file": "screenshots/48-agent-cte-native-results.png",
+      "sha256": "9d39df023f397b6f7f7d92066e0b78ce5d9c26bebf52b2afb51237329c86603c",
+      "width": 1920,
+      "height": 1100,
+      "visuallyInspected": true,
+      "observation": "Actual model-written CTE includes AND and unix_timestamp. The editor displays the executed revision, 60 native daily rows and seven verified evidence rows in the assistant.",
+      "captureDeploymentId": "01f1de6df52e1627b40c7ea0d70516c8"
+    },
+    {
+      "file": "screenshots/49-cte-mobile-results.png",
+      "sha256": "72083f0c84ebe4eeb2bf8365caec01970e69de32af72e8546f2fb61dcbec7502",
+      "width": 375,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Phone Results view shows native success, 60 rows and leading result columns without page-wide overflow. Horizontal panning to the final duration column was separately verified without resubmission.",
+      "captureDeploymentId": "01f1de6df52e1627b40c7ea0d70516c8"
+    }
+  ]
+}

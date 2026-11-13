@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator
 
 from ...domain.events import Event
 from ...ports import AgentAuthError, AgentCrashed, AgentError, Capabilities, RuntimeHandle, SessionSpec
+from ..child_env import child_env
 from .blocks import prompt_blocks
 from .jsonrpc import StdioChannel, TransportError
 from .mapper import from_permission, from_update, model_options, turn_end_from_prompt_response
@@ -36,14 +37,24 @@ class AcpAgentRuntime:
         self._turn_ends: dict[str, asyncio.Queue] = {}
         self._turn_ids: dict[str, str] = {}
         self._permission_waiters: dict[str, asyncio.Future] = {}
-        self._approval_seq = 0
+        self._tool_frames: dict[str, dict[str, dict]] = {}
+        self._call_turns: dict[str, dict[str, str]] = {}
         self._prompt_tasks: dict[str, asyncio.Task] = {}
+        self._questions = {}
+        self._agent_sessions = {}
         self._pending_permissions: dict[str, tuple[str, dict]] = {}
 
     # -- lifecycle ------------------------------------------------------------
     async def start(self, spec: SessionSpec) -> RuntimeHandle:
-        env = {**os.environ, **self._extra_env, **spec.env}
+        env = child_env({**self._extra_env, **spec.env}, home=os.path.join(spec.cwd, ".home"))
         env.setdefault("NODE_NO_WARNINGS", "1")
+        env["OPENCODE_DISABLE_AUTOUPDATE"] = "1"
+        from pathlib import Path
+        # Agent discovery walks ancestors. None may silently contribute instructions or skills.
+        for ancestor in Path(spec.cwd).resolve().parents:
+            for candidate in ("AGENTS.md", "CLAUDE.md", ".opencode", ".assistant/skills", ".agents/skills"):
+                if (ancestor / candidate).exists():
+                    raise AgentCrashed(f"Agent folder has inherited instructions or skills at {ancestor / candidate}")
         # A missing working directory makes subprocess raise FileNotFoundError for the *binary*,
         # which is a misleading error. Create it, and say so clearly if we cannot.
         try:
@@ -77,6 +88,7 @@ class AcpAgentRuntime:
         self._turn_ends[spec.session_id] = asyncio.Queue()
 
         ch.on_request("session/request_permission", lambda p: self._on_permission(spec.session_id, p))
+        ch.on_request("elicitation/create", lambda p: self._on_question(spec.session_id,p))
 
         try:
             init = await ch.request(
@@ -86,6 +98,8 @@ class AcpAgentRuntime:
                     "clientCapabilities": {
                         "fs": {"readTextFile": False, "writeTextFile": False},
                         "terminal": False,
+                        "elicitation": {"form": {}},
+                        "session": {"notices": {}, "compaction": {}},
                     },
                     "clientInfo": CLIENT_INFO,
                 },
@@ -110,7 +124,14 @@ class AcpAgentRuntime:
         if caps.protocol_version != 1:
             await self.close_silently(spec.session_id)
             raise AgentCrashed("unsupported ACP version: this runtime requires ACP v1")
-        if spec.agent_session_id and not caps.load_session:
+        if caps.agent.lower() == "opencode" and caps.version not in {"1.18.19"}:
+            await self.close_silently(spec.session_id)
+            raise AgentCrashed(f"Unsupported opencode version {caps.version}; supported: 1.18.19")
+        if spec.mcp_url and not (caps.raw.get("mcpCapabilities") or {}).get("http"):
+            await self.close_silently(spec.session_id)
+            raise AgentCrashed("The agent cannot reach tools: mcpCapabilities.http was not advertised")
+        can_resume = "resume" in (caps.raw.get("sessionCapabilities") or {})
+        if spec.agent_session_id and not (caps.load_session or can_resume):
             await self.close_silently(spec.session_id)
             raise AgentCrashed("this agent cannot restore sessions; loadSession was not advertised")
         self._capabilities[spec.session_id] = caps
@@ -118,7 +139,7 @@ class AcpAgentRuntime:
         ch.discard_session_history(bool(spec.agent_session_id))
         try:
             new = await ch.request(
-                "session/load" if spec.agent_session_id else "session/new",
+                ("session/resume" if can_resume else "session/load") if spec.agent_session_id else "session/new",
                 {
                     **({"sessionId": spec.agent_session_id} if spec.agent_session_id else {}),
                     "cwd": spec.cwd,
@@ -149,17 +170,26 @@ class AcpAgentRuntime:
             await self.close_silently(spec.session_id)
             raise AgentCrashed("the agent returned no session id")
         self._by_agent[agent_sid] = spec.session_id
+        self._agent_sessions[spec.session_id] = agent_sid
+        # Setup can carry the initial command catalogue before any update notification exists.
+        if "availableCommands" in new:
+            await ch.enqueue_notification({"method": "session/update", "params": {"update": {
+                "sessionUpdate": "available_commands_update", "availableCommands": new["availableCommands"]}}})
         return RuntimeHandle(session_id=agent_sid, ours=spec.session_id, capabilities=caps,
                              models=models, current_model=current)
 
     async def _drain_stderr(self, session_id: str, stream: asyncio.StreamReader) -> None:
         """Keep the agent's stderr flowing and remember the tail, for diagnosis."""
         try:
-            while True:
-                line = await stream.readline()
-                if not line:
-                    return
-                self._stderr[session_id].append(line.decode(errors="replace").rstrip())
+            pending = ""
+            while chunk := await stream.read(16384):
+                lines = (pending + chunk.decode(errors="replace")).split("\n")
+                pending = lines.pop()[-4096:]
+                rows = self._stderr.get(session_id)
+                if rows is not None:
+                    rows.extend(line[-4096:].rstrip() for line in lines)
+            if pending and session_id in self._stderr:
+                self._stderr[session_id].append(pending)
         except (asyncio.CancelledError, ConnectionResetError):
             return
 
@@ -205,6 +235,7 @@ class AcpAgentRuntime:
         proc, ch = self._procs.pop(ours, (None, None))
         if ch:
             await ch.close()
+        self._forget(ours)
         if proc and proc.returncode is None:
             proc.terminate()
             try:
@@ -221,9 +252,22 @@ class AcpAgentRuntime:
         proc, ch = self._procs.pop(session_id, (None, None))
         if ch:
             await ch.close()
+        self._forget(session_id)
         if proc and proc.returncode is None:
             proc.kill()
             await proc.wait()
+
+    def _forget(self, sid: str) -> None:
+        for qid,pending in list(self._questions.items()):
+            if pending[0]==sid:self._questions.pop(qid,None)
+        task = self._prompt_tasks.pop(sid, None)
+        if task and not task.done():
+            task.cancel()
+        for mapping in (self._capabilities, self._turn_ends, self._turn_ids, self._stderr, self._tool_frames, self._call_turns, self._agent_sessions):
+            mapping.pop(sid, None)
+        for agent_id, ours in list(self._by_agent.items()):
+            if ours == sid:
+                del self._by_agent[agent_id]
 
     # -- turns ----------------------------------------------------------------
     def _blocks(self, h: RuntimeHandle, text: str, images: list[dict] | None) -> list[dict]:
@@ -330,6 +374,9 @@ class AcpAgentRuntime:
             except TransportError:
                 raise AgentError(str(first)) from first
 
+    async def set_mode(self,h,mode):
+        await self._channel(h).request('session/set_config_option',{'sessionId':h.session_id,'configId':'mode','value':mode},timeout=30)
+
     async def respond_permission(self, h: RuntimeHandle, request_id: str, option_id: str | None) -> None:
         pending = self._pending_permissions.get(request_id)
         if not pending or pending[0] != self._ours(h):
@@ -340,6 +387,14 @@ class AcpAgentRuntime:
         fut = self._permission_waiters.get(request_id)
         if fut and not fut.done():
             fut.set_result(option_id)
+
+    async def fail_permission(self, h: RuntimeHandle, request_id: str, reason: str) -> None:
+        pending = self._pending_permissions.get(request_id)
+        if not pending or pending[0] != self._ours(h):
+            raise AgentError("permission is no longer pending for this session")
+        future = self._permission_waiters.get(request_id)
+        if future and not future.done():
+            future.set_exception(ValueError(reason[:300]))
 
     # -- events ---------------------------------------------------------------
     async def events(self, h: RuntimeHandle) -> AsyncIterator[Event | tuple]:
@@ -363,12 +418,13 @@ class AcpAgentRuntime:
                 read = read or asyncio.create_task(ch.next_notification())
                 fin = fin or asyncio.create_task(ends.get())
                 try:
-                    done, _ = await asyncio.wait({read, fin}, timeout=IDLE_TURN_TIMEOUT,
+                    done, _ = await asyncio.wait({read, fin}, timeout=(90 if any(f.get("status") in ("pending", "in_progress", "running")
+                        for f in self._tool_frames.get(ours, {}).values()) else IDLE_TURN_TIMEOUT),
                                                  return_when=asyncio.FIRST_COMPLETED)
                 except asyncio.CancelledError:
                     raise
                 if not done:
-                    if any(sid == ours for sid, _ in self._pending_permissions.values()):
+                    if any(sid == ours for sid, _ in self._pending_permissions.values()) or any(q[0]==ours for q in self._questions.values()):
                         continue  # waiting for a person is not an unresponsive model
                     tail = self.stderr_tail(ours, 4)
                     yield (("error", f"the model or agent failed: {tail}") if tail
@@ -387,11 +443,19 @@ class AcpAgentRuntime:
                         else:
                             yield ("error", "the agent process ended")
                         return
+                    if item.get("method") == "opengenie/question":
+                        yield Event(ours,"question.requested",item["params"],turn_id=self._turn_ids.get(ours),actor="agent")
                     if item.get("method") == "opengenie/permission":
                         params = item["params"]
-                        yield from_permission(ours, self._turn_ids.get(ours), params["request"], params["approvalId"])
+                        request = params["request"]
+                        call = request.get("toolCall") or {}
+                        frame = self._tool_frames.get(ours, {}).get(call.get("toolCallId"), {})
+                        request = {**request, "toolCall": {**call, **frame}}
+                        yield from_permission(ours, self._turn_ids.get(ours), request, params["approvalId"])
                     if item.get("method") == "session/update":
                         update = (item.get("params") or {}).get("update") or {}
+                        if not self._remember_tool(ours, update):
+                            continue
                         for ev in from_update(ours, self._turn_ids.get(ours), update):
                             yield ev
                         from .mapper import turn_end_from_state
@@ -434,29 +498,29 @@ class AcpAgentRuntime:
             if queued.get("method") != "session/update":
                 continue
             update = (queued.get("params") or {}).get("update") or {}
-            out.extend(from_update(ours, self._turn_ids.get(ours), update))
+            if self._remember_tool(ours, update):
+                out.extend(from_update(ours, self._turn_ids.get(ours), update))
         return out
 
-    def pending_approval(self) -> tuple[str, str, dict] | None:
-        """(approval_id, session_id, params) of a permission request waiting for a human."""
-        for aid, (sid, params) in list(self._pending_permissions.items()):
-            if aid in self._permission_waiters:
-                return aid, sid, params
-        return None
-
-    def take_permission_event(self, session_id: str, turn_id: str) -> Event | None:
-        """Called by the runner when it notices a pending request, to build approval.requested."""
-        found = self.pending_approval()
-        if not found:
-            return None
-        aid, sid, params = found
-        if sid != session_id:
-            return None
-        return from_permission(sid, turn_id, params, aid)
+    def _remember_tool(self, sid: str, update: dict) -> bool:
+        cid = update.get("toolCallId")
+        if cid:
+            epoch = self._turn_ids.get(sid, "")
+            calls = self._call_turns.setdefault(sid, {})
+            if cid in calls and calls[cid] != epoch:
+                return False
+            calls[cid] = epoch
+            # Bound retained attribution ids. They exist to reject late notifications.
+            if len(calls) > 4096:
+                del calls[next(iter(calls))]
+            frames = self._tool_frames.setdefault(sid, {})
+            frames[cid] = {**frames.get(cid, {}), **update}
+        return True
 
     def set_turn(self, session_id: str, turn_id: str) -> None:
         """Tell the adapter which turn subsequent updates belong to."""
         self._turn_ids[session_id] = turn_id
+        self._tool_frames[session_id] = {}
 
     # -- internals ------------------------------------------------------------
     def _ours(self, h: RuntimeHandle) -> str:
@@ -498,8 +562,31 @@ class AcpAgentRuntime:
             self._pending_permissions.pop(approval_id, None)
 
     def _cancel_permissions(self, session_id: str) -> None:
+        for qid,(sid,future,schema) in list(self._questions.items()):
+            if sid==session_id and not future.done():future.set_result({"action":"cancel"})
         for aid, (sid, _) in list(self._pending_permissions.items()):
             if sid == session_id:
                 fut = self._permission_waiters.get(aid)
                 if fut and not fut.done():
                     fut.set_result(None)
+
+    async def _on_question(self,sid,params):
+        from ...domain.question import validate_schema
+        if params.get('mode')!='form':raise ValueError('Only advertised form elicitation is supported')
+        if self._agent_sessions.get(sid)!=params.get('sessionId'):raise ValueError('Question does not belong to this connection')
+        schema=validate_schema(params.get('requestedSchema',{}))
+        qid='question_'+uuid4().hex
+        future=asyncio.get_running_loop().create_future()
+        self._questions[qid]=(sid,future,schema)
+        await self._procs[sid][1].enqueue_notification({'method':'opengenie/question','params':{'id':qid,'message':str(params.get('message',''))[:2000],'schema':schema,'state':'pending','agent':self._capabilities[sid].agent}})
+        try:return await future
+        finally:self._questions.pop(qid,None)
+
+    async def respond_question(self,h,qid,action,content):
+        from ...domain.question import validate_content
+        pending=self._questions.get(qid)
+        if not pending or pending[0]!=self._ours(h) or pending[1].done():raise AgentError('This question is no longer pending')
+        if action not in ('accept','decline','cancel'):raise ValueError('Choose accept, decline or cancel')
+        result={'action':action}
+        if action=='accept':result['content']=validate_content(pending[2],content)
+        pending[1].set_result(result)

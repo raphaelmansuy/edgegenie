@@ -360,16 +360,17 @@ def test_native_source_truncation_is_explicit():
 
 async def test_context_resolver_rereads_the_private_sql_snapshot():
     from api.services.context import resolve
+    from api.composition.context import build_attachment_reader
 
     store = SqliteQueryStore()
     service = SqlService(DemoQueries(store), store)
     actor = SqlActor("workspace", "alice")
     source = await service.draft(actor, {"text": "-- untrusted comment\nSELECT 1", "name": "SQL"})
     attachment = context.Attachment("query-draft", source["id"])
-    resolved = await resolve([attachment], None, None, None, sql=service, sql_actor=actor)
+    resolved = await resolve([attachment], build_attachment_reader(sql=service, sql_actor=actor))
     assert resolved[0].text == source["text"] and "revision" in resolved[0].note
     denied = await resolve(
-        [attachment], None, None, None, sql=service, sql_actor=SqlActor("workspace", "bob")
+        [attachment], build_attachment_reader(sql=service, sql_actor=SqlActor("workspace", "bob"))
     )
     assert denied[0].error and not denied[0].text
     store.close()

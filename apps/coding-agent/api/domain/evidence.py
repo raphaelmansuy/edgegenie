@@ -92,7 +92,7 @@ class EvidenceRow:
 # A sentence that restricts the work is not itself work to prove: "Do not change anything." has no
 # tool call that could evidence it, and treating it as a requirement blocks every read-only request.
 CONSTRAINT_RE = re.compile(
-    r"^\s*(?:please\s+)?(?:do\s+not|don'?t|never|without|avoid|leave\b|keep\b.*\b(?:untouched|unchanged|as is)|"
+    r"^\s*(?:please\s+)?(?:make\s+no\b|do\s+not|don'?t|never|without|avoid|leave\b|keep\b.*\b(?:untouched|unchanged|as is)|"
     r"no\s+(?:changes|writes|edits)|only\b|make\s+sure\s+(?:not|nothing)|it\s+must\s+not)",
     re.I,
 )
@@ -174,7 +174,21 @@ NO_TOOLS_RE = re.compile(
 
 def says_no_tools(prompt: str) -> bool:
     """True when the user explicitly asked to be answered without tools or code."""
-    return bool(NO_TOOLS_RE.search(DEMO_MARKER.sub(" ", prompt)))
+    clean = DEMO_MARKER.sub(" ", prompt)
+    matches = list(NO_TOOLS_RE.finditer(clean))
+    if not matches:
+        return False
+    if any(re.search(r"\btools?\b", m.group(), re.I) for m in matches):
+        return True
+    # "Do not run code or SQL" restricts execution, not a requested source edit. It must not
+    # turn an unperformed edit into an informational answer exempt from the proof floor.
+    positive = NO_TOOLS_RE.sub(" ", clean)
+    if any(
+        CHANGE_RE.search(r.text) and not INFORMATIONAL_RE.match(r.text)
+        for r in extract_requirements(positive)
+    ):
+        return False
+    return True
 
 
 def is_read_only(requirements: list[Requirement], has_context: bool) -> bool:
@@ -183,10 +197,14 @@ def is_read_only(requirements: list[Requirement], has_context: bool) -> bool:
     Without context the agent has to look things up, so an explanation is a claim that needs
     evidence like any other. With context, the evidence is the attachment itself.
     """
-    return has_context and bool(requirements) and all(INFORMATIONAL_RE.match(r.text) and not CHANGE_RE.search(r.text) for r in requirements)
+    return (
+        has_context
+        and bool(requirements)
+        and all(INFORMATIONAL_RE.match(r.text) and not CHANGE_RE.search(r.text) for r in requirements)
+    )
 
 
-def parse_evidence_block(text: str) -> list[dict]:
+def parse_evidence_block(text: str, *, full_citations: bool = False) -> list[dict]:
     """The agent is asked to end with an EVIDENCE table. Parse leniently: JSON first, then rows."""
     rows: list[dict] = []
     for block in re.findall(r"```(?:json)?\s*(\[\s*\{.*?\}\s*\])\s*```", text, re.S):
@@ -204,7 +222,7 @@ def parse_evidence_block(text: str) -> list[dict]:
             continue
         cells = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
         if len(cells) >= 2 and cells[0].lower() not in ("requirement", "#"):
-            tool = cells[1].split()[0] if cells[1] else ""
+            tool = cells[1] if full_citations else cells[1].split()[0] if cells[1] else ""
             rows.append(
                 {"requirement": cells[0], "tool": tool, "summary": cells[2] if len(cells) > 2 else ""}
             )
@@ -306,7 +324,10 @@ def gaps(requirements: list[Requirement], rows: list[EvidenceRow]) -> list[str]:
         words = {w for w in re.findall(r"[a-z0-9_]{4,}", req.text.lower())}
         covered = any(
             r.verified
-            and (words & set(re.findall(r"[a-z0-9_]{4,}", (r.requirement + " " + r.tool_name).lower())))
+            and (
+                req.text.strip().casefold() == r.requirement.strip().casefold()
+                or words & set(re.findall(r"[a-z0-9_]{4,}", (r.requirement + " " + r.tool_name).lower()))
+            )
             for r in rows
         )
         if not covered:

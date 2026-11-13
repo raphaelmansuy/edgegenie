@@ -438,31 +438,28 @@ def test_the_bridge_key_opens_one_session_and_only_with_a_grant():
     assert bridge.env_for("s1")["NBMCP_RUN_KEY"] == k
 
 
-def test_a_tool_server_can_run_a_notebook_for_a_granted_session_and_no_other():
-    doc = json.dumps({"v": 1, "cells": [{"i": 0, "ok": True}, {"i": 1, "ok": True, "stdout": "21\n"}]})
+def test_agent_internal_execution_refuses_even_a_legacy_admin_grant():
     with internal() as c:
-        c.app.state.pyruns = PythonRuns(FakeRunner([("TERMINATED", "SUCCESS")], doc))
+        class NeverRun:
+            async def start(self, *args, **kwargs):
+                raise AssertionError("model code reached the app execution identity")
+            async def poll(self, *args, **kwargs):
+                raise AssertionError("model code reached the app execution identity")
+        c.app.state.pyruns = NeverRun()
         bridge = c.app.state.run_bridge
-        body = {"session": "sess1", "key": bridge.key_for("sess1"), "source": SOURCE, "language": "PYTHON"}
-        # a valid key but no grant: the user of this session is not an administrator
-        assert c.post("/internal/run-notebook", json=body).status_code == 403
         bridge.grant("sess1")
-        # a key for another session, or none, is refused whatever the grant
-        assert c.post("/internal/run-notebook", json={**body, "key": bridge.key_for("other")}).status_code == 403
-        started = c.post("/internal/run-notebook", json=body).json()
-        assert started["cells"] == 2 and started["handle"]
-        q = {"session": "sess1", "key": body["key"]}
-        done = c.get(f"/internal/run-notebook/{started['handle']}", params=q).json()
-        assert done["state"] == "done" and done["results"]["1"]["output"] == "21\n"
-        assert c.get(f"/internal/run-notebook/{started['handle']}",
-                     params={"session": "other", "key": bridge.key_for("other")}).status_code == 403
+        body = {"session": "sess1", "key": bridge.key_for("sess1"), "source": SOURCE, "language": "PYTHON"}
+        response = c.post("/internal/run-notebook", json=body)
+        assert response.status_code == 403
+        assert "never runs as the app service principal" in response.json()["detail"]
+        assert c.get("/internal/run-notebook/old-handle", params={"session": "sess1", "key": body["key"]}).status_code == 403
 
 
-def test_creating_a_session_grants_an_administrator_and_not_anyone_else():
-    for admins, expected in ((ADMIN, True), ("someone-else@example.com", False)):
+def test_creating_a_session_never_grants_the_agent_app_identity_even_to_an_admin():
+    for admins in (ADMIN, "someone-else@example.com"):
         with internal(admins) as c:
             sid = c.post("/api/sessions", json={"folder": "/Users/tester@example.com/agent_scratch"}).json()["id"]
-            assert c.app.state.run_bridge.granted(sid) is expected
+            assert not c.app.state.run_bridge.granted(sid)
 
 
 def _tool_module():
@@ -490,9 +487,9 @@ def test_the_tool_falls_back_to_the_app_when_the_users_token_cannot_submit_runs(
             return {"handle": "h1"}
         return {"state": "done", "seconds": 4.0, "results": {"1": {"state": "succeeded", "output": "21\n"}}}
     monkeypatch.setattr(mod, "_app_call", app)
-    out = json.loads(mod.dbx_run_notebook("/Users/me/x/nb"))
-    assert out["finished"] and out["result"] == "SUCCESS" and out["cells"][0]["output"] == "21\n"
-    assert "not as the user" in out["ran_as"] and calls == ["POST", "GET"]
+    with pytest.raises(PermissionError, match="never runs as the app"):
+        mod.dbx_run_notebook("/Users/me/x/nb")
+    assert calls == []
 
 
 def test_without_the_app_run_service_the_denial_stands(monkeypatch):

@@ -1,0 +1,151 @@
+{
+  "reviewedOn": "2026-11-12",
+  "method": "All 18 refreshed compatible-build images individually opened and visually inspected through view_image. No post-processing.",
+  "images": [
+    {
+      "file": "screenshots/01-library-light.png",
+      "sha256": "000f4126b07a05b936dd8a57a2a0c0f1fbcce47d02c382b27e690a7ed4a7dce2",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Clear Queries heading, search, owner and favorites controls; aligned rows; cache scope disclosed; new-query action unobscured."
+    },
+    {
+      "file": "screenshots/02-query-editor-light.png",
+      "sha256": "982a52720428bbbe21be656120a2df77a65505869b54f5e9edaafea68c6a5b3d",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Saved Query label agrees with clean source; SQL highlighting is legible; toolbar clears the context handle; empty results state is distinct."
+    },
+    {
+      "file": "screenshots/03-query-running.png",
+      "sha256": "8d11a2742a44f5d10858035d53526193385b2e2d9cfff7fa5b1587256845950d",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Waiting state and cancel controls are visible; Run is disabled during the active attempt; editor and dock retain their positions."
+    },
+    {
+      "file": "screenshots/04-query-results.png",
+      "sha256": "d4bc3640da3a179974c57b7228367d95a0877d3e5ce76f57027ea0e8f3925fbf",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Three result rows, schema labels, success state and preview bounds are legible; table aligns by ordinal and remains inside the workspace."
+    },
+    {
+      "file": "screenshots/05-run-provenance.png",
+      "sha256": "3a652a2d12bb4b4a72c35362cb0de51e0c0eb3feefaa8e1df68aa952ef385aa5",
+      "width": 1440,
+      "height": 1039,
+      "visuallyInspected": true,
+      "observation": "Expanded snapshot shows run, warehouse, start, hash and executed SQL; long hash wraps within its column and details remain readable."
+    },
+    {
+      "file": "screenshots/06-parameters-and-null.png",
+      "sha256": "8d56d94eb53f39a1343681525e620ed1ab769e7c02b7167420792909011656a8",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Parameter name/value/type/NULL controls are distinct; dirty source label is correct; NULL cell differs from text and singular row copy is correct."
+    },
+    {
+      "file": "screenshots/07-policy-refusal.png",
+      "sha256": "2c2c3740ed31559cd1914ad197fa1d6eb3f79d4043b6820b2acd398365455b0b",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Server refusal is prominent above source; previous successful output remains labeled stale; error does not cover editor or result controls."
+    },
+    {
+      "file": "screenshots/08-canceled.png",
+      "sha256": "4faad95cc48a450c4bbe56bb782beb2e02a8ba50c2076211ffb9dc08e9a72263",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Terminal Canceled is distinct from pending cancellation; Run is available again; no fabricated result rows are displayed."
+    },
+    {
+      "file": "screenshots/09-own-history.png",
+      "sha256": "a2d0a22e66d7d39d711dad3a0193233606affaa6b1ec6975d78b6d97069ed62e",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Own-history tab is selected; three runs have aligned status and Open snapshot controls; history remains separate from chat sessions."
+    },
+    {
+      "file": "screenshots/10-query-dark.png",
+      "sha256": "137f4e316b32720c83e9d6fb7b75d5eb46da1f78e2264dc9b75dc6fd04be8535",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Dark app shell and editor agree; syntax, input surfaces and action text are legible; captured after theme/editor readiness."
+    },
+    {
+      "file": "screenshots/11-mobile-editor.png",
+      "sha256": "4f2dfa16c4e0051020696cee8518df655c2f6bed1e6e5e41e0a12fc351e9c1af",
+      "width": 375,
+      "height": 900,
+      "visuallyInspected": true,
+      "observation": "375px editor layout wraps header and toolbar; warehouse remains usable; Editor/Results controls and composer fit without horizontal page overflow."
+    },
+    {
+      "file": "screenshots/12-mobile-results.png",
+      "sha256": "269c6dc95ea30324af9d588de31e5242795afdb571c55ac328c8a12c3e2fd9ec",
+      "width": 375,
+      "height": 900,
+      "visuallyInspected": true,
+      "observation": "375px results view has visible success/count, schema, exact value and copy action; query toolbar and output tabs remain usable."
+    },
+    {
+      "file": "screenshots/13-tablet-editor.png",
+      "sha256": "02abe1406ea6fb04dd0ee852a9d8c7df34c09a85734a47c19cbe50e36b9e6605",
+      "width": 768,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "768px view shows editor and results together; controls wrap cleanly; composer remains separate below the document workspace."
+    },
+    {
+      "file": "screenshots/14-query-chat-context.png",
+      "sha256": "07f04fa77b39b315fa9ff29d88cb5e0a4c853f0525190bb79de08571cd81c215",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Snapshot notice and query attachment chip are visible; current source remains readable; dock and document actions do not overlap."
+    },
+    {
+      "file": "screenshots/15-save-copy-dialog.png",
+      "sha256": "869542ea4cc221dbc325dda1e23ed6cae6e9840fcdec2c6e5913ca4a9e999753",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Centered review dialog has readable destination/effects, visible name focus ring, and separated Cancel/Create controls."
+    },
+    {
+      "file": "screenshots/16-assistant-sql-proposal.png",
+      "sha256": "6a72281d1fda0f1bceaf5c3ed889fb13c9cd7f35ef9aaea27eb4d11542c9f898",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "One completed SQL proposal appears with Ready state; Open as query has contrasting light text on a dark code header; code remains horizontally scrollable."
+    },
+    {
+      "file": "screenshots/17-promoted-sql-draft.png",
+      "sha256": "24a2633be71b4795e18fd558fa48666a8c7b8df0c07c7dca491fc3dbd2c14e77",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Private draft opens in the shared tabs with proposed SQL and empty results; completed assistant proposal remains visible; no automatic run is represented."
+    },
+    {
+      "file": "screenshots/18-save-response-lost.png",
+      "sha256": "1e0e0921540ecf1fc3f6688e030df3e207ff76b6895f42e12f368f581929d215",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Lost-response explanation wraps within the dialog; original destination remains visible and frozen; Check again clearly recovers the existing request."
+    }
+  ],
+  "sourceRevision": "345d1828d1ed158a74276b3008c09093e16fce45"
+}

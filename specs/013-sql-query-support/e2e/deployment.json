@@ -1,0 +1,116 @@
+{
+  "profile": "opengenie-dev",
+  "host": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "workspaceId": "7474647158015570",
+  "user": "raphael.mansuy@gmail.com",
+  "app": "coding-agent",
+  "url": "https://coding-agent-7474647158015570.aws.databricksapps.com",
+  "version": "1.2.0-rc.4",
+  "gitCommit": "d2d4754e05f15dc06f41d57fdeaaa8b9ae6415e8",
+  "gitBranch": "main",
+  "deploymentId": "01f1de70fb671ee4b550c1f685eb3a56",
+  "deployment": {
+    "deployment_id": "01f1de70fb671ee4b550c1f685eb3a56",
+    "git_source": {
+      "git_repository": {
+        "url": "https://github.com/raphaelmansuy/opengenie",
+        "provider": "gitHub"
+      },
+      "commit": "d2d4754e05f15dc06f41d57fdeaaa8b9ae6415e8",
+      "source_code_path": "apps/coding-agent",
+      "resolved_commit": "d2d4754e05f15dc06f41d57fdeaaa8b9ae6415e8"
+    },
+    "mode": "SNAPSHOT",
+    "status": {
+      "state": "SUCCEEDED",
+      "message": "App started successfully"
+    },
+    "create_time": "2026-11-12T08:13:46Z",
+    "creator": "raphael.mansuy@gmail.com",
+    "update_time": "2026-11-12T08:14:18Z",
+    "scan_status": "APP_DEPLOYMENT_SCAN_STATUS_FINDINGS",
+    "scan_omitted_findings_count": 0,
+    "scan_omitted_count_is_lower_bound": false
+  },
+  "appState": "RUNNING",
+  "status": "merged-main-qualified",
+  "sourceRevisionVerified": true,
+  "resourcesPreserved": true,
+  "effectiveUserApiScopes": [
+    "ai-gateway",
+    "apps",
+    "catalog.catalogs:read",
+    "catalog.schemas:read",
+    "catalog.tables:read",
+    "files",
+    "genie",
+    "iam.access-control:read",
+    "iam.current-user:read",
+    "model-serving",
+    "postgres",
+    "sql",
+    "workspace.workspace"
+  ],
+  "releaseTag": "v1.2.0-rc.4",
+  "releaseUrl": "https://github.com/raphaelmansuy/opengenie/releases/tag/v1.2.0-rc.4",
+  "releasePublished": true,
+  "releasePrerelease": true,
+  "releasePublishedAt": "2026-11-12T07:57:18Z",
+  "publicationAuthorized": true,
+  "publicationScope": "User requested fixes, commit, PR merge and dev deployment. Existing public documentation/count checks updated for main CI; private specs, credentials and screenshot artifacts excluded.",
+  "changedAppFiles": 0,
+  "addedLineCredentialPatternFindings": [],
+  "finalBackendValidation": {
+    "passed": 2061,
+    "skipped": 4,
+    "warnings": 7,
+    "newPolicyCases": 67,
+    "realPostgresEnabled": true
+  },
+  "finalFrontendValidation": {
+    "passed": 1233,
+    "files": 84,
+    "buildPassed": true
+  },
+  "finalLocalE2eChecks": 16,
+  "nativeSqlRunEnabled": true,
+  "sqlJournalDurable": true,
+  "nativeSavedQueryOriginRunEnabled": false,
+  "nativeQueryWritesEnabled": false,
+  "coldStartVerified": true,
+  "originalDraftUnchanged": true,
+  "exactQueryResultRows": 60,
+  "previousReleaseEvidence": "releases/v1.2.0-rc.4-deployment.json",
+  "previousAiWorkflowEvidence": "releases/v1.2.0-rc.3-agent-report.json",
+  "deploymentWorktree": "/private/tmp/opengenie-dev-git-fuce8rn5",
+  "completedAt": "2026-11-12T08:21:25.229740+00:00",
+  "pullRequest": "https://github.com/raphaelmansuy/opengenie/pull/17",
+  "mergedAt": "2026-11-12T08:13:01Z",
+  "releaseSourceCommit": "717c6216f51b951b21aa9cff34dd434cfd4b245e",
+  "appTreeIdenticalToRelease": true,
+  "liveReport": "merge-report.json",
+  "visualReviewManifest": "merge-screenshots-manifest.json",
+  "deployedScreenshotsInspected": 7,
+  "totalScreenshotsInspected": 56,
+  "liveCteChecks": 8,
+  "liveAiMissions": 1,
+  "mainCi": {
+    "url": "https://github.com/raphaelmansuy/opengenie/actions/runs/43181131344",
+    "gitCommit": "d2d4754e05f15dc06f41d57fdeaaa8b9ae6415e8",
+    "status": "completed",
+    "conclusion": "success",
+    "browserViews": 180,
+    "browserFailures": 0,
+    "internalLinks": 69,
+    "jobs": [
+      {
+        "name": "build and check",
+        "conclusion": "success"
+      },
+      {
+        "name": "deploy",
+        "conclusion": "success"
+      }
+    ]
+  }
+}

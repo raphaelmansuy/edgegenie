@@ -1,0 +1,20 @@
+{
+  "workspace": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "identity": "raphael.mansuy@gmail.com",
+  "bundledExecutable": true,
+  "cliVersion": "0.289.1",
+  "attempts": 1,
+  "explicitUserApproval": true,
+  "rawLogsRetained": false,
+  "alternateIdentityUsed": false,
+  "state": "unavailable",
+  "code": "HANDSHAKE_FAILED",
+  "httpStatus": 503,
+  "reason": "The log service did not establish a log stream.",
+  "pass": false,
+  "interpretation": {
+    "currentCategory": "SERVICE_UNAVAILABLE",
+    "basedOn": "Recorded HTTP 503 and separate read-only app status STOPPED. No additional log request.",
+    "remainingAction": "Restore workspace/account availability before deployed log validation."
+  }
+}

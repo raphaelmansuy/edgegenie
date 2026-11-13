@@ -1,3 +1,4 @@
+import { WorkComposerBar, PendingWork } from "./AgentWork";
 /** The assistant dock: the conversation, beside the document it is about.
  *
  * Spec 006 04. The whole point is in the header: it states the binding (`in context: …`), so the
@@ -24,8 +25,9 @@ import { conversationMarkdown, exportName } from "../domain/transcript";
 import type { SessionSummary } from "../api/client";
 import { RunStatus } from "./RunStatus";
 import { StreamNotice } from "./StreamNotice";
-import { canSend } from "../domain/compose";
+import { canSend as sendDecision } from "../domain/compose";
 import type { StreamState } from "../domain/stream";
+import { AgentMeter } from "./AgentMeter";
 import { Composer } from "./Composer";
 import { TurnView } from "./Transcript";
 import type { Doc } from "../domain/docs";
@@ -93,8 +95,16 @@ export function AssistantDock(p: DockProps) {
     last: turns.at(-1) ? { status: turns.at(-1)!.status } : null,
     pendingApprovals: pending.length,
   });
+  const [historyEnd,setHistoryEnd]=useState<number | null>(null);
+  // History expansion belongs to one conversation; a visit to another resets the DOM bound.
+  const [historySession,setHistorySession]=useState(p.session.id);
+  if (historySession !== p.session.id) {
+    setHistorySession(p.session.id);
+    setHistoryEnd(null);
+  }
   const last = turns.at(-1);
-  const decision = canSend({ status: p.session.status, requiresResume: p.session.requiresResume });
+  const decision = sendDecision({status: p.session.status, requiresResume: p.session.requiresResume});
+  const canSend = decision.canSend;
   /* Follow the stream while the reader is at the tail, and let go the moment they move up — by wheel,
      finger, key or scrollbar. The decision is `domain/follow.ts`; the panel-wide wheel and focus
      contract is the hook's (spec 012 §3). */
@@ -167,19 +177,27 @@ export function AssistantDock(p: DockProps) {
         aria-label="Conversation" aria-live="polite" aria-busy={state === "streaming"}>
         {empty && <Start focus={p.focus} onSuggestion={p.onSuggestion} hasSession={p.hasSession} />}
 
-        {turns.map((t) => (
+        {turns.length > 30 && <nav className="transcript-pages" aria-label="Conversation history pages">
+          <p role="status">Viewing turns {Math.max(0, (historyEnd ?? turns.length) - 30) + 1}–{historyEnd ?? turns.length} of {turns.length}</p>
+          <button className="btn ghost" disabled={(historyEnd ?? turns.length) <= 30} onClick={() => { setHistoryEnd(Math.max(0, (historyEnd ?? turns.length) - 30)); scroller.current?.scrollTo({top:0}); }}>Show 30 earlier turns</button>
+          {historyEnd !== null && <>
+            <button className="btn ghost" onClick={() => { setHistoryEnd(historyEnd + 30 >= turns.length ? null : historyEnd + 30); scroller.current?.scrollTo({top:0}); }}>Show 30 newer turns</button>
+            <button className="btn ghost" onClick={() => { setHistoryEnd(null); requestAnimationFrame(toEnd); }}>Return to latest turn</button>
+          </>}
+        </nav>}
+        {turns.slice(Math.max(0, (historyEnd ?? turns.length) - 30), historyEnd ?? turns.length).map((t) => (
           // Retry is offered on the last turn only, and only when it is not the thing already running.
           <TurnView key={t.id} turn={t} onRetry={decision.canSend && t === last && state !== "streaming" && state !== "asking" && t.status !== "interrupted" ? p.onRetry : undefined} />
         ))}
 
         {/* The next step, derived from what this turn actually did. Only on the last turn, and only when
             nothing is running or waiting: a chip beside a pending approval is a second place to look. */}
-        {last && decision.canSend && state === "empty" && (
+        {historyEnd === null && last && canSend && state === "empty" && (
           <FollowUps items={followUps(last)} onPick={p.onSuggestion} />
         )}
 
-        {state === "asking" && pending.map((a) => (
-          <InlineApproval key={a.approvalId} approval={a} disabled={!decision.canSend} onDecide={p.onApprove} />
+        {state === "asking" && pending.filter(a => !a.changeId).map((a) => (
+          <InlineApproval key={a.approvalId} approval={a} disabled={!canSend} onDecide={p.onApprove} />
         ))}
 
         {state === "failed" && decision.canSend && (
@@ -199,7 +217,7 @@ export function AssistantDock(p: DockProps) {
         {/* Only when the reader has left the tail and there is more below: the way back to following. */}
         {behind && (
           <button type="button" className="dock-jump"
-            onClick={() => { toEnd(); scroller.current?.focus({ preventScroll: true }); }}>
+            onClick={() => { setHistoryEnd(null); requestAnimationFrame(() => { toEnd(); scroller.current?.focus({ preventScroll: true }); }); }}>
             <span aria-hidden>↓</span> {state === "streaming" ? "Follow the work" : "Latest"}
           </button>
         )}
@@ -214,6 +232,7 @@ export function AssistantDock(p: DockProps) {
           <span className="dock-pin-was"> · the answer above came from {shortLabel(p.lastTurnModel)}</span>
         </p>
       )}
+      <PendingWork /><WorkComposerBar /><AgentMeter session={p.session} />
       <Composer
         variant="dock"
         blockedReason={decision.canSend ? null : decision.reason}
@@ -307,15 +326,17 @@ export function InlineApproval({ approval, onDecide, disabled = false }: {
         <strong>Needs your decision</strong>
       </header>
       <p className="dock-approval-action">
-        it wants to <strong>{approval.action}</strong> something outside your working folder
+        The agent requested <strong>{approval.action}</strong>
       </p>
       <p className="dock-approval-target"><code>{approval.target}</code></p>
       {approval.reason && <p className="dock-approval-reason">{approval.reason}</p>}
+      {approval.validationError && <p className="dock-approval-reason" role="alert">Proposal refused: {approval.validationError} Reject this call so the agent can correct its input.</p>}
+      {approval.input && <pre className="approval-input">{JSON.stringify(approval.input, null, 2)}</pre>}
       {approval.blastRadius && <p className="dock-approval-reason">Blast radius: {approval.blastRadius}</p>}
       <div className="dock-approval-actions">
-        <button className="btn sm primary" disabled={disabled || pending || !approval.options.some((o) => o.kind === "allow_once")}
+        <button className="btn sm primary" disabled={disabled || pending || approval.argumentsKnown === false || !approval.options.some((o) => o.kind === "allow_once")}
           onClick={() => void decide("allow_once")}>Allow once</button>
-        <button className="btn sm" disabled={disabled || pending || !approval.options.some((o) => o.kind === "allow_always")}
+        <button className="btn sm" disabled={disabled || pending || approval.argumentsKnown === false || !approval.options.some((o) => o.kind === "allow_always")}
           onClick={() => void decide("allow_session")}>Allow this session</button>
         <button className="btn sm ghost stop" disabled={disabled || pending} onClick={() => void decide("deny")}>Deny</button>
       </div>

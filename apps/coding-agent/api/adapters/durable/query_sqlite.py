@@ -12,7 +12,7 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 
-from ...domain.sqlquery import ACTIVE, SqlError, check_operation, check_run_capacity
+from ...domain.sqlquery import ACTIVE, SqlError
 
 
 class SqliteQueryStore:
@@ -144,23 +144,43 @@ class SqliteQueryStore:
                     (scope, key),
                 ).fetchone()
                 if old:
-                    check_operation(fingerprint, old[0], old[3])
+                    if old[0] != fingerprint:
+                        raise SqlError("CONFLICT", "This operation key belongs to different input.", 409)
+                    if time.time() - old[3] > 86400:
+                        raise SqlError(
+                            "CONFLICT", "This operation key has expired; it cannot be replayed.", 409
+                        )
                     return self._read(scope, old[2], old[1]), False
                 kind = body.get("operationKind", "run")
                 if kind == "run":
                     states = tuple(ACTIVE)
                     marks = ",".join("?" for _ in states)
+                    count = db.execute(
+                        f"SELECT COUNT(*) FROM sql_item WHERE scope=? AND kind='run' AND state IN ({marks})",
+                        (scope, *states),
+                    ).fetchone()[0]
                     total = db.execute(
                         f"SELECT COUNT(*) FROM sql_item WHERE kind='run' AND state IN ({marks})", states
                     ).fetchone()[0]
-                    active = db.execute(
-                        f"SELECT body FROM sql_item WHERE scope=? AND kind='run' AND state IN ({marks})",
-                        (scope, *states),
-                    ).fetchall()
-                    check_run_capacity(
-                        [json.loads(self._cipher.decrypt(row[0])).get("sourceRef", "") for row in active],
-                        total, body.get("sourceRef", ""),
-                    )
+                    if count >= 4 or total >= 32:
+                        raise SqlError(
+                            "RUN_LIMIT",
+                            "Too many active SQL runs. Cancel or resolve an existing run first.",
+                            409,
+                        )
+                    source = body.get("sourceRef", "")
+                    if source:
+                        active = db.execute(
+                            f"SELECT body FROM sql_item WHERE scope=? AND kind='run' AND state IN ({marks})",
+                            (scope, *states),
+                        ).fetchall()
+                        if any(
+                            json.loads(self._cipher.decrypt(row[0])).get("sourceRef") == source
+                            for row in active
+                        ):
+                            raise SqlError(
+                                "RUN_LIMIT", "This query already has an active or unresolved run.", 409
+                            )
                 saved = self._write(scope, kind, body["id"], body)
                 db.execute(
                     "INSERT INTO sql_operation VALUES (?,?,?,?,?,?)",

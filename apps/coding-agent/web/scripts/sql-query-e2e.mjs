@@ -6,8 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { localApp } from './mission-test-server.mjs';
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const evidence = process.env.SQL_E2E_EVIDENCE_DIR || resolve(web, '../../../specs/013-sql-query-support/e2e');
-const shots = resolve(evidence, 'screenshots');
+const iteration=process.env.ITERATION||'';
+const evidence = process.env.SQL_E2E_EVIDENCE ? resolve(process.env.SQL_E2E_EVIDENCE) : resolve(web, '../../../specs/013-sql-query-support/e2e');
+const shots = resolve(evidence, 'screenshots',iteration);
 const captureScreenshots=process.env.SQL_E2E_CAPTURE!=='0';
 mkdirSync(shots, { recursive: true });
 const app = await localApp();
@@ -163,8 +164,8 @@ try {
   await screenshot('17-promoted-sql-draft');check('T13 assistant SQL promotion opens an editable draft without execution');
   expect(errors).toEqual([]);
   check('No browser runtime errors');
-  writeFileSync(resolve(evidence,'report.json'),JSON.stringify({success:true,assertions,requests,screenshots,screenshotMode:captureScreenshots?'captured this run':'retained from the last visually inspected capture',browserErrors:errors,provider:'deterministic local provider; live Databricks not contacted'},null,2));
+  writeFileSync(resolve(evidence,iteration?iteration+'.json':'report.json'),JSON.stringify({success:true,assertions,requests,screenshots,screenshotMode:captureScreenshots?'captured this run':'retained from the last visually inspected capture',browserErrors:errors,provider:'deterministic local provider; live Databricks not contacted'},null,2));
 } catch(e) {
-  writeFileSync(resolve(evidence,'report.json'),JSON.stringify({success:false,error:String(e.stack??e),assertions,requests,screenshots,browserErrors:errors},null,2));
+  writeFileSync(resolve(evidence,iteration?iteration+'.json':'report.json'),JSON.stringify({success:false,error:String(e.stack??e),assertions,requests,screenshots,browserErrors:errors},null,2));
   throw e;
 } finally { await browser.close(); await app.stop(); }

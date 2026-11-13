@@ -1,0 +1,43 @@
+{
+  "turn": {
+    "actions": [
+      {
+        "id": "read",
+        "tool": "dbx_read",
+        "arguments": {
+          "kind": "notebook",
+          "id": "$folder/revenue"
+        }
+      },
+      {
+        "id": "edit",
+        "tool": "dbx_edit",
+        "arguments": {
+          "kind": "notebook",
+          "id": "$folder/revenue",
+          "base": "$read.revision",
+          "ops": [
+            {
+              "op": "replace_cell",
+              "index": 3,
+              "sha": "$read.cells.3.sha",
+              "source": "print(300)\n\n"
+            }
+          ]
+        }
+      }
+    ],
+    "answer": "The cell change is recorded for review. It has not been claimed as verified.",
+    "followupActions": [
+      {
+        "id": "read",
+        "tool": "dbx_read",
+        "arguments": {
+          "kind": "notebook",
+          "id": "$folder/revenue"
+        }
+      }
+    ],
+    "followupAnswer": "**Done** \u2014 Read back the current notebook revision.\n\n**Evidence**\n\n| requirement | tool | summary |\n|---|---|---|\n| Verify the notebook change | ${read.invocationId} | 300 |\n\n**Assumptions and unverified** \u2014 No notebook execution was requested.\n\n**Anything odd or suspicious** \u2014 None."
+  }
+}

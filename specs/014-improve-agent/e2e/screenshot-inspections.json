@@ -1,0 +1,2817 @@
+{
+  "date": "2026-11-14",
+  "method": "Original 346 captures retain their prior individual inspection records. All 135 integration captures visually inspected in labeled contact sheets; detailed full-size review of jobs failure and notebook diff informed corrections. Failed iterations retained and marked superseded.",
+  "count": 481,
+  "screenshots": [
+    {
+      "path": "screenshots/assets-01/01-native-single-review.png",
+      "sha256": "d78af045e3a71155591d1d9ca7fb6482271c254b5d0fda3450b4f3e980ff884d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-01/02-native-verified-once.png",
+      "sha256": "e434c25a52d21972d48d3b0c082b93856897335f1cdc8fd2cf56f372f9ddadc1",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-01/03-native-rejected.png",
+      "sha256": "b2c7ac676c419415f3881063cc1600be19752e56b3deba729f07a7b9ef32817d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-01/04-bundle-review.png",
+      "sha256": "1073bd651c50b43ef082f3a773f76dde07dd792b27add755e478d15e347ab496",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-01/05-bundle-inspected.png",
+      "sha256": "8a1192b162aa06ee4de4dc560ac4d2f1fb9b6cdb78ea9c83a479c83218dcc809",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-01/06-asset-attached.png",
+      "sha256": "c96db3c912ed08dfa0383072e9340d3bce2d11aaa1183e061077098a085bbb5d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-02/01-native-single-review.png",
+      "sha256": "153f5fb8662ad8bc424b489ce61142d37023b2dbb1a4bf85bededaac54b2b70c",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-02/02-native-verified-once.png",
+      "sha256": "e434c25a52d21972d48d3b0c082b93856897335f1cdc8fd2cf56f372f9ddadc1",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-02/03-native-rejected.png",
+      "sha256": "b2c7ac676c419415f3881063cc1600be19752e56b3deba729f07a7b9ef32817d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-02/04-bundle-review.png",
+      "sha256": "1073bd651c50b43ef082f3a773f76dde07dd792b27add755e478d15e347ab496",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-02/05-bundle-inspected.png",
+      "sha256": "86049ac8f6fd355f6c96611000e4f874961dcdf20545c8f3ae25db7ff353f590",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-02/06-asset-attached.png",
+      "sha256": "f481d09749d88939ed6c6aa09142fcebc201db506858e086ed851a55c16d7609",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-02/07-as-code-capabilities.png",
+      "sha256": "eee78d132012e11fc596f48e8ef32d927164a5f8a1af0945af681cd479cca4e0",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-02/08-created-resource.png",
+      "sha256": "f97e67fc692dd1f3b61ff51793014a067f8d0cce3c81be0aa4b2b8286e4c9c14",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-02/09-archive-resources.png",
+      "sha256": "9093fe9f2b4220765d891a677317af21f8deaf1671f0f1c310945aa4e1bddf75",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-02/10-cleanup-review.png",
+      "sha256": "7461108378b2e1c8134ef11cb5b810519bc484608fb0226e56892a46b50678fc",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-02/11-cleanup-deleted.png",
+      "sha256": "029640add3371ea6d13e9ee77aee69b95d7d0525d01c44bd28f949c44e82d411",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-02/12-stop-native-runs.png",
+      "sha256": "62f89ef95652052ad28ed5935ecfa97bb854a9ce9e1aefe22c4a2c04e9b86862",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-02/13-stopped-native-cancelled.png",
+      "sha256": "898147a1459a6dfd2d5181e3d9cbae343b5cbde02326d6ce4a44768331d374e3",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-03/01-native-single-review.png",
+      "sha256": "80f08e2b47a5336ed308275c0bf2ea9f4e25ddd60a15d7e2674517f3a738e945",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-03/02-native-verified-once.png",
+      "sha256": "db5a453de45433f828ab070f658651051aa116b2e16443351a92c7a67c07c95a",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-03/03-native-rejected.png",
+      "sha256": "b2c7ac676c419415f3881063cc1600be19752e56b3deba729f07a7b9ef32817d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-03/04-bundle-review.png",
+      "sha256": "4bd1fbaab8c31f66dee931bfa29526973b707a5a5a8bb5ac18d4217d5a80b8e2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-03/05-bundle-inspected.png",
+      "sha256": "62fb809719c63d057939d3c2022e1452299dc35ef4fb95f76aab22a60162d952",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-03/06-asset-attached.png",
+      "sha256": "f75841a81c77994922c2383f666445c84cb6d601d5a427c3ae3f34d0ac942100",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-03/07-as-code-capabilities.png",
+      "sha256": "5983198cf3f0806727608025c8be1f5ab742de315a75a77fef14f4a3eb37603d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-03/08-created-resource.png",
+      "sha256": "ce276a3b6e28159e62466a3205376f927152f4d255b89b0f19b21a9b0e7c8df0",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-03/09-archive-resources.png",
+      "sha256": "47dcae8c770cc99f28fd1b23bb48705f66eb6c164e22c862c0e7ad9732ff2947",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-03/10-cleanup-review.png",
+      "sha256": "ebc975643bf8c26ec7db77d4f2b8d2f8dc509967ab0dffba3a659471c88c621a",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-03/11-cleanup-deleted.png",
+      "sha256": "c5ebaf3a746404ad7edd45062a270e59308fe3dc50031a049005360ad97adb9d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-03/12-stop-native-runs.png",
+      "sha256": "830110b358f732e3f3a76111a24cd0be63c44466adac646bf7080f1d2bf45414",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-03/13-stopped-native-cancelled.png",
+      "sha256": "5f1842421f9dc68de08082821fc11fcf11c0e324273892660586845dc0b23b7f",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-context-02/01-native-single-review.png",
+      "sha256": "b2c19007424a73316eab5e5d98e2d4645a27ed7f65dc586f1bbe58354e9f8a16",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-context-02/02-native-verified-once.png",
+      "sha256": "b56fd91e64dfbdbebc072533728e176bf4bbb8e7ed1be30b08f24c48d5018abd",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-context-02/03-native-rejected.png",
+      "sha256": "633a1b127bf383e8deb90285348f9ca37c57a92dcfd9b6bdc563e7cf77ef9448",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-context-02/04-bundle-review.png",
+      "sha256": "4bd1fbaab8c31f66dee931bfa29526973b707a5a5a8bb5ac18d4217d5a80b8e2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-context-02/05-bundle-inspected.png",
+      "sha256": "b92e5f61739280791f3218a12c9ea82c9186bc6435b715277cc665b9f9cc39ff",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-context-02/06-asset-attached.png",
+      "sha256": "4d25348d4f5afd7bcfc2bbff4a8b85331432863f78f19507ca1f364727ca72df",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-context-final/01-native-single-review.png",
+      "sha256": "57016a462b47b1d1b8bafd0d07c93ad675ad1d36f1e9314a8a91d253b8125dad",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-context-final/02-native-verified-once.png",
+      "sha256": "b56fd91e64dfbdbebc072533728e176bf4bbb8e7ed1be30b08f24c48d5018abd",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-context-final/03-native-rejected.png",
+      "sha256": "633a1b127bf383e8deb90285348f9ca37c57a92dcfd9b6bdc563e7cf77ef9448",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-context-final/04-bundle-review.png",
+      "sha256": "4bd1fbaab8c31f66dee931bfa29526973b707a5a5a8bb5ac18d4217d5a80b8e2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-context-final/05-bundle-inspected.png",
+      "sha256": "ab4bb70287f0e04d75a37e6eae7f7f53f26e8d08af75c9bb2bae4f2368066ed0",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-context-final/06-asset-attached.png",
+      "sha256": "f8cbfc487f934465b4a4a448d518aa87fc6f536f014753d2d75ff5fd919bd862",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-decision/01-native-single-review.png",
+      "sha256": "7f2079d5fd12a4e3e288f7bfc3b1542f2b2613dc06ba8f4acc32527bf1055d55",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-decision/02-native-verified-once.png",
+      "sha256": "b56fd91e64dfbdbebc072533728e176bf4bbb8e7ed1be30b08f24c48d5018abd",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-decision/03-native-rejected.png",
+      "sha256": "633a1b127bf383e8deb90285348f9ca37c57a92dcfd9b6bdc563e7cf77ef9448",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-decision/04-bundle-review.png",
+      "sha256": "4bd1fbaab8c31f66dee931bfa29526973b707a5a5a8bb5ac18d4217d5a80b8e2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-decision/05-bundle-inspected.png",
+      "sha256": "75429c3aff377d98259bf3f95efe15c5e4616afda61b5d3b3a1550ac03e23c35",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-decision/06-asset-attached.png",
+      "sha256": "4cf01aac357b2e62b1cfe2c607b8b0e45e7e154f27977a9e676727bfee0d1f1b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-decision/07-as-code-capabilities.png",
+      "sha256": "c5fae9dafedc989e87530cadb8489f022b6f0e0cafcd61c790b90c4af7bebb04",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-decision/08-created-resource.png",
+      "sha256": "d32bd12f1faa55df7d3d3b5380c321f848ab010478f75e75ddf26d037979a0ad",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-decision/09-archive-resources.png",
+      "sha256": "53034c703c3e91e2407f243e4a891f17745158f889145df076a9f7dd4d35016b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-decision/10-cleanup-review.png",
+      "sha256": "6f0d10bb68b3015d5fef3da37c7be843252fec667ad6ae90d1b8fa0f02c36aca",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-decision/11-cleanup-deleted.png",
+      "sha256": "37dd377b722d28353f6ed19d7ccc2ecb4b59d65a4a880b5d142932178b899a28",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-decision/12-stop-native-runs.png",
+      "sha256": "5e1e8ff4bdab315771def1d63bca10bdd571dc534e191e910e7ab0506af52d76",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-decision/13-stopped-native-cancelled.png",
+      "sha256": "a239ca82b16d786cb421a8c7367a62d931270be83369bcc3ced9dd49ec83b813",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-final/01-native-single-review.png",
+      "sha256": "1326c154721d9272911b8e24b757266b941821a601db1fc235e8339ca7ef82e2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-final/02-native-verified-once.png",
+      "sha256": "4e0b67c408c3b59a0cb4f7108b5036e4b1b5e0ef9763aceeb1ab2ad30a62482f",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-final/03-native-rejected.png",
+      "sha256": "b2c7ac676c419415f3881063cc1600be19752e56b3deba729f07a7b9ef32817d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-final/04-bundle-review.png",
+      "sha256": "4bd1fbaab8c31f66dee931bfa29526973b707a5a5a8bb5ac18d4217d5a80b8e2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-final/05-bundle-inspected.png",
+      "sha256": "abc0762e145e9de777f0e0b3e02ec94958cae064922cebc984cebc5ac7c725d9",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-final/06-asset-attached.png",
+      "sha256": "cd3d829daa128af76dfa3251c00399d41e4db8dcecdb976c644a861b760d3ab5",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-final/07-as-code-capabilities.png",
+      "sha256": "cc8dab680eb3fb440f7dea36882b611669b3a7482b47f3045658f9f3d5575e68",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-final/08-created-resource.png",
+      "sha256": "1dae72393bacd2074b42c4803a69ac5760d4416ac452ebb546d264cb40d4130b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-final/09-archive-resources.png",
+      "sha256": "819de94b7c947acbb321575bf910b06ec412f6daa4db281261337f78794c867d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-final/10-cleanup-review.png",
+      "sha256": "6826fc5ff6534af7447446d01e448c17f523cac82b6b0f99dd3f22824aab60e9",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-final/11-cleanup-deleted.png",
+      "sha256": "127b4ba6961dc9d6040980db55bf0349eedfa5522cdb65f16bd94064b42fab52",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-final/12-stop-native-runs.png",
+      "sha256": "4cb1fa788f70ed021ffb7e1b49f0d280c517e5559ea78542960a5298fbbaac1b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-final/13-stopped-native-cancelled.png",
+      "sha256": "654ab9d9aade020098dd52f23cf2208937d1d479fbfd564fa4c3e2cf12161a3c",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-gap-final/01-native-single-review.png",
+      "sha256": "996faa8b30bba5ec5d2311919a7aa99843035e8031ab1981baa573df301ab3fb",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-gap-final/02-native-verified-once.png",
+      "sha256": "b56fd91e64dfbdbebc072533728e176bf4bbb8e7ed1be30b08f24c48d5018abd",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-gap-final/03-native-rejected.png",
+      "sha256": "633a1b127bf383e8deb90285348f9ca37c57a92dcfd9b6bdc563e7cf77ef9448",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-gap-final/04-bundle-review.png",
+      "sha256": "4bd1fbaab8c31f66dee931bfa29526973b707a5a5a8bb5ac18d4217d5a80b8e2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-gap-final/05-bundle-inspected.png",
+      "sha256": "a095b5a39f4877a68162d1144a42e220e005de845f8526d1442176f6f2cc99a4",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-gap-final/06-asset-attached.png",
+      "sha256": "9a266d61ae3e0901df3e833b284dbfb5d849e4ce14fa2ddf1936fe66ef99c44a",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-gap-final/07-as-code-capabilities.png",
+      "sha256": "c5fae9dafedc989e87530cadb8489f022b6f0e0cafcd61c790b90c4af7bebb04",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-gap-final/08-created-resource.png",
+      "sha256": "528bba00f2bbb127854703e0fc3e2ff558799c57e4fce8659c052f333b956394",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-gap-final/09-archive-resources.png",
+      "sha256": "7a85dd7bf2335377d277058a16871d990f0428c4f9f203285c99b2971f4847fe",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-gap-final/10-cleanup-review.png",
+      "sha256": "6076dfa3e5d6b77b4a3401d3961fdb843f3812569762921cffa86005679e48d0",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-gap-final/11-cleanup-deleted.png",
+      "sha256": "35cf98ea49fc449c13bf5339f97c7f6937159859fdf2f2ece3514366204668c6",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-gap-final/12-stop-native-runs.png",
+      "sha256": "f70d585199d4c22ee6ae3deafeb8c8fb783f2ec2c4f5d46b9479ee2346c270f8",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-gap-final/13-stopped-native-cancelled.png",
+      "sha256": "72baa798b45bac1d9ac9fe9633d080e02d856debd7dbdb93252048f919ea2afc",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-gap-final/14-resource-kept-acknowledged.png",
+      "sha256": "dc257ce6ae82e0b91d0daff24473d37b9cb2bfe95469b3d9ab07b0473ee08ccb",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-paged/01-native-single-review.png",
+      "sha256": "2dccb591f257a29d4e3ccfe9b761ca3f5e678360ce082ef051847c178877c446",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-paged/02-native-verified-once.png",
+      "sha256": "b56fd91e64dfbdbebc072533728e176bf4bbb8e7ed1be30b08f24c48d5018abd",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-paged/03-native-rejected.png",
+      "sha256": "82c5499bd17027b560f33235303e4bc9b892d5c767b3d8129bec6142f1b3ffd1",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-paged/04-bundle-review.png",
+      "sha256": "4bd1fbaab8c31f66dee931bfa29526973b707a5a5a8bb5ac18d4217d5a80b8e2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-paged/05-bundle-inspected.png",
+      "sha256": "f6651c3826b512bd885dfdaafa25e057ad9eb0e1adce693b93eb8d155329c933",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-paged/06-asset-attached.png",
+      "sha256": "7f6c4b16892f61073e2a71437d7c662076151ac2eb4baf58e6057a7d4ce5642b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-paged/07-as-code-capabilities.png",
+      "sha256": "c5fae9dafedc989e87530cadb8489f022b6f0e0cafcd61c790b90c4af7bebb04",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-paged/08-created-resource.png",
+      "sha256": "6527030a81be709c901855769693c80e56512b95cbdfbbf89132bfd266ac8295",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-paged/09-archive-resources.png",
+      "sha256": "601dbe52e797c978ad0761c611c362ddb37feafab341a5d7e449311ecfc676dd",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-paged/10-cleanup-review.png",
+      "sha256": "b71e60652a6940e625d1686e6535a3db513ce3a990a307af4af2879190e21870",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-paged/11-cleanup-deleted.png",
+      "sha256": "3e0ae1c92bbe66c3534602a3f8c149a5d699fea316bee1fec3fb4b2e74996e3b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-paged/12-stop-native-runs.png",
+      "sha256": "eb9cb8b1016512a331d79edbafbb957ca3032eb1a9f14f1504c492e7b1fa1f51",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-paged/13-stopped-native-cancelled.png",
+      "sha256": "c6383fc4e086df0a1f9aff265b40ef2dbc2f17c1b870810f8d6bd9dac696967a",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-principles/01-native-single-review.png",
+      "sha256": "9519e0c7226d898f422343bb9574acf4fc279c02b56aa26538604707a2345826",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-principles/02-native-verified-once.png",
+      "sha256": "b56fd91e64dfbdbebc072533728e176bf4bbb8e7ed1be30b08f24c48d5018abd",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-principles/03-native-rejected.png",
+      "sha256": "633a1b127bf383e8deb90285348f9ca37c57a92dcfd9b6bdc563e7cf77ef9448",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-principles/04-bundle-review.png",
+      "sha256": "4bd1fbaab8c31f66dee931bfa29526973b707a5a5a8bb5ac18d4217d5a80b8e2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-principles/05-bundle-inspected.png",
+      "sha256": "386c5a2b2fdcca6f53a4ef8db63dbdfefe0c9863c5aa9bb3e149d9e98e521f50",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-principles/06-asset-attached.png",
+      "sha256": "2b6a56797944010bc4a87d92d938a17974714f10c621219e7ac0caec41ef7ea7",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-principles/07-as-code-capabilities.png",
+      "sha256": "50a2bdcfb97d07e7a377ab9372771e02dcc7fb641e2ed8c10bac0b624a94e8a0",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-principles/08-created-resource.png",
+      "sha256": "40dfb9d857b224eb34b2f3cabc360261fba14a058c6fb23a00549260076704bc",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-principles/09-archive-resources.png",
+      "sha256": "c82c084a6cd066eb829b33b3a9515538fbaad9e2b2f06d7186b203a2e28e8ff8",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-principles/10-cleanup-review.png",
+      "sha256": "0bb1af45828663c2571d2e07f2d733c9948c4392b3c9f3088f75039bc3e804c0",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-principles/11-cleanup-deleted.png",
+      "sha256": "9bd446e949facf516425e9e2620572245bfaaee4a93acf9c4efab498bc0b61b4",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-principles/12-stop-native-runs.png",
+      "sha256": "5e1e8ff4bdab315771def1d63bca10bdd571dc534e191e910e7ab0506af52d76",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-principles/13-stopped-native-cancelled.png",
+      "sha256": "422fde14feba825d1502143f621dc210ed3376b70b45b08e59a5af98c2796e5b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-principles/14-resource-kept-acknowledged.png",
+      "sha256": "ef8e4a3a793df91307cb78a8fc1e97b129938d04612e32b62f7272c51cc01d66",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-reviewed/01-native-single-review.png",
+      "sha256": "7eea5dd317f1f967927350a49924bf9b339c6d1553705e38d8a22a8b6ebc809f",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-reviewed/02-native-verified-once.png",
+      "sha256": "b56fd91e64dfbdbebc072533728e176bf4bbb8e7ed1be30b08f24c48d5018abd",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-reviewed/03-native-rejected.png",
+      "sha256": "82c5499bd17027b560f33235303e4bc9b892d5c767b3d8129bec6142f1b3ffd1",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-reviewed/04-bundle-review.png",
+      "sha256": "4bd1fbaab8c31f66dee931bfa29526973b707a5a5a8bb5ac18d4217d5a80b8e2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-reviewed/05-bundle-inspected.png",
+      "sha256": "1b1cf456ffb870f5f5b87833af5331e06747bf1bf240b150679b116c7835a1f4",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-reviewed/06-asset-attached.png",
+      "sha256": "f187add61770effebdbb873e176acb3dcd7a043eecd1f405bcd277dbd0ecd062",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-reviewed/07-as-code-capabilities.png",
+      "sha256": "c5fae9dafedc989e87530cadb8489f022b6f0e0cafcd61c790b90c4af7bebb04",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-reviewed/08-created-resource.png",
+      "sha256": "bb2dcff466a41f4b14baf5a803d511d3fdb0c0144aeca2d040e646bc93aec8c5",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-reviewed/09-archive-resources.png",
+      "sha256": "07cdabc97c9de001840b62608fbc873bb7b42111a492ebe869e7bdb2efda66e8",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-reviewed/10-cleanup-review.png",
+      "sha256": "19127a752f8941cd09eff494a88f3d0806346384b23b71fd462cfdb18e9cd924",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-reviewed/11-cleanup-deleted.png",
+      "sha256": "258505167ae45f4ffe9772ff50edc781d4b45f5cac4c9eb6b95971dec75e41e2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-reviewed/12-stop-native-runs.png",
+      "sha256": "d148b6b28ea5045d8ac6079047771d45b62892225cb51a462efb370c3e4676fc",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/assets-reviewed/13-stopped-native-cancelled.png",
+      "sha256": "8fa73ba000dff5b820c41372454498240f2329f2cf2bf8482ad965f2f39dc922",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/editor-01/01-unsaved-local.png",
+      "sha256": "ff8e745d183cfe9714b803c67f8f05f75a4686a13c2a98dd1c11ecf11c79d347",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/editor-01/02-incoming-preserves-local.png",
+      "sha256": "267db5418e4f40d7693c6c4d6def9c6fd8fded8068f3aa245ee8bb0d475312ff",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/editor-02/01-unsaved-local.png",
+      "sha256": "43c7821acc5f60c07def3d647491ceea9204473892814b6f4065610bb23f0711",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/editor-02/02-incoming-preserves-local.png",
+      "sha256": "267db5418e4f40d7693c6c4d6def9c6fd8fded8068f3aa245ee8bb0d475312ff",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/editor-02/03-local-recovered.png",
+      "sha256": "8c1b67259f798212fa2164c8c72b4ea1504a62e91f53750fe93df2eea479375c",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/editor-02/04-live-editor-refreshed.png",
+      "sha256": "0c0d06db62819af6ff2be5ef1198fab13b4e6934f28adce813bffc2f83e35345",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/editor-03/01-unsaved-local.png",
+      "sha256": "0c86aaae2ebfa3416ae51832e18bacb8eb52ba149f20324fd2d53fe83ecc0b18",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/editor-03/02-incoming-preserves-local.png",
+      "sha256": "f7fa0eb965dd6d8392fbc3af4954d6d43e131d3105c5d76cf0b3675bf2efc9b5",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/editor-03/03-local-recovered.png",
+      "sha256": "5659ea9d23146496a1f676eb3fb0a25c32f2e4447281a63df5a0d04e505e6532",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/editor-03/04-live-editor-refreshed.png",
+      "sha256": "8aad51ac0114343bb242a64b09f230434417145346372156a4276d383d52dcfc",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/editor-final/01-unsaved-local.png",
+      "sha256": "a19725259719912d4bdb0e473aaaf264bb04df711e49544e7a2e19ebfeb6af1d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/editor-final/02-incoming-preserves-local.png",
+      "sha256": "3b7a72665de1279765e8baeb07cbb032585e0e2c34ec683850e47f419413f6bd",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/editor-final/03-local-recovered.png",
+      "sha256": "82c99d4a6ee0fb3c5d5ab045f419a5e4d6d41c934c5e370c50be45dcdb8e3b11",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/editor-final/04-live-editor-refreshed.png",
+      "sha256": "a8f0d23d4db16b9ca5b5745d932e1e8b6cb384ac3b9890defd4b4e131897b40d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/exam-invocation-final/gpt-oss-change.png",
+      "sha256": "37f613d905c4ce6ef8c90cd39026d340e430827e4fa67afb03261df2bfe95430",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/exam-invocation-final/gpt-oss-overview.png",
+      "sha256": "db5e3e3ef151e2dcbb2ef52d0a7f9f15315cdd88175bf1e6cd4b428b80636fe5",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/exam-invocation-final/maverick-mobile-blocked.png",
+      "sha256": "a586dd9022c1c842734f77eb552440f18c8e30fe622073891c777505819d6c02",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/exam-invocation-final/maverick-overview.png",
+      "sha256": "f3ec6b8c0d20ea95e5c09e8c0148dfe8d81af4e9e7ee8da6184cc057d1cbeea5",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/exam-proof-01/gpt-oss-change.png",
+      "sha256": "14c729befbdacc7b512d0d3cbc4a22de2e8b15f164028c30cc13816a2f5770d7",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/exam-proof-01/gpt-oss-overview.png",
+      "sha256": "841797cd735e10493715110743c01a98a0ea71343b9120a7a27c471aca880ad6",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/exam-proof-01/maverick-mobile-blocked.png",
+      "sha256": "22de6de1f1ac337c6c26d19f14b965ab5c21c3e0daca1a085966c3a571480b88",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/exam-proof-01/maverick-overview.png",
+      "sha256": "85660d0b275485fa86978d0e71aa0dbe1cd39dd907f218b2d65f97946c895551",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/exam-proof-02/gpt-oss-change.png",
+      "sha256": "f0d703f0623eebb11fb0e789b8d359cc21a47f8134d362651d3b07f7e73d6cb8",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/exam-proof-02/gpt-oss-overview.png",
+      "sha256": "3d5730fb714372987e6973fdbe0ae0dd1cf944acf441d8821169b23ceead81c0",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/exam-proof-03/gpt-oss-change.png",
+      "sha256": "979d5f24c8513b66934aa305d02ce6f224d7d8ed2f6b59a6e027af81f40d3a58",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/exam-proof-03/gpt-oss-overview.png",
+      "sha256": "416c00021abaefc45743f59d47ec79cc04f7cafd2429325c1fc252e655d85fed",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/exam-proof-03/maverick-mobile-blocked.png",
+      "sha256": "ebdc29fd6310659ff56fcaed1bbe330ea0500638d821ce914740d62e3bded1a4",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/exam-proof-03/maverick-overview.png",
+      "sha256": "6782ddca6c6a8e32b5a755d2f056e7e4b08d40d652e1290c144736ed8ce80499",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-01/01-permission-desktop.png",
+      "sha256": "fdaa22cc233a17bebcb735f4a9091a5a1ee6212527942c2bf30564805eaddd00",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-01/02-rejected-desktop.png",
+      "sha256": "2341ba36e8d5339f4febb9cccb03b5c5aba08310cfe944c865dec386d0967be5",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-01/03-approved-desktop.png",
+      "sha256": "03d50e4f3d56df1cbc86a497b0d2c87edff810c31e0604863303c57f47f85cd7",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-01/04-meter-desktop.png",
+      "sha256": "b324b904b7670c67b348e649690831f71dfa07c5e71ff0eab61c18bd61d53039",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-01/05-permission-320.png",
+      "sha256": "50d5be1f15e40238c726682e68e83f6a08ebf2a72d135d25bf1fb08d975f9bdc",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-01/05-permission-390.png",
+      "sha256": "a0ec88e0bfb7c8677c8f2ce4aa54871dd0fb1216a0f844fa13ae560e61be8ea4",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-02/01-permission-desktop.png",
+      "sha256": "4e0c4e4f79c0dc78ddd4b3fce6d67c6def566e1b344a80c82e256d79a282ee25",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-02/02-rejected-desktop.png",
+      "sha256": "1fb4f5b596bc380d770381c6700b90e1e39ae709ed0dbf1b5e424a7a26c68e15",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-02/03-approved-desktop.png",
+      "sha256": "7f7d50a4ac5487a6557fb6d9b221475afd2742908d45ad18eb30c088f789f7b0",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-02/04-meter-desktop.png",
+      "sha256": "993a2eb3db2e31c53dc235008aca487f5c455604cb5a2779f2f42c38002efa0e",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-02/05-permission-320.png",
+      "sha256": "d762f49dcce7824fcf2772917ef8b6522f3310cd9a3f235eb163f4b06c0dcec7",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-02/05-permission-390.png",
+      "sha256": "719c71f1dc6185a2d1354270c4774dfa77b067e4c2b5d0ddfd34bef441558ad3",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-03/01-permission-desktop.png",
+      "sha256": "4e0c4e4f79c0dc78ddd4b3fce6d67c6def566e1b344a80c82e256d79a282ee25",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-03/02-rejected-desktop.png",
+      "sha256": "55c91be614a47a72c3614b45817cf951cf04d0bcbfabefccf0fac6ac303860b1",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-03/03-approved-desktop.png",
+      "sha256": "7f7d50a4ac5487a6557fb6d9b221475afd2742908d45ad18eb30c088f789f7b0",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-03/04-meter-desktop.png",
+      "sha256": "993a2eb3db2e31c53dc235008aca487f5c455604cb5a2779f2f42c38002efa0e",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-03/05-permission-320.png",
+      "sha256": "d762f49dcce7824fcf2772917ef8b6522f3310cd9a3f235eb163f4b06c0dcec7",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/iteration-03/05-permission-390.png",
+      "sha256": "719c71f1dc6185a2d1354270c4774dfa77b067e4c2b5d0ddfd34bef441558ad3",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-03/01-real-review.png",
+      "sha256": "56f77234992b7df0e77380438e5462cd2ca0883dcea268650ecf0b62adc17311",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-03/02-real-applied.png",
+      "sha256": "28c303709faea62e88a078cef863470c40ea2476fc35206f0d173a62c52cb21d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-04/01-real-review.png",
+      "sha256": "c24cd8278117915c8dd9601958ffce72a2636eeb12f6e0ca9cf84233c5e7b0c7",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-04/02-real-applied.png",
+      "sha256": "13d1e42e2440a85e74bdd648423c89163a35ad4306b7922e387725d1e6a99b60",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-05/01-real-review.png",
+      "sha256": "f566d92a4cfab583e7f2f6f1b7f80bcd36916e2a89f081622b8ab8b6d33ca664",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-05/02-real-applied.png",
+      "sha256": "dd41c06afb9b8ecb103354110988696c7257911699ab28a502a1b27d23fe26be",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-05/03-real-proof.png",
+      "sha256": "044d0109b232dca75119cfd680f5dbe79d192286cef9dd4231345a69e8d67909",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-05/04-real-undo.png",
+      "sha256": "9fc1cf9a02d32276decc68cefc4297e79a75dbe7eda6ab3c2b47a10870907612",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-06/00-inherited-auto-mode.png",
+      "sha256": "8ca04b5ed4bddf399a4a174eb44fdeade45a3fd81310c939c247ec6ec1785549",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-07/01-real-review.png",
+      "sha256": "8287cde83d713998efc451f00d259bc0c670a8335238a38dbb845fdb5683172e",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-07/02-real-applied.png",
+      "sha256": "103a639e5b8dcc179c05ef46de1bc798999d103b5f7b5471b134f8830b12532b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-07/03-real-proof.png",
+      "sha256": "7481f1660fa3eed67bf1abbac8d8dc6d679c8e39cf8056ced37340ae105d5b1b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-07/04-real-undo.png",
+      "sha256": "9a4dedd9e92295565f7299ac678032ddf76bf3c1f995f011a2772d261c446cb6",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-08/01-real-review.png",
+      "sha256": "9a0262663f28448001862e35536ac85b33adaaaab7effd470db7f7d971712d9e",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-08/02-real-applied.png",
+      "sha256": "3ce61036a9010ff6e11233b1854d3d3e2a31b71f04311074d598e11a2f45acc0",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-08/03-observed-supported-block.png",
+      "sha256": "ea714668529a78f0d60b9984a30d35501af2b19aaee02fa5b1ef0debd4738ba4",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-08/04-real-undo.png",
+      "sha256": "81c0afed5d6b03ec485bd36fc0cb324cdce63a3540d9addfa844ddc29de3e9a8",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-09/01-real-review.png",
+      "sha256": "e9c831f66556d57d28878415ccf93e65c1ed241aadf29bf870adbc8dee3cafb1",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-09/02-real-applied.png",
+      "sha256": "dd4b50f873e15c3d7187ff2b23e79907075c22e9a88aea84c51c855c1637e0c8",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-09/03-real-proof.png",
+      "sha256": "d13fb52563168bc63a72ea271a706383f3e18c2a910107031d526baf384f3712",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-edit-09/04-real-undo.png",
+      "sha256": "e8c6bf0cd7cd36f7b96d37d674714dde1ae6950a754990e22457f717f8bc385a",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-table-01/01-native-table-run.png",
+      "sha256": "7ed26a6a2690cbbeaae632f389f29102582387ef4869756913b2c27a81372b1b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-table-01/02-native-table-resource.png",
+      "sha256": "d660ab0ddb3ec06d99c815b38192c812eaf39f02bc6897aec27633f0e4f4890c",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-table-01/03-table-cleanup-review.png",
+      "sha256": "36dd3e2460fe3ff1813e44fc56a585820b7471329e69eae9a663a909081b1dbc",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-table-01/04-native-table-deleted.png",
+      "sha256": "ba7cfd1931bc43b082ca59c210ac592a34794cad7c03a5d3b08df8dd42decf38",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-table-02/99-failed-state.png",
+      "sha256": "b26ac31f15392db545aa6c786e8a541fa0b4f70efb1ba431243bc53b902147d5",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-table-03/01-native-table-run.png",
+      "sha256": "e5ab3650d4e4af88fcc0a63965812cfe283734e6f3677bb971c012943cb47b4c",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-table-03/02-native-table-resource.png",
+      "sha256": "b53e5cb1bebe1478e301c52fcc9e9ca9b344e80eeb8e1e7e490ea59f1060ea6a",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-table-03/03-table-cleanup-review.png",
+      "sha256": "2a40e17027da7d902f787e5a89fa7d7363fd4db185e26bb483dbf6ee58e1686c",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/live-table-03/04-native-table-deleted.png",
+      "sha256": "afe74eaa7e3a810df82869bc0c0fa6482ed7621bbd8d1592d89097e9440355d7",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-01/01-run-review.png",
+      "sha256": "6fde26d9260340837b4f78b137a8f4b83b75c833c099a338bb8067e15c275f77",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-01/02-running.png",
+      "sha256": "264025492dfb318786b5363406dc927d1994894cd123e8d485156811f53f1aed",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-01/03-settled-return.png",
+      "sha256": "2a6e93bbc45a48a13c4ad247e05da07265d4f6e34846bce37e231cffc9336295",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-01/04-recovered.png",
+      "sha256": "51f595d3546dd4cd38c670e8d08f48bf3f5b828d066d5fb058a6a3a718a63105",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-01/05-cancelled.png",
+      "sha256": "82f62f95cbf8fc5b257843fa6dab1eaf4ef1e0e16800ef93d9a7162364745073",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-01/06-mobile-cancelled.png",
+      "sha256": "bee21be550acf7224d404cfd9ad072ca3255498bbd3951f620c3c080f8a8509b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-02-pg/01-run-review.png",
+      "sha256": "a6f1d139d7ba99e92841374d6bc2cee9fadcbbf2e9c4e060f56da748f4d420f7",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-02-pg/02-running.png",
+      "sha256": "a83e27843453340b6c03de577ff36d53dfbb3080f974e4cb74cdbbef20373321",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-02-pg/03-settled-return.png",
+      "sha256": "32e004941ac656416b880126f47f8a9bd00d83d2c09026d13af99513f61c4460",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-02-pg/04-recovered.png",
+      "sha256": "0b99cb3c9797f9fb8603a14d5a873ba3d8600b00e4b687534df6769783fa1a15",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-02-pg/05-cancelled.png",
+      "sha256": "d2a2916df5c883d26f8faa94413a6d1b2bce697e9ec7e4f1210f7c3026f74af3",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-02-pg/06-mobile-cancelled.png",
+      "sha256": "b81887f4fb03819b0bfeecb285677da7fb98fd9b6002625216b76689c09cfb86",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-03-pg/01-run-review.png",
+      "sha256": "187903a543b3364131939f77f01f70189178f4da2033e30cd58bba1a6a862da7",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-03-pg/02-running.png",
+      "sha256": "d10f2e3b2f6f934242223e0809c8f0adecfdff33c90afad80c8cd20c16203ee8",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-03-pg/03-settled-return.png",
+      "sha256": "c4718920ab8ca5df873379d496308191d73836dae0416a92abdc3c2fc98aae84",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-03-pg/04-recovered.png",
+      "sha256": "3dbfe0b6eb77acd9893b9eb2b8efc3132a9a620cc57007067f2e4081170cfd90",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-03-pg/05-cancelled.png",
+      "sha256": "c4e3f9135993c652337f72aaa30df72db34ba0dee466103d05c48b0bd82739e6",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-03-pg/06-mobile-cancelled.png",
+      "sha256": "5a937835569517c6322ddcdaf217e784a3f497a40235255fca4e2099b497ec9e",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-final/01-run-review.png",
+      "sha256": "a110efe2c99fabb904cfd397d25536a310e54c8a2a333ed45e774a2c1af46baa",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-final/02-running.png",
+      "sha256": "37de4ed118a519073b133f0b7cdf8bb4cbb4ab4987478de03044e93a23eb574e",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-final/03-settled-return.png",
+      "sha256": "3da97eee626ac902674e71b8a56cbffce94bd4abd15b9d4b09aa2f58dcc8daaf",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-final/04-recovered.png",
+      "sha256": "a949e55da7101fb46235b1f9213784dd8cce21a7bee872b3b8e1d4ad8e57e1bd",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-final/05-cancelled.png",
+      "sha256": "50c427ee739dbb8481cdd3d23d2c74a630b975195da67dc6ce23fa3d7b43b35d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-final/06-mobile-cancelled.png",
+      "sha256": "216bf2804ac0991e81ea916304dcb99eaa66a39e31be469c60e6f754c15484db",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-gap-final/01-run-review.png",
+      "sha256": "43010e5109c8c7ce079fe285df09059f3e9acb67629b5fab6a9977ade6b7476d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-gap-final/02-running.png",
+      "sha256": "101c162de1253255ae5217cb03eb57a20fb49447fc17a41e5b7a9ae6c75d7a98",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-gap-final/03-settled-return.png",
+      "sha256": "cc76700425537dfca75b1de82a884786f9667ac9fb5741c75ffd76bc02fbd3b9",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-gap-final/04-recovered.png",
+      "sha256": "4bb91b0f1e048603a0d9fbb7a65ca3a1f12d8da1880f8eb27ac70a57acd8ae29",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-gap-final/05-cancelled.png",
+      "sha256": "b286007d1c0f52a2e7e0ab42752655f84bdcce8d52dc74e601e13f8501e8add3",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-gap-final/06-mobile-cancelled.png",
+      "sha256": "90d87ada27f11ff660f9c8f36f4176ba5ff3804190aa665553eb1159259cce7b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-retention/01-run-review.png",
+      "sha256": "81143a2ad34fc3ff6d1c1f41a376436c726e27c6dde2e8c10657e29e327084f3",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-retention/02-running.png",
+      "sha256": "201da2337476aac3a7429598da9b060ef478329db3b395ee3fad956ab50eed69",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-retention/03-settled-return.png",
+      "sha256": "cb738f0ebba37025554aa7cdbf4afe02ac82d9cb8c1a979943f87b455bdb8823",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-retention/04-recovered.png",
+      "sha256": "73e01188e51e4a93c7be45aeb319b2d33feefece0b650db398d776bc912734c6",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-retention/05-cancelled.png",
+      "sha256": "7feb38b7e64705c0253150b074148ba1ebaefa0f21e39520b9ef27f4d9373991",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-retention/06-mobile-cancelled.png",
+      "sha256": "685c2b26df0e8cd394d60f7593cb98f99c5454cbe16f543d14a43ffb4e49aa47",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-reviewed/01-run-review.png",
+      "sha256": "989af764e8968f37df0b9b3006c8faddd9e164d0c795cab045a8751a08ab82db",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-reviewed/02-running.png",
+      "sha256": "83a8ea2e487f97dd2c25969ab9c782edb423819df8700b33230acaf4b65522d6",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-reviewed/03-settled-return.png",
+      "sha256": "b0207d3cd26ae7301bab2675a970687de18d51b165c4c1c23f8c7a2370519003",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-reviewed/04-recovered.png",
+      "sha256": "618f91f24366c0c4c6059f43b4c9f763d75d7410a37db8141aab809fb7675b8b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-reviewed/05-cancelled.png",
+      "sha256": "5f87d3bea68d96de42dec69df6a9a0496457952278723a5e67cc527d8440b64e",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/operations-reviewed/06-mobile-cancelled.png",
+      "sha256": "1cf0bbf192ff579c083cdba44587d4f56fa3aa59230d3f0077dd374f78e30d34",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/parity-principles/01-parity-desktop.png",
+      "sha256": "747f63db9c2d587770237d22fc1d48f68e11c0edfeb793f0f9dec23b6a0e88d4",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/parity-principles/02-parity-replayed.png",
+      "sha256": "98214c8a4a3bd36aed5e81df0eb567436987109165ea54f65455164e2fde2f4d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/parity-principles/03-parity-mobile.png",
+      "sha256": "11e3470cb5ec20fdc896928571d89f8670ddc4656f3c555717fc4eaeaa3cd6a7",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/parity-principles-final/01-parity-desktop.png",
+      "sha256": "98214c8a4a3bd36aed5e81df0eb567436987109165ea54f65455164e2fde2f4d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/parity-principles-final/02-parity-replayed.png",
+      "sha256": "98214c8a4a3bd36aed5e81df0eb567436987109165ea54f65455164e2fde2f4d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/parity-principles-final/03-parity-mobile.png",
+      "sha256": "11e3470cb5ec20fdc896928571d89f8670ddc4656f3c555717fc4eaeaa3cd6a7",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/parity-principles-final/04-parity-mobile-expanded.png",
+      "sha256": "ec0dcc636091dc2455895857ddcea455910476caf3a6c7905ad32a78bc0b90b6",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-01/01-question.png",
+      "sha256": "f18e490321995a1070fe5c04dae194f52aab98bd28ace53c0c25794e9aa09fde",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-01/02-answered.png",
+      "sha256": "7ed594142825e3d8553deed385d3e5cc96d3370538139c3f2c353c7d6f045225",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-01/03-skipped.png",
+      "sha256": "01b2f5748c979feb2a3bd99ea51935c7c1ab6536573cf13ce7feed37e6ce713e",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-01/04-expired.png",
+      "sha256": "20b15e510b427881381eb5963effa47dc755d067cc789648830eaa84e51d3063",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-01/05-mobile-question.png",
+      "sha256": "a7b1dce399d18792888ab1471957bbe701ee56444b1dcfaeb692aa9977597575",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-02/01-question.png",
+      "sha256": "1e8e163762bb8f3c286fb75a92664a08986f1a2ccd33d738d51bf043fabae117",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-02/02-answered.png",
+      "sha256": "dedb7c3cdb5c225c01a9671221f8a558a6cc6b6956c86336d7768afa7b27b281",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-02/03-skipped.png",
+      "sha256": "de9d863708cf6563cf34f0c421fca7615094a47f715e8f18572712d6bb2e5ec9",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-02/04-expired.png",
+      "sha256": "2373863279339035136aa4e7d3cd5d4e8996ebe37c1b08aca321176e16d11530",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-02/05-mobile-question.png",
+      "sha256": "d1e8b516ec07bd0e2335676c84da432ce77e3e1fc6d6c5f6c2db3b8389b475ab",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-final/01-question.png",
+      "sha256": "1e8e163762bb8f3c286fb75a92664a08986f1a2ccd33d738d51bf043fabae117",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-final/02-answered.png",
+      "sha256": "a20a903b9b363528521d6765272408a42c1de57badcd0217fb87a4fc76302121",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-final/03-skipped.png",
+      "sha256": "de9d863708cf6563cf34f0c421fca7615094a47f715e8f18572712d6bb2e5ec9",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-final/04-expired.png",
+      "sha256": "2373863279339035136aa4e7d3cd5d4e8996ebe37c1b08aca321176e16d11530",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/questions-final/05-mobile-question.png",
+      "sha256": "d1e8b516ec07bd0e2335676c84da432ce77e3e1fc6d6c5f6c2db3b8389b475ab",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/real-agent-03/capabilities-dark-390.png",
+      "sha256": "6a2deb50d1243982f9ab1955746198e67539ab4207306020064f34c814684dc6",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/real-agent-03/capabilities-desktop.png",
+      "sha256": "c6bf69e941c28ad283df0347a77703ef63f9157f64186e2273965bd63131c282",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/real-agent-03/databricks-gpt-oss-120b.png",
+      "sha256": "eb659ad1875ac59249658a24cdc9b51a17019b5326325de3365bcc5e672e4c3a",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/real-agent-03/databricks-llama-4-maverick.png",
+      "sha256": "6dfe341cfaa814d0c586e7c92425dd18b1542ce7c8fe0449fa57c443a960098f",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-01/01-recovered-200-turns.png",
+      "sha256": "830689c3124f6c77305a684dce3cc537ea14597691cb5dc3a757ff0764c57702",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-01/02-earlier-results.png",
+      "sha256": "0bd76425c7510596467e47ca61acbae328610003173b874ae24a88c992c2af7a",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-02/01-recovered-200-turns.png",
+      "sha256": "06a2066a935cba7c6e6d6773b3ef30cc1c5ccde50773be87c0baebd1cfaa460b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-02/02-earlier-results.png",
+      "sha256": "e9f4a7b0c3ff563856fa5fa684b019158ad42b8cdbccc527da966f91cd459e51",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-03/01-recovered-200-turns.png",
+      "sha256": "d78ef568f009f8b25c45cae92d38a7a58a9652ae1317e8149dca5b74dd823b99",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-03/02-earlier-results.png",
+      "sha256": "58e5c916713f01bd34f784fc489ef64e0525fe162b5f468c2d589b3d22f27e4e",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-03/03-mobile-recovered.png",
+      "sha256": "f841171443b8ab32fba8d246ebf2917342c87577fe8fa445e0a110c8a9b6409f",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-04/01-recovered-200-turns.png",
+      "sha256": "06a2066a935cba7c6e6d6773b3ef30cc1c5ccde50773be87c0baebd1cfaa460b",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-04/02-earlier-results.png",
+      "sha256": "e9f4a7b0c3ff563856fa5fa684b019158ad42b8cdbccc527da966f91cd459e51",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-04/03-mobile-recovered.png",
+      "sha256": "557423f8088ae9d4df52fd432d3ee0bb77a0852ea678e9ee5c9ba6030ef926a2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-window-01/01-recovered-200-turns.png",
+      "sha256": "19e107ea7d56e07aee13a160e6f8202cbfd797f6c2105c99bef0bf95386478f9",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-window-01/02-earlier-results.png",
+      "sha256": "87bd14a9069389ba7115e2fe89f0e788fba2cc07cc5fe09e361c1043dcb35758",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-window-01/03-mobile-recovered.png",
+      "sha256": "557423f8088ae9d4df52fd432d3ee0bb77a0852ea678e9ee5c9ba6030ef926a2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-window-01/04-oldest-history-page.png",
+      "sha256": "bca662fecb26512629ac4b3dbf0f573a271e90593a5b3813c6e1e51437804711",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-window-01/05-result-row-page.png",
+      "sha256": "9bd4175241b3776e98d06598175ff9a61e22ce699bd864d9aa34e8d781dd4eb0",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-window-02/01-recovered-200-turns.png",
+      "sha256": "7782d2f7e32be1c5e6cd071ec84df75d04414f06501eb26cde8917ffea898c27",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-window-02/02-earlier-results.png",
+      "sha256": "5c999f77b413e4761b07fea73a87dd9d6dd4e04f5d1d548310affe32e77cd3fc",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-window-02/03-mobile-recovered.png",
+      "sha256": "557423f8088ae9d4df52fd432d3ee0bb77a0852ea678e9ee5c9ba6030ef926a2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-window-02/04-oldest-history-page.png",
+      "sha256": "04a4c0a28037b9d8bde16d34f1eaf6acd10941bec6dc788d13aeb4c636d1bfdd",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/scale-window-02/05-result-row-page.png",
+      "sha256": "86de53f0a89e5d842a5d9a69d9f27c5528fe94c31da9efa1f3b76e54cf04d184",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/storage-01/01-storage-desktop.png",
+      "sha256": "29d10c55a4a6aa1ba7c552d00417e445ef3063f227d215fd2cf0227bfed13cbb",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/storage-02/01-storage-desktop.png",
+      "sha256": "f5f35d46a2ae08cefc190256cbc0b5a3b832e45ef512d88527dd37e10e83b4ec",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/storage-03/01-storage-desktop.png",
+      "sha256": "154f6f47189a550494bfaa1c7803f0e29876ffe467deffc492b122d9a868122c",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/storage-03/02-storage-mobile.png",
+      "sha256": "e10df93ad30df40b8ac5c4bdda59e65e5e9483787c2001abb70a72f37fa3f1b2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/storage-03/03-storage-unavailable.png",
+      "sha256": "801d5161f3946bc45df767d4a1d8b179666a4d6cdf8963167f9fb40ae1b98999",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/storage-03/04-storage-recovered.png",
+      "sha256": "e10df93ad30df40b8ac5c4bdda59e65e5e9483787c2001abb70a72f37fa3f1b2",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/storage-04/01-storage-desktop.png",
+      "sha256": "680ae2ae3b4120d40556bc2970cdcbc0fd9213eb2972556284042d590178c101",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/storage-04/02-storage-mobile.png",
+      "sha256": "3e772f90b95390372ccefdb2e6615c756dbd46919e13676f968a74305246c2de",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/storage-04/03-storage-unavailable.png",
+      "sha256": "420f0cffba204c48c25acca36f3c5017dea3876275c7954350bf47e3b9ba08eb",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/storage-04/04-storage-recovered.png",
+      "sha256": "3e772f90b95390372ccefdb2e6615c756dbd46919e13676f968a74305246c2de",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-01/01-review-diff.png",
+      "sha256": "d88cc1c141a9f025948f46bae949b8bc04acdb17cf80aa5e3cd985fbb36a39fe",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-01/02-changes.png",
+      "sha256": "d6d8b78a5629841e1d5fa1e67af9e53a82b8a9b44563dca671a74c5655f0376c",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-01/03-applied.png",
+      "sha256": "9fd55dd56aad0b54015056f69a4f61e3604f93c9c3c5d9927662ec32eaaff1f4",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-01/04-assets.png",
+      "sha256": "8a62212670a2a9d9be8cb533bb511e5d37f271581706932684eaf29c04c84496",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-01/04-budget.png",
+      "sha256": "003c76ffdcba6fed60b6740830dc8b40a2eeaa1c03cc3170418d5f28c4ee8cb5",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-01/04-capabilities.png",
+      "sha256": "ae9b57eabe03088086d386a1473df5098dd6af5b688ee00807d724b503e6ad58",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-01/04-resources.png",
+      "sha256": "ad4def1fc0b379220920d192b986b44a37cf08a19b54585161f79b909e17e210",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-01/04-runs.png",
+      "sha256": "e84eaf7333dcdbfc02f5c57a8077c6396ed9d757aebf6b1a968a7a51bd00a3c0",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-01/05-plan-budget.png",
+      "sha256": "75dd675dec14131e469b54e3b122a6f2a1180ee0a8eb53ebdd6ee86069e8652c",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-01/06-reverted.png",
+      "sha256": "81e07de5482cec16daa2733b9ae6f570f00a6753a0c5dc1f83523b3d70b2326a",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-01/07-rejected.png",
+      "sha256": "944281d010ac709382ae5856f235b934c10b73ccbf0bc3cf904af2d926948a0d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-01/08-mobile-capabilities.png",
+      "sha256": "80a967181628e6c2ab43f1377a249b106ae5570cfe85d23c8f9968b72b463d08",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-02/01-review-diff.png",
+      "sha256": "302d70e046b782e8e5a859f85d2b9c0a8aa2fe02a53ea031747870c3d643228f",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-02/02-changes.png",
+      "sha256": "5cae290e295ee4b3c0bacf18f0837aae84faf864fe479a531945f2cd64f1d593",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-02/03-applied.png",
+      "sha256": "7441d992287caf27c80dcef997a09bd657d39c91ac4fc94f7208cad20098d913",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-02/04-assets.png",
+      "sha256": "b9f8e9a1e533f899f9b93490ce4a1bc390ef8d690d5d300bc253680b50eedd07",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-02/04-budget.png",
+      "sha256": "b86b1c5c81c07e73969ca60d8514df9e8274f9404ec789a0b941bfc4a0d1f901",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-02/04-capabilities.png",
+      "sha256": "06db6b54b679a604003b6191ecd01840175c682acc1f046500f30467f931a36a",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-02/04-resources.png",
+      "sha256": "01b87df9810cc545be204f8a02e15579176eb8a5094b25a584cf55e00b26c0de",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-02/04-runs.png",
+      "sha256": "bfc032deeb9a8ac35a2af23df78f1d768923dc17147958a5f79c1f421458f1ce",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-02/05-plan-budget.png",
+      "sha256": "03f1c4713f0a525a4a1a34ab6e94bd086eda56488d83252890278f18218cd2ea",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-02/06-reverted.png",
+      "sha256": "7299eedca49044ccbc36660b588900d252f858ecaa18875b8fb65f4151038004",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-02/07-rejected.png",
+      "sha256": "dc7e73b2e595a1b83397dbc21559282b591cd2af0aadcc3098e49bbed1e38998",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-02/08-mobile-capabilities.png",
+      "sha256": "38583c3401da03ac7af8d06e74fb3e476d6040d321a7e8c19efd2b0be41bf4cb",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-03/01-review-diff.png",
+      "sha256": "4984dd456c3ada5566680c2ab3c395e4e8f1fbbd493b9e9a1fccfe3b94d5cbab",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-03/02-changes.png",
+      "sha256": "2ec0003cba3d4b87c308b8b5111c97895997a6baa5d2582d03d7710f83582a17",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-03/03-applied.png",
+      "sha256": "cb554345ad3f8be476d45230279717c02a6459297c9d7562a2221b97a40707d1",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-03/04-assets.png",
+      "sha256": "70991d75dc5efae5c898eee9168beb1be2f004aceac211cdd5e1d30fc288a0db",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-03/04-budget.png",
+      "sha256": "3c27de517e3b1c813444e7800cd62bdde2c84d02520aeab1d02bc39df7a71d78",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-03/04-capabilities.png",
+      "sha256": "d07e4f39106c280f82da56c5691d30e79ee4dc920d250b0d70297e3862023d01",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-03/04-resources.png",
+      "sha256": "35dacc568f32c1118371608f7698f6b4d10faa5c710767f76e079f31b44ba377",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-03/04-runs.png",
+      "sha256": "86a5fe67b2a3c243880eb963c1a95139e443e54d74091f840ea052aead599973",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-03/05-plan-budget.png",
+      "sha256": "aa93f5bfaee180cd9d89aa27beba696b4e35c6b94658d2c952518486c307e695",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-03/06-reverted.png",
+      "sha256": "7f7dcd32d109f78a0f546beb276af1c9b0d407bd1282451320f831c551db3ca3",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-03/07-rejected.png",
+      "sha256": "5c67200c85e6e577675f12905a8a30c96488a3b2b45feb5e3b9c7b9a28ee4847",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-03/08-mobile-capabilities.png",
+      "sha256": "8277768fb23c1700a5e13fe227accba0803138ca55ee25194b85c2ab41710d81",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-final/01-review-diff.png",
+      "sha256": "255dc4bb2379ec35fde01cd4850ad6bcf0627e973bce440023c291ef9bd5ebb7",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-final/02-changes.png",
+      "sha256": "c67a59928c48d0677c74d42772d11e7fce56b40b2e51b81351509ab348db3bcc",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-final/03-applied.png",
+      "sha256": "9c2771a318941ac8e1f2eec1fff48a1cb3f08267c20e695c04cf58181a2ab3e3",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-final/04-assets.png",
+      "sha256": "b9f8e9a1e533f899f9b93490ce4a1bc390ef8d690d5d300bc253680b50eedd07",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-final/04-budget.png",
+      "sha256": "b86b1c5c81c07e73969ca60d8514df9e8274f9404ec789a0b941bfc4a0d1f901",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-final/04-capabilities.png",
+      "sha256": "b6d5543c33938aafac38839ad216aadf7dc62a09eb7f47d26e0871f6ef7be44d",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-final/04-resources.png",
+      "sha256": "4a85cace0dbbb0ec7e09cfbb127b438ed3620a32cab5896ef81e6c2be851b241",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-final/04-runs.png",
+      "sha256": "ca177f9b732b1098b581048ecc7782269b625d46ab56c8eeb71ecdb143b6b302",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-final/05-plan-budget.png",
+      "sha256": "03f1c4713f0a525a4a1a34ab6e94bd086eda56488d83252890278f18218cd2ea",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-final/06-reverted.png",
+      "sha256": "c99d0359a764a449bbbe80e86b55b9f552866a4680698e783810d6f2bbfb55c8",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-final/07-rejected.png",
+      "sha256": "5c67200c85e6e577675f12905a8a30c96488a3b2b45feb5e3b9c7b9a28ee4847",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/work-final/08-mobile-capabilities.png",
+      "sha256": "8277768fb23c1700a5e13fe227accba0803138ca55ee25194b85c2ab41710d81",
+      "inspected": true
+    },
+    {
+      "path": "screenshots/integration-assets/01-native-single-review.png",
+      "sha256": "6c4f2a8d250c00eead4868b6abcc28bcbbb831df9373beb674e82c20c0040ffc",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/00.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/02-native-verified-once.png",
+      "sha256": "fd003de3c9b45fd6a2660b731661cece3fa7c4acf26144ee47e9ed9b0a758cc3",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/00.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/03-native-rejected.png",
+      "sha256": "12d45854e185dba39098a9666dfa203372659b1418aaed7a9817f2bd83f7167a",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/00.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/04-bundle-review.png",
+      "sha256": "73c20c817f3bc0f62e7ec2c4f8a36945a63f9d739539c5b8005bc5bedd33c55c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/00.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/05-bundle-inspected.png",
+      "sha256": "b97f55b50e0823ba9c62797f9620436446ca26fda442ee5e659ad0c5dcf61aca",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/00.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/06-asset-attached.png",
+      "sha256": "33baeb5ab97de3389f71b0a6cb7e375670f232e3639d70806e39709995eee0b2",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/00.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/07-as-code-capabilities.png",
+      "sha256": "94befa33c99394def17c55b5791fd6e5658ba9d521b6ec4b24e476f490f51e3b",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/01.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/08-created-resource.png",
+      "sha256": "0b7b462ab5dbfbb65a4d0d9dc47a49f333fa8da956311ecf5f58995472d3e9f4",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/01.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/09-archive-resources.png",
+      "sha256": "eac4f5755b10660959468269260b5121dd6938b909a17c3985e711b6cd1a4288",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/01.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/10-cleanup-review.png",
+      "sha256": "4925985f5d19850a07d7b7bf3b58674a289347c670a250ee4dbc874bdd5f9b4c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/01.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/11-cleanup-deleted.png",
+      "sha256": "94a38243637a3859b871f4e0a4487d3c7a249dde4f187f016a5dd39584c830f7",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/01.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/12-stop-native-runs.png",
+      "sha256": "239d87a71cc248bc5c8cafaf9060cd236b6dd9a8d8c55ae63b85ee61fbc5b4d5",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/01.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/13-stopped-native-cancelled.png",
+      "sha256": "ce6a09d861e1af87ab2450574d00fb7aedccc0726064d4eb0ad0b07ff450b446",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/02.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets/14-resource-kept-acknowledged.png",
+      "sha256": "14aee34617467acefd25482c20f3136692e5425541f9ddc9cb1d312c85f7dfa4",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/02.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/01-native-single-review.png",
+      "sha256": "c90f1772deaf3ef820390fc83aa3860f5aaeb26ac771c0c56acc2f36b9c342d7",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/02.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/02-native-verified-once.png",
+      "sha256": "fd003de3c9b45fd6a2660b731661cece3fa7c4acf26144ee47e9ed9b0a758cc3",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/02.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/03-native-rejected.png",
+      "sha256": "12d45854e185dba39098a9666dfa203372659b1418aaed7a9817f2bd83f7167a",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/02.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/04-bundle-review.png",
+      "sha256": "73c20c817f3bc0f62e7ec2c4f8a36945a63f9d739539c5b8005bc5bedd33c55c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/02.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/05-bundle-inspected.png",
+      "sha256": "44facf7b293eb9bfb39db4d4a6e5e030377b6856feb6b564da257c5bb8aa5e4b",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/03.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/06-asset-attached.png",
+      "sha256": "ec877488782bd6b117cff8b4276b33a7b6d631625051840857a8391b34faa037",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/03.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/07-as-code-capabilities.png",
+      "sha256": "94befa33c99394def17c55b5791fd6e5658ba9d521b6ec4b24e476f490f51e3b",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/03.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/08-created-resource.png",
+      "sha256": "7d5ca27ae1cf33ada04ffe2fc348c359cc642ef5dd8b76141a973f12e19333bd",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/03.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/09-archive-resources.png",
+      "sha256": "8e79ff33de2ae20dcd77260af9816bedd9751fb84dac8fda9ad8a81f61578807",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/03.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/10-cleanup-review.png",
+      "sha256": "8c1c9bb491de524775952fb57a3e4355315d5ed1528c38ccc697eb90ab0983fb",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/03.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/11-cleanup-deleted.png",
+      "sha256": "aa09371533c46a8732c08c51f7c38cad8140cda16e6a3dce39020661f5c687cc",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/04.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/12-stop-native-runs.png",
+      "sha256": "69b061350c0d498d4f52a7013f1fccbb05d193e4800348cf8f513759e0bcbed2",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/04.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/13-stopped-native-cancelled.png",
+      "sha256": "f89ace1b89b1f647930603fc22ad51a78d75402f7c0ca0b63d847134a5f0b8e7",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/04.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-assets-final/14-resource-kept-acknowledged.png",
+      "sha256": "70b6204e55526c33399ec0fc719a15466df44fdff7f42abe0afd16a5c5b12de5",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/04.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-editor/01-unsaved-local.png",
+      "sha256": "c03c734d433880e18b4a55f1a1b32c4f6bdc9d99f1c3a6cec958067d2dc49729",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/04.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-editor/02-incoming-preserves-local.png",
+      "sha256": "dc035e6c8eb7fd2cb68389cd4dff7493991b0fa94ca2c5f3e680393e6b854202",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/04.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-editor/03-local-recovered.png",
+      "sha256": "e2484f84088496bd24d77b887e921b59a55b17a907ff04a9537adc072988b2dc",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/05.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-editor/04-live-editor-refreshed.png",
+      "sha256": "1c4e4d91e07352e0815d93c7cdfbb662e4881ecb90ed6921beb1568102101750",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/05.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s1-shell-data-1480.png",
+      "sha256": "f86f74f645e7ff5e8997e0133bb38cd2cd5d6e81f56e2d0ef327854d58ca0454",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/05.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s2-job-1480.png",
+      "sha256": "f97633597d21731936f86439be09d70bdf04f7d9685db03f27ade31aaa846b33",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/05.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s3-run-failed-1480.png",
+      "sha256": "2314d6da35b3c89609d93fd67bd34575863c04488538007d37ed37756eaaf3c8",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/05.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s4-run-live-1480.png",
+      "sha256": "07222d6c96b2b9364c584001eea9dd89d57c6b949335724d7bb0e2373a3bc45b",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/05.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s5-pipeline-1480.png",
+      "sha256": "c7e2f326a1f316e05abadca3af6e6c4f9d2945a364d1bda0e2b37cd3a228baba",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/06.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s6-refused-1480.png",
+      "sha256": "5f6ba9e9eb655817d4339bc910a5fc657b95cb75eaebc2898f9bd57bedcfdbb9",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/06.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s7-agent-turn-1480.png",
+      "sha256": "c933f7e5be9c9dbfb228f2583997d1a62787bae837ef2fa95d3cf7a8c4d43793",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/06.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s8-narrow-620.png",
+      "sha256": "bb3d726b1be8ab0d588ee85261ebcd25b32c9c91ddfdd6a019e7ed6cea13a6f0",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/06.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs/s9-palette-1480.png",
+      "sha256": "d3eaccf716173b9dd7693f03944c0ed80f447e0f5664e43cdc97064cddac76a4",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/06.jpg",
+      "status": "superseded",
+      "finding": "Missing table styles; replaced by integration-jobs-fixed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s1-shell-data-1480.png",
+      "sha256": "7dabb8ef6868624500b631ff04a971257081c919971366b7a0f375d75397261d",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/06.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s2-job-1480.png",
+      "sha256": "86645f1683a98d58207d7ee71fa2959e65a32a658d8ace1442b11e6b6507ac17",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/07.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s3-run-failed-1480.png",
+      "sha256": "b7389a6c8499f53abef362a42a0ac4920b7d74193ecbc90f1e787722ccb85e9a",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/07.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s4-run-live-1480.png",
+      "sha256": "7fa7b5d0f1026c44d5eff6583b8b9a205cb5d06fe2fe460f8fcf218ce61f55b0",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/07.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s5-pipeline-1480.png",
+      "sha256": "d08653ee5c9eeb165a58c66335d0e032563bfa5ac0752775b613f16dee1d9bb3",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/07.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s6-refused-1480.png",
+      "sha256": "dd1e6234d30b6aa7a47c2931a633d8beb435c833423a41fab02a2c6cf1af3eaf",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/07.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s7-agent-turn-1480.png",
+      "sha256": "c933f7e5be9c9dbfb228f2583997d1a62787bae837ef2fa95d3cf7a8c4d43793",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/07.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s8-narrow-620.png",
+      "sha256": "715865314414951d87f81418df945e0380ea773deb55810a0919acc546856957",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/08.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-jobs-fixed/s9-palette-1480.png",
+      "sha256": "a8472ab17bd3b51eff53baf5cb51c7ae540a4c57af6a311f67a16e312bf6e9cd",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/08.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s1-shell-data-1480.png",
+      "sha256": "2b9783b87637b4f1395d0c0f5b155bd75cdda001543eac2c8425aada41620f68",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/08.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s2-project-1480.png",
+      "sha256": "66aeba009b95d8e17addcef57ad6db2f124a23cb84e45e82a68bdaa733825529",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/08.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s3-app-1480.png",
+      "sha256": "f20155ce24f4d5ed1f776047c569e8d30733bc9c6732ccdc05a327dc9eae6004",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/08.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s4-app-cold-1480.png",
+      "sha256": "08455c2b780c0afbb43898db64647c92551215b9f0ce95627196357229a1903a",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/08.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s5-refused-1480.png",
+      "sha256": "2a32daa239cf642aa1a1a21b3cdaafc4ff6a99583aaaeae8950d3bf2c3ab5054",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/09.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s6-scaffold-running-1480.png",
+      "sha256": "895d84b459db5f0fdb402825cf20c49f4449fd55df01f0323f1a9bbaf1922e3b",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/09.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s7-mid-900.png",
+      "sha256": "b8ada02c5e1ceb20089dfbf2b1d20ea6fbfb8c11bab2ad50e7991216baf93c4c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/09.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-lakebase/s8-palette-1480.png",
+      "sha256": "0c947b709866817af7daf3213c356b83dbfc48caaf3e9c19cfcc3aaf17dddd6a",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/09.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-operations/01-run-review.png",
+      "sha256": "337dd747c4223743120abe60ae8d8dd5a71ed6447ee01d5881dfa34796ae972c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/09.jpg",
+      "status": "superseded",
+      "finding": "Postgres session pagination closure failed; replaced by integration-operations-fixed."
+    },
+    {
+      "path": "screenshots/integration-operations/02-running.png",
+      "sha256": "5d5093c425228e0dd32ad2db436476cdb90ad7d45fc436975747b058e0a9eecf",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/09.jpg",
+      "status": "superseded",
+      "finding": "Postgres session pagination closure failed; replaced by integration-operations-fixed."
+    },
+    {
+      "path": "screenshots/integration-operations/03-settled-return.png",
+      "sha256": "86cff3aba0bd0b07b18766f0dd8d23a48a124532d695cfff8b97c3f40ef108df",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/10.jpg",
+      "status": "superseded",
+      "finding": "Postgres session pagination closure failed; replaced by integration-operations-fixed."
+    },
+    {
+      "path": "screenshots/integration-operations/04-recovered.png",
+      "sha256": "93a9a7c43e26ee5c1dec96bef025b108932301b593d968b81b3cb3bccba52943",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/10.jpg",
+      "status": "superseded",
+      "finding": "Postgres session pagination closure failed; replaced by integration-operations-fixed."
+    },
+    {
+      "path": "screenshots/integration-operations/05-cancelled.png",
+      "sha256": "81d950425b5e57a17e0aeecb64104a8481ed6d35a1a46c743884cf68f251daec",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/10.jpg",
+      "status": "superseded",
+      "finding": "Postgres session pagination closure failed; replaced by integration-operations-fixed."
+    },
+    {
+      "path": "screenshots/integration-operations/06-mobile-cancelled.png",
+      "sha256": "2ae49e86cd95664a80abb60a2782b4724d0caa01619ba4570720d4a729d75146",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/10.jpg",
+      "status": "superseded",
+      "finding": "Postgres session pagination closure failed; replaced by integration-operations-fixed."
+    },
+    {
+      "path": "screenshots/integration-operations-fixed/01-run-review.png",
+      "sha256": "4f6302497f5b3889d8224475ca30b2e13afe8786da6cc7f89f6dd9c343000eb4",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/10.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-operations-fixed/02-running.png",
+      "sha256": "9904c62cd8c7cbae6b81e73fd66477b5c3462b451f77cd8e96a04ee88c7f2fab",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/10.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-operations-fixed/03-settled-return.png",
+      "sha256": "59501ff5e661fe03f8a5c0950c5634d54fe06d4ca778bc06c525fb145de0ec9c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/11.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-operations-fixed/04-recovered.png",
+      "sha256": "1ae7a1782cc5c598e382df4c6e6e85e72e0195741c3e0eb160dafd68ce886d20",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/11.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-operations-fixed/05-cancelled.png",
+      "sha256": "61971097351f5db8e04a1c8afe3fe4508fe98baa9d4fa821e2598bba7d4ae39d",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/11.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-operations-fixed/06-mobile-cancelled.png",
+      "sha256": "03bbdeb4f6bd5e264be22c483f142d9fe9734ed2a8ebdf5f9a0634776a5c280f",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/11.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-parity/01-parity-desktop.png",
+      "sha256": "fa6db589d07c7123ee88d255fd4184101b7133c5710b83caf9bf31cc013de5ad",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/11.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-parity/02-parity-replayed.png",
+      "sha256": "3a3b0761283f2c4871d795f7a1e61e49391536373710bc2c6116b52d8ab7ece2",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/11.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-parity/03-parity-mobile.png",
+      "sha256": "11e3470cb5ec20fdc896928571d89f8670ddc4656f3c555717fc4eaeaa3cd6a7",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/12.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-parity/04-parity-mobile-expanded.png",
+      "sha256": "ec0dcc636091dc2455895857ddcea455910476caf3a6c7905ad32a78bc0b90b6",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/12.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-questions/01-question.png",
+      "sha256": "6a1d6bc953c06d7f978195faa30d6fb8d803a1053a62df03bc6dcfa513dedde1",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/12.jpg",
+      "status": "superseded",
+      "finding": "Session recovery missed dataclasses import; replaced by integration-questions-fixed."
+    },
+    {
+      "path": "screenshots/integration-questions/02-answered.png",
+      "sha256": "2af92b93ce2f73e63adf645f6b0a28edb19c66c1e62b08b7ea5c6ebcb594c7f6",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/12.jpg",
+      "status": "superseded",
+      "finding": "Session recovery missed dataclasses import; replaced by integration-questions-fixed."
+    },
+    {
+      "path": "screenshots/integration-questions/03-skipped.png",
+      "sha256": "a18aa9e70e232ba4d50e0001460685b42c72620d85d94a94d43ee25b4c7fe98c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/12.jpg",
+      "status": "superseded",
+      "finding": "Session recovery missed dataclasses import; replaced by integration-questions-fixed."
+    },
+    {
+      "path": "screenshots/integration-questions/04-expired.png",
+      "sha256": "89a69df0be547c3be626d9ca0b3884033af6eb2ce0ca63b9297b03903b74b3e3",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/12.jpg",
+      "status": "superseded",
+      "finding": "Session recovery missed dataclasses import; replaced by integration-questions-fixed."
+    },
+    {
+      "path": "screenshots/integration-questions/05-mobile-question.png",
+      "sha256": "c24b09ed282efc6d7bbc8e9b83dab56459d484c25017858fa88ca7fa3304dc09",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/13.jpg",
+      "status": "superseded",
+      "finding": "Session recovery missed dataclasses import; replaced by integration-questions-fixed."
+    },
+    {
+      "path": "screenshots/integration-questions-fixed/01-question.png",
+      "sha256": "f52f100bea5abebc7774dc5363d0aa60095f7e74635fbb3dbd74bcc55fdede64",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/13.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-questions-fixed/02-answered.png",
+      "sha256": "8534b2f3f1f12187e3018c9a2f01682f9f9cbcf105c83c4b4aec1713f334ab6f",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/13.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-questions-fixed/03-skipped.png",
+      "sha256": "3f942f4f51ee0394b5e19b1e68cb315468efbeaefed782063dba6d25d496827a",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/13.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-questions-fixed/04-expired.png",
+      "sha256": "677cbb622fc766f9df2a26e81ec9d6099cdfb367b654ccaf20a1b91352f38fd3",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/13.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-questions-fixed/05-mobile-question.png",
+      "sha256": "d1e8b516ec07bd0e2335676c84da432ce77e3e1fc6d6c5f6c2db3b8389b475ab",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/13.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-scale/01-recovered-200-turns.png",
+      "sha256": "89d2fd2a259abe026e2f263f98f02d389f74c221dfa986a3095e8683700a09c8",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/14.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-scale/02-earlier-results.png",
+      "sha256": "0f6b2b29796145f5224ad8c5b02e1fd6c3c8a1034862e64250e541a251f44241",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/14.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-scale/03-mobile-recovered.png",
+      "sha256": "557423f8088ae9d4df52fd432d3ee0bb77a0852ea678e9ee5c9ba6030ef926a2",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/14.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-scale/04-oldest-history-page.png",
+      "sha256": "bbb79bb59c02c53d1f62b1c7cfecfebcad23b1ee4bc3099a1c096f11e1a5b853",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/14.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-scale/05-result-row-page.png",
+      "sha256": "15fd15b4d262a8d170775ecc7b9819024a2d1a31b1ca0178869435a975fe8260",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/14.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/01-library-light.png",
+      "sha256": "35c12ce1aed0dcd4a46a95b75f844867633161d2408652769e2586993ee7c338",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/14.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/02-query-editor-light.png",
+      "sha256": "591ef12b124a1f0a2848177f88306b8bc78b1229be3e7e35f3a9d8e1b673d846",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/15.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/03-query-running.png",
+      "sha256": "13b5ab787c234ec72d285f4361cb6804b8b9395d136ceb1c9899bc9fab1889da",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/15.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/04-query-results.png",
+      "sha256": "9dbca04a35c3956d75420d02853e361b0caf3a5e0ed7b5814f60dbae1b6965c9",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/15.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/05-run-provenance.png",
+      "sha256": "ec379f7de303f940894b79643b814e1e60859dfeea2bb615bd409159e4aa3d45",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/15.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/06-parameters-and-null.png",
+      "sha256": "92cf42b2f3307233ddc6ee8bc58c14eddda4375aa6cf3bfc8520bf6873f4ce7d",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/15.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/07-policy-refusal.png",
+      "sha256": "46ecaf737989d939cc48f204040372ccba1d34bba485a435cd64badd265ff731",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/15.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/08-canceled.png",
+      "sha256": "40112233273da41ec7ec34e8071735a723fc10fc01d23237cb974755b285741f",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/16.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/09-own-history.png",
+      "sha256": "07248f2b245c3c82dbcde1a5ae525f24f9bff761bce56e1aca7197a2a13e1747",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/16.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/10-query-dark.png",
+      "sha256": "f57011bb8496aa81c554a65bbc4467af793359cfe510e3dfba3b783ff90817a3",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/16.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/11-mobile-editor.png",
+      "sha256": "4f2dfa16c4e0051020696cee8518df655c2f6bed1e6e5e41e0a12fc351e9c1af",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/16.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/12-mobile-results.png",
+      "sha256": "0bcf24718d75bae4128e3750fce0ac6e06f161569b60ae5a52e8cf91898110a5",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/16.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/13-tablet-editor.png",
+      "sha256": "7b53724cab8b34ed654b7ae749b420eac87749295663ec259a724e1b3822ca60",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/16.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/14-query-chat-context.png",
+      "sha256": "4b1d340bc1267b85fd633500ffd257c9a4c89c2decbe7a18ecdc66286d72a6e4",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/17.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/15-save-copy-dialog.png",
+      "sha256": "25b1dffa07fbb466d93a38e6983455feb7d535e1508d6082052b118a3a4f2918",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/17.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/16-assistant-sql-proposal.png",
+      "sha256": "3572d849888183afa42cdaa5fd4d395ffb50c031d0b404e57c90d96a7a864b8d",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/17.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/17-promoted-sql-draft.png",
+      "sha256": "f2e0f1ea7946a62fc3a44abf3a6e381cbd1aa0acf2b50cf4b1081adc281bf0b2",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/17.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-sql/18-save-response-lost.png",
+      "sha256": "26936e04e1d2587ef218e559a57a79e910228c0e67f778aab6c5cd30eb4f7cb4",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/17.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-storage/01-storage-desktop.png",
+      "sha256": "54fb09fb003fd25a1a8a17ab6775e919f93d2c3fe213338c313b4759b833fd33",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/17.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-storage/02-storage-mobile.png",
+      "sha256": "132a1c36975ab4ee7550cfd64acab2c303862ba6bd2e2c3e025d9882ec23d65f",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/18.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-storage/03-storage-unavailable.png",
+      "sha256": "420f0cffba204c48c25acca36f3c5017dea3876275c7954350bf47e3b9ba08eb",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/18.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-storage/04-storage-recovered.png",
+      "sha256": "132a1c36975ab4ee7550cfd64acab2c303862ba6bd2e2c3e025d9882ec23d65f",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/18.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/01-review-diff.png",
+      "sha256": "4c7000d06d7b8646a6d7235f2f3ca898fbfec534d0782488ab5e6f7c060c5bab",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/18.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/02-changes.png",
+      "sha256": "b6353b6cb88c743ac31c2551a006c4059380b9b4e2719038fb1a3792977e2d5e",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/18.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/03-applied.png",
+      "sha256": "e9924a5b8b09c71dd946c9d0a054f5124dd7df6b879642b50ef0e3997e109371",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/18.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/04-assets.png",
+      "sha256": "f1979cfd039703453168e14ad9cf533253636a9e4538dfcd94e70a420ca90d99",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/19.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/04-budget.png",
+      "sha256": "2284305bbc0fd5081a11e982d0dab4b736d8158061503614a86170e8e0858f30",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/19.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/04-capabilities.png",
+      "sha256": "22c07e41f1f1dec23b78513f21fdafb5e0e59fa30fa31c36d9fd1a5b96d257b9",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/19.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/04-resources.png",
+      "sha256": "6d2faa103582a1911cca3467079735fa60db1d8fd4b54821673813a47b74510c",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/19.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/04-runs.png",
+      "sha256": "97e9108ad55b741ae034599a4a2d1b2440fae9c8d95f80928ef0b757587a0426",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/19.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/05-plan-budget.png",
+      "sha256": "97546ed1fbb7d8bb0b0e18dda4e534f4d2e6ce11d4fff3b041a431dfeed79f04",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/19.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/06-reverted.png",
+      "sha256": "48a4a14ab9dba5ded796bb38f9067c464266e164668c32612a223a98dc9d96bf",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/20.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/07-rejected.png",
+      "sha256": "4a0bc1703e99dcb97dfd4d94f60826dcbd1c2373d3fcfbebe4be6fdd3c607341",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/20.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work/08-mobile-capabilities.png",
+      "sha256": "8277768fb23c1700a5e13fe227accba0803138ca55ee25194b85c2ab41710d81",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/20.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/01-review-diff.png",
+      "sha256": "ad65b322642666d4e4e424441068b07b9b29a42bcfcab7958f02b7468346a13b",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/20.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/02-changes.png",
+      "sha256": "1323e6dc3c7ab8874f8e1dc025a24c562631ac052d90208e87c964437f9e9e38",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/20.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/03-applied.png",
+      "sha256": "29f854e425f158847f3a66a9685b9b757e6c2020350b9c9a1fb178ab6c4c3fc0",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/20.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/04-assets.png",
+      "sha256": "720b37178607a98791a8dcab0deecf89a3b85eab2c92ef5801ecb6b2be7b1cd8",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/21.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/04-budget.png",
+      "sha256": "fa2d794509afe8c00b2603be9271e9455366225741c246b52aa1b1877ae244d6",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/21.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/04-capabilities.png",
+      "sha256": "7e226603d3d0f3fd3340cf31710852f1e8170c483651e8e8fdfe71465011e842",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/21.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/04-resources.png",
+      "sha256": "f53a1d12e1593426d5a1ae0a6179d49e5769ecc422a212babdb56eb43299fd82",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/21.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/04-runs.png",
+      "sha256": "0f5e4933af30a38e81b54f0bc801ad31f98e1d2a7c664e86c61ace1c8b517e3f",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/21.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/05-plan-budget.png",
+      "sha256": "97546ed1fbb7d8bb0b0e18dda4e534f4d2e6ce11d4fff3b041a431dfeed79f04",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/21.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/06-reverted.png",
+      "sha256": "0be821645d80186a55f2162417fe836704c209f24484270b0b18653da2c47a5a",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/22.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/07-rejected.png",
+      "sha256": "4a0bc1703e99dcb97dfd4d94f60826dcbd1c2373d3fcfbebe4be6fdd3c607341",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/22.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/integration-work-final/08-mobile-capabilities.png",
+      "sha256": "38583c3401da03ac7af8d06e74fb3e476d6040d321a7e8c19efd2b0be41bf4cb",
+      "inspected": true,
+      "inspection_sheet": "inspection-sheets/22.jpg",
+      "status": "reviewed",
+      "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  pass: true,
+  captures: [
+    '01-review-diff',
+    '02-changes',
+    '03-applied',
+    '04-runs',
+    '04-assets',
+    '04-capabilities',
+    '04-resources',
+    '04-budget',
+    '05-plan-budget',
+    '06-reverted',
+    '07-rejected',
+    '08-mobile-capabilities'
+  ]
+}

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import time
-from uuid import uuid4
+import json
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from ..domain import sqlpolicy
 from ..domain.sqlquery import (
@@ -19,6 +20,21 @@ from ..domain.sqlquery import (
 
 
 class SqlService:
+    @staticmethod
+    def operation_run_id(actor, key):
+        return str(uuid5(NAMESPACE_URL, actor.scope + ":agent-operation:" + key))
+
+    async def lookup_operation(self, actor, key):
+        """Recover only our durable intent; never create a draft or submit during lookup."""
+        run_id = self.operation_run_id(actor, key)
+        try:
+            await self.store.get(actor.scope, "run", run_id)
+        except SqlError as exc:
+            if exc.code != "NOT_FOUND":
+                raise
+            return None
+        return run_id
+
     def __init__(
         self, provider: QueryProvider, store: QueryStore, *, create_enabled=False, run_enabled=False
     ):
@@ -36,7 +52,9 @@ class SqlService:
             "run": self.run_enabled and sqlpolicy.available() and recovery,
             "update": False,
             "durable": self.store.durable,
-            "reason": "" if recovery else "SQL execution is unavailable. Private drafts are temporary in this workspace.",
+            "reason": ""
+            if recovery
+            else "SQL execution is unavailable. Private drafts are temporary in this workspace.",
             "createReason": "Saving a new Query is unavailable in this workspace.",
         }
 
@@ -143,7 +161,7 @@ class SqlService:
                 return {"state": "created_unverified", "queryId": row["queryId"], "operationId": row["id"]}
         return {"state": row["state"], "operationId": row["id"]}
 
-    async def run(self, actor, body, key):
+    async def run(self, actor, body, key, *, mutation_scope=None, created_tables=()):
         if not self.capabilities()["run"]:
             raise SqlError(
                 "CAPABILITY_DISABLED",
@@ -160,9 +178,16 @@ class SqlService:
                     "ACCESS_DENIED", asset.get("runReason", "You cannot run the source Query."), 403
                 )
         statement = selected_source(draft["text"], body.get("selection"))
-        parameters = sqlpolicy.validate(
-            statement, body.get("parameters", []), dialect=self.provider.dialect
-        )
+        if mutation_scope is not None:
+            from ..domain.policy.sql import mutation_parameters
+
+            parameters = mutation_parameters(
+                statement, body.get("parameters", []), schema=mutation_scope, dialect=self.provider.dialect
+            )
+        else:
+            parameters = sqlpolicy.validate(
+                statement, body.get("parameters", []), dialect=self.provider.dialect
+            )
         warehouse = body["warehouseId"]
         warehouses = await self.provider.warehouses(actor)
         if not any(w["id"] == warehouse for w in warehouses):
@@ -188,7 +213,9 @@ class SqlService:
             "run:" + key,
             digest(payload),
             {
-                "id": str(uuid4()),
+                "id": self.operation_run_id(actor, key) if mutation_scope is not None else str(uuid4()),
+                "operationKey": key if mutation_scope is not None else "",
+                "createdTableCandidates": list(created_tables),
                 "state": "submitting",
                 "createdAt": time.time(),
                 "name": draft["name"],
@@ -259,6 +286,24 @@ class SqlService:
     async def observe(self, actor, run_id, cancel=False):
         row = await self.store.get(actor.scope, "run", native_id(run_id))
         sid = row.get("statementId")
+        if not sid and row.get("operationKey") and row["state"] in {"submitting", "submission_unknown"}:
+            lookup = getattr(self.provider, "lookup_statement", None)
+            if lookup:
+                sid = await lookup(actor, row)
+                if sid:
+                    try:
+                        row = await self.store.put(
+                            actor.scope,
+                            "run",
+                            run_id,
+                            {**row, "statementId": native_id(sid), "state": "pending"},
+                            row["version"],
+                        )
+                    except SqlError as exc:
+                        if exc.code != "CONFLICT":
+                            raise
+                        row = await self.store.get(actor.scope, "run", run_id)
+                    sid = row.get("statementId")
         if not sid:
             if row["state"] == "submitting":
                 row = {**row, "state": "submission_unknown"}
@@ -333,8 +378,32 @@ class SqlService:
                 ),
                 "rowCount": len(rows[:1000]),
                 "totalRows": manifest.get("total_row_count"),
+                "nextChunk": (response.get("result") or {}).get("next_chunk_index"),
             }
         return result
+
+    async def result_page(self, actor, run_id, chunk):
+        if type(chunk) is not int or not 0 <= chunk <= 10000:
+            raise SqlError("INVALID_CHUNK", "Choose a valid result chunk.")
+        row = await self.store.get(actor.scope, "run", native_id(run_id))
+        if not row.get("statementId"):
+            raise SqlError("OUTCOME_UNKNOWN", "The statement handle is not known.", 409)
+        if not hasattr(self.provider, "chunk"):
+            raise SqlError("UNAVAILABLE", "This provider does not expose result chunks.", 409)
+        response = await self.provider.chunk(actor, row["statementId"], chunk)
+        values = response.get("data_array", [])
+        if not isinstance(values, list) or len(json.dumps(values).encode()) > 8 * 1024 * 1024:
+            raise SqlError("UPSTREAM_PROTOCOL", "Result chunk exceeded the bounded response size.", 502)
+        manifest = (await self.provider.status(actor, row["statementId"])).get("manifest", {})
+        return {
+            "columns": manifest.get("schema", {}).get("columns", []),
+            "totalRows": manifest.get("total_row_count"),
+            "rows": values,
+            "chunk": chunk,
+            "nextChunk": response.get("next_chunk_index"),
+            "rowOffset": response.get("row_offset", 0),
+            "rowCount": response.get("row_count", len(values)),
+        }
 
     async def history(self, actor):
         rows = await self.store.list(actor.scope, "run")

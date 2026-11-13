@@ -1,0 +1,477 @@
+{
+  "date": "2026-11-13",
+  "scope": "Manual semantic assessment of all 64 requirements; exact representative test selectors. Status is not inferred from token counts or code markers. See 16-gap-assessment.md.",
+  "requirements": {
+    "AG-01": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_empty_schema_denies_each_write_verb"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-02": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_path_variants"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-03": {
+      "tests": [
+        "apps/coding-agent/tests/test_genie_features.py::test_builtin_shell_and_file_tools_are_denied_but_planning_stays"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Negative skill/task probe passed on actual pinned model-request catalogue. Full recorded real-agent timed-fault matrix remains."
+    },
+    "AG-04": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_no_parent_secret_reaches_a_child"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-05": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_assets.py::test_mutating_sql_uses_shared_fence_and_shared_parameter_bindings"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-06": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_delimiter_cannot_be_closed_by_data"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-07": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_foreign_session_id_in_save_body_is_404"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-10": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_changes.py::test_stale_revision_is_conflicted_not_merged"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-11": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_changes.py::test_review_preserves_other_59_cells_and_undo_is_byte_identical"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-12": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_changes.py::test_rejection_is_final_and_first_decision_wins"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Browser keyboard/review flow passed; full WCAG 2.2 AA audit of every new state remains."
+    },
+    "AG-13": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_mode_verdict_table"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-14": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_changes.py::test_stale_revision_is_conflicted_not_merged"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-15": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_changes.py::test_encrypted_previous_content_survives_restart"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-16": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_table_resources.py::test_native_table_create_has_one_resource_and_reviewed_version_guarded_cleanup"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-17": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_changes.py::test_review_preserves_other_59_cells_and_undo_is_byte_identical"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-18": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_rejection_is_not_nudged"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-30": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_assets.py::test_new_asset_kind_is_attachable_without_another_kind_dispatch_implementation",
+        "apps/coding-agent/tests/test_agent014_assets.py::test_message_route_resolves_a_registered_kind_with_the_session_owner",
+        "apps/coding-agent/tests/test_agent014_traceability.py::test_services_do_not_implement_asset_kind_specific_dispatch"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Asset and cell attachment reads now delegate to the same registered handler; legacy duplicate service implementations were removed. New-kind unit and full owner-bound HTTP tests pass without a second dispatcher. All-services kind-dispatch architecture check passes."
+    },
+    "AG-31": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_deployment_scope_drift_is_detected"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Live user-scope comparison passed. Deployment of this checkout and deployed capability re-check remain."
+    },
+    "AG-32": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_assets.py::test_repair_has_its_own_native_identity_and_ignores_the_original_terminal_failure"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Native repair and as-code contracts pass; X2 product exam at both identity tiers remains."
+    },
+    "AG-33": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_assets.py::test_pipeline_uses_platform_conditional_write"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Conditional writes/reference grader pass; complete pipeline-fix product exam remains."
+    },
+    "AG-34": {
+      "tests": [
+        "apps/coding-agent/tests/test_pyrun.py::test_agent_internal_execution_refuses_even_a_legacy_admin_grant",
+        "apps/coding-agent/tests/test_agent014_run_identity.py::test_an_unqualified_run_identity_cannot_boot_or_pass_the_deployment_check"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "All agent app-SP entry points now deny, including retained administrator grants. Task 2.6 ships the S13 fallback: verifier/isolated-runner ports, fail-closed permission values, boot/build/deployment declaration checks. No separate runner is enabled until S13 qualifies an adapter."
+    },
+    "AG-35": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_app_logs.py::test_describe_includes_logs_without_weakening_revision_guards",
+        "apps/coding-agent/tests/test_agent014_log_packaging.py::test_log_cli_checksum_failure_never_replaces_existing_binary",
+        "specs/014-improve-agent/e2e/packaged-app-logs-live.json",
+        "apps/coding-agent/tests/test_agent014_app_logs.py::test_native_service_outage_is_never_reported_as_user_permission_failure",
+        "specs/014-improve-agent/e2e/app-logs-principles.json",
+        "specs/014-improve-agent/e2e/app-state-principles.json"
+      ],
+      "status": "implemented; qualification blocked by external app availability",
+      "remaining": "Log adapter classification, bounds, packaging and readable-metadata/error handling implemented. Approved one-time native check returned HTTP503; app compute is STOPPED due to workspace/account status. Native success and full M6 product qualification await availability."
+    },
+    "AG-36": {
+      "tests": [
+        "apps/coding-agent/tests/test_sqlquery.py::test_journal_reservation_is_atomic_encrypted_and_owner_scoped"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-37": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_assets.py::test_no_jobs_scope_writes_only_a_reviewed_bundle_file"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Handler attachments and Fix flow tested. Legacy attachment duplication is tracked under AG-30."
+    },
+    "AG-38": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_assets.py::test_no_jobs_scope_writes_only_a_reviewed_bundle_file"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Actual generated job and pipeline bundles validated with CLI, zero deploy calls. X2 closed-API product exam remains."
+    },
+    "AG-39": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_assets.py::test_system_observation_describes_before_one_bounded_query_and_reports_lag"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Describe-before-query/lag/refusal contracts pass. Deployed system-table grants and all views remain to qualify."
+    },
+    "AG-20": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_whole_tool_call_has_a_deadline",
+        "apps/coding-agent/tests/test_agent014_operations.py::test_sql_wait_compatibility_is_explicitly_clamped_without_changing_effect_identity"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "SQL returns an immediate durable handle and explicitly reports effective wait zero and clamping; invalid wait is rejected before submission. Real pinned-agent timed wait/timeout recording remains."
+    },
+    "AG-21": {
+      "tests": [
+        "apps/coding-agent/tests/test_adapters.py::test_a_turn_with_no_events_fails_instead_of_hanging"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Silent-agent contract passes; full real timed fault matrix remains."
+    },
+    "AG-22": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_operations.py::test_repeat_submit_is_one_native_run_and_observer_needs_no_browser"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "PostgreSQL no-viewer/restart flow passes using deterministic native runner. Ten-minute real job qualification remains."
+    },
+    "AG-23": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_operations.py::test_pruned_wakeup_cannot_rearm_or_repeat_a_consumed_continuation"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-24": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_operations.py::test_expired_credential_retains_last_native_handle"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Credential expiry/recovery contracts pass; live token rotation during a long turn remains."
+    },
+    "AG-25": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_operations.py::test_cancel_reaches_native_run"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-26": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_operations.py::test_lost_submit_response_never_resubmits"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-27": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_operations.py::test_repeat_submit_is_one_native_run_and_observer_needs_no_browser"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-50": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_operations.py::test_evidence_grades_actual_result_values"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-51": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_refusal_is_a_failed_tool_call"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-52": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_operations.py::test_no_execution_constraint_never_exempts_a_requested_source_edit_from_proof"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-53": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_operations.py::test_contradicted_claim_still_blocks_completion_after_a_verified_effect"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-54": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_app_driver_pages_events_without_replaying_mutations",
+        "apps/coding-agent/tests/test_agent014_exam_validity.py::test_ungraded_failures_never_count_as_zero_score_missions"
+      ],
+      "status": "partial",
+      "remaining": "Ungraded infrastructure/setup/grader failures are explicitly excluded from score denominators. Full two-model suite, measured noise and original historical baseline remain unqualified."
+    },
+    "AG-55": {
+      "tests": [
+        "exams/validate_graders.py",
+        "specs/014-improve-agent/e2e/grader-M9.log",
+        "specs/014-improve-agent/e2e/grader-M10.log",
+        "specs/014-improve-agent/e2e/grader-M11.log",
+        "specs/014-improve-agent/e2e/grader-M12.log",
+        "specs/014-improve-agent/e2e/grader-M13.log",
+        "specs/014-improve-agent/e2e/grader-M14.log"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "All six new graders reference 10/10 and do-nothing fail; these are grader checks, not model scores."
+    },
+    "AG-56": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_real_usage_and_partial_frames"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-57": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_usage_is_sum_of_passes"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-58": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_budget.py::test_budget_reserves_unicode_prompt_and_output_before_a_pass"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-40": {
+      "tests": [
+        "apps/coding-agent/tests/test_adapters.py::test_real_runtime_speaks_to_the_fake_agent"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Runtime negotiates and refuses unavailable HTTP transport; full pinned-agent capability recording remains."
+    },
+    "AG-41": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_permission_as_the_pinned_agent_sends_it"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-42": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_real_usage_and_partial_frames"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-43": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_parity.py::test_all_published_acp_v1_updates_have_explicit_mappers",
+        "apps/coding-agent/tests/test_agent014_parity.py::test_setup_commands_are_delivered_and_implemented_extensions_are_advertised",
+        "apps/coding-agent/web/src/domain/agentupdates.test.ts",
+        "specs/014-improve-agent/e2e/parity-principles-final.json"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Official vocabulary, implemented extension advertisement, ID/patch/append/null semantics, severity detail and replay/browser display are tested. Full pinned-agent recording remains."
+    },
+    "AG-44": {
+      "tests": [
+        "apps/coding-agent/tests/test_long_running.py::test_native_restore_capability_and_large_history_are_handled"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Advertised resume/load fallback contracts pass; real 200-turn native resume recording remains."
+    },
+    "AG-45": {
+      "tests": [
+        "apps/coding-agent/web/src/domain/commands.test.ts",
+        "apps/coding-agent/tests/test_agent014_parity.py::test_setup_commands_are_delivered_and_implemented_extensions_are_advertised"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Initial setup commands are forwarded, and later command updates remain dynamic. Native real-agent command recording remains."
+    },
+    "AG-46": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_assets.py::test_question_answer_is_typed_and_bound_to_the_schema"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Typed keyboard answer/skip/cancel/restart browser flows pass. Full pinned-agent elicitation recording remains."
+    },
+    "AG-47": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_runtime_close_releases_all_session_maps",
+        "apps/coding-agent/tests/test_agent014_parity.py::test_unbroken_oversized_stderr_cannot_block_initialization_or_grow_history"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "Oversized stdout and a 20 MB unbroken stderr stream are bounded and do not deadlock. Full real timed failure matrix remains."
+    },
+    "AG-60": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_operations.py::test_journal_coalesces_and_flushes_before_transition"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Coalescing/flush tests pass. Exhaustive named crash/fault matrix remains."
+    },
+    "AG-61": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_operations.py::test_repeated_unchanged_observation_does_not_rewrite_the_journal"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-62": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_scale.py::test_index_boot_and_listing_do_not_hydrate_ten_thousand_snapshots"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-63": {
+      "tests": [
+        "apps/coding-agent/tests/test_long_running.py::test_journal_order_pagination_and_overflow_replay"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-64": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_assets.py::test_catalogue_search_is_one_parameterized_capped_query_as_the_user"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-65": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_operations.py::test_notebook_pages_reuse_one_export_per_revision_and_turn"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-66": {
+      "tests": [
+        "apps/coding-agent/web/scripts/agent-scale-e2e.mjs",
+        "specs/014-improve-agent/e2e/scale-window-02.json"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "All 200 turns reachable with at most 30 mounted; result rows paged by 20. Measured p95 scroll frame 17.3 ms; high-population concurrent browser load remains."
+    },
+    "AG-67": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_scale.py::test_unused_sessions_spawn_nothing_and_restart_lists_without_hydrating"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-70": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_parity.py::test_deep_instruction_walk_keeps_user_preferences_capped_and_untrusted"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "User-token capped discovery/data escaping tested. Real-model preference-change and hostile-instruction behavior exam remains."
+    },
+    "AG-71": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_parity.py::test_user_skill_is_listed_without_body_then_loaded_by_exact_name"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "User skill list/load tested; full pinned-agent recording remains."
+    },
+    "AG-80": {
+      "tests": [
+        "apps/coding-agent/scripts/sync-app-source.sh",
+        "apps/coding-agent/tests/test_packaging.py"
+      ],
+      "status": "implemented; qualification remaining",
+      "remaining": "Canonical source and generated facade packaging implemented. Legacy alias removal is dated no earlier than 2027-02-13."
+    },
+    "AG-81": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_trust.py::test_all_services_depend_on_ports_not_adapters_or_composition"
+      ],
+      "status": "implemented; representative tests pass",
+      "remaining": "No additional implementation gap identified in this pass; evidence is limited to the cited checks."
+    },
+    "AG-82": {
+      "tests": [
+        "apps/coding-agent/tests/test_agent014_traceability.py"
+      ],
+      "status": "partial",
+      "remaining": "This map enforces existing evidence paths/selectors, not semantic completeness or mutation testing of every acceptance criterion. Full parent-commit-fails demonstration remains."
+    }
+  }
+}

@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 EventType = Literal[
+    "question.requested",
+    "question.decided",
     "session.created",
     "session.recovery_required",
     "session.checkpoint",
@@ -39,6 +41,30 @@ EventType = Literal[
     "document.saved",
     "blob.attached",
     "sql.changed",
+    "capabilities.reported",
+    "mode.changed",
+    "budget.updated",
+    "budget.reached",
+    "turn.paused",
+    "change.proposed",
+    "change.decided",
+    "change.applied",
+    "change.settled",
+    "operation.started",
+    "operation.progress",
+    "operation.settled",
+    "run.review_required",
+    "resource.updated",
+    "approval.linked",
+
+    "turn.declined",
+    "turn.refused",
+    "turn.truncated",
+    "commands.updated",
+    "config.updated",
+    "session.info",
+    "agent.notice",
+
 ]
 
 EVENT_TYPES: tuple[str, ...] = EventType.__args__  # type: ignore[attr-defined]
@@ -118,7 +144,7 @@ def tool_updated(
     sid: str,
     tid: str,
     call_id: str,
-    status: str,
+    status: str | None,
     seconds: float | None = None,
     summary: str = "",
     error: str = "",
@@ -126,9 +152,9 @@ def tool_updated(
     table: dict[str, Any] | None = None,
     proof: dict[str, Any] | None = None,
 ) -> Event:
-    p: dict[str, Any] = {"callId": call_id, "status": status}
-    if proof:
-        p["proof"] = proof
+    p: dict[str, Any] = {"callId": call_id}
+    if status is not None:
+        p["status"] = status
     if table:
         # A query result, kept structured so the UI can show a grid instead of a sentence.
         p["table"] = table

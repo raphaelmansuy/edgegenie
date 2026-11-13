@@ -1,0 +1,11 @@
+{
+  "pass": true,
+  "captures": [
+    "01-question",
+    "02-answered",
+    "03-skipped",
+    "04-expired",
+    "05-mobile-question"
+  ],
+  "errors": []
+}

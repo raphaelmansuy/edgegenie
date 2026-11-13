@@ -1,0 +1,107 @@
+{
+  "version": "1.2.0-rc.2",
+  "sourceRevision": "fe4e1109a18495a1bcb0e58908655c1dea3ed908",
+  "deploymentId": "01f1de5e4a341e8293928592df9ddbf7",
+  "reviewedAt": "2026-11-12T06:03:47.963015+00:00",
+  "images": [
+    {
+      "file": "screenshots/23-sql-enabled-library.png",
+      "sha256": "511faeca4bca3fa846221bb3118ee6b69b83b965b35c8a5b20de3301515e483c",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Version v1.2.0-rc.2 is visible; library layout and existing navigator/assistant remain aligned.",
+      "captureDeploymentId": "01f1de5d6611146288d303e8d55ba1e8"
+    },
+    {
+      "file": "screenshots/24-sql-enabled-draft.png",
+      "sha256": "d7d26f791bb49e03c40f4fccb35bebaa78d3760dec4617cca78bfd6e2f3aac14",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Run is enabled on a stopped native warehouse; neutral warehouse dot, Starts on demand hint and encrypted-history label are clear; create remains disabled.",
+      "captureDeploymentId": "01f1de5d6611146288d303e8d55ba1e8"
+    },
+    {
+      "file": "screenshots/25-sql-enabled-mobile.png",
+      "sha256": "64d8fe4cad62915fe16a395c306bc6dd27647c94bd031c4903217fdd74929d54",
+      "width": 375,
+      "height": 900,
+      "visuallyInspected": true,
+      "observation": "375px editor keeps Run, warehouse selector and on-demand hint visible; source and composer fit without horizontal page overflow.",
+      "captureDeploymentId": "01f1de5d6611146288d303e8d55ba1e8"
+    },
+    {
+      "file": "screenshots/26-sql-enabled-dark.png",
+      "sha256": "4b80244ce137ebc466478ad2ad5fbc21c7af6b0d16317aa6ad0f70bb838d32cd",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Enabled Run action has clear dark-theme contrast; warehouse state and editor surfaces agree with the shell.",
+      "captureDeploymentId": "01f1de5d6611146288d303e8d55ba1e8"
+    },
+    {
+      "file": "screenshots/27-native-on-demand-submitted.png",
+      "sha256": "1bc60ce783420aeec6e290ac7b27a4cf4b661207446dc2e50616fb9fc63eff4e",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Native pending state shows Waiting for warehouse and cancel actions; source remains readable and Run is disabled during the active attempt.",
+      "captureDeploymentId": "01f1de5d6611146288d303e8d55ba1e8"
+    },
+    {
+      "file": "screenshots/28-native-query-result.png",
+      "sha256": "1495b8dbe9972e8bb01de8489e3081e0e508310045966d87b99aaa22cd0cd8aa",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Native serverless result is one INT value 1; warehouse now shows running; success and bounded preview are legible.",
+      "captureDeploymentId": "01f1de5d6611146288d303e8d55ba1e8"
+    },
+    {
+      "file": "screenshots/29-native-parameters-null.png",
+      "sha256": "b184170c564eccb0cf3c686072e8c7ba3bfeea7041988abf8a4c1f68cbc39769",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Named region binding is distinct from SQL text; native Europe and NULL cells render clearly with correct column labels.",
+      "captureDeploymentId": "01f1de5d6611146288d303e8d55ba1e8"
+    },
+    {
+      "file": "screenshots/30-native-cancel-terminal.png",
+      "sha256": "a600e602a7444da2fa33a334d2aaba8e91370119f7d584263da0cbaac6215d3d",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Native cancellation reached Canceled; no result rows are fabricated; Run is available again.",
+      "captureDeploymentId": "01f1de5d6611146288d303e8d55ba1e8"
+    },
+    {
+      "file": "screenshots/31-native-mobile-results.png",
+      "sha256": "45bccba49853c35d9d218d8d750d2c35d44747d36e21ba36fa6567fad36d3b3d",
+      "width": 375,
+      "height": 900,
+      "visuallyInspected": true,
+      "observation": "375px Results tab shows its success checkmark, native value 1, count and copy control without clipping.",
+      "captureDeploymentId": "01f1de5d6611146288d303e8d55ba1e8"
+    },
+    {
+      "file": "screenshots/32-native-own-history.png",
+      "sha256": "0feb6b0deab2d367712de1ece133d4df8b67c0d97adfd9bbeb58ec22609289f4",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "Four durable own-history entries show aligned success/canceled states and separate Open snapshot actions.",
+      "captureDeploymentId": "01f1de5d6611146288d303e8d55ba1e8"
+    },
+    {
+      "file": "screenshots/33-native-server-restart-recovery.png",
+      "sha256": "5cbe247544b2c604cdaa245fb026bdb4f1fb77269459887fe77a690ff864addd",
+      "width": 1440,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "After actual server replacement, the recovered draft, native result 1 and encrypted-history label remain visible; no submit request was sent.",
+      "captureDeploymentId": "01f1de5e4a341e8293928592df9ddbf7"
+    }
+  ]
+}

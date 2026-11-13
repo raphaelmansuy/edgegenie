@@ -167,7 +167,9 @@ def test_the_reap_re_checks_under_the_session_lock():
     depends on a window that a refactor could close without changing any output on a quiet machine,
     so both are needed and both are here.
     """
-    src = (API / "services" / "orchestrator.py").read_text(encoding="utf-8")
+    import inspect
+    from api.services.orchestrator import Orchestrator
+    src = inspect.getsource(Orchestrator.reap_idle)
     start = src.index("async def reap_idle")
     rest = src[start:]
     end = rest.find("\n    def scope(")

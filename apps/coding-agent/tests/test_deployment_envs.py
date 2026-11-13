@@ -17,6 +17,7 @@ observed or is one edit away.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -239,3 +240,46 @@ def test_no_credential_is_committed_in_the_scripts():
     offenders = [p.name for p in SCRIPTS.rglob("*")
                  if p.is_file() and pattern.search(p.read_text(errors="ignore"))]
     assert not offenders, f"these contain what looks like a Databricks PAT: {offenders}"
+
+
+@pytest.mark.parametrize("source", ["git", "workspace"])
+def test_deploy_uses_supported_cli_arguments_and_pins_git(tmp_path, source):
+    """Exercise the release function without a workspace: unsupported flags broke the pinned CLI."""
+    deploy = (SCRIPTS / "deploy.sh").read_text().split("deploy() {", 1)[1].split("\n}\n", 1)[0]
+    fake_cli = tmp_path / "databricks"
+    fake_cli.write_text('''#!/usr/bin/env python3
+import json, os, sys
+args = sys.argv[1:]
+assert not set(args) & {"--auto-approve", "--git-branch", "--git-source-code-path"}
+if args[:2] == ["apps", "deploy"]:
+    if os.environ["SOURCE"] == "git":
+        body = json.loads(args[args.index("--json") + 1])
+        assert body == {"git_source": {"commit": "a" * 40, "source_code_path": "apps/coding-agent"}}
+    else:
+        assert args[args.index("--source-code-path") + 1] == "/Workspace/app"
+    print('{"deployment_id":"test","git_source":{"resolved_commit":"' + "a"*40 + '"}}')
+else:
+    print('{"active_deployment":{"status":{"state":"SUCCEEDED"}},"app_status":{"state":"RUNNING"}}')
+''')
+    fake_cli.chmod(0o755)
+    (tmp_path / "sync-app-source.sh").write_text("#!/bin/bash\nexit 0\n")
+    (tmp_path / "sync-app-source.sh").chmod(0o755)
+    script = f'''set -euo pipefail
+say() {{ :; }}
+die() {{ echo "$*" >&2; exit 1; }}
+git() {{ printf '%040d\\trefs/heads/main\\n' 0 | tr 0 a; }}
+APP_DIR={str(APP)!r}
+HERE={str(tmp_path)!r}
+APP_NAME=coding-agent
+DEPLOY_SOURCE={source}
+DEPLOY_GIT_URL=https://example.test/repo
+DEPLOY_GIT_BRANCH=main
+DEPLOY_GIT_PATH=apps/coding-agent
+DEPLOY_WS_SRC=/Workspace/app
+deploy() {{{deploy}
+}}
+deploy
+'''
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
+                            env={**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}", "SOURCE": source})
+    assert result.returncode == 0, result.stdout + result.stderr

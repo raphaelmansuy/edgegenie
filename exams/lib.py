@@ -5,10 +5,12 @@ agent under test never sees the grader: it gets a prompt and tools, and the
 grader inspects live workspace state afterwards. That is the point of an
 execution-based exam: we do not trust what the agent *says* it did.
 """
+
 from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -24,6 +26,8 @@ CATALOG = "workspace"
 
 
 def _token() -> str:
+    if os.environ.get("EXAM_DATABRICKS_TOKEN"):
+        return os.environ["EXAM_DATABRICKS_TOKEN"]
     for line in (ROOT / ".env").read_text().splitlines():
         if line.startswith("TOKEN="):
             return line.split("=", 1)[1].strip()
@@ -33,19 +37,50 @@ def _token() -> str:
 TOKEN = _token()
 _S = requests.Session()
 _S.headers["Authorization"] = f"Bearer {TOKEN}"
+_AUTH = None
 
 
 # --------------------------------------------------------------------------
 # REST
 # --------------------------------------------------------------------------
-def api(method: str, path: str, body: dict | None = None, params: dict | None = None,
-        ok_404: bool = False) -> Any:
-    r = _S.request(method, HOST + path, json=body, params=params, timeout=120)
+def api(
+    method: str,
+    path: str,
+    body: dict | None = None,
+    params: dict | None = None,
+    ok_404: bool = False,
+) -> Any:
+    global _AUTH
+    if os.environ.get("EXAM_DATABRICKS_PROFILE"):
+        # Explicit opt-in for long local qualifications. SDK unified auth refreshes the same user
+        # credential before a request; it never retries an uncertain mutation or bypasses a 403.
+        if _AUTH is None:
+            from databricks.sdk.core import Config
+
+            _AUTH = Config(profile=os.environ["EXAM_DATABRICKS_PROFILE"], host=HOST)
+            if _AUTH.host.rstrip("/") != HOST:
+                raise RuntimeError("Grader credential workspace mismatch")
+        _S.headers.update(_AUTH.authenticate())
+    query = {
+        key: str(value).lower() if isinstance(value, bool) else value
+        for key, value in (params or {}).items()
+    }
+    r = _S.request(method, HOST + path, json=body, params=query, timeout=120)
     if r.status_code == 404 and ok_404:
         return None
     if not r.ok:
         raise RuntimeError(f"{method} {path} -> {r.status_code}: {r.text[:300]}")
     return r.json() if r.text else {}
+
+
+def verify_identity() -> dict:
+    """Read-only qualification before a grader may seed any isolated workspace fixture."""
+    identity = api("GET", "/api/2.0/preview/scim/v2/Me")
+    if identity.get("userName") != USER:
+        raise RuntimeError(
+            "Grader identity does not match the configured workspace user. No fixture was seeded."
+        )
+    return identity
 
 
 _WH: list[str] = []
@@ -60,10 +95,18 @@ def warehouse() -> str:
 
 def sql(statement: str, timeout: int = 180) -> list[list[Any]]:
     """Run SQL synchronously and return rows (list of lists of strings)."""
-    d = api("POST", "/api/2.0/sql/statements", {
-        "warehouse_id": warehouse(), "statement": statement,
-        "wait_timeout": "50s", "on_wait_timeout": "CONTINUE",
-        "format": "JSON_ARRAY", "disposition": "INLINE"})
+    d = api(
+        "POST",
+        "/api/2.0/sql/statements",
+        {
+            "warehouse_id": warehouse(),
+            "statement": statement,
+            "wait_timeout": "50s",
+            "on_wait_timeout": "CONTINUE",
+            "format": "JSON_ARRAY",
+            "disposition": "INLINE",
+        },
+    )
     t0 = time.time()
     while d["status"]["state"] in ("PENDING", "RUNNING") and time.time() - t0 < timeout:
         time.sleep(2)
@@ -90,22 +133,36 @@ def mkdirs(path: str) -> None:
 
 
 def import_nb(path: str, source: str) -> None:
-    api("POST", "/api/2.0/workspace/import", {
-        "path": path, "format": "SOURCE", "language": "PYTHON", "overwrite": True,
-        "content": base64.b64encode(source.encode()).decode()})
+    api(
+        "POST",
+        "/api/2.0/workspace/import",
+        {
+            "path": path,
+            "format": "SOURCE",
+            "language": "PYTHON",
+            "overwrite": True,
+            "content": base64.b64encode(source.encode()).decode(),
+        },
+    )
 
 
 def export_nb(path: str) -> str | None:
-    d = api("GET", "/api/2.0/workspace/export", params={"path": path, "format": "SOURCE"},
-            ok_404=True)
+    d = api(
+        "GET",
+        "/api/2.0/workspace/export",
+        params={"path": path, "format": "SOURCE"},
+        ok_404=True,
+    )
     return base64.b64decode(d["content"]).decode() if d else None
 
 
 def delete_path(path: str) -> None:
-    try:
-        api("POST", "/api/2.0/workspace/delete", {"path": path, "recursive": True})
-    except RuntimeError:
-        pass
+    api(
+        "POST",
+        "/api/2.0/workspace/delete",
+        {"path": path, "recursive": True},
+        ok_404=True,
+    )
 
 
 def run_notebook(path: str, params: dict | None = None, timeout: int = 600) -> dict:
@@ -114,8 +171,11 @@ def run_notebook(path: str, params: dict | None = None, timeout: int = 600) -> d
     task: dict[str, Any] = {"task_key": "t", "notebook_task": {"notebook_path": path}}
     if params:
         task["notebook_task"]["base_parameters"] = params
-    run_id = api("POST", "/api/2.1/jobs/runs/submit",
-                 {"run_name": "exam-grader", "tasks": [task]})["run_id"]
+    run_id = api(
+        "POST",
+        "/api/2.1/jobs/runs/submit",
+        {"run_name": "exam-grader", "tasks": [task]},
+    )["run_id"]
     t0 = time.time()
     while time.time() - t0 < timeout:
         d = api("GET", "/api/2.1/jobs/runs/get", params={"run_id": run_id})
@@ -136,12 +196,15 @@ def run_notebook(path: str, params: dict | None = None, timeout: int = 600) -> d
 
 def find_jobs(name_prefix: str) -> list[dict]:
     jobs = api("GET", "/api/2.1/jobs/list", params={"limit": 100}).get("jobs", [])
-    return [j for j in jobs if (j["settings"].get("name") or "").startswith(name_prefix)]
+    return [
+        j for j in jobs if (j["settings"].get("name") or "").startswith(name_prefix)
+    ]
 
 
 def latest_run(job_id: int) -> dict | None:
-    runs = api("GET", "/api/2.1/jobs/runs/list",
-               params={"job_id": job_id, "limit": 5}).get("runs", [])
+    runs = api(
+        "GET", "/api/2.1/jobs/runs/list", params={"job_id": job_id, "limit": 5}
+    ).get("runs", [])
     return runs[0] if runs else None
 
 
@@ -158,12 +221,12 @@ class Check:
 
 @dataclass
 class Ctx:
-    run_id: str                   # e.g. "r1a2b3"
+    run_id: str  # e.g. "r1a2b3"
     mission: str
     extra: dict = field(default_factory=dict)
 
     @property
-    def schema(self) -> str:      # full catalog.schema the agent may write to
+    def schema(self) -> str:  # full catalog.schema the agent may write to
         return f"{CATALOG}.exam_{self.run_id}"
 
     @property
@@ -171,7 +234,7 @@ class Ctx:
         return f"exam_{self.run_id}"
 
     @property
-    def home(self) -> str:        # workspace folder the agent may write to
+    def home(self) -> str:  # workspace folder the agent may write to
         return f"/Users/{USER}/exams/{self.run_id}"
 
 
@@ -179,8 +242,8 @@ class Ctx:
 class Mission:
     id: str
     title: str
-    capability: str                        # Genie Code capability exercised (C-number)
-    difficulty: int                        # 1..5
+    capability: str  # Genie Code capability exercised (C-number)
+    difficulty: int  # 1..5
     prompt: Callable[[Ctx], str]
     setup: Callable[[Ctx], None]
     grade: Callable[[Ctx, str], list[Check]]
@@ -190,6 +253,7 @@ class Mission:
     reference: Callable[[Ctx], str] = lambda ctx: ""
     cleanup: Callable[[Ctx], None] = lambda ctx: None
     max_minutes: int = 12
+    uses_schema: bool = True
 
 
 def score(checks: list[Check]) -> tuple[int, int]:

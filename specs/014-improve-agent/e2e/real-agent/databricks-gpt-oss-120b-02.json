@@ -1,0 +1,381 @@
+{
+  "via": "app",
+  "autonomy": "review",
+  "session_id": "294477e9e4594c36",
+  "turn_id": "b3180fb63676",
+  "status": "completed",
+  "events": [
+    {
+      "seq": 1,
+      "sessionId": "294477e9e4594c36",
+      "turnId": null,
+      "type": "session.created",
+      "actor": "app",
+      "at": "2026-11-13T09:48:33.729587+00:00",
+      "folder": "/Users/raphael.mansuy@gmail.com/agent_scratch",
+      "model": "databricks/databricks-gpt-oss-120b",
+      "schema": ""
+    },
+    {
+      "seq": 2,
+      "sessionId": "294477e9e4594c36",
+      "turnId": null,
+      "type": "capabilities.reported",
+      "actor": "app",
+      "at": "2026-11-13T09:48:35.265766+00:00",
+      "capabilities": [
+        {
+          "kind": "notebook",
+          "label": "Notebooks",
+          "description": "Notebook cells, revisions and reviewed changes.",
+          "read": true,
+          "change": true,
+          "run": true,
+          "tier": "api",
+          "reason": "Notebook runs use an ephemeral Jobs submission that runs as you."
+        },
+        {
+          "kind": "file",
+          "label": "Files",
+          "description": "Workspace source files and reviewed range edits.",
+          "read": true,
+          "change": true,
+          "run": false,
+          "tier": "api",
+          "reason": "Workspace access as you; agent Python runs require a separate identity."
+        },
+        {
+          "kind": "statement",
+          "label": "SQL statements",
+          "description": "SQL execution through the shared query service.",
+          "read": true,
+          "change": false,
+          "run": false,
+          "tier": "sql",
+          "reason": "Statements run as you through the SQL editor service."
+        },
+        {
+          "kind": "query",
+          "label": "Queries",
+          "description": "Saved Queries, reviewed copies and SQL execution.",
+          "read": true,
+          "change": false,
+          "run": false,
+          "tier": "api",
+          "reason": "New Query copies only; native in-place update remains gated by spec 013."
+        },
+        {
+          "kind": "query-draft",
+          "label": "Query drafts",
+          "description": "Private query drafts.",
+          "read": true,
+          "change": false,
+          "run": false,
+          "tier": "api",
+          "reason": "New Query copies only; native in-place update remains gated by spec 013."
+        },
+        {
+          "kind": "table",
+          "label": "Tables",
+          "description": "Schema grounding and one bounded catalogue query.",
+          "read": true,
+          "change": false,
+          "run": false,
+          "tier": "api",
+          "reason": "Unity Catalog privileges are the permission boundary."
+        },
+        {
+          "kind": "job",
+          "label": "Jobs",
+          "description": "Native Jobs or reviewed bundle definitions.",
+          "read": true,
+          "change": true,
+          "run": true,
+          "tier": "api",
+          "reason": "Uses your native API permissions; definitions and runs are checked again before dispatch."
+        },
+        {
+          "kind": "pipeline",
+          "label": "Pipelines",
+          "description": "Conditional pipeline changes or reviewed bundle definitions.",
+          "read": true,
+          "change": true,
+          "run": true,
+          "tier": "api",
+          "reason": "Uses your native API permissions; definitions and runs are checked again before dispatch."
+        },
+        {
+          "kind": "app",
+          "label": "Apps",
+          "description": "Reviewed app definitions and deployments.",
+          "read": true,
+          "change": true,
+          "run": true,
+          "tier": "api",
+          "reason": "Uses your native API permissions; definitions and runs are checked again before dispatch."
+        },
+        {
+          "kind": "instance",
+          "label": "Instances",
+          "description": "Reviewed Lakebase instance definitions and readiness.",
+          "read": true,
+          "change": true,
+          "run": true,
+          "tier": "api",
+          "reason": "Creating an instance incurs ongoing cost and always requires review."
+        },
+        {
+          "kind": "job_run",
+          "label": "Job runs",
+          "description": "Native or lagged system-table job run observations.",
+          "read": true,
+          "change": false,
+          "run": false,
+          "tier": "api",
+          "reason": "Read run state and task results as you."
+        },
+        {
+          "kind": "pipeline_update",
+          "label": "Pipeline updates",
+          "description": "Native or lagged system-table pipeline update observations.",
+          "read": true,
+          "change": false,
+          "run": false,
+          "tier": "api",
+          "reason": "Read run state and task results as you."
+        }
+      ],
+      "checkedAt": 1794563315.2641878,
+      "eventId": "event_c8d6b6b26d01431488b18a1a4c2a5ee2"
+    },
+    {
+      "seq": 3,
+      "sessionId": "294477e9e4594c36",
+      "turnId": null,
+      "type": "session.ready",
+      "actor": "app",
+      "at": "2026-11-13T09:48:35.268093+00:00",
+      "toolCount": 0,
+      "agent": "",
+      "agentVersion": "",
+      "capabilities": {}
+    },
+    {
+      "seq": 4,
+      "sessionId": "294477e9e4594c36",
+      "turnId": "b3180fb63676",
+      "type": "turn.started",
+      "actor": "user",
+      "at": "2026-11-13T09:48:35.273771+00:00",
+      "text": "Read session capabilities with dbx_capabilities once and report the numeric toolCount in an Evidence table with requirement Read session capabilities, tool the exact returned invocationId, and summary the actual numeric toolCount.",
+      "model": "databricks/databricks-gpt-oss-120b"
+    },
+    {
+      "seq": 5,
+      "sessionId": "294477e9e4594c36",
+      "turnId": null,
+      "type": "session.ready",
+      "actor": "app",
+      "at": "2026-11-13T09:48:37.793374+00:00",
+      "toolCount": 13,
+      "agent": "OpenCode",
+      "agentVersion": "1.18.19",
+      "capabilities": {
+        "loadSession": true,
+        "mcpCapabilities": {
+          "http": true,
+          "sse": true
+        },
+        "promptCapabilities": {
+          "embeddedContext": true,
+          "image": true
+        },
+        "sessionCapabilities": {
+          "close": {},
+          "fork": {},
+          "list": {},
+          "resume": {}
+        }
+      }
+    },
+    {
+      "seq": 6,
+      "sessionId": "294477e9e4594c36",
+      "turnId": "b3180fb63676",
+      "type": "turn.retrying",
+      "actor": "app",
+      "at": "2026-11-13T09:48:37.793893+00:00"
+    },
+    {
+      "seq": 7,
+      "sessionId": "294477e9e4594c36",
+      "turnId": "b3180fb63676",
+      "type": "commands.updated",
+      "actor": "agent",
+      "at": "2026-11-13T09:48:37.794767+00:00",
+      "availableCommands": [
+        {
+          "name": "customize-opencode",
+          "description": "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself."
+        },
+        {
+          "name": "init",
+          "description": "guided AGENTS.md setup"
+        },
+        {
+          "name": "review",
+          "description": "review changes [commit|branch|pr], defaults to uncommitted"
+        }
+      ]
+    },
+    {
+      "seq": 8,
+      "sessionId": "294477e9e4594c36",
+      "turnId": "b3180fb63676",
+      "type": "tool_call.started",
+      "actor": "agent",
+      "at": "2026-11-13T09:48:40.967641+00:00",
+      "callId": "call_f4f4c4b1-ab1c-4933-adfe-2fc95ffa7446",
+      "name": "db_dbx_capabilities",
+      "args": "",
+      "kind": "other",
+      "status": "running",
+      "locations": [],
+      "rawInput": {}
+    },
+    {
+      "seq": 9,
+      "sessionId": "294477e9e4594c36",
+      "turnId": "b3180fb63676",
+      "type": "thought.delta",
+      "actor": "agent",
+      "at": "2026-11-13T09:48:40.968410+00:00",
+      "text": "We need to call db_dbx_capabilities, then get toolCount from response. Then output final with Evidence table. Need to record requirement, tool, summary. Also include invocationId. So first call function."
+    },
+    {
+      "seq": 10,
+      "sessionId": "294477e9e4594c36",
+      "turnId": "b3180fb63676",
+      "type": "tool_call.updated",
+      "actor": "agent",
+      "at": "2026-11-13T09:48:40.968500+00:00",
+      "callId": "call_f4f4c4b1-ab1c-4933-adfe-2fc95ffa7446",
+      "status": "in_progress",
+      "args": "{\"kind\": \"notebook\"}",
+      "locations": [],
+      "title": "db_dbx_capabilities",
+      "kind": "other",
+      "rawInput": {
+        "kind": "notebook"
+      }
+    },
+    {
+      "seq": 11,
+      "sessionId": "294477e9e4594c36",
+      "turnId": "b3180fb63676",
+      "type": "tool_call.updated",
+      "actor": "agent",
+      "at": "2026-11-13T09:48:40.999502+00:00",
+      "callId": "call_f4f4c4b1-ab1c-4933-adfe-2fc95ffa7446",
+      "status": "completed",
+      "summary": "{\"identity\": \"raphael.mansuy@gmail.com\", \"mode\": \"review\", \"fence\": {\"folder\": \"/Users/raphael.mansuy@gmail.com/agent_scratch/\", \"schema\": \"\"}, \"capabilities\": [{\"kind\": \"notebook\", \"label\": \"Notebook"
+    },
+    {
+      "seq": 12,
+      "sessionId": "294477e9e4594c36",
+      "turnId": "b3180fb63676",
+      "type": "message.delta",
+      "actor": "agent",
+      "at": "2026-11-13T09:48:42.219470+00:00",
+      "text": "**Evidence**\n\n| requirement                     | tool          | summary                     |\n|--------------------------------|---------------|-----------------------------|\n| Read session capabilities      | inv_582dbccbf52b43ed91ba | toolCount = 13 |"
+    },
+    {
+      "seq": 13,
+      "sessionId": "294477e9e4594c36",
+      "turnId": "b3180fb63676",
+      "type": "usage.updated",
+      "actor": "agent",
+      "at": "2026-11-13T09:48:42.242619+00:00",
+      "usage": {
+        "used": 6514,
+        "size": 128000,
+        "cost": {
+          "amount": 0,
+          "currency": "USD"
+        }
+      }
+    },
+    {
+      "seq": 14,
+      "sessionId": "294477e9e4594c36",
+      "turnId": "b3180fb63676",
+      "type": "evidence.proposed",
+      "actor": "app",
+      "at": "2026-11-13T09:48:42.265631+00:00",
+      "rows": [
+        {
+          "requirement": "Read session capabilities",
+          "toolCallId": "inv_582dbccbf52b43ed91ba",
+          "tool": "dbx_capabilities",
+          "summary": "toolCount = 13",
+          "verified": true,
+          "grade": "verified",
+          "observed": "{\"identity\": \"raphael.mansuy@gmail.com\", \"mode\": \"review\", \"fence\": {\"folder\": \"/Users/raphael.mansuy@gmail.com/agent_scratch/\", \"schema\": \"\"}, \"capabilities\": [{\"kind\": \"notebook\", \"label\": \"Notebooks\", \"description\": \"Notebook cells, revisions and reviewed changes.\", \"read\": true, \"change\": true, \"run\": true, \"tier\": \"api\", \"reason\": \"Notebook runs use an ephemeral Jobs submission that runs as you.\"}, {\"kind\": \"file\", \"label\": \"Files\", \"description\": \"Workspace source files and reviewed range edits.\", \"read\": true, \"change\": true, \"run\": false, \"tier\": \"api\", \"reason\": \"Workspace access as you; agent Python runs require a separate identity.\"}, {\"kind\": \"statement\", \"label\": \"SQL statements\", \"description\": \"SQL execution through the shared query service.\", \"read\": true, \"change\": false, \"run\": false, \"tier\": \"sql\", \"reason\": \"Statements run as you through the SQL editor service.\"}, {\"kind\": \"query\", \"label\": \"Queries\", \"description\": \"Saved Queries, reviewed copies and SQL execution.\", \"read\": true, \"change\": false, \"run\": false, \"tier\": \"api\", \"reason\": \"New Query copies only; native in-place update remains gated by spec 013.\"}, {\"kind\": \"query-draft\", \"label\": \"Query drafts\", \"",
+          "reason": ""
+        }
+      ],
+      "sources": [
+        {
+          "callId": "inv_582dbccbf52b43ed91ba",
+          "name": "dbx_capabilities",
+          "status": "completed",
+          "summary": "{\"identity\": \"raphael.mansuy@gmail.com\", \"mode\": \"review\", \"fence\": {\"folder\": \"/Users/raphael.mansuy@gmail.com/agent_scratch/\", \"schema\": \"\"}, \"capabilities\": [{\"kind\": \"notebook\", \"label\": \"Notebooks\", \"description\": \"Notebook cells, revisions and reviewed changes.\", \"read\": true, \"change\": true, \"run\": true, \"tier\": \"api\", \"reason\": \"Notebook runs use an ephemeral Jobs submission that runs as you.\"}, {\"kind\": \"file\", \"label\": \"Files\", \"description\": \"Workspace source files and reviewed range edits.\", \"read\": true, \"change\": true, \"run\": false, \"tier\": \"api\", \"reason\": \"Workspace access as you; agent Python runs require a separate identity.\"}, {\"kind\": \"statement\", \"label\": \"SQL statements\", \"description\": \"SQL execution through the shared query service.\", \"read\": true, \"change\": false, \"run\": false, \"tier\": \"sql\", \"reason\": \"Statements run as you through the SQL editor service.\"}, {\"kind\": \"query\", \"label\": \"Queries\", \"description\": \"Saved Queries, reviewed copies and SQL execution.\", \"read\": true, \"change\": false, \"run\": false, \"tier\": \"api\", \"reason\": \"New Query copies only; native in-place update remains gated by spec 013.\"}, {\"kind\": \"query-draft\", \"label\": \"Query drafts\", \""
+        }
+      ]
+    },
+    {
+      "seq": 15,
+      "sessionId": "294477e9e4594c36",
+      "turnId": "b3180fb63676",
+      "type": "turn.completed",
+      "actor": "supervisor",
+      "at": "2026-11-13T09:48:42.266091+00:00",
+      "stopReason": "end_turn",
+      "usage": {
+        "inputTokens": 6514,
+        "outputTokens": 50,
+        "totalTokens": 6564
+      },
+      "seconds": 4.5
+    }
+  ],
+  "answer": "**Evidence**\n\n| requirement                     | tool          | summary                     |\n|--------------------------------|---------------|-----------------------------|\n| Read session capabilities      | inv_582dbccbf52b43ed91ba | toolCount = 13 |",
+  "all_text": "**Evidence**\n\n| requirement                     | tool          | summary                     |\n|--------------------------------|---------------|-----------------------------|\n| Read session capabilities      | inv_582dbccbf52b43ed91ba | toolCount = 13 |",
+  "tools": [
+    {
+      "seq": 11,
+      "sessionId": "294477e9e4594c36",
+      "turnId": "b3180fb63676",
+      "type": "tool_call.updated",
+      "actor": "agent",
+      "at": "2026-11-13T09:48:40.999502+00:00",
+      "callId": "call_f4f4c4b1-ab1c-4933-adfe-2fc95ffa7446",
+      "name": "db_dbx_capabilities",
+      "args": "{\"kind\": \"notebook\"}",
+      "kind": "other",
+      "status": "completed",
+      "locations": [],
+      "rawInput": {
+        "kind": "notebook"
+      },
+      "title": "db_dbx_capabilities",
+      "summary": "{\"identity\": \"raphael.mansuy@gmail.com\", \"mode\": \"review\", \"fence\": {\"folder\": \"/Users/raphael.mansuy@gmail.com/agent_scratch/\", \"schema\": \"\"}, \"capabilities\": [{\"kind\": \"notebook\", \"label\": \"Notebook"
+    }
+  ],
+  "tokens": 6564,
+  "steps": 1,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "model": "databricks/databricks-gpt-oss-120b",
+  "qualification": "Read-only real model through local product HTTP/ACP/MCP and target workspace probes; not a graded exam."
+}

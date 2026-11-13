@@ -1,0 +1,21 @@
+{
+  "pass": true,
+  "captures": [
+    "01-real-review",
+    "02-real-applied",
+    "03-real-proof",
+    "04-real-undo"
+  ],
+  "errors": [],
+  "sessionId": "1e5f981097a54628",
+  "workspace": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "folder": "/Users/raphael.mansuy@gmail.com/agent_scratch/agent014-e2e-4440f6ba",
+  "checks": {
+    "reviewWroteNothing": true,
+    "exactlyOneCellChanged": true,
+    "other59ByteIdentical": true,
+    "readBackVerified": true,
+    "undoByteIdentical": true
+  },
+  "scope": "Real OpenCode 1.18.19, served gpt-oss-120b, actual app/ACP/MCP and user-owned Databricks notebook; no compute run."
+}

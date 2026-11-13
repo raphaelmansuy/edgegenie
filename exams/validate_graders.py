@@ -10,19 +10,21 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from lib import Ctx, delete_path, score, sql  # noqa: E402
+from lib import Ctx, delete_path, score, sql, verify_identity  # noqa: E402
 from missions import all_missions  # noqa: E402
 
 
-def teardown(ctx: Ctx) -> None:
+def teardown(ctx: Ctx, uses_schema: bool = True) -> None:
     try:
-        sql(f"DROP SCHEMA IF EXISTS {ctx.schema} CASCADE")
+        if uses_schema:
+            sql(f"DROP SCHEMA IF EXISTS {ctx.schema} CASCADE")
     except Exception as e:  # noqa: BLE001
         print("  teardown schema:", e)
     delete_path(ctx.home)
 
 
 def main() -> int:
+    verify_identity()
     want = set(sys.argv[1:])
     bad = 0
     for mid, m in all_missions().items():
@@ -50,7 +52,7 @@ def main() -> int:
             bad += 1
         finally:
             m.cleanup(ctx)
-            teardown(ctx)
+            teardown(ctx, m.uses_schema)
     print("grader validation:", "ALL GOOD" if not bad else f"{bad} problem(s)")
     return 1 if bad else 0
 

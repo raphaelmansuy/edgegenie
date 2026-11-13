@@ -65,17 +65,19 @@ info "deployment $DEP_STATE · app $APP_STATE"
 [ "$DEP_STATE" = "SUCCEEDED" ] && ok "the last deployment SUCCEEDED" || bad "the last deployment is $DEP_STATE"
 [ "$APP_STATE" = "RUNNING" ] && ok "the app process is RUNNING" || bad "the app process is $APP_STATE"
 
-# The scopes the workspace panes need. Missing scopes 403 every user, and nothing else notices.
-# The list itself lives in env.sh, so this check and the deploy's grant cannot disagree.
-REQUIRED_SCOPES="$DEPLOY_REQUIRED_SCOPES_CSV"
-printf '%s' "$APP_JSON" | REQUIRED="$REQUIRED_SCOPES" python3 -c '
-import json,os,sys
-have = set(json.load(sys.stdin).get("effective_user_api_scopes") or [])
-missing = [s for s in os.environ["REQUIRED"].split() if s not in have]
-if missing:
-    print("  \033[31mFAIL\033[0m missing scopes: " + ", ".join(missing)); sys.exit(1)
-print("  \033[32mPASS\033[0m all %d user scopes are effective" % len(os.environ["REQUIRED"].split()))' \
-  && pass=$((pass+1)) || fail=$((fail+1))
+# Check the exact declared scopes and run-identity qualification before HTTP probes.
+scopes_python="${PYTHON:-python3}"
+[ ! -x "$APP_DIR/.venv/bin/python" ] || scopes_python="$APP_DIR/.venv/bin/python"
+if printf '%s' "$APP_JSON" | "$scopes_python" "$HERE/check-app-scopes.py" coding-agent "${DEPLOY_REQUIRED_SCOPES_CSV:-}"; then
+  ok "user API scopes match databricks.yml"
+else
+  bad "user API scopes differ from databricks.yml or could not be read"
+fi
+if "$scopes_python" "$HERE/check-run-identity.py"; then
+  ok "agent run-identity declaration is safe"
+else
+  bad "agent run identity has not passed isolation qualification"
+fi
 
 # -- 0b. the volume a Python session exchanges its files through ---------------------------------
 # The app can write those files but cannot create the volume, and cannot grant itself anything, so a
@@ -373,6 +375,10 @@ fi
 
 printf '\n'
 if [ "$fail" -eq 0 ]; then
+  if [ "$skip" -gt 0 ]; then
+    printf '\033[33mPLATFORM CHECKS PASSED; LIVE APP NOT VERIFIED\033[0m — %d passed, %d skipped\n' "$pass" "$skip"
+    exit 1
+  fi
   printf '\033[32m\033[1mDEPLOYED AND CURRENT\033[0m — %d passed' "$pass"
   [ "$skip" -gt 0 ] && printf ', %d skipped (see above)' "$skip"
   printf '\n\n'

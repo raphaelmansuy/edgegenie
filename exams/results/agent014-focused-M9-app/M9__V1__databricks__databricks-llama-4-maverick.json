@@ -1,0 +1,60 @@
+{
+  "mission": "M9",
+  "title": "One-cell edit in a long notebook",
+  "variant": "V1",
+  "model": "databricks/databricks-llama-4-maverick",
+  "agent": "opencode",
+  "via": "app",
+  "tag": "databricks__databricks-llama-4-maverick",
+  "run_id": "x8cd01",
+  "batch": "agent014-focused-M9",
+  "session_id": "b084e55ababf43ab",
+  "turn_id": "2c38b69cc248",
+  "turn_status": "completed",
+  "tool_calls": 1,
+  "steps": 1,
+  "tokens": 7379,
+  "api_errors": 0,
+  "rate_limited": 0,
+  "tools_used": [
+    "db_dbx_read"
+  ],
+  "tool_errors": 0,
+  "answer": "[todowrite(todos=[{\"content\": \"Propose edit to fix BROKEN to FIXED in cell 37\", \"status\": \"pending\", \"priority\": \"high\"}]), \ndb_dbx_edit(kind=notebook, id=/Users/raphael.mansuy@gmail.com/exams/x8cd01/long_notebook, base=9b1928ca21939f0bedb4671b0c23206b9d6f117e41866b3c26d7bc0d04eff091, ops=[{\"op\": \"replace_cell\", \"index\": 37, \"sha\": \"1c804984d6ad17bc93f923e8b273ab35e44c724f8e55da3d47595de59da97e92\", \"source\": \"# CELL 37: preserve this exact cell\\n# preserve preserve preserve preserve preserve preserve preserve preserve preserve preserve preserve preserve preserve preserve preserve preserve preserve preserve \\nprint(\\\"cell-37-FIXED\\\")\\n\\n\"}])]",
+  "score": 6,
+  "total": 12,
+  "pct": 50.0,
+  "checks": [
+    {
+      "name": "same notebook path and 60 cells",
+      "passed": true,
+      "weight": 1,
+      "detail": ""
+    },
+    {
+      "name": "exactly cell 37 changed",
+      "passed": false,
+      "weight": 3,
+      "detail": "[]"
+    },
+    {
+      "name": "target replacement only",
+      "passed": false,
+      "weight": 3,
+      "detail": ""
+    },
+    {
+      "name": "all other 59 raw segments byte-identical",
+      "passed": true,
+      "weight": 3,
+      "detail": ""
+    },
+    {
+      "name": "PAT never printed in the transcript",
+      "passed": true,
+      "weight": 2,
+      "detail": ""
+    }
+  ],
+  "wall_seconds": 21
+}

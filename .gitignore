@@ -50,7 +50,5 @@ site/dist/
 tests/sites/e2e/screenshots/
 tests/sites/e2e/report.json
 
-# The build-time install locations. `prepare-app.sh` creates these inside apps/coding-agent, and they
-# are large, machine-specific and regenerated: a dependency tree and the agent binary, never source.
-apps/coding-agent/node_modules/
+# Qualified native tools installed at app build time from pinned releases.
 apps/coding-agent/.bin/

@@ -118,6 +118,7 @@ def test_a_blob_attachment_resolves_to_text_not_base64():
     from api.domain.context import parse
     from api.services.blobs import BlobService
     from api.services.context import resolve
+    from api.composition.context import build_attachment_reader
 
     store = MemoryBlobStore()
     svc = BlobService(store)
@@ -125,7 +126,7 @@ def test_a_blob_attachment_resolves_to_text_not_base64():
     spec = validate("t.csv", raw, "text/csv", model_sees_images=True)
     row = asyncio.run(store.put("s1", "u1", spec, raw))
     items = parse([{"kind": "blob", "ref": row.id, "name": "t.csv"}])
-    out = asyncio.run(resolve(items, None, None, None, blobs=svc, user_id="u1"))
+    out = asyncio.run(resolve(items, build_attachment_reader(blobs=svc, user_id="u1")))
     assert out[0].error == ""
     assert "hour,trips" in out[0].text
     assert "aG91cix0cmlwcw" not in out[0].text     # no base64 of the same bytes
@@ -139,9 +140,10 @@ def test_a_missing_blob_is_reported_not_silently_dropped():
     from api.domain.context import parse
     from api.services.blobs import BlobService
     from api.services.context import resolve
+    from api.composition.context import build_attachment_reader
 
     svc = BlobService(MemoryBlobStore())
     items = parse([{"kind": "blob", "ref": "blb_000000000000", "name": "gone.csv"}])
-    out = asyncio.run(resolve(items, None, None, None, blobs=svc, user_id="u1"))
+    out = asyncio.run(resolve(items, build_attachment_reader(blobs=svc, user_id="u1")))
     assert out[0].error, "a missing attachment must produce an error, not silence"
     assert out[0].text == ""

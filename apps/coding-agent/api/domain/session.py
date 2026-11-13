@@ -29,6 +29,10 @@ class TurnStatus(str, Enum):
     CANCELLED = "cancelled"
     INTERRUPTED = "interrupted"
     FAILED = "failed"
+    DECLINED = "declined"
+    REFUSED = "refused"
+    TRUNCATED = "truncated"
+    PAUSED = "paused"
 
 
 TERMINAL = {
@@ -37,6 +41,9 @@ TERMINAL = {
     TurnStatus.CANCELLED,
     TurnStatus.INTERRUPTED,
     TurnStatus.FAILED,
+    TurnStatus.DECLINED,
+    TurnStatus.REFUSED,
+    TurnStatus.TRUNCATED,
 }
 
 _ALLOWED = {
@@ -79,6 +86,7 @@ class Session:
     agent_version: str = ""
     tokens: int = 0
     requires_resume: bool = False
+    mode: str = "auto"
 
     def transition(self, to: SessionStatus) -> Session:
         if to == self.status:

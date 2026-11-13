@@ -23,7 +23,7 @@ class SqlBodyLimit:
     async def __call__(self, scope, receive, send):
         if (
             scope["type"] != "http"
-            or not (scope.get("path", "").startswith("/api/sql/") or scope.get("path") == "/internal/query")
+            or not scope.get("path", "").startswith("/api/sql/")
             or scope.get("method") not in {"POST", "PATCH"}
         ):
             return await self.app(scope, receive, send)

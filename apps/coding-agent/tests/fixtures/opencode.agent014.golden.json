@@ -1,0 +1,38 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "dbx/databricks-llama-4-maverick",
+  "permission": {
+    "*": "deny",
+    "todowrite": "allow",
+    "db_*": "allow"
+  },
+  "provider": {
+    "dbx": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Databricks serving endpoints",
+      "options": {
+        "baseURL": "https://h.example.com/serving-endpoints",
+        "apiKey": "{env:DATABRICKS_TOKEN}"
+      },
+      "models": {
+        "databricks-llama-4-maverick": {
+          "name": "llama-4-maverick",
+          "limit": {
+            "context": 128000,
+            "output": 8000
+          },
+          "attachment": true,
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

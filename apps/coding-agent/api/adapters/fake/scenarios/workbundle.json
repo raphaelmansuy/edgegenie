@@ -1,0 +1,37 @@
+{
+  "turn": {
+    "actions": [
+      {
+        "id": "define",
+        "tool": "dbx_define",
+        "arguments": {
+          "kind": "job",
+          "id": "$folder/nightly/databricks.yml",
+          "spec": {
+            "name": "nightly_diagnostic",
+            "tasks": [
+              {
+                "task_key": "check",
+                "notebook_task": {
+                  "notebook_path": "$folder/revenue"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "answer": "The job is defined as a reviewable bundle file. It is not deployed.",
+    "followupActions": [
+      {
+        "id": "read",
+        "tool": "dbx_read",
+        "arguments": {
+          "kind": "file",
+          "id": "$folder/nightly/databricks.yml"
+        }
+      }
+    ],
+    "followupAnswer": "Defined, not deployed. Read back the bundle definition.\n\n**Evidence**\n\n| requirement | tool | summary |\n|---|---|---|\n| Verify the bundle | ${read.invocationId} | nightly_diagnostic |"
+  }
+}

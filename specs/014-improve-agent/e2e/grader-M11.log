@@ -1,0 +1,4 @@
+== M11 Repair a pipeline and observe its output  (run v7fb08)
+  no-op        : 1/10  OK (fails)
+  reference    : 10/10  OK
+grader validation: ALL GOOD

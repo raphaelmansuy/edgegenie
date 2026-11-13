@@ -1,3 +1,4 @@
+import { WORK_TABS, WorkPanel, type WorkTab } from "./AgentWork";
 /** Mission is a read model of a turn, never a second execution or persistence path. Spec 011. */
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import type { SessionView } from "../domain/events";
@@ -31,11 +32,12 @@ function Proof({ proof }: { proof: MissionProof }) {
     <summary>
       <span className="mission-proof-mark" aria-hidden>{verified ? <Check size={14} /> : <Alert size={14} />}</span>
       <span className="mission-proof-text"><strong>{row.requirement || "Unnamed requirement"}</strong>
-        <small>{verified ? "Verified" : "Not verified"} <span aria-hidden>·</span> Inspect source</small></span>
+        <small>{row.grade ? row.grade[0].toUpperCase() + row.grade.slice(1) : verified ? "Verified" : "Not verified"} <span aria-hidden>·</span> Inspect source</small></span>
       <ArrowUpRight size={13} />
     </summary>
     <div className="mission-proof-source">
       {row.summary && <p>{row.summary}</p>}
+      {row.grade && <p>Grade: {row.grade}</p>}{row.reason && <p>{row.reason}</p>}{row.observed && <details><summary>Observed result</summary><pre className="work-diff">{row.observed}</pre></details>}
       {!verified && <p className="mission-proof-warning">{!source ? "No source tool call was found in this mission."
         : source.name !== row.tool ? "The cited tool does not match this source call."
           : "This evidence has not been verified against a successful tool result."}</p>}
@@ -82,7 +84,8 @@ export function artifactIcon(kind: DocKind) {
 export function MissionScreen({ session, conn, dockVisible, error, onOpen, onConversation, onStop, onRestore }: Props) {
   // App keys this surface by session ID. A pin refers only to a turn in that session.
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useState<"overview" | "activity">("overview");
+  const [tab, setTab] = useState<"overview" | "activity" | WorkTab>("overview");
+  const choices = ["overview", "activity", ...(session.agentWork ? WORK_TABS : [])] as const;
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const scroll = useRef<HTMLDivElement>(null);
   const uid = useId();
@@ -103,8 +106,8 @@ export function MissionScreen({ session, conn, dockVisible, error, onOpen, onCon
   function tabKeys(e: KeyboardEvent<HTMLButtonElement>, index: number) {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
     e.preventDefault();
-    const next = e.key === "Home" ? 0 : e.key === "End" ? 1 : 1 - index;
-    setTab(next === 0 ? "overview" : "activity"); tabs.current[next]?.focus();
+    const next = e.key === "Home" ? 0 : e.key === "End" ? choices.length - 1 : (index + (e.key === "ArrowRight" ? 1 : -1) + choices.length) % choices.length;
+    setTab(choices[next]); tabs.current[next]?.focus();
   }
 
   return <div className="mission-screen" aria-label="Agent mission" role="region">
@@ -143,9 +146,9 @@ export function MissionScreen({ session, conn, dockVisible, error, onOpen, onCon
             : previous && previous.id !== turn?.id && <button type="button" className="btn ghost" onClick={() => choose(previous.id)}>{achieved ? "Last achieved" : "Last completed"}<ArrowUpRight size={12} /></button>}
         </div>
         <div className="mission-tabbar"><div className="mission-tabs" role="tablist" aria-label="Mission views">
-          {(["overview", "activity"] as const).map((name, i) => <button type="button" key={name} role="tab" ref={(el) => { tabs.current[i] = el; }}
+          {choices.map((name, i) => <button type="button" key={name} role="tab" ref={(el) => { tabs.current[i] = el; }}
             id={`${uid}-tab-${name}`} aria-controls={`${uid}-panel-${name}`} aria-selected={tab === name} tabIndex={tab === name ? 0 : -1}
-            onClick={() => setTab(name)} onKeyDown={(e) => tabKeys(e, i)}>{name === "overview" ? "Overview" : "Activity"}
+            onClick={() => setTab(name)} onKeyDown={(e) => tabKeys(e, i)}>{name[0].toUpperCase() + name.slice(1)}
             {name === "activity" && <span>{turn?.tools.length ?? 0}</span>}</button>)}
         </div><button type="button" className="mission-conversation" aria-label="Open conversation" onClick={onConversation}><Chat size={13} /><span>Conversation</span><ArrowUpRight size={12} /></button></div>
 
@@ -191,6 +194,7 @@ export function MissionScreen({ session, conn, dockVisible, error, onOpen, onCon
             {ended && <MissionPlan view={v} />}
           </>}
         </div>
+        {WORK_TABS.includes(tab as WorkTab) && <div role="tabpanel" id={`${uid}-panel-${tab}`} aria-labelledby={`${uid}-tab-${tab}`} tabIndex={0}><WorkPanel tab={tab as WorkTab} /></div>}
         <footer className="mission-footer"><Folder size={13} /><span>Working folder <code>{session.scope?.folder || session.folder || "Not selected"}</code>
           {session.execution?.persistence !== "durable" && <small>History lasts until this server restarts.</small>}</span></footer>
       </div>

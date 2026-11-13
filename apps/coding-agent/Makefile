@@ -26,6 +26,7 @@
 # what this checkout has. A deployment nobody probed is a guess.
 
 SHELL := /bin/bash
+.SHELLFLAGS := -eu -o pipefail -c
 .DEFAULT_GOAL := help
 .PHONY: help doctor setup dev dev-real shell-pg check types unit audits vision \
         long-running
@@ -39,7 +40,6 @@ PY         := $(APP_DIR)/.venv/bin/python
 WEB        := $(APP_DIR)/web
 PORT       ?= 8062
 REAL_PORT  ?= 8071
-
 # Which workspace. `dev` is the deployment/experiment workspace; `prod` is the live one. Both the
 # host and the transport come from scripts/env.sh, so this variable cannot put the two out of step.
 ENV        ?= prod
@@ -94,7 +94,7 @@ setup: ## Install what is needed to run and test locally
 	@test -d $(APP_DIR)/.venv || python3 -m venv $(APP_DIR)/.venv
 	@$(APP_DIR)/.venv/bin/pip install -q -U pip
 	@$(APP_DIR)/.venv/bin/pip install -q -r $(APP_DIR)/requirements.txt
-	@$(APP_DIR)/.venv/bin/pip install -q pytest pytest-asyncio pytest-xdist 2>/dev/null || true
+	@$(APP_DIR)/.venv/bin/pip install -q pytest pytest-asyncio pytest-xdist ruff 2>/dev/null || true
 	@npm --prefix $(WEB) install --no-audit --no-fund
 	@printf '  ready. Next: make dev\n'
 
@@ -124,12 +124,13 @@ check: types unit ## Everything that must pass before a deploy (no cloud, no net
 types: ## TypeScript, and no Python that fails to import
 	@printf '\033[1mtsc\033[0m\n'
 	@cd $(WEB) && npx tsc -b --noEmit && printf '  ok      no type errors\n'
+	@cd $(APP_DIR) && $(PY) -m ruff check api tools --select F821
 
 unit: ## pytest + vitest
 	@printf '\033[1mpytest\033[0m\n'
-	@cd $(APP_DIR) && $(PY) -m pytest tests -q 2>&1 | tail -2
+	@set -euo pipefail; cd $(APP_DIR); env -u DATABRICKS_HOST $(PY) -m pytest tests -q 2>&1 | tail -2
 	@printf '\033[1mvitest\033[0m\n'
-	@cd $(WEB) && npx vitest run 2>&1 | grep -E 'Test Files|Tests '
+	@set -euo pipefail; cd $(WEB); npx vitest run 2>&1 | grep -E 'Test Files|Tests '
 
 audits: ## Accessibility, overflow and layout shift, against a running app on PORT
 	@printf '\033[1maudits against http://127.0.0.1:$(PORT)\033[0m\n'
@@ -150,11 +151,6 @@ vision: ## Prove the model can READ an image (needs dev-real on REAL_PORT)
 	@cd $(WEB) && APP_URL=http://127.0.0.1:$(REAL_PORT) node scripts/vision-e2e.mjs
 
 # ---------------------------------------------------------------- deployment
-# Everything below reads its workspace and its transport from scripts/env.sh, so `make deploy ENV=dev`
-# and `make deploy ENV=prod` take genuinely different paths without any target knowing which is which.
-provision: provision-secrets provision-lakebase ## Prepare the two things an app cannot create for itself
-	@printf '\n\033[1mprovisioned\033[0m — %s is ready for a deploy\n' "$(ENV)"
-
 provision-secrets: ## Create the secret scope and its two secrets (idempotent; never overwrites)
 	@$(ENVSH) "$(SCRIPTS)/provision-secrets.sh" "$(ENV)"
 

@@ -1,0 +1,72 @@
+{
+  "version": "1.2.0-rc.4",
+  "sourceRevision": "d2d4754e05f15dc06f41d57fdeaaa8b9ae6415e8",
+  "deploymentId": "01f1de70fb671ee4b550c1f685eb3a56",
+  "pullRequest": "https://github.com/raphaelmansuy/opengenie/pull/17",
+  "reviewedAt": "2026-11-12T08:17:32.402631+00:00",
+  "images": [
+    {
+      "file": "screenshots/50-cte-native-submitted.png",
+      "sha256": "e16e95d6d7ed1a65299ea14f21ce4d263ce74517e71c85711cd23245fbe6d319",
+      "width": 1920,
+      "height": 1100,
+      "visuallyInspected": true,
+      "observation": "Native submission from the exact reported CTE shows Waiting for warehouse, cancel actions and the stopped serverless warehouse with Starts on demand. Source and actions are readable without overlap.",
+      "captureDeploymentId": "01f1de70fb671ee4b550c1f685eb3a56"
+    },
+    {
+      "file": "screenshots/51-cte-native-daily-results.png",
+      "sha256": "41416223debef4689ca78ef8ce0b413c86da2f866580c9a364499baa925f8505",
+      "width": 1920,
+      "height": 1100,
+      "visuallyInspected": true,
+      "observation": "Native success shows 60 daily rows and all five result columns alongside the exact source. Warehouse now reports running; no policy refusal is present.",
+      "captureDeploymentId": "01f1de70fb671ee4b550c1f685eb3a56"
+    },
+    {
+      "file": "screenshots/52-cte-native-dark.png",
+      "sha256": "7d8ad5a1b7f6168674de288b9052d154cead50bd786d4cdfb86ec7d945897287",
+      "width": 1920,
+      "height": 1100,
+      "visuallyInspected": true,
+      "observation": "Dark-theme source, SQL highlighting, native success and all five result headers remain readable and aligned.",
+      "captureDeploymentId": "01f1de70fb671ee4b550c1f685eb3a56"
+    },
+    {
+      "file": "screenshots/53-cte-actionable-function-refusal.png",
+      "sha256": "45468d2ecb91e3a3e467749da7304574326decce4c64196de18f7cfb0b3e9486",
+      "width": 1920,
+      "height": 1100,
+      "visuallyInspected": true,
+      "observation": "The unknown-function refusal names the restriction, and the prior successful results are explicitly marked as belonging to the previous snapshot. Controls remain available.",
+      "captureDeploymentId": "01f1de70fb671ee4b550c1f685eb3a56"
+    },
+    {
+      "file": "screenshots/54-cte-recovered-source-and-result.png",
+      "sha256": "d258e9ffcbfa3e2b1b26b7e73d988989b705552139723ddb7c4fd99ffe6aa247",
+      "width": 1920,
+      "height": 1100,
+      "visuallyInspected": true,
+      "observation": "Reload restores the exact CTE source and the same 60-row result. The machine assertion verifies no repeated submission.",
+      "captureDeploymentId": "01f1de70fb671ee4b550c1f685eb3a56"
+    },
+    {
+      "file": "screenshots/55-agent-cte-native-results.png",
+      "sha256": "927bdfd82da6398e34b8e79909e1e7d0dfac51e6e5399cca56a86c7f80a0caf7",
+      "width": 1920,
+      "height": 1100,
+      "visuallyInspected": true,
+      "observation": "The real AI mission is completed: the updated CTE appears in the editor, native results show 60 rows, and the assistant reports seven proven evidence rows. Source, results and assistant remain visible.",
+      "captureDeploymentId": "01f1de70fb671ee4b550c1f685eb3a56"
+    },
+    {
+      "file": "screenshots/56-cte-mobile-results.png",
+      "sha256": "edc30f9cb3aa7b7b88fb3ff706a9c1f7842b949f2317fd4b158fa75445a16ede",
+      "width": 375,
+      "height": 1000,
+      "visuallyInspected": true,
+      "observation": "The 375px Results view shows success, row count and leading columns without page-wide overflow. The harness separately verifies horizontal panning to the last column without another submission.",
+      "captureDeploymentId": "01f1de70fb671ee4b550c1f685eb3a56"
+    }
+  ]
+}

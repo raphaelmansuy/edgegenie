@@ -280,13 +280,14 @@ class WorkspaceBrowser:
         return raw
 
     async def import_content(self, path: str, raw: bytes, token: str | None, *,
-                              format: str, language: str = "") -> None:
+                              format: str, language: str = "", overwrite: bool = False) -> None:
         """Create an object. Never deletes: a right-click create must not be an overwrite."""
         if len(raw) > self.MAX_EXPORT_BYTES:
             raise ValueError("this file is too large to import here; open it in Databricks")
         body: dict[str, Any] = {
             "path": path, "format": format,
             "content": base64.b64encode(raw).decode("ascii"),
+            "overwrite": overwrite,
         }
         if language:
             body["language"] = language
@@ -372,3 +373,7 @@ class WorkspaceBrowser:
             await self.import_content(dest, raw, token, format="SOURCE", language=language or "PYTHON")
         else:
             await self.import_content(dest, raw, token, format="AUTO")
+
+    async def close(self):
+        closer=getattr(self._http,'close',None)
+        if closer:await closer()

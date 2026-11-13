@@ -1,0 +1,51 @@
+{
+  "success": true,
+  "version": "1.2.0-rc.1",
+  "deploymentId": "01f1de58bbcb18228bf8d92ed9b8e056",
+  "gitCommit": "8e9e520fb0a0a244a758f13daab96c08517161f5",
+  "origin": "https://coding-agent-7474647158015570.aws.databricksapps.com",
+  "checks": [
+    "Live health, readiness and expected release version return JSON 200",
+    "Live principal and workspace match the verified dev target",
+    "Live backend exposes SQL query, draft, execution and cancellation routes",
+    "Native provider is active with create, run and update gates preserved",
+    "Native query metadata is readable through the deployed user-authenticated API",
+    "Live Queries route renders the native library",
+    "Live editor creates an owner-scoped draft and respects server gates",
+    "Live SQL authoring fits the 375px mobile viewport",
+    "Live SQL editor and shell support the dark theme",
+    "No browser runtime or authenticated transport errors"
+  ],
+  "capabilities": {
+    "demo": false,
+    "read": true,
+    "create": false,
+    "run": false,
+    "update": false,
+    "durable": false,
+    "reason": "SQL execution is unavailable. Private drafts are temporary in this workspace.",
+    "createReason": "Saving a new Query is unavailable in this workspace."
+  },
+  "nativeMetadataPageSize": 0,
+  "screenshots": [
+    {
+      "file": "screenshots/19-deployed-query-library.png",
+      "sha256": "4dd9062d986405fb9d89c31708f2bd3b1c6379fa2f0acf6f33f493505eed2a81"
+    },
+    {
+      "file": "screenshots/20-deployed-private-draft.png",
+      "sha256": "cd3b5971f224df6696b0733f6faaddb81a0add3efc0f96c524f8bc717aa8fa32"
+    },
+    {
+      "file": "screenshots/21-deployed-mobile-draft.png",
+      "sha256": "895a622a9cd10c0e848d423539658aef66cda3f9c6fb0a433a5c7458046d32d5"
+    },
+    {
+      "file": "screenshots/22-deployed-dark-draft.png",
+      "sha256": "1e100efda3f3fa0c3fc17cb00b7920ea652a188247d6b7f7ef3eb65dbcbfd6a1"
+    }
+  ],
+  "browserErrors": [],
+  "transportErrors": [],
+  "operations": "Read-only native APIs plus one private application draft; no native Query creation or SQL execution."
+}

@@ -3,11 +3,7 @@ import type { Attachment } from "./events";
 import { projectRef } from "./lakebase";
 import { asId } from "./jobs";
 
-/** What can be open in a tab. `table` is a Unity Catalog table; `lakebase`, `app`, `job`, `pipeline`
- *  and `run` are viewers of infrastructure the agent built (spec 013 [UI-1], spec 014 [UI-1]). Adding a
- *  member here is what makes the compiler point at every place that must handle it — the tab icon, the
- *  actions map, the palette group, the `@` hint, the route grammar. */
-export type DocKind = "notebook" | "file" | "table" | "lakebase" | "app" | "job" | "pipeline" | "run" | "query" | "query-draft";
+export type DocKind = "lakebase" | "app" | "job" | "run" | "pipeline" | "notebook" | "file" | "table" | "query" | "query-draft";
 export interface Doc { id: string; kind: DocKind; ref: string; name: string; rev: number }
 
 /** One path, two spellings, one object.
@@ -268,33 +264,24 @@ export function docFromOpenEvent(event: string, detail: unknown): Doc | null {
 export type Action = "explain" | "fix" | "document" | "optimize" | "profile" | "query";
 
 /**
- * Quick actions. Every one that changes something says "in your working folder, leave the original
- * alone": the write fence is the product's promise, and the prompt must not talk the agent around it.
+ * Quick actions preserve the fence and ask for revisioned review before an in-place edit.
  */
 export const ACTIONS: Record<Action, { label: string; prompt: string }> = {
   explain: { label: "Explain", prompt: "Explain what the attached notebook does, cell by cell, in plain English. Do not change anything." },
-  fix: { label: "Fix errors", prompt: "Review the attached notebook for bugs. Check every table and column name with describe_table before judging it. Write a corrected copy in your working folder (never modify the original), run it, and show the evidence that it works." },
-  document: { label: "Document", prompt: "Add clear markdown documentation to the attached notebook: a title, one short note per step, and the assumptions. Write it as a new notebook in your working folder; leave the original untouched." },
-  optimize: { label: "Optimize", prompt: "Find the performance problems in the attached notebook (shuffles, repeated reads, collect(), row-wise UDFs). Write an optimized copy in your working folder (leave the original untouched), run both, and show the timings side by side." },
+  fix: { label: "Fix errors", prompt: "Review the attached notebook for bugs. Check every table and column name with describe_table before judging it. For an asset inside the working folder, read its revision and propose minimal cell or range edits for review. For an outside asset, propose a copy inside the working folder. Run the approved result as my identity and show the evidence." },
+  document: { label: "Document", prompt: "Add clear markdown documentation to the attached notebook: a title, one short note per step, and the assumptions. Read the revision and propose cell edits for review if it is inside the working folder; otherwise propose a new notebook inside the working folder." },
+  optimize: { label: "Optimize", prompt: "Find the performance problems in the attached notebook (shuffles, repeated reads, collect(), row-wise UDFs). Propose revisioned edits inside the working folder, or an inside copy of an outside asset. Run the approved result as my identity and show measured timings." },
   profile: { label: "Profile", prompt: "Profile the attached table: row count, null rate per column, distinct counts for likely keys, and anything that looks wrong. Show the SQL you used." },
   query: { label: "Write a query", prompt: "Suggest three useful queries on the attached table and run the first one. Check the real column names before writing SQL." },
 };
 
 export const ACTIONS_FOR: Record<DocKind, Action[]> = {
+  lakebase: ["explain"], app: ["explain"], job: ["explain"], run: ["explain"], pipeline: ["explain"],
   notebook: ["explain", "fix", "document", "optimize"],
   file: ["explain"],
   table: ["profile", "query"],
   query: ["explain"],
   "query-draft": ["explain"],
-  // A project, an app, a job, a pipeline and a run are read-only viewers of something the agent built, so
-  // there is no quick action that changes them. An empty list is the honest answer: a button that cannot
-  // act is the inert control spec 011 [N5] removed. The dock's SUGGESTIONS for these kinds are about
-  // their state — "why did the last run fail?" — and live in `domain/dock.ts` ([UI-6]).
-  lakebase: [],
-  app: [],
-  job: [],
-  pipeline: [],
-  run: [],
 };
 
 /** Which kinds a page renders as a viewer rather than an editor. One predicate, read by the dock, the

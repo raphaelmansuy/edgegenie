@@ -42,6 +42,11 @@ class SqlActor:
     workspace: str
     user: str
     token: str | None = None
+    username: str = ""
+
+    @property
+    def run_as(self) -> str:
+        return self.username or self.user
 
     @property
     def scope(self) -> str:
@@ -89,10 +94,17 @@ class QueryProvider(Protocol):
     async def list(self, actor: SqlActor, cursor: str, size: int) -> dict: ...
     async def get(self, actor: SqlActor, query_id: str) -> dict: ...
     async def create(self, actor: SqlActor, query: dict) -> dict: ...
+    async def delete(self, actor: SqlActor, query_id: str) -> None: ...
     async def warehouses(self, actor: SqlActor) -> list[dict]: ...
     async def submit(self, actor: SqlActor, payload: dict) -> dict: ...
     async def status(self, actor: SqlActor, statement_id: str) -> dict: ...
     async def cancel(self, actor: SqlActor, statement_id: str) -> None: ...
+
+
+class StatementLookup(Protocol):
+    """Optional native-history capability, independent of submission and result access."""
+
+    async def lookup_statement(self, actor: SqlActor, intent: dict) -> str | None: ...
 
 
 class QueryStore(Protocol):

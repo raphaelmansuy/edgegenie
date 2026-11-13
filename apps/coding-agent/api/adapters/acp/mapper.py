@@ -10,6 +10,8 @@ Everything here is pure so it can be tested against recorded frames.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from collections import Counter
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -118,67 +120,86 @@ def _table_of(content: Any) -> dict | None:
             "truncated": len(d["rows"]) > MAX_ROWS or len(d["columns"]) > MAX_COLS}
 
 
+def _tool_start(sid: str, tid: str | None, update: dict) -> list[Event]:
+    args = _summarise(update.get("rawInput"))
+    args = "" if args in ("{}", "[]", "null") else args
+    event = tool_started(sid, tid or "", str(update.get("toolCallId", "")),
+        str(update.get("name") or update.get("title") or update.get("kind") or "tool"),
+        args, str(update.get("kind") or "other"))
+    for key in ("locations", "rawInput"):
+        if key in update:
+            event.payload[key] = update[key]
+    return [event]
+
+
+def _tool_update(sid: str, tid: str | None, update: dict) -> list[Event]:
+    raw = update.get("rawInput") or {}
+    output = update.get("rawOutput") or {}
+    err = _summarise(output.get("error"), 300) if isinstance(output, dict) else ""
+    summary = _summarise(update.get("content") or (raw.get("summary") if isinstance(raw, dict) else ""), 200) if not err else ""
+    shown = {k: v for k, v in raw.items() if k not in ("error", "summary", "tool")} if isinstance(raw, dict) else raw
+    event = tool_updated(sid, tid or "", str(update.get("toolCallId", "")),
+        str(update["status"]) if "status" in update else None, update.get("seconds"), summary,
+        err, _summarise(shown, 160) if shown else "", _table_of(update.get("content")) if not err else None)
+    proof = _proof_of(update.get("content"))
+    if proof is not None:
+        event.payload["proof"] = proof
+    content = update.get("content") or []
+    diffs = [c for c in content if isinstance(c, dict) and c.get("type") == "diff"] if isinstance(content, list) else []
+    if diffs:
+        event.payload["diffs"] = diffs
+    for key in ("locations", "name", "title", "kind", "rawInput"):
+        if key in update:
+            event.payload[key] = update[key]
+    return [event]
+
+
+def _plan(sid: str, tid: str | None, update: dict) -> list[Event]:
+    entries = [{"content": str(e.get("content", ""))[:200], "status": str(e.get("status", "pending")),
+                "priority": str(e.get("priority", "medium"))}
+               for e in update.get("entries") or [] if isinstance(e, dict) and e.get("content")]
+    return [plan_updated(sid, tid or "", entries)] if entries else []
+
+
+def _usage(sid: str, tid: str | None, update: dict) -> list[Event]:
+    usage = {k: update[k] for k in ("used", "size", "cost") if k in update} or update.get("usage") or {}
+    return [usage_updated(sid, tid or "", usage)] if usage else []
+
+
+def _text(constructor):
+    return lambda sid, tid, update: [constructor(sid, tid or "", _text_of(update.get("content")))]
+
+
+def _event(event_type):
+    return lambda sid, tid, update: [Event(sid, event_type,
+        {k: v for k, v in update.items() if k != "sessionUpdate"}, turn_id=tid, actor="agent")]
+
+
+MAPPERS = {
+    "agent_thought_chunk": _text(thought), "agent_message_chunk": _text(message),
+    "agent_message": _text(message), "agent_thought": _text(thought),
+    "tool_call": _tool_start, "tool_call_update": _tool_update, "plan": _plan, "usage_update": _usage,
+    "available_commands_update": _event("commands.updated"),
+    "current_mode_update": _event("config.updated"), "config_option_update": _event("config.updated"),
+    "session_info_update": _event("session.info"), "user_message_chunk": _event("agent.notice"),
+    "notice": _event("agent.notice"), "compaction_update": _event("session.compacted"),
+    "compaction_summary_chunk": _event("session.compacted"),
+    "state_update": _event("session.info"),
+}
+UNKNOWN_UPDATES = Counter()
+
+
 def from_update(sid: str, tid: str | None, update: dict) -> list[Event]:
-    """Map one session/update's `update` object into zero or more events."""
-    kind = update.get("sessionUpdate")
-    if kind == "agent_thought_chunk":
-        return [thought(sid, tid or "", _text_of(update.get("content")))]
-    if kind == "agent_message_chunk":
-        return [message(sid, tid or "", _text_of(update.get("content")))]
-    if kind in ("agent_message", "agent_thought"):
-        return [message(sid, tid or "", _text_of(update.get("content")))] if update.get("content") else []
-    if kind == "tool_call":
-        # opencode sends the arguments on the follow-up tool_call_update, not here, so an empty
-        # rawInput must render as no arguments rather than as "{}".
-        args = _summarise(update.get("rawInput"))
-        args = "" if args in ("{}", "[]", "null") else args
-        return [
-            tool_started(
-                sid,
-                tid or "",
-                str(update.get("toolCallId", "")),
-                str(update.get("title") or update.get("kind") or "tool"),
-                args,
-                str(update.get("kind") or "other"),
-            )
-        ]
-    if kind == "tool_call_update":
-        status = str(update.get("status") or "running")
-        raw = update.get("rawInput") or {}
-        err = _summarise(raw.get("error"), 300) if isinstance(raw, dict) else ""
-        summary = _summarise(update.get("content") or raw.get("summary"), 200) if not err else ""
-        # The arguments of a call are useful whatever its status: show them, minus the noise keys.
-        shown = (
-            {k: v for k, v in raw.items() if k not in ("error", "summary", "tool")}
-            if isinstance(raw, dict)
-            else raw
-        )
-        args = _summarise(shown, 160) if shown else ""
-        return [
-            tool_updated(
-                sid,
-                tid or "",
-                str(update.get("toolCallId", "")),
-                status,
-                update.get("seconds"),
-                summary,
-                err,
-                args,
-                _table_of(update.get("content")) if not err else None,
-                _proof_of(update.get("content")) if not err else None,
-            )
-        ]
-    if kind == "plan":
-        # ACP: {"entries": [{"content", "priority", "status": pending|in_progress|completed}]}.
-        entries = [
-            {"content": str(e.get("content", ""))[:200], "status": str(e.get("status", "pending")),
-             "priority": str(e.get("priority", "medium"))}
-            for e in update.get("entries") or [] if isinstance(e, dict) and e.get("content")
-        ]
-        return [plan_updated(sid, tid or "", entries)] if entries else []
-    if kind == "usage_update":
-        u = update.get("usage") or {}
-        return [usage_updated(sid, tid or "", u)] if u else []
+    """Map known ACP updates. Missing optional fields stay absent; unknown kinds are counted."""
+    kind = str(update.get("sessionUpdate", ""))
+    mapper = MAPPERS.get(kind)
+    if mapper:
+        return mapper(sid, tid, update)
+    # Bound adversarial unknown kinds, while retaining a total overflow count.
+    key = kind if kind in UNKNOWN_UPDATES or len(UNKNOWN_UPDATES) < 128 else "<other>"
+    UNKNOWN_UPDATES[key] += 1
+    if UNKNOWN_UPDATES[key] == 1:
+        logging.getLogger(__name__).warning("Unknown ACP update: %s", key)
     return []
 
 
@@ -188,23 +209,22 @@ def from_permission(sid: str, tid: str | None, params: dict, approval_id: str) -
     The agent's option list is passed through unchanged; the UI maps `kind`
     (allow_once / allow_always / reject_once / reject_always) onto buttons.
     """
-    subject = params.get("subject") or {}
-    target = _summarise(subject.get("path") or subject.get("target") or params.get("title", ""), 160)
-    options = [
-        {"optionId": o.get("optionId"), "kind": o.get("kind"), "name": o.get("name")}
-        for o in params.get("options", [])
-    ]
-    return approval_requested(
-        sid,
-        tid or "",
-        approval_id,
-        str(subject.get("toolCallId") or ""),
-        action=str(subject.get("action") or "write"),
-        target=target or "an object",
-        reason=str(params.get("description") or params.get("title") or "the agent asked for permission"),
-        blast=_summarise(subject.get("blastRadius") or "", 200),
-        options=options,
+    call = params.get("toolCall") or {}
+    raw = call.get("rawInput") or {}
+    target = _summarise(next((raw[k] for k in ("path", "id", "full_name", "name", "sql")
+                              if isinstance(raw, dict) and raw.get(k)), ""), 160)
+    options = [{"optionId": o.get("optionId"), "kind": o.get("kind"), "name": o.get("name")}
+               for o in params.get("options", [])]
+    event = approval_requested(
+        sid, tid or "", approval_id, str(call.get("toolCallId") or ""),
+        action=str(call.get("name") or call.get("title") or "tool"),
+        target=target or "Arguments unknown", reason="The agent requested permission for this tool call.",
+        blast="", options=options,
     )
+    event.payload["input"] = raw
+    event.payload["argumentsKnown"] = bool(raw)
+    return event
+
 
 
 def turn_end_from_prompt_response(result: dict) -> TurnEnd:

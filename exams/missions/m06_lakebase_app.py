@@ -21,7 +21,7 @@ DB = "databricks_postgres"
 
 
 def inst(ctx: Ctx) -> str:
-    return f"{ctx.run_id}-lb"
+    return ctx.extra.get("instancePrefix", f"{ctx.run_id}-") + "lb"
 
 
 def app_dir(ctx: Ctx) -> str:

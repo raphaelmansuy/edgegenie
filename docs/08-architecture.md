@@ -81,7 +81,7 @@ flowchart TB
 
     subgraph C["the Databricks App — one uvicorn process"]
         direction TB
-        API["<b>HTTP + SSE API</b><br/>8 routers, 109 routes"]:::yellow
+        API["<b>HTTP + SSE API</b><br/>9 routers, 141 routes"]:::yellow
         subgraph PURE["domain · pure, no I/O"]
             direction LR
             SUP["<b>supervisor</b><br/>is this turn done?"]:::purple
@@ -133,7 +133,7 @@ flowchart TB
 | Container | Technology | One job | Where |
 |---|---|---|---|
 | Front end | React 19, TypeScript, CodeMirror 6, Vite | render, reduce the event stream, reconnect | `web/src/` |
-| API | FastAPI, 8 routers, 109 routes | validate, delegate, map a domain error to a status | `api/routers/` |
+| API | FastAPI, 9 routers, 141 routes | validate, delegate, map a domain error to a status | `api/routers/` |
 | Orchestrator | Python, async | own session and turn lifecycle | `api/services/orchestrator.py` |
 | Supervisor | Python, pure | decide whether a turn is finished | `api/domain/supervisor.py` |
 | Evidence rules | Python, pure | match a claim to a tool call that happened | `api/domain/evidence.py` |
@@ -144,10 +144,11 @@ flowchart TB
 
 **Two rules the arrows encode, and that the rest of this page keeps returning to.**
 
-- **The agent does not hold a workspace token.** It holds a loopback URL to the tool server. The
-  tool server holds the token, in a file it re-reads on every call. So a prompt injection inside
-  the agent cannot make a Databricks call the fence has not seen. (The agent's own file tools are
-  disabled for the same reason — see [09 §6](09-security.md#6--the-write-fence-in-detail).)
+- **Children receive an explicit environment allow-list.** The selected model may need the
+  user's workspace token or one provider credential. Parent app credentials, the app service
+  principal, and unrelated keys are never copied. The agent runs in a private directory with
+  deny-by-default tools and no client filesystem or terminal capability. This is an application
+  boundary; it is not a claim of operating-system sandbox isolation.
 - **The browser never supplies content.** An attachment is `{kind, ref}`; the server re-reads the
   object with the user's own token. The one exception is a pasted blob, which is exactly why
   `domain/blob.py` is a separate, pure, heavily tested module.
@@ -204,18 +205,18 @@ flowchart LR
 
 | Layer | Count | May import | Must not contain |
 |---|---|---|---|
-| `api/routers/` | 8 files, 109 routes | services, domain, ports | a business rule; a vendor name |
-| `api/services/` | 18 files | domain, ports | an HTTP status; a `databricks` import that could be an adapter |
-| `api/domain/` | 46 files | each other, ports | I/O of any kind — no clock, no network, no file |
-| `api/ports/` | 1 file, 13 protocols | domain | an implementation |
-| `api/adapters/` | 50 files | domain, ports | anything from `routers/` or `services/` |
+| `api/routers/` | 9 files, 141 routes | services, domain, ports | a business rule; a vendor name |
+| `api/services/` | 30 files | domain, ports | an HTTP status; a `databricks` import that could be an adapter |
+| `api/domain/` | 61 files | each other, ports | I/O of any kind — no clock, no network, no file |
+| `api/ports/` | 5 files, 23 protocols | domain | an implementation |
+| `api/adapters/` | 73 files | domain, ports | anything from `routers/` or `services/` |
 
 The payoff is measurable. `domain/scope.py` decides where a write may land and has no `import
 httpx`; `domain/supervisor.py` decides whether a turn is done and never calls a model. Both are
 tested in milliseconds, and both are the kind of rule that quietly destroys data if it is wrong —
 which is why neither is allowed to be inside a request handler.
 
-`api/main.py` is the only file that chooses implementations. It is the composition root:
+`api/main.py` and the three modules in `api/composition/` choose implementations. It is the composition root:
 `build()` decides between Postgres, SQLite and memory; between the real ACP agent, the HTTP agent
 and the scripted fake; between the subprocess tool server and none.
 
@@ -261,7 +262,6 @@ flowchart TB
     TS1 -->|"REST / SQL"| UC
     UV --> LB
     UV --> SS
-    TS1 -->|"Lakebase admin<br/>as the app's SP"| LB
 
     classDef teal fill:#E0F5F3,stroke:#9AD5CE,color:#1F2937
     classDef pink fill:#FDE7EF,stroke:#F2B5CB,color:#1F2937
@@ -536,8 +536,9 @@ than per request.
 
 ## 9 · The tool server: 45 tools, 32 advertised
 
-The agent's only hands. One process per session, started with the session's scope in its
-environment and reachable only on loopback.
+The compatibility MCP server has 45 tools, of which 32 are in its core profile. With spec 014
+agent-work enabled, an authenticated facade advertises the session's bounded capability catalogue
+instead; it holds no user token or app credential. Phase flags remain opt-in pending live qualification.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#E8F0FE','primaryTextColor':'#1F2937','primaryBorderColor':'#A8C0E8','lineColor':'#94A3B8','clusterBkg':'#F8FAFC','clusterBorder':'#CBD5E1'}}}%%
@@ -578,7 +579,6 @@ NBMCP_WRITE_APP_PREFIX     agent-<first 8>-
 NBMCP_WRITE_INSTANCE_PREFIX agent-<first 8>-
 NBMCP_SESSION_LEDGER       one JSONL file this session appends to
 NBMCP_TOKEN_FILE           the user's token, re-read on every call
-NBMCP_SP_TOKEN_FILE        the app's own token, for the one API a user token cannot call
 NBMCP_RUN_*                the per-session bridge key (see below)
 NBMCP_QUERY_URL            the turn-bound SQL editor bridge
 ```
@@ -587,11 +587,10 @@ The scope is read from the environment **by the app**, not decided by the agent.
 the fence a boundary rather than an instruction: the model can ask for anything, and the process it
 asks was started with one folder and one schema.
 
-**The bridge, and why it is a key and not a flag.** A Databricks App's user authorisation carries no
-compute scope, so a tool cannot submit a notebook run as the user. The app *can* run Python on
-serverless compute as its own service principal. `services/run_bridge.py` lets the tool ask the app,
-on `/internal/`, with `HMAC(secret, session_id)`. The key opens exactly one session's door, and the
-endpoint additionally checks that this session's user is an administrator.
+**Execution identity.** The historical app-identity notebook bridge always refuses agent
+execution, including for administrators. Human Python execution has its own authorization path.
+A separate agent execution identity must pass isolation qualification before it can be enabled;
+otherwise the capability is explicitly unavailable. The user SQL editor bridge remains available.
 
 The SQL editor bridge uses the signed-in user for execution. Its key is bound to the accepted
 turn and attached draft. Read, compare-and-swap update, run and status all use the same SQL
@@ -643,8 +642,8 @@ without a durable journal — a conversation in container memory is lost on the 
 | `agent.session_event` | every event, monotonic per session | no | never |
 | `llm.*` | providers, models, grants, encrypted keys, health, turn pins | no | health rows age out of the query, not the table |
 | Blob files | attachment bytes, `0600` | **yes** if `/tmp` is not a mounted volume | `sweep()` on refcount 0 |
-| Session ledger | what this conversation created | **yes** for the same reason | with the session |
-| Token files | one user token, one SP token | yes, by design | `archive()` deletes the directory |
+| Agent ledgers | changes, operations, resources, decisions and retry receipts | no with durable journal storage | explicit, authorized history purge; native resources require separate cleanup |
+| Token files | one user token; no app SP token is handed to an agent | yes, by design | `archive()` deletes the directory |
 
 > **A real deployment note.** `app.yaml` points `APP_BLOB_DIR` at `/tmp/agent-blobs`, and `/tmp` in
 > an App container is ephemeral. The comment in `app.yaml` says the path is "a mounted volume path
@@ -687,7 +686,7 @@ flowchart LR
 
 | Fact | Where | Why it matters |
 |---|---|---|
-| 84 test files, 1233 test cases | `web/src/**/*.test.ts(x)` | the reducer is pure, so replay and reconnection are testable with recorded events |
+| 86 test files, 1246 test cases | `web/src/**/*.test.ts(x)` | the reducer is pure, so replay and reconnection are testable with recorded events |
 | `domain/event-parity.json` | `web/src/domain/` | a Python test asserts the front end knows every event type the back end emits |
 | Routes are a hash grammar | `domain/route.ts` | the hash never reaches the server, so any host or proxy serves a deep link |
 | One shell, many document kinds | `App.tsx` | a notebook, a table, a job and a pipeline are tabs, not pages you navigate away from |

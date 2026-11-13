@@ -136,14 +136,12 @@ def test_the_sql_fence_still_refuses_a_write_outside_the_schema(monkeypatch, sql
     assert (error is not None) is blocked
 
 
-def test_a_read_is_never_offered_to_the_write_checker(monkeypatch):
-    """The guarantee is in the caller: a read head skips the check. This asserts the caller's rule,
-    because the helper fails closed by design and would refuse an unparseable statement."""
+def test_read_sql_is_parsed_and_unknown_functions_fail_closed(monkeypatch):
     m = load(monkeypatch)
-    import inspect
-    src = inspect.getsource(m.dbx_run_sql)
-    assert '("SELECT", "SHOW", "DESCRIBE", "DESC", "EXPLAIN"' in src
-    assert "_check_sql_scope(sql)" in src
+    assert m.classify("SELECT 1").action is m.ActionClass.READ
+    assert m._check_sql_scope("SELECT 1") is None
+    assert m._check_sql_scope("SELECT unverified_remote_function()")
+    assert m._check_sql_scope("WITH x AS (SELECT 1) INSERT INTO main.other.t SELECT * FROM x")
 
 
 # -- the capacity rules are checked before the platform is asked -----------------------------

@@ -1,0 +1,15 @@
+{
+  "pass": true,
+  "identity": "raphael.mansuy@gmail.com",
+  "workspace": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "agentVersion": "1.18.19",
+  "model": "databricks-gpt-oss-120b",
+  "modelRequests": 2,
+  "offeredToolNames": [
+    "todowrite"
+  ],
+  "skillOffered": false,
+  "taskOffered": false,
+  "seconds": 3.88,
+  "scope": "Actual pinned agent/model request with production deny-by-default configuration and isolated child environment; no MCP or workspace mutations."
+}

@@ -76,6 +76,7 @@ function mergeTurns(streamed: Turn[], server: Turn[]): Turn[] {
       thought: live.thought,
       tools: live.tools.length ? live.tools : t.tools,
       evidence: live.evidence.length ? live.evidence : t.evidence,
+      evidenceSources: live.evidenceSources ?? t.evidenceSources,
       plan: live.plan ?? t.plan,
       seconds: live.seconds ?? t.seconds,
       blocked: live.blocked ?? t.blocked,
@@ -95,6 +96,9 @@ function hydrate(id: string, d: Partial<SessionView> | undefined): SessionView {
   return {
     ...base,
     id: d?.id ?? base.id,
+    questions: d?.questions, notices: d?.notices, compactions: d?.compactions,
+    changedAssets: d?.changedAssets,
+    agentWork: d?.agentWork, mode: d?.mode, workVersion: d?.workVersion, approvalLinks: d?.approvalLinks,
     title: d?.title ?? base.title,
     folder: d?.folder ?? base.folder,
     schema: d?.schema ?? base.schema,
@@ -148,6 +152,13 @@ export function useSessionStream(sessionId: string | null) {
             next.status = prev.status;
             next.requiresResume = prev.requiresResume;
             next.approvals = prev.approvals;
+            next.questions = prev.questions ?? next.questions;
+            next.notices = prev.notices ?? next.notices;
+            next.compactions = prev.compactions ?? next.compactions;
+            next.mode = prev.mode ?? next.mode;
+            next.workVersion = prev.workVersion ?? next.workVersion;
+            next.approvalLinks = prev.approvalLinks ?? next.approvalLinks;
+            next.changedAssets = prev.changedAssets ?? next.changedAssets;
           }
           const server = Array.isArray(rawTurns)
             ? (rawTurns as Record<string, unknown>[]).map(adoptTurn) : [];

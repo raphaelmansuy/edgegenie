@@ -14,6 +14,7 @@ syntax colouring; without it the build still succeeds and code blocks render unc
 from __future__ import annotations
 
 import argparse
+import ast
 import html
 import re
 import json
@@ -84,8 +85,7 @@ def facts() -> dict[str, int]:
     """Counts the prose quotes about the application, read from the files that define them.
 
     The site once said "16 models" while the catalogue held 13. A count typed into prose drifts the day
-    someone edits the catalogue, so prose writes `{{models}}` and the build fills it in from source. No
-    YAML or AST import: the shapes read here are fixed by the files' own conventions and are asserted.
+    someone edits the catalogue, so prose writes `{{models}}` and the build fills it in from source. The core count is read from the pure shared catalogue rather than a duplicated set in the tool server.
     """
     section, providers, models = "", 0, 0
     for line in SEED.read_text(encoding="utf-8").splitlines():
@@ -96,8 +96,10 @@ def facts() -> dict[str, int]:
             models += section == "models"
     source = TOOL_SERVER.read_text(encoding="utf-8")
     tools = len(re.findall(r"^@tool\(\)\s*\n(?:async\s+)?def dbx_\w+", source, re.M))
-    core_block = re.search(r"^_CORE = \{(.*?)\}", source, re.M | re.S)
-    core = len(re.findall(r'"dbx_\w+"', core_block.group(1))) if core_block else 0
+    catalogue = ast.parse((TOOL_SERVER.parents[1] / "api/domain/tool_catalogue.py").read_text())
+    value = next(n.value for n in catalogue.body if isinstance(n, ast.Assign)
+                 and any(isinstance(t, ast.Name) and t.id == "CORE_TOOLS" for t in n.targets))
+    core = len(ast.literal_eval(value.args[0]))
     skills = len(list(SKILLS.glob("*.md"))) if SKILLS.is_dir() else 0
     out = {"models": models, "providers": providers, "tools": tools, "core_tools": core, "skills": skills}
     empty = [k for k, v in out.items() if not v]

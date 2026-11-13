@@ -68,8 +68,9 @@ flowchart LR
 
 ## 2 · The `agent` schema — session and SQL journals
 
-Four tables: two for durable sessions and two for owner-scoped SQL drafts, run intents and
-idempotency records. SQL storage shares the existing Postgres connection coordinator.
+21 tables in `agent`: the session and SQL journals, encrypted agent ledgers, retry receipts,
+and a bounded session index. SQL writes and agent transitions share the execution-owner
+connection coordinator; journal reads use a separate connection.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#E8F0FE','primaryTextColor':'#1F2937','primaryBorderColor':'#A8C0E8','lineColor':'#94A3B8'}}}%%
@@ -108,6 +109,23 @@ erDiagram
 | `agent.session_event` | **one row per event per session** | the transcript, the replay source for `/stream`, and the audit trail |
 | `agent.sql_item` | **one row per scope, kind and item id** | encrypted draft source or run metadata, with a version for atomic conflict detection |
 | `agent.sql_operation` | **one row per scope and idempotency key** | reserves an operation once and rejects replay with a different fingerprint |
+| `agent.session` | **one session work configuration** | versioned recovery and bounded lookup |
+| `agent.turn` | **one durable agent turn** | versioned recovery and bounded lookup |
+| `agent.invocation` | **one accepted tool invocation** | versioned recovery and bounded lookup |
+| `agent.change` | **one revision-bound proposal** | versioned recovery and bounded lookup |
+| `agent.approval` | **one native permission decision** | versioned recovery and bounded lookup |
+| `agent.resource` | **one session-created resource** | versioned recovery and bounded lookup |
+| `agent.operation` | **one native operation intent** | versioned recovery and bounded lookup |
+| `agent.wakeup` | **one continuation receipt** | versioned recovery and bounded lookup |
+| `agent.fake_asset` | **one deterministic fixture asset** | versioned recovery and bounded lookup |
+| `agent.fake_run` | **one deterministic fixture run** | versioned recovery and bounded lookup |
+| `agent.previous_content` | **one encrypted undo payload** | versioned recovery and bounded lookup |
+| `agent.evidence` | **one invocation-bound evidence claim** | versioned recovery and bounded lookup |
+| `agent.usage_pass` | **one provider usage pass** | versioned recovery and bounded lookup |
+| `agent.preference` | **one owner preference record** | versioned recovery and bounded lookup |
+| `agent.outbox` | **one event publication receipt** | versioned recovery and bounded lookup |
+| `agent.request` | **one entity-kind and idempotency-key reservation** | versioned recovery and bounded lookup |
+| `agent.session_index` | **one small owner-scoped session header** | versioned recovery and bounded lookup |
 
 The SQL payload is authenticated against its scope, kind and id before decoding. Draft updates
 compare the expected version in the same transaction as the write. Run reservation applies
@@ -152,7 +170,7 @@ self.publish(session_id, stored.to_dict())
 
 The order is the guarantee. A browser that has seen an event can always re-read it, because the
 commit happened first. The in-memory queue is a **wake-up**, never the truth: after each wake the
-SSE handler re-reads `since(seq)`.
+SSE handler can deliver contiguous committed events directly and re-reads `since(seq)` when it detects a gap.
 
 ### The advisory lock
 
@@ -161,7 +179,7 @@ spells `OPENGENI`. A second server cannot take the journal, and losing the conne
 rather than reconnecting a stale worker behind a replacement owner's back. This is a deliberate
 single-active-server design, and it is why the app runs one uvicorn worker.
 
-### The event vocabulary: 28 types, in one place
+### The event vocabulary: 52 types, in one place
 
 `domain/events.py` defines the whole language. Nothing else may invent an event type, and the front
 end must know every one.
@@ -399,6 +417,7 @@ conversation* make it?" — a weaker question than authorisation and deliberatel
 003_llm_model_vision.sql  sees_images, default false
 004_session_journal.sql   schema agent: snapshot + event
 005_sql_journal.sql       schema agent: encrypted SQL items + operation replay keys
+006_agent_ledgers.sql     encrypted agent ledgers, session index and atomic transition support
 ```
 
 | Rule | Why |

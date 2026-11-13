@@ -1,8 +1,10 @@
+import { patchCompaction, type Compaction, type AgentNotice } from "./agentupdates";
 /**
  * The event vocabulary. Mirrors api/domain/events.py — a test asserts the lists match.
  * The reducer is a pure function over these, which is what makes replay and reconnection free.
  */
 export type EventType =
+  | "question.requested" | "question.decided"
   | "session.recovery_required" | "session.checkpoint"
   | "session.created" | "session.ready" | "session.degraded" | "session.archived" | "document.saved"
   | "turn.started" | "turn.queued" | "thought.delta" | "message.delta"
@@ -11,9 +13,32 @@ export type EventType =
   | "evidence.proposed" | "turn.auditing"
   | "turn.completed" | "turn.blocked" | "turn.cancelled" | "turn.interrupted"
   | "turn.failed" | "turn.retrying" | "session.compacted" | "usage.updated"
-  | "blob.attached" | "sql.changed";
+  | "capabilities.reported"
+  | "mode.changed"
+  | "budget.updated"
+  | "budget.reached"
+  | "turn.paused"
+  | "change.proposed"
+  | "change.decided"
+  | "change.applied"
+  | "change.settled"
+  | "operation.started"
+  | "operation.progress"
+  | "operation.settled"
+  | "run.review_required"
+  | "resource.updated"
+  | "approval.linked"
+  | "blob.attached"
+  | "turn.declined"
+  | "turn.refused"
+  | "turn.truncated"
+  | "commands.updated"
+  | "config.updated"
+  | "session.info"
+  | "agent.notice" | "sql.changed";
 
 export const EVENT_TYPES: EventType[] = [
+  "question.requested", "question.decided", "sql.changed",
   "session.recovery_required", "session.checkpoint",
   "session.created", "session.ready", "session.degraded", "session.archived", "document.saved",
   "turn.started", "turn.queued", "thought.delta", "message.delta",
@@ -23,8 +48,33 @@ export const EVENT_TYPES: EventType[] = [
   "turn.completed", "turn.blocked", "turn.cancelled", "turn.interrupted",
   "turn.failed", "turn.retrying", "session.compacted", "usage.updated",
   "blob.attached",
-  "sql.changed",
+  "capabilities.reported",
+  "mode.changed",
+  "budget.updated",
+  "budget.reached",
+  "turn.paused",
+  "change.proposed",
+  "change.decided",
+  "change.applied",
+  "change.settled",
+  "operation.started",
+  "operation.progress",
+  "operation.settled",
+  "run.review_required",
+  "resource.updated",
+  "approval.linked",
+
+  "turn.declined",
+  "turn.refused",
+  "turn.truncated",
+  "commands.updated",
+  "config.updated",
+  "session.info",
+  "agent.notice",
+
 ];
+
+export interface AgentQuestion { id: string; message: string; state: string; agent: string; schema: { properties: Record<string, {type: string; title?: string; description?: string; enum?: (string|number)[]; default?: unknown; minimum?: number; maximum?: number; minLength?: number; maxLength?: number}>; required?: string[] } }
 
 export interface AgentEvent {
   seq: number;
@@ -36,13 +86,14 @@ export interface AgentEvent {
   [key: string]: unknown;
 }
 
-/** The three states a tool card can be in. The server says `failed` (the agent protocol's word) and the
+/** Tool states include an explicit owner rejection. The server says `failed` (the agent protocol's word) and the
  *  card says `error`; anything unrecognised was once treated as "still running", which left a failed
  *  call spinning forever under a finished turn. Only an explicit in-flight word means running. */
-export function toolState(status: string | undefined): "running" | "completed" | "error" {
+export function toolState(status: string | undefined): "running" | "completed" | "error" | "declined" {
   switch ((status ?? "").toLowerCase()) {
     case "completed": case "complete": case "done": case "success": case "succeeded": return "completed";
-    case "error": case "failed": case "failure": case "cancelled": case "canceled": case "rejected": return "error";
+    case "declined": case "rejected": return "declined";
+    case "error": case "failed": case "failure": case "cancelled": case "canceled": return "error";
     default: return "running";
   }
 }
@@ -57,10 +108,13 @@ export interface ToolCall {
   error?: string;
   /** A query result, shown as a grid rather than as a sentence. */
   table?: { columns: string[]; rows: string[][]; truncated: boolean };
+  diffs?: { type: "diff"; path: string; oldText?: string; newText: string }[];
+  locations?: { path: string; line?: number }[];
 }
 
 export interface Approval {
   approvalId: string;
+  changeId?: string;
   callId?: string;
   action: string;
   target: string;
@@ -68,6 +122,9 @@ export interface Approval {
   blastRadius?: string;
   options: { optionId: string; kind: string; name: string }[];
   outcome?: string;
+  input?: Record<string, unknown>;
+  argumentsKnown?: boolean;
+  validationError?: string;
 }
 
 export interface EvidenceRow {
@@ -76,15 +133,16 @@ export interface EvidenceRow {
   tool: string;
   summary: string;
   verified: boolean;
+  grade?: string; observed?: string; reason?: string;
 }
 
 export type TurnStatus =
-  | "queued" | "running" | "auditing" | "completed" | "blocked" | "cancelled" | "interrupted" | "failed";
+  | "paused" | "queued" | "running" | "auditing" | "completed" | "blocked" | "cancelled" | "interrupted" | "failed" | "declined" | "refused" | "truncated";
 
 /** `cell` is a fragment on a notebook path (`/path#3`); the server renders only that cell (006 FX-3). */
 export interface Attachment {
   /** `blob` is bytes the user handed us (paste, drop, picker); the rest are references to the workspace. */
-  kind: "notebook" | "file" | "folder" | "table" | "cell" | "blob" | "query" | "query-draft";
+  kind: "notebook" | "file" | "folder" | "table" | "cell" | "blob" | "query" | "query-draft" | "job" | "job_run" | "pipeline" | "pipeline_update" | "app" | "instance" | "job_task_run" | "lineage" | "column_lineage" | "compute_usage" | "query_history";
   ref: string;
   name: string;
 }
@@ -102,6 +160,7 @@ export interface Turn {
   answer: string;
   tools: ToolCall[];
   evidence: EvidenceRow[];
+  evidenceSources?: ToolCall[];
   blocked?: { reason: string; missing: string[]; attempted: { tool: string; status: string; summary?: string }[] };
   auditPasses: number;
   seconds?: number;
@@ -110,6 +169,16 @@ export interface Turn {
 
 export interface SessionView {
   sqlChanges?: Record<string,import("./query").SqlChange>;
+  resumeReason?: string;
+  writeMode?: string;
+  agentWork?: boolean;
+  mode?: "plan" | "review" | "auto";
+  workVersion?: number;
+  changedAssets?: { key: string; kind: string; id: string }[];
+  questions?: AgentQuestion[];
+  notices?: AgentNotice[];
+  compactions?: Compaction[];
+  approvalLinks?: Record<string, string>;
   id: string;
   title: string;
   folder: string;
@@ -124,10 +193,8 @@ export interface SessionView {
   /** Human writes, in the same stream as the agent's tool calls (WR-4). */
   saves?: { path: string; size: number; by: string; at: string }[];
   requiresResume?: boolean;
-  /** Why this session needs a restore (`[R-10]`): `mid_turn` after a restart. Absent when it does not. */
-  resumeReason?: string;
-  /** What this conversation may change (`[R-9]`). Absent on an older snapshot means `fenced`. */
-  writeMode?: string;
+  meter?: { used: number; size: number; cost?: { amount: number; currency: string } };
+  commands?: { name: string; description?: string }[];
   execution?: import("./mission").Execution;
   scope?: { folder: string; schema: string | null; jobPrefix: string; appPrefix: string };
 }
@@ -142,19 +209,18 @@ export const newTurn = (id: string, index: number, prompt = "", model = ""): Tur
   evidence: [], auditPasses: 0,
 });
 
-const findTurn = (s: SessionView, turnId?: string | null): Turn | undefined =>
-  turnId ? s.turns.find((t) => t.id === turnId) : s.turns[s.turns.length - 1];
-
+const indexes = new WeakMap<Turn[], Map<string, number>>();
+function indexOfTurn(turns: Turn[], id: string): number {
+  let index=indexes.get(turns);
+  if(!index){index=new Map();turns.forEach((t,i)=>{if(!index!.has(t.id))index!.set(t.id,i);});indexes.set(turns,index);}
+  return index.get(id) ?? -1;
+}
 const patchTurn = (s: SessionView, turnId: string | null | undefined, fn: (t: Turn) => Turn): SessionView => {
-  const target = findTurn(s, turnId);
-  if (!target) return s;
-  // One id, one update. Mapping every copy used to paint the answer onto a duplicate turn as well.
-  let done = false;
-  return { ...s, turns: s.turns.map((t) => {
-    if (done || t !== target) return t;
-    done = true;
-    return fn(t);
-  }) };
+  const at=turnId ? indexOfTurn(s.turns,turnId) : s.turns.length-1;
+  if(at<0)return s;
+  const turns=s.turns.slice();turns[at]=fn(turns[at]);
+  const index=indexes.get(s.turns);if(index)indexes.set(turns,index);
+  return {...s,turns};
 };
 
 /** Pure reducer. Unknown events are ignored (a newer server must not break an older tab). */
@@ -180,6 +246,33 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
       if(!id||(previous&&previous.seq>=e.seq))return s;
       return {...s,sqlChanges:{...s.sqlChanges,[id]:{version:Number(e.version),runId:String(e.runId??""),seq:e.seq}}};
     }
+    case "question.requested":
+      return { ...s, questions: [...(s.questions ?? []).filter(q => q.id !== e.id), { ...e, state: "pending" } as unknown as AgentQuestion] };
+    case "question.decided":
+      return { ...s, questions: (s.questions ?? []).map(q => q.id === e.id ? { ...q, state: String(e.state) } : q) };
+    case "session.compacted":
+      return { ...s, compactions: patchCompaction(s.compactions, e) };
+    case "session.info": case "agent.notice": case "config.updated":
+      return { ...s, notices: [...(s.notices ?? []), { type: e.type, text: String(e.message ?? e.title ?? e.modeId ?? "Agent configuration updated").slice(0, 2000), description: typeof e.description === "string" ? e.description.slice(0, 4000) : undefined, severity: typeof e.severity === "string" ? e.severity : undefined }].slice(-20) };
+    case "approval.linked":
+      return { ...s, workVersion: (s.workVersion ?? 0) + 1, approvalLinks: { ...s.approvalLinks, [String(e.approvalId)]: String(e.changeId) }, approvals: s.approvals.map(a => a.approvalId === e.approvalId ? { ...a, changeId: String(e.changeId) } : a) };
+    case "turn.paused":
+      return { ...patchTurn(s, e.turnId, t => ({ ...t, status: "paused" })), status: "ready", workVersion: (s.workVersion ?? 0) + 1 };
+    case "mode.changed":
+      return { ...s, mode: e.mode as SessionView["mode"], workVersion: (s.workVersion ?? 0) + 1 };
+    case "capabilities.reported": case "budget.updated": case "budget.reached":
+    case "change.applied": case "change.settled": {
+      const change = e.change as { id?: string; version?: number; state?: string; asset?: { kind: string; id: string } } | undefined;
+      const asset = change?.asset;
+      const changes = asset && ["applied", "verified", "reverted"].includes(change?.state ?? "")
+        ? [...(s.changedAssets ?? []).filter(a => a.kind !== asset.kind || a.id !== asset.id), { ...asset, key: `${change?.id}:${change?.version}:${change?.state}` }].slice(-100)
+        : s.changedAssets;
+      return { ...s, changedAssets: changes, workVersion: (s.workVersion ?? 0) + 1 };
+    }
+    case "change.proposed": case "change.decided":
+    case "operation.started": case "operation.progress": case "operation.settled":
+    case "run.review_required": case "resource.updated":
+      return { ...s, workVersion: (s.workVersion ?? 0) + 1 };
     case "session.created":
       return { ...s, folder: String(e.folder ?? s.folder), model: String(e.model ?? s.model),
         schema: (e.schema as string | null) ?? s.schema, status: "provisioning" };
@@ -235,8 +328,11 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
           status: "running",
         }],
       }));
-    case "tool_call.updated":
-      return patchTurn(s, e.turnId, (t) => ({
+    case "tool_call.updated": {
+      const raw = e.rawInput as Record<string, unknown> | undefined;
+      const enriched = raw && Object.keys(raw).length ? { ...s, approvals: s.approvals.map((a) => a.callId === e.callId && !a.outcome
+        ? { ...a, input: raw, argumentsKnown: true, target: String(raw.path ?? raw.id ?? raw.full_name ?? raw.name ?? raw.sql ?? a.target) } : a) } : s;
+      return patchTurn(enriched, e.turnId, (t) => ({
         ...t,
         tools: t.tools.map((c) => (c.callId === e.callId
           ? { ...c, status: e.status ? toolState(String(e.status)) : c.status,
@@ -244,15 +340,20 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
               seconds: typeof e.seconds === "number" ? e.seconds : c.seconds,
               summary: e.summary ? String(e.summary) : c.summary,
               error: e.error ? String(e.error) : c.error,
+              name: e.name ? String(e.name) : c.name,
+              diffs: e.diffs ? (e.diffs as ToolCall["diffs"]) : c.diffs,
+              locations: e.locations ? (e.locations as ToolCall["locations"]) : c.locations,
               table: e.table ? (e.table as ToolCall["table"]) : c.table }
           : c)),
       }));
+    }
     case "approval.requested":
       return { ...s, approvals: [...s.approvals, {
-        approvalId: String(e.approvalId), callId: String(e.callId ?? ""), action: String(e.action ?? "write"),
+        approvalId: String(e.approvalId), changeId: s.approvalLinks?.[String(e.approvalId)], callId: String(e.callId ?? ""), action: String(e.action ?? "write"),
         target: String(e.target ?? ""), reason: String(e.reason ?? ""),
         blastRadius: e.blastRadius ? String(e.blastRadius) : undefined,
         options: (e.options as Approval["options"]) ?? [],
+        input: e.input as Approval["input"], argumentsKnown: e.argumentsKnown as boolean | undefined,
       }] };
     case "approval.decided":
       return { ...s, approvals: s.approvals.map((a) =>
@@ -271,7 +372,7 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
     }
     case "evidence.proposed":
       // a snapshot for the turn, not an append: the supervisor may report it more than once
-      return patchTurn(s, e.turnId, (t) => ({ ...t, evidence: (e.rows as EvidenceRow[]) ?? [] }));
+      return patchTurn(s, e.turnId, (t) => ({ ...t, evidence: (e.rows as EvidenceRow[]) ?? [], evidenceSources: (e.sources as ToolCall[]) ?? t.evidenceSources }));
     case "turn.auditing":
       return patchTurn(s, e.turnId, (t) => ({
         ...t, status: "auditing", auditPasses: Number(e.pass ?? t.auditPasses + 1) }));
@@ -292,6 +393,11 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
     case "turn.cancelled":
       return { ...s, status: "ready", turns: s.turns.map((t) =>
         t.id === e.turnId ? { ...t, status: "cancelled" } : t) };
+    case "turn.declined":
+    case "turn.refused":
+    case "turn.truncated":
+      return { ...s, status: "ready", turns: s.turns.map((t) => t.id === e.turnId
+        ? { ...t, status: e.type.slice(5) as TurnStatus, blocked: { reason: String(e.reason), missing: [], attempted: [] } } : t) };
     case "turn.interrupted":
     case "turn.failed": {
       // A failed turn must say why: a bare "failed" is the least useful state in the product.
@@ -302,8 +408,13 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
               blocked: { reason, missing: [], attempted: [] } }
           : t) };
     }
-    case "usage.updated":
-      return s;
+    case "commands.updated":
+      return { ...s, commands: (e.availableCommands as SessionView["commands"]) ?? [] };
+    case "usage.updated": {
+      const u = (e.usage ?? {}) as Record<string, unknown>;
+      return { ...s, meter: { used: Number(u.used ?? s.meter?.used ?? 0), size: Number(u.size ?? s.meter?.size ?? 0),
+        cost: (u.cost ?? s.meter?.cost) as { amount: number; currency: string } | undefined } };
+    }
     default:
       return s;
   }

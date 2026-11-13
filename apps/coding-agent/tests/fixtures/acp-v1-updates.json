@@ -1,0 +1,21 @@
+{
+  "source": "https://raw.githubusercontent.com/agentclientprotocol/agent-client-protocol/main/schema/v1/schema.json",
+  "retrieved": "2026-11-13",
+  "sourceSha256": "e747a7bec3c02708b70885bf3cccac5c72fa421390dd7e85758fd61e33b1ae21",
+  "sessionUpdates": [
+    "user_message_chunk",
+    "agent_message_chunk",
+    "agent_thought_chunk",
+    "tool_call",
+    "tool_call_update",
+    "plan",
+    "available_commands_update",
+    "current_mode_update",
+    "config_option_update",
+    "session_info_update",
+    "usage_update",
+    "notice",
+    "compaction_update",
+    "compaction_summary_chunk"
+  ]
+}

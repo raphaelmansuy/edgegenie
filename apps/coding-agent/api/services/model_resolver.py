@@ -19,7 +19,6 @@ from __future__ import annotations
 import logging
 import time
 
-from ..adapters.llm.providers import adapter_for
 from ..domain.llm import (
     Capability,
     CredentialKind,
@@ -44,15 +43,24 @@ log = logging.getLogger("app.llm.resolve")
 class ModelResolver:
     """`id -> ResolvedModel`. I/O only through the catalogue and the credential service."""
 
-    def __init__(self, catalogue, credentials, *, host: str = "", allow_external: bool = True) -> None:
+    def __init__(
+        self, catalogue, credentials, *, providers, host: str = "", allow_external: bool = True
+    ) -> None:
         self._catalogue = catalogue
         self._credentials = credentials
         self._host = host
         self._allow_external = allow_external
+        self.providers = providers
 
-    async def resolve(self, model_id: str, *, user_id: str, session_id: str = "",
-                      groups: frozenset[str] = frozenset(), with_secret: bool = False,
-                      ) -> tuple[ResolvedModel, Secret | None]:
+    async def resolve(
+        self,
+        model_id: str,
+        *,
+        user_id: str,
+        session_id: str = "",
+        groups: frozenset[str] = frozenset(),
+        with_secret: bool = False,
+    ) -> tuple[ResolvedModel, Secret | None]:
         """The whole pipeline. Raises a typed `ModelError`; never returns a half-built model.
 
         `with_secret=False` is the default because most callers — the picker, the inspector, the turn
@@ -64,8 +72,10 @@ class ModelResolver:
         spec = await self._catalogue.find(mid.value, user_id)
         if spec is None:
             raise UnknownModel(mid.value)
-        if not self._allow_external and spec.id.provider not in (ProviderKind.DATABRICKS,
-                                                                ProviderKind.FAKE):
+        if not self._allow_external and spec.id.provider not in (
+            ProviderKind.DATABRICKS,
+            ProviderKind.FAKE,
+        ):
             from ..domain.llm import NotSelectable
 
             raise NotSelectable(mid.value, "external providers are disabled in this workspace")
@@ -74,32 +84,39 @@ class ModelResolver:
         may_use(spec, user_id, grant, groups).raise_if_denied(spec)
 
         # 5. the descriptor, from the adapter that owns this wire
-        adapter = adapter_for(spec.id.provider)
+        adapter = self.providers(spec.id.provider)
         project = ""
         secret: Secret | None = None
         ref_id = ""
-        source = CredentialSource.WORKSPACE_TOKEN if spec.id.provider is ProviderKind.DATABRICKS \
+        source = (
+            CredentialSource.WORKSPACE_TOKEN
+            if spec.id.provider is ProviderKind.DATABRICKS
             else CredentialSource.NONE
+        )
 
         if spec.credential_kind is not CredentialKind.NONE:
             found = await self._credentials.find(spec.id.provider, user_id=user_id)
             if found is None:
                 raise NoCredential(mid.value, spec.provider_name)
             ref_id = found.id
-            source = (CredentialSource.ENV if found.id.startswith("env:")
-                      else CredentialSource.USER if found.scope_kind == "user"
-                      else CredentialSource.WORKSPACE)
+            source = (
+                CredentialSource.ENV
+                if found.id.startswith("env:")
+                else CredentialSource.USER
+                if found.scope_kind == "user"
+                else CredentialSource.WORKSPACE
+            )
             if spec.id.provider is ProviderKind.GOOGLE_VERTEX:
                 project = found.project_hint
 
         desc = adapter.descriptor(spec, host=self._host, project=project)
 
         # 6. the limits, clamped. This is the only number the app ever asks for.
-        limits = clamp(spec.limits,
-                       requested_context=spec.limits.context,
-                       requested_output=spec.limits.output)
+        limits = clamp(
+            spec.limits, requested_context=spec.limits.context, requested_output=spec.limits.output
+        )
 
-        wire = _wire_for(spec)
+        wire = spec.wire if spec.wire is not None else adapter.wire
         resolved = ResolvedModel(
             id=spec.id,
             provider=spec.id.provider,
@@ -131,15 +148,13 @@ class ModelResolver:
 
     def _log(self, resolved: ResolvedModel, source: CredentialSource) -> None:
         """One structured line per resolution (NFR-8). Never the secret, only its source."""
-        log.info("llm.resolve model=%s provider=%s wire=%s credential=%s outcome=ok",
-                 resolved.id.value, resolved.provider.value, resolved.wire.value, source.value)
-
-
-def _wire_for(spec: ModelSpec) -> WireProtocol:
-    """A spec's declared wire, or the adapter's default for a row that omits it."""
-    if spec.wire is not None:
-        return spec.wire
-    return adapter_for(spec.id.provider).wire  # type: ignore[attr-defined]
+        log.info(
+            "llm.resolve model=%s provider=%s wire=%s credential=%s outcome=ok",
+            resolved.id.value,
+            resolved.provider.value,
+            resolved.wire.value,
+            source.value,
+        )
 
 
 def _options(desc) -> dict:

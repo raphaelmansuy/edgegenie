@@ -52,6 +52,9 @@ def _is_connection_error(exc: BaseException) -> bool:
     return isinstance(exc, (psycopg.OperationalError, psycopg.InterfaceError, OSError, TimeoutError))
 
 
+from contextlib import asynccontextmanager
+from ...domain.session_index import header, cursor_decode, cursor_encode
+
 class PostgresSessionStore(Broadcast):
     durable = True
 
@@ -63,22 +66,13 @@ class PostgresSessionStore(Broadcast):
         self._owned_once = False
         self._last_used = 0.0
         self._closed = False
+        self._reader = None
+        self._read_lock = asyncio.Lock()
 
-    # -- connection lifecycle ---------------------------------------------------
     async def _connect(self):
         """A new connection that holds the owner lock, with the schema applied."""
         import psycopg
-        cls = psycopg.AsyncConnection
-        dsn = self._cfg.session_database_url
-        if self._cfg.session_use_lakebase:
-            from ..llm.store.lakebase import TokenSource, connection_class, resolve_target
-            if not self._cfg.llm_pg_endpoint:
-                raise RuntimeError("APP_LLM_PG_ENDPOINT is required for the Lakebase session journal")
-            target = await asyncio.to_thread(resolve_target, self._cfg.llm_pg_endpoint,
-                                            self._cfg.llm_pg_database, self._cfg.llm_pg_user)
-            cls = connection_class(TokenSource(target.endpoint))
-            dsn = target.conninfo
-        conn = await cls.connect(dsn, autocommit=True, **CONNECT_OPTIONS)
+        conn = await self._new_connection()
         try:
             # A reconnect may race the release of the lock held by the connection it replaces.
             deadline = time.monotonic() + (OWNER_RETRY_SECONDS if self._owned_once else 0.0)
@@ -146,7 +140,6 @@ class PostgresSessionStore(Broadcast):
             self._closed = False
             await self._ensure()
 
-    # -- running one operation ---------------------------------------------------
     async def _run(self, op, *, retry: bool = False):
         """Run `op(conn)` exclusively, to completion, whatever happens to the caller.
 
@@ -183,58 +176,184 @@ class PostgresSessionStore(Broadcast):
             task.add_done_callback(lambda t: t.cancelled() or t.exception())
             raise
 
-    # -- the journal ---------------------------------------------------------------
     async def run_operation(self, operation, *, retry: bool = False):
         """Shared persistence seam: retain cancellation, reconnect and owner-lock guarantees."""
         return await self._run(operation, retry=retry)
+
+    async def _new_connection(self):
+        import psycopg
+        cls = psycopg.AsyncConnection
+        dsn = self._cfg.session_database_url
+        if self._cfg.session_use_lakebase:
+            from ..llm.store.lakebase import TokenSource, connection_class, resolve_target
+            if not self._cfg.llm_pg_endpoint:
+                raise RuntimeError("APP_LLM_PG_ENDPOINT is required for the Lakebase session journal")
+            target = await asyncio.to_thread(resolve_target, self._cfg.llm_pg_endpoint,
+                                            self._cfg.llm_pg_database, self._cfg.llm_pg_user)
+            cls = connection_class(TokenSource(target.endpoint))
+            dsn = target.conninfo
+        return await cls.connect(dsn, autocommit=True, **CONNECT_OPTIONS)
+
+    async def read_operation(self, operation):
+        """Reads use a separate connection, so an event replay cannot hold the writer lock."""
+        if not self._owned_once:
+            await self.open()
+        async def guarded():
+            async with self._read_lock:
+                if self._closed:
+                    raise JournalUnavailable("the session journal is closed")
+                for attempt in range(2):
+                    if not self._usable(self._reader):
+                        await self._close_quietly(self._reader)
+                        self._reader = await self._new_connection()
+                    try:
+                        return await operation(self._reader)
+                    except BaseException as exc:
+                        if not _is_connection_error(exc):
+                            raise
+                        await self._close_quietly(self._reader)
+                        self._reader = None
+                        if attempt:
+                            raise JournalUnavailable("the session journal read connection is unavailable") from exc
+        task = asyncio.ensure_future(guarded())
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            task.add_done_callback(lambda t: t.cancelled() or t.exception())
+            raise
+
+    @asynccontextmanager
+    async def transaction(self):
+        """Maintenance seam. Application mutations use cancellation-safe run_operation."""
+        async with self._lock:
+            await self._ensure()
+            async with self._conn.transaction():
+                yield self._conn
+
+    async def snapshot(self, sid):
+        async def op(conn):
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT body FROM agent.session_snapshot WHERE session_id=%s", (sid,))
+                row = await cur.fetchone()
+                if not row:
+                    raise KeyError(sid)
+                return row[0]
+        return await self.read_operation(op)
+
+    async def session_page(self, user, cursor="", limit=50):
+        limit = min(max(limit, 1), 100)
+        async def op(conn):
+            position = cursor_decode(cursor)
+            condition = " AND (updated,id)<(%s,%s)" if position else ""
+            params = (user, *position, limit + 1) if position else (user, limit + 1)
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT header,updated,id FROM agent.session_index WHERE owner=%s AND state!='archived'"
+                    + condition
+                    + " ORDER BY updated DESC,id DESC LIMIT %s",
+                    params,
+                )
+                rows = await cur.fetchall()
+                return {
+                    "items": [r[0] for r in rows[:limit]],
+                    "nextCursor": cursor_encode(rows[limit - 1][1], rows[limit - 1][2])
+                    if len(rows) > limit
+                    else "",
+                }
+        return await self.read_operation(op)
 
     async def snapshots(self) -> list[dict]:
         async def op(conn):
             async with conn.cursor() as cur:
                 await cur.execute("SELECT body FROM agent.session_snapshot ORDER BY session_id")
                 return [r[0] for r in await cur.fetchall()]
-        return await self._run(op, retry=True)
+        return await self.read_operation(op)
 
-    async def commit(self, event: Event, snapshot: dict) -> Event:
-        """Append the event AND write the projection, in one transaction.
-
-        Kept for callers that genuinely want both (the terminal event of a turn, an archive, a state
-        change where the snapshot is the point). The hot streaming path uses `append()` + a policy
-        checkpoint instead, because writing the whole projection per delta was ≈1.8 GB a turn (`[F-4]`).
-        """
-        from psycopg.types.json import Jsonb
-
+    async def commit(self, event: Event, snapshot: dict, *, participant=None) -> Event:
         async def op(conn):
+            from psycopg.types.json import Jsonb
+
             async with conn.transaction(), conn.cursor() as cur:
-                await cur.execute("""INSERT INTO agent.session_snapshot (session_id, body, latest_seq)
-                    VALUES (%s, %s, 1) ON CONFLICT (session_id) DO UPDATE
-                    SET body=EXCLUDED.body, latest_seq=agent.session_snapshot.latest_seq+1
-                    RETURNING latest_seq""", (event.session_id, Jsonb(snapshot)))
+                if participant:
+                    await participant(cur)
+                if snapshot is None:
+                    await cur.execute(
+                        "UPDATE agent.session_snapshot SET latest_seq=latest_seq+1 WHERE session_id=%s RETURNING latest_seq",
+                        (event.session_id,),
+                    )
+                else:
+                    await cur.execute(
+                        """INSERT INTO agent.session_snapshot (session_id, body, latest_seq)
+                        VALUES (%s, %s, 1) ON CONFLICT (session_id) DO UPDATE
+                        SET body=EXCLUDED.body, latest_seq=agent.session_snapshot.latest_seq+1
+                        RETURNING latest_seq""",
+                        (event.session_id, Jsonb(snapshot)),
+                    )
                 seq = (await cur.fetchone())[0]
+                if snapshot is not None and snapshot.get("session"):
+                    h = header(snapshot)
+                    await cur.execute(
+                        "INSERT INTO agent.session_index VALUES (%s,%s,%s,%s,%s) ON CONFLICT(id) DO UPDATE SET updated=EXCLUDED.updated,state=EXCLUDED.state,header=EXCLUDED.header",
+                        (event.session_id, h["user_id"], h["updatedAt"], h["status"], Jsonb(h)),
+                    )
                 stored = replace(event, seq=seq)
-                await cur.execute("INSERT INTO agent.session_event VALUES (%s, %s, %s)",
-                                  (event.session_id, seq, Jsonb(stored.to_dict())))
-            # Published by the task that wrote it, so a cancelled caller cannot leave a committed
-            # event that no subscriber is ever told about.
+                await cur.execute(
+                    "INSERT INTO agent.session_event VALUES (%s, %s, %s)",
+                    (event.session_id, seq, Jsonb(stored.to_dict())),
+                )
             self.publish(event.session_id, stored.to_dict())
             return stored
         return await self._run(op)
 
-    async def checkpoint(self, session_id: str, seq: int, body: dict) -> None:
-        """Rewrite the projection only. O(size), and NOT on the append path (`[R-5]`).
-
-        `latest_seq` is deliberately not advanced: the sequence belongs to the events, and a checkpoint
-        that moved it would make `since(seq)` skip the events written between the last append and this
-        write. The checkpoint records what the projection CONTAINS, not how far the log has gone.
-        """
-        from psycopg.types.json import Jsonb
-
+    async def since(self, session_id: str, seq: int, limit: int = 2000) -> list[dict]:
         async def op(conn):
             async with conn.cursor() as cur:
-                await cur.execute("""INSERT INTO agent.session_snapshot (session_id, body, latest_seq)
-                    VALUES (%s, %s, %s) ON CONFLICT (session_id) DO UPDATE
-                    SET body=EXCLUDED.body""", (session_id, Jsonb(body), seq))
-        await self._run(op)
+                await cur.execute(
+                    "SELECT body FROM agent.session_event WHERE session_id=%s AND seq>%s ORDER BY seq LIMIT %s",
+                    (session_id, seq, limit),
+                )
+                return [r[0] for r in await cur.fetchall()]
+        return await self.read_operation(op)
+
+    async def latest_seq(self, session_id: str) -> int:
+        async def op(conn):
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT latest_seq FROM agent.session_snapshot WHERE session_id=%s", (session_id,)
+                )
+                row = await cur.fetchone()
+                return row[0] if row else 0
+        return await self.read_operation(op)
+
+    async def storage(self, sid):
+        async def op(conn):
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT COUNT(*),COALESCE(SUM(octet_length(body::text)),0) FROM agent.session_event WHERE session_id=%s",
+                    (sid,),
+                )
+                count, size = await cur.fetchone()
+                await cur.execute(
+                    "SELECT octet_length(body::text) FROM agent.session_snapshot WHERE session_id=%s", (sid,)
+                )
+                snapshot = await cur.fetchone()
+                return {
+                    "eventRows": count,
+                    "eventPayloadBytes": size,
+                    "snapshotPayloadBytes": snapshot[0] if snapshot else 0,
+                }
+        return await self.read_operation(op)
+
+    async def purge_session(self, sid, *, participant=None):
+        async def op(conn):
+            async with conn.transaction():
+                async with conn.cursor() as cur:
+                    if participant:
+                        await participant(cur)
+                    for name in ("session_event", "session_snapshot"):
+                        await cur.execute(f"DELETE FROM agent.{name} WHERE session_id=%s", (sid,))
+                    await cur.execute("DELETE FROM agent.session_index WHERE id=%s", (sid,))
+        return await self._run(op)
 
     async def append(self, event: Event) -> Event:
         """Append one event and publish it. O(1) in the event's size: no snapshot is read or written.
@@ -259,26 +378,27 @@ class PostgresSessionStore(Broadcast):
             return stored
         return await self._run(op)
 
-    async def since(self, session_id: str, seq: int, limit: int = 2000) -> list[dict]:
-        async def op(conn):
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    "SELECT body FROM agent.session_event WHERE session_id=%s AND seq>%s ORDER BY seq LIMIT %s",
-                    (session_id, seq, limit))
-                return [r[0] for r in await cur.fetchall()]
-        return await self._run(op, retry=True)
+    async def checkpoint(self, session_id: str, seq: int, body: dict) -> None:
+        """Rewrite the projection only. O(size), and NOT on the append path (`[R-5]`).
 
-    async def latest_seq(self, session_id: str) -> int:
+        `latest_seq` is deliberately not advanced: the sequence belongs to the events, and a checkpoint
+        that moved it would make `since(seq)` skip the events written between the last append and this
+        write. The checkpoint records what the projection CONTAINS, not how far the log has gone.
+        """
+        from psycopg.types.json import Jsonb
+
         async def op(conn):
             async with conn.cursor() as cur:
-                await cur.execute("SELECT latest_seq FROM agent.session_snapshot WHERE session_id=%s",
-                                  (session_id,))
-                row = await cur.fetchone()
-                return row[0] if row else 0
-        return await self._run(op, retry=True)
+                await cur.execute("""INSERT INTO agent.session_snapshot (session_id, body, latest_seq)
+                    VALUES (%s, %s, %s) ON CONFLICT (session_id) DO UPDATE
+                    SET body=EXCLUDED.body""", (session_id, Jsonb(body), seq))
+        await self._run(op)
 
     async def close(self) -> None:
         self._closed = True
+        async with self._read_lock:
+            await self._close_quietly(self._reader)
+            self._reader = None
         # Wait for an in-flight statement, but not forever: shutdown must finish inside the platform's grace.
         try:
             await asyncio.wait_for(self._lock.acquire(), 5)

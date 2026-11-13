@@ -1,0 +1,30 @@
+{
+  "turn": {
+    "question": {
+      "mode": "form",
+      "message": "Which approach should I use for the notebook review?",
+      "requestedSchema": {
+        "type": "object",
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "title": "Review approach",
+            "enum": [
+              "Focused change",
+              "Broader refactor"
+            ],
+            "default": "Focused change"
+          },
+          "notes": {
+            "type": "string",
+            "title": "Additional constraints",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "strategy"
+        ]
+      }
+    }
+  }
+}
