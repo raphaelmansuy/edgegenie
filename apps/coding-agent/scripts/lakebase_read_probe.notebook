@@ -142,4 +142,3 @@ results.append({
 dbutils.notebook.exit(json.dumps(results))
 
 # COMMAND ----------
-

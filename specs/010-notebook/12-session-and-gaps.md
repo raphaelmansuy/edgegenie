@@ -107,4 +107,3 @@ open in a browser shows up as an active run, and that is correct — the open ta
   the session.
 - Python sessions are on the dev workspace only. The prod workspace has no session volume yet: running
   `make deploy ENV=prod` will create it, because the step lives in the shared deploy path.
-

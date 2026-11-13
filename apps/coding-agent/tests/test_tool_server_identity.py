@@ -229,4 +229,3 @@ def test_no_postgres_call_can_use_the_user_transport():
         f"{len(bad)} Postgres call(s) use the user-token transport {bad}; they must be "
         "_get_sp/_post_sp/_patch_sp, because that API cannot be called with a user token ([RB-10])"
     )
-
