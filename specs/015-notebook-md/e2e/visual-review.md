@@ -31,3 +31,8 @@ The mobile view retains the existing application composer/pane layout. Review co
 surface shown here, and does not claim that all surrounding application layouts are redesigned.
 WebKit runs the same functional scenarios without creating duplicate PNGs.
 
+
+The additional `11-deployed-reading.png` was individually opened after the live deployment.
+The title, subheading, paragraph, list, table and explicit Edit action render correctly in the actual
+served bundle. Account/model initialization is still in progress in the surrounding app chrome;
+the notebook fixture itself is fully rendered. No workspace content was created or overwritten.

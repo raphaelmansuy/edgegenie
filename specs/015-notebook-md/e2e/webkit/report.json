@@ -70,10 +70,6 @@
       "method": "GET"
     },
     {
-      "path": "/api/workspace/fence",
-      "method": "POST"
-    },
-    {
       "path": "/api/workspace/save",
       "method": "POST"
     },

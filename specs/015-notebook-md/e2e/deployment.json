@@ -1,0 +1,11 @@
+{
+  "verifiedAt": "2026-11-14T06:39:01.248677+00:00",
+  "workspace": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "profile": "opengenie-dev",
+  "app": "https://coding-agent-7474647158015570.aws.databricksapps.com",
+  "commit": "c2606665d1b6c484dee9966b1f2d18348fc7d910",
+  "deploymentId": "01f1dff5c4c512d19c8c3964fa27fe99",
+  "deploymentState": "SUCCEEDED",
+  "appState": "RUNNING",
+  "computeState": "ACTIVE"
+}

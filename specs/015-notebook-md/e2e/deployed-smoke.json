@@ -1,0 +1,13 @@
+{
+  "pass": true,
+  "app": "https://coding-agent-7474647158015570.aws.databricksapps.com",
+  "workspace": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "identity": "raphael.mansuy@gmail.com",
+  "version": "v1.2.0-rc.4",
+  "scripts": [
+    "https://coding-agent-7474647158015570.aws.databricksapps.com/assets/index-CSuR5FLf.js"
+  ],
+  "errors": [],
+  "blocked": [],
+  "scope": "Real deployed frontend and API identity; notebook object is an intercepted fixture; no workspace writes or executions"
+}

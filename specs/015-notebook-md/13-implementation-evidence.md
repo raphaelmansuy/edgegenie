@@ -76,3 +76,20 @@ No claim of exhaustive edge-case enumeration or universal visual perfection is m
 inert rendering, local fallbacks and regression fixtures mitigate unsupported/malformed inputs.
 
 Deployment status is recorded separately after the release command and served-version verification.
+
+## Verified release
+
+Implementation commit `c2606665d1b6c484dee9966b1f2d18348fc7d910` was pushed to `origin/main`
+and deployed to the existing OpenGenie app. [Deployment evidence](e2e/deployment.json) records
+SUCCEEDED, RUNNING and the exact resolved Git commit. This app belongs to the repository's
+`opengenie-dev` workspace (`dbc-cb61f1e1-bd8e`); the distinct configured `prod` workspace was not changed.
+
+The user explicitly approved profile discovery and use of the existing login after the repository
+PAT was rejected by the separate prod workspace. No scopes, grants or database schema were changed.
+The warehouse was STOPPED; no SQL or compute job was needed.
+
+[Deployed smoke](e2e/deployed-smoke.json) verified the real API identity and served frontend,
+styled Markdown, source editing and return to preview. Its notebook GET uses an intercepted fixture
+and all mutation requests are blocked. [Deployed screenshot](e2e/11-deployed-reading.png) was opened
+and visually inspected: heading hierarchy, list, semantic table, Edit control and white reading
+surface are readable and aligned. This is not a live notebook-write or live-media-ACL test.
