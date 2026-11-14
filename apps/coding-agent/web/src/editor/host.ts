@@ -34,6 +34,10 @@ export interface EditorHost {
   getCaret(): number;
   /** Query execution snapshots one contiguous selection, in UTF-16 editor offsets. */
   getSelection?(): { start: number; end: number; multiple: boolean };
+  /** Optional source-edit capability. One transaction, preserving history and selection. */
+  applyEdit?(edit: import("../domain/markdown/format").SourceEdit): void;
+  snapshot?(): unknown;
+  restoreSnapshot?(snapshot: unknown): void;
   /** Called when the caret moves (typing, arrows, click), so the app can remember the user's place. */
   onCaret(cb: (pos: number) => void): void;
   /** Take the keyboard focus away (the cell stays selected). */

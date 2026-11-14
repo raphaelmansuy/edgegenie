@@ -8,7 +8,7 @@
  * you are not in it, and edits when you are** (NB-3). Getting that right without the text changing
  * is the detail users notice.
  */
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   insertCell, mergeWithNext, moveCell, newCell, removeCell, setCellKind, splitCell, updateCellSource, type Cell,
 } from "../domain/notebook";
@@ -20,16 +20,27 @@ import { runAffordance, spanIds, type CellRun, type PythonPolicy } from "../doma
 import { CellOutput } from "./CellOutput";
 import { Editor } from "../editor/Editor";
 import { Markdown } from "./Markdown";
+import { MarkdownToolbar } from "./MarkdownToolbar";
+import { parseMarkdown, type MarkdownModel } from "../domain/markdown/parse";
+import { headingId } from "../domain/markdown/policy";
+import { readingState, transition } from "../domain/markdown/viewstate";
 import { commandKey, OPEN_SHORTCUTS, type Advance, type CellCommand, type RunSpan } from "../domain/cellkeys";
 import { executionMap } from "../domain/minimap";
 import { Minimap } from "./Minimap";
 import { clampTo, recall, remember, type ViewState } from "../domain/viewstate";
-import type { EditorChord } from "../editor/host";
+import type { EditorChord, EditorHost } from "../editor/host";
 import { display } from "../domain/keys";
 
 /** A request to move the user's place: into a cell's text ("edit") or onto the cell itself
  *  ("command"). `n` makes each request distinct. See Editor's `focusRequest`. */
 type Req = { id: string; mode: "edit" | "command"; at?: number; n: number };
+// Weak keys follow the immutable cell source model and cannot retain closed notebooks.
+const markdownModels = new WeakMap<Cell, MarkdownModel>();
+function modelOf(cell: Cell) {
+  let model = markdownModels.get(cell);
+  if (!model) { model = parseMarkdown(cell.source); markdownModels.set(cell, model); }
+  return model;
+}
 
 /** The element that scrolls the cell stack: the stack itself (it owns its overflow) or an ancestor. */
 function scrollParent(el: HTMLElement | null): HTMLElement | null {
@@ -88,6 +99,11 @@ export function NotebookEditor({
   onRunCells, onClearOutputs, onStopRun, batch = null,
 }: Props) {
   const root = useRef<HTMLDivElement>(null);
+  const [outlineOpen, setOutlineOpen] = useState(false);
+  const headings = useMemo(() => cells.flatMap(cell => cell.kind === "markdown" ? modelOf(cell).headings.map(h => ({ ...h, cellId: cell.id })) : []), [cells]);
+  const runnable = useMemo(() => spanIds(cells, python, 0, "all"), [cells, python]);
+  const runnableSet = useMemo(() => new Set(runnable), [runnable]);
+  const runnableCounts = useMemo(() => { const out = [0]; for (const c of cells) out.push(out.at(-1)! + Number(runnableSet.has(c.id))); return out; }, [cells, runnableSet]);
   /* A link to a cell must land ON the cell: scroll it to the middle and mark it. Runs when the link
      changes or when the cells first exist (a link is opened before the notebook has loaded). */
   /* Cells another writer just changed are marked, never scrolled to. Moving the page on its own is the
@@ -392,21 +408,37 @@ export function NotebookEditor({
     )
   );
 
-  const map = executionMap(cells, runs ?? {}, spanIds(cells, python, 0, "all"), batch);
+  const map = executionMap(cells, runs ?? {}, runnable, batch);
 
   return (
     <div className="nb-stage">
+    <div className="nb-markdown-navigation" onKeyDown={e => { if (e.key === "Escape") { setOutlineOpen(false); e.stopPropagation(); } }}>
+      <button type="button" className="btn sm" aria-expanded={outlineOpen} onClick={() => setOutlineOpen(v => !v)}>Outline</button>
+      {outlineOpen && <nav className="nb-markdown-outline" aria-label="Notebook headings">
+        <strong>Notebook outline</strong>
+        {!headings.length && <p>No Markdown headings yet.</p>}
+        {headings.map(h => <button type="button" key={`${h.cellId}-${h.ordinal}`} style={{ paddingInlineStart: 12 + (h.depth - 1) * 12 }} onClick={() => {
+          setCollapsed(previous => { const next = new Set(previous); next.delete(h.cellId); return next; });
+          const node = document.getElementById(headingId(`${viewKey || "notebook"}:${h.cellId}`, h.ordinal));
+          if (node) { node.scrollIntoView({ block: "start" }); node.focus({ preventScroll: true }); }
+          else { request(h.cellId, "command"); window.setTimeout(() => document.getElementById(headingId(`${viewKey || "notebook"}:${h.cellId}`, h.ordinal))?.scrollIntoView({ block: "start" }), 0); }
+          setOutlineOpen(false);
+        }}>{h.label || "Untitled heading"}</button>)}
+      </nav>}
+    </div>
     <div className="cells" ref={root} onKeyDown={onKey}>
       {cells.length === 0 && !readOnly && seam(0)}
       {cells.map((cell, i) => (
         <Fragment key={cell.id}>
         <CellBlock
           cell={cell}
+          markdownModel={cell.kind === "markdown" ? modelOf(cell) : undefined}
           index={i}
           total={cells.length}
           language={language}
           theme={theme}
           readOnly={readOnly}
+          documentPath={viewKey || ""}
           focused={focused === cell.id}
           selected={selected.length > 1 && selected.includes(cell.id)}
           collapsed={collapsed.has(cell.id)}
@@ -422,7 +454,7 @@ export function NotebookEditor({
           onRequestDone={done}
           onCaret={(pos) => { carets.current.set(cell.id, pos); note({ cell: i + 1, caret: pos, mode: "edit" }); }}
           onChord={(chord) => onChord(i, chord)}
-          onEdit={() => request(cell.id, "edit", Infinity)}
+          onEdit={() => request(cell.id, "edit", carets.current.get(cell.id) ?? 0)}
           onToggleCollapse={() => {
             const next = new Set(collapsed);
             if (next.has(cell.id)) next.delete(cell.id);
@@ -452,8 +484,8 @@ export function NotebookEditor({
           run={runs?.[cell.id]}
           canRun={Boolean(onRunCell)}
           onRun={() => onRunCell?.(cell, i)}
-          aboveEnabled={spanIds(cells, python, i, "above").length > 0}
-          belowEnabled={spanIds(cells, python, i, "below").length > 0}
+          aboveEnabled={runnableCounts[i] > 0}
+          belowEnabled={runnableCounts[cells.length] - runnableCounts[i] > 0}
           onSelectClick={(e) => {
             if (e.shiftKey) selectTo(i, true);
             else if (e.metaKey || e.ctrlKey) {
@@ -477,6 +509,8 @@ export function NotebookEditor({
 }
 
 interface CellProps {
+  markdownModel?: MarkdownModel;
+  documentPath: string;
   cell: Cell;
   index: number;
   total: number;
@@ -526,9 +560,23 @@ function CellBlock(p: CellProps) {
   const isMd = cell.kind === "markdown";
   const [runMenu, setRunMenu] = useState(false);
   /** A markdown cell shows prose until you enter it. Entering is a click or Enter on the block. */
-  const [editing, setEditing] = useState(isMd ? false : true);
-  // A fresh cell (empty source) should be editable immediately; that is what you meant by adding it.
-  const wantsEdit = !isMd || editing || !cell.source.trim();
+  const [view, dispatchView] = useReducer(transition, { ...readingState, readOnly });
+  const editing = isMd ? view.mode === "edit" : true;
+  const setEditing = (value: boolean) => dispatchView({ type: value ? "edit" : "preview" });
+  useEffect(() => { dispatchView({ type: "permission", readOnly }); }, [readOnly]);
+  // Explicit insertion requests enter edit mode; loaded empty cells remain readable.
+  const wantsEdit = !isMd || editing && !readOnly;
+  const editorHost = useRef<EditorHost | null>(null);
+  const retainedState = useRef<{ value: string; state: unknown } | null>(null);
+  const composing = useRef(false);
+  useEffect(() => { if (collapsed) dispatchView({ type: "preview" }); }, [collapsed]);
+  const [hostReady, setHostReady] = useState(false);
+  const preview = () => {
+    if (composing.current) { dispatchView({ type: "preview" }); return; }
+    const value = editorHost.current?.getValue();
+    if (editing && value !== undefined && value !== cell.source) p.onSource(value);
+    setEditing(false); section.current?.focus({ preventScroll: true });
+  };
   // Whether this cell CAN run is a domain decision, so the control cannot claim something the server
   // will refuse (006 X1, 00 P4). A disabled button with the reason in its title beats a lying one.
   const affordance = runAffordance(isMd ? "markdown" : cell.language || "python", cell.source, p.python);
@@ -557,11 +605,11 @@ function CellBlock(p: CellProps) {
     const r = p.request;
     if (!r) return;
     if (r.mode === "command" || collapsed) {
-      if (isMd && cell.source.trim()) setEditing(false);
+      if (isMd && !composing.current) setEditing(false);
       section.current?.focus();
       p.onRequestDone(r.n);
     } else if (isMd) {
-      setEditing(true);
+      if (!readOnly) { setHostReady(false); setEditing(true); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reqN]);
@@ -580,6 +628,9 @@ function CellBlock(p: CellProps) {
       aria-label={`Cell ${index + 1}${isMd ? ", markdown" : ", code"}`}
       aria-keyshortcuts="Enter Shift+Enter Control+Enter Alt+Enter Escape"
       data-cell={index + 1}
+      data-mode={isMd && !wantsEdit ? "read" : "edit"}
+      onCompositionStart={() => { composing.current = true; dispatchView({ type: "compositionStart" }); }}
+      onCompositionEnd={() => { composing.current = false; dispatchView({ type: "compositionEnd" }); }}
       /* Focus anywhere inside the cell (its editor, its buttons) is "this cell is current". React's
          onFocus/onBlur bubble like focusin/focusout, so one pair on the section covers all of it; the
          blur only counts when focus leaves the cell, not when it moves between two controls inside. */
@@ -589,7 +640,7 @@ function CellBlock(p: CellProps) {
         p.onBlur();
         // Leaving a markdown cell renders it (Databricks). Not when the whole window lost focus: the
         // user switching app and coming back must find the cell as they left it.
-        if (isMd && editing && cell.source.trim() && document.hasFocus()) setEditing(false);
+        if (isMd && editing && document.hasFocus() && !composing.current) setEditing(false);
       }}
     >
       <div className="cell-gutter" onMouseDown={(e) => {
@@ -603,6 +654,7 @@ function CellBlock(p: CellProps) {
       </div>
 
       <div className="cell-main">
+        <div className={isMd && wantsEdit ? "markdown-authoring-chrome" : undefined}>
         <header className="cell-bar"
           /* KB-4: one Tab stop per cell. Its controls are reachable with ←/→ from the cell, instead of
              six Tab presses before the text. Buttons keep their names and clicks; only their Tab entry
@@ -627,6 +679,9 @@ function CellBlock(p: CellProps) {
             {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
           </button>
           <span className={`cell-kind is-${cell.kind}`}>{isMd ? "md" : ({ python: "py", sql: "sql", scala: "scala", r: "r" }[(cell.language || "").toLowerCase()] || (cell.language || "code").slice(0, 4))}</span>
+          {isMd && <span className="markdown-mode-label">{wantsEdit ? "Editing Markdown" : readOnly ? "Read only" : "Preview"}</span>}
+          {isMd && !readOnly && <button type="button" className="markdown-mode-toggle btn sm" aria-label={wantsEdit ? `Show preview of cell ${index + 1}` : `Edit Markdown cell ${index + 1}`}
+            onMouseDown={e => e.preventDefault()} onClick={() => wantsEdit ? preview() : p.onEdit()}>{wantsEdit ? "Show preview" : "Edit"}</button>}
 
           <span className="cell-actions">
             {!readOnly && (
@@ -679,6 +734,8 @@ function CellBlock(p: CellProps) {
             )}
           </span>
         </header>
+        {isMd && wantsEdit && !collapsed && <MarkdownToolbar host={editorHost} disabled={readOnly || !hostReady} documentPath={p.documentPath} />}
+        </div>
 
         {p.prompting && (
           <CellPrompt mode="edit" label={`cell ${index + 1}`} onClose={p.onClosePrompt} onSend={p.onPromptSend}
@@ -689,11 +746,13 @@ function CellBlock(p: CellProps) {
           <div className="cell-body">
             {isMd && !wantsEdit ? (
               <div className="cell-rendered" title={readOnly ? undefined : "Double-click to edit"}
-                onDoubleClick={() => { if (!readOnly) p.onEdit(); }}>
-                <Markdown text={cell.source || "*Empty markdown cell*"} />
+                onDoubleClick={e => { if (!readOnly && !(e.target as HTMLElement).closest("a,button,input") && !window.getSelection()?.toString()) p.onEdit(); }}>
+                <Markdown text={cell.source} model={p.markdownModel} surface="notebook" namespace={`${p.documentPath || "notebook"}:${cell.id}`} documentPath={p.documentPath} />
               </div>
             ) : (
               <Editor
+                retainedState={isMd ? retainedState : undefined}
+                onReady={host => { editorHost.current = host; setHostReady(true); }}
                 value={cell.source}
                 language={isMd ? "markdown" : cell.language}
                 readOnly={readOnly}
@@ -720,6 +779,7 @@ function CellBlock(p: CellProps) {
               onFix={p.onFix && p.run.error ? () => p.onFix?.(p.run?.error ?? "") : undefined} />
           </div>
         )}
+        {isMd && (wantsEdit || collapsed) && <div className="markdown-print-only"><Markdown text={cell.source} model={p.markdownModel} surface="notebook" namespace={`print:${p.documentPath}:${cell.id}`} documentPath={p.documentPath} /></div>}
       </div>
     </section>
   );

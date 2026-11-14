@@ -1,177 +1,95 @@
-/** Markdown for answers and markdown cells: headings, lists, tables, code, emphasis, inline code,
- *  links, and **math** (TeX via KaTeX). No raw HTML, ever.
- *
- * Math is the one part that cannot be a regex in `inline()`: `$` is also money, `\$` is an escape, and
- * a formula inside a fenced block is code. `domain/math.ts` finds the spans as data (with the rules and
- * its own tests); this file stashes them behind a private-use marker so the ordinary markdown pass runs
- * unchanged, then substitutes the rendered <Math> back in. That keeps one parser and one code path for
- * a streamed answer and a finished one.
- */
-import { memo, useContext, useMemo, type ReactNode } from "react";
-import { splitStashed, stashMath, type MathSpan } from "../domain/math";
-import { Math as MathNode } from "./Math";
-import { splitPaths, workspaceUrl, type Workspace } from "../domain/links";
+/** Shared AST renderer. Surface profiles control presentation, never source or persistence. */
+import { Component, createElement, memo, useContext, useId, useMemo, type ReactNode } from "react";
+import type { Nodes, Table } from "mdast";
+import { parseMarkdown } from "../domain/markdown/parse";
+import { destination, headingId, headingSlug } from "../domain/markdown/policy";
+import { splitStashed } from "../domain/math";
+import { splitPaths, workspaceUrl } from "../domain/links";
 import { WorkspaceLinks, OpenSqlQuery } from "./DocContext";
+import { Math as MathNode } from "./Math";
 import { CopyButton } from "./CopyButton";
+import { MarkdownImage } from "./MarkdownImage";
+import "../notebook-markdown.css";
+import type { MarkdownModel } from "../domain/markdown/parse";
 
-/** A workspace path becomes a link to that object in Databricks; anything else stays text. */
-function linked(text: string, ws: Workspace | null, keyBase: string, asCode = false): ReactNode[] {
-  if (!ws) return [asCode ? <code key={`${keyBase}-x`}>{text}</code> : text];
-  return splitPaths(text).map((part, n) => {
-    const href = part.path ? workspaceUrl(ws, { kind: "file", ref: part.path }) : null;
-    const body = asCode ? <code>{part.text}</code> : part.text;
-    return href
-      ? <a key={`${keyBase}-l${n}`} className="path-link" href={href} target="_blank" rel="noopener noreferrer"
-          title="Open in Databricks">{body}</a>
-      : <span key={`${keyBase}-t${n}`}>{body}</span>;
-  });
+export interface MarkdownProps { text: string; streaming?: boolean; surface?: "answer" | "notebook"; namespace?: string; documentPath?: string; model?: MarkdownModel }
+class RenderBoundary extends Component<{ text: string; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidUpdate(previous: { text: string }) { if (previous.text !== this.props.text && this.state.failed) this.setState({ failed: false }); }
+  render() { return this.state.failed ? <Fallback text={this.props.text} reason="This preview could not be rendered." /> : this.props.children; }
 }
-
-/** The stashed-marker pass for INLINE text (a paragraph, a table cell, a list item, a heading).
- *  Display math inside a paragraph is unusual but legal; it renders in place, as its own block. */
-function inlineStashed(text: string, keyBase: string, ws: Workspace | null, spans: MathSpan[], streaming: boolean): ReactNode[] {
-  const parts = splitStashed(text);
-  if (parts.length === 0) return [];
-  const out: ReactNode[] = [];
-  parts.forEach((part, n) => {
-    if (part.kind === "math") {
-      out.push(<MathNode key={`${keyBase}-m${n}`} span={spans[part.index]} streaming={streaming} />);
-      return;
-    }
-    out.push(...inline(part.text, `${keyBase}-t${n}`, ws));
-  });
-  return out;
+function Fallback({ text, reason }: { text: string; reason: string }) {
+  return <div className="markdown-fallback" role="region" aria-label="Preview unavailable"><p role="status">Preview unavailable. {reason}</p><CopyButton text={text} label="Copy source" /><pre>{text.slice(0, 20_000)}</pre></div>;
 }
-
-function inline(text: string, keyBase: string, ws: Workspace | null = null): ReactNode[] {
-  const out: ReactNode[] = [];
-  const re = /(`[^`]+`|\*\*[^*]+\*\*)/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  let i = 0;
-  while ((m = re.exec(text))) {
-    if (m.index > last) out.push(...linked(text.slice(last, m.index), ws, `${keyBase}-p${i}`));
-    const tok = m[0];
-    if (tok.startsWith("`")) {
-      const code = tok.slice(1, -1);
-      out.push(ws && splitPaths(code).some((p) => p.path)
-        ? <span key={`${keyBase}-c${i}`}>{linked(code, ws, `${keyBase}-c${i}`, true)}</span>
-        : <code key={`${keyBase}-c${i}`}>{code}</code>);
-    }
-    else out.push(<strong key={`${keyBase}-b${i}`}>{tok.slice(2, -2)}</strong>);
-    last = m.index + tok.length;
-    i += 1;
-  }
-  if (last < text.length) out.push(...linked(text.slice(last), ws, `${keyBase}-end`));
-  return out;
-}
-
-/** Renders a markdown subset. Any HTML in the input is displayed as text, never executed. */
-function MarkdownView({ text, streaming = false }: { text: string; streaming?: boolean }) {
+function MarkdownView({ text, streaming = false, surface = "answer", namespace, documentPath = "", model: suppliedModel }: MarkdownProps) {
+  const generatedId = useId();
+  const ns = namespace || generatedId;
   const ws = useContext(WorkspaceLinks);
   const openSql = useContext(OpenSqlQuery);
-  /* One stash for the whole document: offsets stay consistent and a fence's `$` is already excluded by
-     `findMath`, so the markdown pass below never sees a delimiter. */
-  const { prose, spans } = useMemo(() => stashMath(text), [text]);
-  const inlineText = (s: string, k: string) => inlineStashed(s, k, ws, spans, streaming);
-  if (!text) return null;
-  const blocks: ReactNode[] = [];
-  /* No manual HTML escaping: this renders React text nodes, which React escapes, and nothing here uses
-     `dangerouslySetInnerHTML`. Escaping first double-encoded the text, so "a < b" showed as "a &lt; b". */
-  /* `prose`, not `text`: every `$...$` is a marker by now, so no markdown rule can see a delimiter and
-     the math is substituted back only at the leaves. */
-  const lines = prose.split("\n");
-  let i = 0;
-  let key = 0;
-
-  while (i < lines.length) {
-    const line = lines[i];
-    const fence = /^\s*```\s*([\w+#.-]*)/.exec(line);
-    if (fence) {
-      const body: string[] = [];
-      i += 1;
-      while (i < lines.length && !/^\s*```/.test(lines[i])) { body.push(lines[i]); i += 1; }
-      i += 1;
-      const code = body.join("\n");
-      blocks.push(
-        <figure key={`k${key++}`} className="codeblock">
-          <figcaption>
-            <span className="codeblock-lang">{fence[1] || "code"}</span>
-            {fence[1].toLowerCase() === "sql" && openSql && <button className="sql-promote-button" disabled={streaming} title={streaming?"Wait for the SQL proposal to finish":undefined} onClick={() => openSql(code)}>Open as query</button>}
-            <CopyButton text={code} label="Copy" title="Copy this code" />
-          </figcaption>
-          <pre><code>{code}</code></pre>
-        </figure>,
-      );
-      continue;
+  const model = useMemo(() => suppliedModel ?? parseMarkdown(text), [text, suppliedModel]);
+  const definitions = useMemo(() => new Map(model.tree.children.filter(n => n.type === "definition").map(n => [n.identifier.toLowerCase(), n])), [model]);
+  if (!text.trim()) return surface === "notebook" ? <div className="notebook-markdown is-empty"><p>Empty Markdown cell</p></div> : null;
+  if (model.issue) return <Fallback text={text} reason={model.issue} />;
+  const linked = (value: string, key: string): ReactNode => splitPaths(value).map((p, i) => {
+    const href = p.path ? workspaceUrl(ws, { kind: "file", ref: p.path }) : null;
+    return href ? <a key={`${key}-${i}`} className="path-link" href={href} target="_blank" rel="noopener noreferrer">{p.text}</a> : p.text;
+  });
+  const textNodes = (value: string, key: string): ReactNode => splitStashed(value).map((p, i) => p.kind === "text"
+    ? <span key={`${key}-${i}`}>{linked(p.text, key + i)}</span>
+    : model.spans[p.index] ? <MathNode key={`${key}-${i}`} span={model.spans[p.index]} streaming={streaming} /> : null);
+  let heading = 0;
+  const link = (raw: string, body: ReactNode, key: string, title?: string | null) => {
+    const d = destination(raw, documentPath);
+    if (d.kind === "fragment") {
+      const target = model.headings.find(h => headingSlug(h.label) === decodeURIComponent(raw.slice(1)));
+      if (!target) return <span key={key} title="Heading not found">{body}</span>;
+      const id = headingId(ns, target.ordinal);
+      return <a key={key} href={`#${id}`} onClick={e => { e.preventDefault(); const node = document.getElementById(id); node?.scrollIntoView({ block: "start" }); node?.focus({ preventScroll: true }); }}>{body}</a>;
     }
-    if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
-      const head = line.split("|").slice(1, -1).map((c) => c.trim());
-      i += 2;
-      const rows: string[][] = [];
-      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
-        rows.push(lines[i].split("|").slice(1, -1).map((c) => c.trim()));
-        i += 1;
+    const href = d.kind === "workspace" ? workspaceUrl(ws, { kind: "file", ref: d.value }) : d.kind === "external" || d.kind === "email" ? d.value : null;
+    return href ? <a key={key} href={href} title={title ?? undefined} target={d.kind === "email" ? undefined : "_blank"} rel="noopener noreferrer">{body}</a>
+      : <span key={key} className="markdown-unsupported-link" title={d.reason || "This destination is unavailable"}>{body}</span>;
+  };
+  const render = (n: Nodes, key: string, table?: Table): ReactNode => {
+    const children = () => "children" in n ? n.children.map((c, i) => render(c as Nodes, `${key}-${i}`, table)) : null;
+    switch (n.type) {
+      case "root": return children();
+      case "text": return textNodes(n.value, key);
+      case "paragraph": {
+        const only = n.children.length === 1 && n.children[0].type === "text" ? splitStashed(n.children[0].value) : [];
+        if (only.length === 1 && only[0].kind === "math" && model.spans[only[0].index]?.mode === "display") return <div key={key} className="math-block">{children()}</div>;
+        return <p key={key}>{children()}</p>;
       }
-      blocks.push(
-        <table key={`k${key++}`}>
-          <thead><tr>{head.map((h, n) => <th key={n}>{inlineText(h, `h${n}`)}</th>)}</tr></thead>
-          <tbody>{rows.map((r, rn) => <tr key={rn}>{r.map((c, cn) => <td key={cn}>{inlineText(c, `c${rn}${cn}`)}</td>)}</tr>)}</tbody>
-        </table>,
-      );
-      continue;
-    }
-    const h = /^(#{1,4})\s+(.*)$/.exec(line);
-    if (h) {
-      /* A `#` in a document is not the page's title — the page already has one (`h1.brand`), and this
-         markdown renders inside it. Emitting `<h1>` for `# e2e seed` gave the document screen two
-         level-one headings, which breaks the outline a screen reader navigates by (measured: h1 count:
-         2). Only the TOP level moves, from h1 to h2; `## …` stays h2 and `### …` stays h3, so the
-         outline below the first line keeps the depth the author wrote. */
-      const level = Math.max(2, Math.min(h[1].length, 4));
-      const Tag = (`h${level}` as unknown) as "h2";
-      blocks.push(<Tag key={`k${key++}`}>{inlineText(h[2], `h${key}`)}</Tag>);
-      i += 1;
-      continue;
-    }
-    if (/^\s*([-*]|\d+[.)])\s+/.test(line)) {
-      const items: string[] = [];
-      while (i < lines.length && /^\s*([-*]|\d+[.)])\s+/.test(lines[i])) {
-        items.push(lines[i].replace(/^\s*([-*]|\d+[.)])\s+/, ""));
-        i += 1;
+      case "heading": {
+        const ordinal = heading++;
+        // Notebook has its own document outline; visual source depth remains independent.
+        const level = surface === "notebook" ? n.depth + 1 : Math.max(2, n.depth);
+        return createElement(`h${Math.min(6, level)}`, { key, id: headingId(ns, ordinal), tabIndex: -1,
+          "data-heading-depth": n.depth, "aria-level": level > 6 ? level : undefined }, children());
       }
-      blocks.push(<ul key={`k${key++}`}>{items.map((it, n) => <li key={n}>{inlineText(it, `i${n}`)}</li>)}</ul>);
-      continue;
+      case "strong": return <strong key={key}>{children()}</strong>;
+      case "emphasis": return <em key={key}>{children()}</em>;
+      case "delete": return <del key={key}>{children()}</del>;
+      case "inlineCode": return <code key={key}>{linked(n.value, key)}</code>;
+      case "break": return <br key={key} />;
+      case "thematicBreak": return <hr key={key} />;
+      case "blockquote": return <blockquote key={key}>{children()}</blockquote>;
+      case "list": return n.ordered ? <ol key={key} start={n.start ?? 1}>{children()}</ol> : <ul key={key}>{children()}</ul>;
+      case "listItem": return <li key={key} className={typeof n.checked === "boolean" ? "markdown-task-item" : undefined}>{n.checked !== null && n.checked !== undefined && <input type="checkbox" checked={n.checked} disabled aria-label={n.checked ? "Completed item" : "Incomplete item"} />}{children()}</li>;
+      case "link": return link(n.url, children(), key, n.title);
+      case "linkReference": { const d = definitions.get(n.identifier.toLowerCase()); return d ? link(d.url, children(), key, d.title) : <span key={key}>{children()}</span>; }
+      case "image": return <MarkdownImage key={key} source={n.url} alt={n.alt ?? ""} documentPath={documentPath} />;
+      case "imageReference": { const d = definitions.get(n.identifier.toLowerCase()); return <MarkdownImage key={key} source={d?.url ?? ""} alt={n.alt ?? ""} documentPath={documentPath} />; }
+      case "code": return <figure key={key} className="codeblock"><figcaption><span className="codeblock-lang">{n.lang || "code"}</span>
+        {surface === "answer" && n.lang?.toLowerCase() === "sql" && openSql && <button className="sql-promote-button" disabled={streaming} onClick={() => openSql(n.value)}>Open as query</button>}
+        <CopyButton text={n.value} label="Copy" title="Copy this code" /></figcaption><pre><code>{n.value}</code></pre></figure>;
+      case "table": return <div key={key} className="markdown-table-scroll" role="region" aria-label="Markdown table" tabIndex={0}><table><thead><tr>{n.children[0]?.children.map((c, i) => <th key={i} scope="col" style={{ textAlign: n.align?.[i] ?? undefined }}>{c.children.map((x, j) => render(x as Nodes, `${key}-h${i}-${j}`))}</th>)}</tr></thead><tbody>{n.children.slice(1).map((row, i) => <tr key={i}>{n.children[0].children.map((_, j) => <td key={j} style={{ textAlign: n.align?.[j] ?? undefined }}>{row.children[j]?.children.map((c, k) => render(c as Nodes, `${key}-${i}-${j}-${k}`))}</td>)}</tr>)}</tbody></table></div>;
+      case "html": return <span key={key} className="markdown-literal">{n.value}</span>;
+      case "definition": return null;
+      default: return <span key={key}>{"value" in n ? String(n.value) : children()}</span>;
     }
-    if (line.trim() === "") { i += 1; continue; }
-    /* The first line is taken unconditionally. Every branch above declined it, so it is prose by
-       definition; the `while` below only decides where the paragraph ENDS. Without this, a line the
-       table branch declined (a row that starts with "|" but is not finished, which is exactly what a
-       streamed table looks like mid-row) was also excluded here, consumed nothing, and `i` never
-       advanced: an infinite loop pushing empty <p> elements until the tab died ("Page Unresponsive"). */
-    const para: string[] = [lines[i]];
-    i += 1;
-    while (i < lines.length && lines[i].trim() !== "" && !/^\s*([-*]|\d+[.)])\s+/.test(lines[i])
-      && !/^#{1,4}\s/.test(lines[i]) && !/^\s*\|/.test(lines[i]) && !/^\s*```/.test(lines[i])) {
-      para.push(lines[i]);
-      i += 1;
-    }
-    /* A paragraph that is nothing but a DISPLAY formula becomes a block, not a paragraph holding a
-       centred formula: that is what `$$...$$` means, and it is how the answer's rhythm stays right. */
-    const joined = para.join(" ").trim();
-    const onlyMath = splitStashed(joined);
-    if (onlyMath.length === 1 && onlyMath[0].kind === "math" && spans[onlyMath[0].index].mode === "display") {
-      blocks.push(
-        <div key={`k${key++}`} className="math-block">
-          <MathNode span={spans[onlyMath[0].index]} streaming={streaming} />
-        </div>,
-      );
-      continue;
-    }
-    blocks.push(<p key={`k${key++}`}>{inlineText(joined, `p${key}`)}</p>);
-  }
-  return <div className="answer">{blocks}</div>;
+  };
+  return <div className={`answer markdown-document${surface === "notebook" ? " notebook-markdown" : ""}`}>{render(model.tree, "root")}</div>;
 }
-
-/** Markdown parsing is the expensive part of a streamed answer: re-parse only when the text changes. */
-export const Markdown = memo(MarkdownView);
+export const Markdown = memo(function Markdown(props: MarkdownProps) { return <RenderBoundary text={props.text}><MarkdownView {...props} /></RenderBoundary>; });

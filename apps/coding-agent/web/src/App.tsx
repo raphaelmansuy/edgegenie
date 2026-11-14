@@ -1,3 +1,4 @@
+import { configureDraftScope } from "./domain/drafts";
 import { useStopWork, useArchiveReview } from "./components/WorkDialogs";
 import { AgentWorkProvider, SessionIdContext, WorkComposerBar, PendingWork } from "./components/AgentWork";
 /** App shell: navigator, mission/document work area and assistant dock.
@@ -286,6 +287,7 @@ export function App() {
     setCatalogue(m);
     setDefaultModel(m.default);
     setScratch(me.scratch ?? "");
+    configureDraftScope(`${me.workspace?.host || "local"}:${me.user || "anonymous"}`);
     setUser(me.user ?? "");
     setWorkspace(me.workspace?.host ? me.workspace : null);
     setDemo(Boolean(me.demo));

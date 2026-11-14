@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import time
+from urllib.parse import quote
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -71,10 +72,12 @@ class WorkspaceObject:
     #: Epoch seconds from get-status. Carried so the client can hold a version token for the save
     #: path (spec 003 CX-1) without a second round trip.
     modified_at: int = 0
+    incomplete_reasons: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {"objectId": self.object_id, "path": self.path, "name": self.path.rsplit("/", 1)[-1], "kind": self.kind,
                 "language": self.language, "size": self.size, "truncated": self.truncated,
+                "incompleteReasons": self.incomplete_reasons,
                 "modifiedAt": self.modified_at,
                 # The version token itself, so the client never re-derives it. Two derivations of
                 # one token is a guaranteed false-conflict bug: the client's hash will not equal
@@ -160,11 +163,40 @@ class WorkspaceBrowser:
         oid = str(status.get("object_id") or "")
         modified = int(status.get("modified_at") or 0)
         if kind == "notebook":
-            return WorkspaceObject(path, kind, language, size, truncated, nb.parse_source(text, language),
-                                   object_id=oid, modified_at=modified)
+            cells, reasons = nb.read_completeness(text, language)
+            if truncated:
+                reasons.insert(0, "document_bytes")
+            return WorkspaceObject(path, kind, language, size, bool(reasons), cells,
+                                   object_id=oid, modified_at=modified, incomplete_reasons=reasons)
         return WorkspaceObject(path, kind, language, size, truncated, [], text, oid, modified)
 
     # -- searching -------------------------------------------------------------------------
+    async def markdown_image(self, path: str, token: str) -> tuple[bytes, str]:
+        from ...domain.markdown_media import MAX_BYTES, validate_raster
+        if not token:
+            raise PermissionError("image loading requires your user authorization")
+        if not path.startswith(("/Workspace/", "/Users/", "/Shared/", "/Repos/", "/Volumes/")) or any(p in (".", "..") for p in path.split("/")):
+            raise ValueError("image must be a canonical workspace or volume path")
+        if path.startswith("/Volumes/"):
+            raw = await self._http.get_bytes("/api/2.0/fs/files" + quote(path, safe="/"), token, limit=MAX_BYTES)
+        else:
+            raw = await self._http.get_bytes("/api/2.0/workspace/export", token,
+                                             params={"path": path, "format": "AUTO", "direct_download": "true"}, limit=MAX_BYTES)
+        return raw, validate_raster(raw)
+
+    async def ensure_complete_notebook(self, path: str, text: str, language: str, token: str | None,
+                                       *, existing: bool) -> None:
+        """Reject partial editor writes before import can replace the original notebook."""
+        if len(text.encode("utf-8")) > MAX_READ_BYTES:
+            raise ValueError("notebook exceeds the editor's 400,000 byte limit")
+        _, reasons = nb.read_completeness(text, language)
+        if reasons:
+            raise ValueError("notebook exceeds the editor's cell count or cell source limits")
+        if existing:
+            current = await self.read(path, token)
+            if current.truncated or any(c.truncated for c in current.cells):
+                raise ValueError("the original notebook is incomplete in this editor; open it in Databricks to preserve its full content")
+
     async def search(self, root: str, query: str, token: str | None) -> tuple[list[Node], bool]:
         """Breadth-first name search under `root`. Returns (matches, complete).
 

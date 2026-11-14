@@ -1,0 +1,113 @@
+{
+  "engine": "webkit",
+  "checks": [
+    {
+      "name": "SC01 styled reading by default without writes or execution",
+      "pass": true
+    },
+    {
+      "name": "SC02 latest preview and undo retained across modes",
+      "pass": true
+    },
+    {
+      "name": "SC05 atomic formatting, undo, validated link dialog and rendered link",
+      "pass": true
+    },
+    {
+      "name": "SC07 explicit save includes latest Markdown and unchanged code",
+      "pass": true
+    },
+    {
+      "name": "SC06 outline expands a collapsed destination",
+      "pass": true
+    },
+    {
+      "name": "SC04 tables, tasks, fences and accessible math",
+      "pass": true
+    },
+    {
+      "name": "SC09 explicit image load and permission denial",
+      "pass": true
+    },
+    {
+      "name": "SC12 dark/narrow reading and editing",
+      "pass": true
+    },
+    {
+      "name": "SC03/SC11 partial notebook styled and read only",
+      "pass": true
+    }
+  ],
+  "screenshots": [],
+  "errors": [],
+  "requests": [
+    {
+      "path": "/api/sessions",
+      "method": "GET"
+    },
+    {
+      "path": "/api/models",
+      "method": "GET"
+    },
+    {
+      "path": "/api/me",
+      "method": "GET"
+    },
+    {
+      "path": "/api/version",
+      "method": "GET"
+    },
+    {
+      "path": "/api/workspace/object",
+      "method": "GET"
+    },
+    {
+      "path": "/api/workspace/fence",
+      "method": "POST"
+    },
+    {
+      "path": "/api/me",
+      "method": "GET"
+    },
+    {
+      "path": "/api/workspace/fence",
+      "method": "POST"
+    },
+    {
+      "path": "/api/workspace/save",
+      "method": "POST"
+    },
+    {
+      "path": "/api/workspace/object",
+      "method": "GET"
+    },
+    {
+      "path": "/api/workspace/fence",
+      "method": "POST"
+    },
+    {
+      "path": "/api/workspace/markdown-image",
+      "method": "GET"
+    },
+    {
+      "path": "/api/sessions",
+      "method": "GET"
+    },
+    {
+      "path": "/api/models",
+      "method": "GET"
+    },
+    {
+      "path": "/api/me",
+      "method": "GET"
+    },
+    {
+      "path": "/api/version",
+      "method": "GET"
+    },
+    {
+      "path": "/api/workspace/object",
+      "method": "GET"
+    }
+  ]
+}

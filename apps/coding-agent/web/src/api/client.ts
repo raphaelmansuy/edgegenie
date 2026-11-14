@@ -15,6 +15,7 @@ export interface SessionSummary {
 
 export interface Cell { index: number; kind: "code" | "markdown"; language: string; source: string; truncated: boolean }
 export interface WsObject {
+  incompleteReasons?: string[];
   objectId?: string;
   /** Epoch seconds from the workspace API. With objectId and size it forms the version token a
    *  save compares (spec 003 CX-1). */

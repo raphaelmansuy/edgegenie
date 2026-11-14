@@ -114,8 +114,9 @@ function cellOf(index: number, block: string[], lang: string, pre: string): Cell
 }
 
 function make(index: number, kind: CellKind, language: string, source: string): Cell {
-  const truncated = source.length > MAX_CELL_CHARS;
-  const text = truncated ? source.slice(0, MAX_CELL_CHARS) : source;
+  const points = Array.from(source);
+  const truncated = points.length > MAX_CELL_CHARS;
+  const text = truncated ? points.slice(0, MAX_CELL_CHARS).join("") : source;
   return { id: idAt(index, text), kind, language, source: text, ...(truncated ? { truncated } : {}) };
 }
 
@@ -157,7 +158,7 @@ export function checkCells(cells: readonly Cell[], language = "PYTHON"): string[
   if (cells.length > MAX_CELLS) problems.push(`${cells.length} cells, limit ${MAX_CELLS}`);
   cells.forEach((c) => {
     if (c.truncated) problems.push(`cell ${c.id}: truncated, saving would drop the rest`);
-    else if (c.source.length > MAX_CELL_CHARS) problems.push(`cell ${c.id}: over ${MAX_CELL_CHARS} characters`);
+    else if (Array.from(c.source).length > MAX_CELL_CHARS) problems.push(`cell ${c.id}: over ${MAX_CELL_CHARS} characters`);
   });
   if (problems.length) return problems;
 

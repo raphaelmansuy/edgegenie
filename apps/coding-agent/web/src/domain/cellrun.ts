@@ -338,9 +338,11 @@ export function spanIds(
 ): string[] {
   const ids = runPlan(cells, python).runnable;
   if (span === "all") return ids;
+  const indexes = new Map(cells.map((c, i) => [c.id, i]));
+  const picked = new Set(these);
   return ids.filter((id) => {
-    if (span === "these") return these.includes(id);
-    const i = cells.findIndex((c) => c.id === id);
+    if (span === "these") return picked.has(id);
+    const i = indexes.get(id) ?? -1;
     return span === "above" ? i < anchor : i >= anchor;
   });
 }

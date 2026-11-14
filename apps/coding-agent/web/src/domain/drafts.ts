@@ -22,11 +22,18 @@ export interface Draft {
   at: number;
 }
 
-export const PREFIX = "coding-agent:draft:v1:";
+export const PREFIX = "coding-agent:draft:v2:";
+let identity = "local";
+const memory = new Map<string, Draft>();
+export function configureDraftScope(scope: string): void {
+  if (identity !== scope) memory.clear();
+  identity = scope;
+}
+const scopedPrefix = () => `${PREFIX}${encodeURIComponent(identity)}:`;
 export const TTL_MS = 30 * 24 * 60 * 60 * 1000;   // 30 days: long enough to be a safety net
 export const MAX_DRAFTS = 50;
 
-const key = (docId: string) => `${PREFIX}${docId}`;
+const key = (docId: string) => `${scopedPrefix()}${docId}`;
 
 /** Every draft key currently stored. Tolerates a `localStorage` that throws (private mode). */
 export function keys(): string[] {
@@ -34,7 +41,7 @@ export function keys(): string[] {
     const out: string[] = [];
     for (let i = 0; i < window.localStorage.length; i += 1) {
       const k = window.localStorage.key(i);
-      if (k?.startsWith(PREFIX)) out.push(k);
+      if (k?.startsWith(scopedPrefix())) out.push(k);
     }
     return out;
   } catch {
@@ -43,9 +50,10 @@ export function keys(): string[] {
 }
 
 export function read(docId: string, now = Date.now()): Draft | null {
+  const fallback = () => { const d = memory.get(key(docId)); if (d && now - d.at <= TTL_MS) return d; memory.delete(key(docId)); return null; };
   try {
     const raw = window.localStorage.getItem(key(docId));
-    if (!raw) return null;
+    if (!raw) return fallback();
     const d = JSON.parse(raw) as Draft;
     if (!d || typeof d.text !== "string" || typeof d.at !== "number") return null;
     if (now - d.at > TTL_MS) {
@@ -54,21 +62,27 @@ export function read(docId: string, now = Date.now()): Draft | null {
     }
     return d;
   } catch {
-    return null;                      // unreadable or disabled storage is not an error to the user
+    return fallback(); // active-tab recovery only; caller reports persistence failure
   }
 }
 
-export function write(draft: Draft): void {
+export function write(draft: Draft): boolean {
+  memory.delete(key(draft.docId));
+  memory.set(key(draft.docId), draft);
+  while (memory.size > MAX_DRAFTS) memory.delete(memory.keys().next().value as string);
   try {
     window.localStorage.setItem(key(draft.docId), JSON.stringify(draft));
     evictIfNeeded();
+    return true;
   } catch {
+    return false;
     // Quota or private mode: the editor still works, it just loses the safety net. Never throw from
     // a keystroke path.
   }
 }
 
 export function clear(docId: string): void {
+  memory.delete(key(docId));
   try {
     window.localStorage.removeItem(key(docId));
   } catch { /* ignore */ }

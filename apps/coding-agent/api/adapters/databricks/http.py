@@ -133,5 +133,29 @@ class DbxHttp:
     async def get(self, path: str, token: str | None, params: dict | None = None) -> Any:
         return await self.request("GET", path, token, params=params)
 
+    async def get_bytes(self, path: str, token: str, *, params: dict | None = None, limit: int) -> bytes:
+        """An explicit caller token, bounded bytes, no redirects and no credential fallback."""
+        if not token:
+            raise PermissionError("image loading requires your user authorization")
+        async with self.connection() as client:
+            async with client.stream("GET", f"{self._host}{path}", params=params,
+                                     headers={"Authorization": f"Bearer {token}"}, timeout=10,
+                                     follow_redirects=False) as response:
+                if response.status_code in (401, 403):
+                    raise PermissionError("image unavailable with your permissions")
+                if response.status_code == 404:
+                    raise LookupError("image not found")
+                if response.status_code != 200:
+                    raise RuntimeError(f"image read failed ({response.status_code})")
+                if int(response.headers.get("content-length") or 0) > limit:
+                    raise ValueError("image exceeds the 5 MiB limit")
+                chunks, size = [], 0
+                async for chunk in response.aiter_bytes():
+                    size += len(chunk)
+                    if size > limit:
+                        raise ValueError("image exceeds the 5 MiB limit")
+                    chunks.append(chunk)
+                return b"".join(chunks)
+
     async def post(self, path: str, token: str | None, body: dict | None = None, timeout: float = TIMEOUT) -> Any:
         return await self.request("POST", path, token, body=body, timeout=timeout)

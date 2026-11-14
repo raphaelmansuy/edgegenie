@@ -1,0 +1,91 @@
+/* One notebook profile; answer consumers retain their compact presentation. */
+.notebook-markdown { font-size: 16px; line-height: 1.65; color: var(--ink); margin: 0; min-width: 0; }
+.notebook-markdown > :first-child { margin-top: 0; }
+.notebook-markdown > :last-child { margin-bottom: 0; }
+.notebook-markdown p, .notebook-markdown ul, .notebook-markdown ol, .notebook-markdown blockquote { max-inline-size: 88ch; }
+.notebook-markdown p { margin: 0.65em 0; }
+.notebook-markdown [data-heading-depth] { font-family: inherit; font-weight: 700; color: var(--ink); letter-spacing: -0.025em; margin: 1.2em 0 0.45em; line-height: 1.23; overflow-wrap: anywhere; scroll-margin-top: 24px; }
+.notebook-markdown [data-heading-depth="1"] { font-size: clamp(28px, 3cqi, 40px); font-weight: 750; line-height: 1.16; }
+.notebook-markdown [data-heading-depth="2"] { font-size: 26px; }
+.notebook-markdown [data-heading-depth="3"] { font-size: 22px; }
+.notebook-markdown [data-heading-depth="4"] { font-size: 19px; }
+.notebook-markdown [data-heading-depth="5"] { font-size: 17px; }
+.notebook-markdown [data-heading-depth="6"] { font-size: 16px; letter-spacing: 0; }
+.notebook-markdown > [data-heading-depth]:first-child { margin-top: 0; }
+.notebook-markdown ul, .notebook-markdown ol { padding-inline-start: 1.6em; margin: 0.7em 0; }
+.notebook-markdown li { margin: 0.25em 0; padding-inline-start: 0.15em; }
+.notebook-markdown li > p { margin: 0.25em 0; }
+.notebook-markdown .markdown-task-item { list-style: none; padding-inline-start: 0; }
+.notebook-markdown .markdown-task-item > p:first-of-type { display: inline; }
+.notebook-markdown input[type=checkbox] { margin-inline-end: 0.55em; accent-color: var(--blue-600); }
+.notebook-markdown blockquote { margin: 1em 0; padding: 0.2em 1em; border-inline-start: 3px solid var(--blue-300); color: var(--ink-2); background: var(--blue-50); border-radius: 0 6px 6px 0; }
+.notebook-markdown hr { border: 0; border-top: 1px solid var(--line-strong); margin: 1.5em 0; }
+.markdown-document a { color: var(--blue-600); text-decoration: underline; text-underline-offset: 3px; }
+.markdown-document a:focus-visible, .markdown-table-scroll:focus-visible { outline: 2px solid var(--blue-600); outline-offset: 3px; }
+.markdown-table-scroll { max-width: 100%; overflow: auto; margin: 1em 0; border-radius: 6px; }
+.notebook-markdown .markdown-table-scroll table { table-layout: auto; width: max-content; min-width: min(100%, 480px); margin: 0; font-size: 14px; }
+.notebook-markdown th, .notebook-markdown td { min-width: 100px; max-width: 360px; padding: 10px 14px; overflow-wrap: anywhere; }
+.notebook-markdown code { font-size: 0.88em; padding: 2px 5px; }
+.notebook-markdown pre { font-size: 13px; white-space: pre; overflow: auto; max-width: 100%; }
+.notebook-markdown pre code { font-size: inherit; white-space: pre; }
+.notebook-markdown.is-empty { color: var(--ink-3); font-style: italic; padding: 4px 0; }
+.markdown-fallback { border: 1px solid var(--line-strong); background: var(--surface-2); border-radius: 8px; padding: 12px; color: var(--ink); }
+.markdown-fallback pre { max-height: 280px; overflow: auto; white-space: pre-wrap; }
+.markdown-literal, .markdown-unsupported-link { overflow-wrap: anywhere; }
+.markdown-image { display: inline-flex; vertical-align: top; flex-direction: column; align-items: flex-start; gap: 7px; max-width: 100%; min-width: min(100%, 180px); padding: 14px; border: 1px dashed var(--line-strong); border-radius: 8px; background: var(--surface-2); font-size: 12px; color: var(--ink-2); }
+.markdown-image-alt { font-size: 14px; font-weight: 600; color: var(--ink); }
+.markdown-image-source { font-family: var(--mono); font-size: 11px; max-width: 100%; overflow-wrap: anywhere; }
+.markdown-image img { max-width: 100%; height: auto; max-height: 600px; object-fit: contain; }
+.markdown-image.is-ready { border: 0; padding: 0; background: transparent; }
+.nb-stage { position: relative; padding-top: 34px; }
+.nb-markdown-navigation { position: absolute; inset-block-start: 0; inset-inline-end: 26px; z-index: 5; }
+.nb-markdown-navigation > .btn { color: var(--ink-2); background: var(--surface); }
+.nb-markdown-outline { position: absolute; right: 0; top: 32px; width: min(340px, 75vw); max-height: 360px; overflow: auto; padding: 12px 6px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-lg); }
+.nb-markdown-outline > strong, .nb-markdown-outline > p { display: block; padding: 4px 10px 10px; font-size: 13px; }
+.nb-markdown-outline button { display: block; width: 100%; border: 0; padding: 8px 12px; background: transparent; text-align: start; color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
+.nb-markdown-outline button:hover { background: var(--blue-50); }
+.nb-stage .cell-block.is-md { background: var(--surface); }
+.markdown-authoring-chrome { position: sticky; top: 0; z-index: 3; background: var(--surface); border-radius: 6px 6px 0 0; }
+.viewer:has(.cell-markdown) > .viewer-head { padding-inline-start: 28px; }
+.viewer-body > .cell-markdown .notebook-markdown { padding: 16px 20px 24px; }
+.cell-block.is-md .cell-main { border: 0; border-radius: 0; background: transparent; overflow: visible; }
+.cell-block.is-md .cell-bar { padding: 7px 10px; min-height: 36px; gap: 8px; }
+.cell-block.is-md .cell-rendered { padding: 12px 22px 24px; cursor: default; }
+.cell-block.is-md .cell-rendered:hover { background: transparent; }
+.cell-block.is-md .cell-body .editor-host { min-height: 112px; }
+.cell-block.is-md .cell-body .cm-editor { font-size: 14px; background: var(--surface-2); }
+.markdown-mode-label { font-size: 11px; color: var(--ink-3); }
+.markdown-mode-toggle { margin-inline-start: 6px; flex: none; font-size: 12px; min-height: 28px; }
+.markdown-toolbar { display: flex; flex-wrap: wrap; gap: 3px; padding: 8px 14px; border-block: 1px solid var(--line); background: var(--surface-2); }
+.markdown-toolbar button { min-width: 32px; min-height: 30px; padding: 4px 8px; border: 1px solid transparent; border-radius: 5px; font-size: 12px; color: var(--ink-2); background: transparent; }
+.markdown-toolbar button:first-child { font-weight: 750; }
+.markdown-toolbar button:nth-child(2) { font-style: italic; }
+.markdown-toolbar button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface); color: var(--ink); }
+.markdown-toolbar button:focus-visible { outline: 2px solid var(--blue-600); outline-offset: 1px; }
+.markdown-toolbar button:disabled { opacity: 0.5; }
+.markdown-toolbar-notice { padding: 6px 14px; margin: 0; font-size: 12px; color: var(--ink-2); }
+.markdown-reference-dialog { width: min(440px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-lg); }
+.markdown-reference-dialog::backdrop { background: rgb(0 0 0 / 35%); }
+.markdown-reference-dialog h3 { margin: 0 0 18px; font-size: 20px; }
+.markdown-reference-dialog label { display: flex; flex-direction: column; gap: 6px; margin: 14px 0; font-size: 13px; }
+.markdown-reference-dialog input { padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-2); color: var(--ink); }
+.markdown-reference-dialog p { font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.markdown-reference-dialog form > div { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+@container (max-width: 600px) {
+ .cell-block.is-md .cell-rendered { padding: 12px 14px 20px; }
+ .cell-block.is-md .cell-gutter { width: 28px; }
+ .cell-block.is-md .cell-bar { flex-wrap: wrap; }
+ .cell-block.is-md .cell-actions { margin-left: auto; order: 0; }
+ .cell-block.is-md .cell-actions .cell-act { min-width: 28px; }
+ .markdown-mode-label { display: none; }
+}
+@media (pointer: coarse) { .markdown-toolbar button, .markdown-mode-toggle { min-height: 44px; min-width: 44px; } }
+@media print {
+ .markdown-toolbar, .markdown-mode-toggle, .cell-bar, .cell-gutter, .nb-markdown-navigation, .markdown-image button { display: none !important; }
+ .cells, .nb-stage { display: block; overflow: visible; padding: 0; }
+ .notebook-markdown { color: #111; background: white; }
+ .markdown-print-only { display: block !important; }
+ .cell-body:has(.editor-host) { display: none; }
+}
+.markdown-print-only { display: none; }
+@media (prefers-reduced-motion: reduce) { .cell-block.is-md { transition: none; animation: none; } }

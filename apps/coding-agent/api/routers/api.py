@@ -736,6 +736,19 @@ async def workspace_object(request: Request, path: str) -> dict:
     return obj.to_dict()
 
 
+@router.get("/workspace/markdown-image")
+async def workspace_markdown_image(request: Request, path: str) -> Response:
+    token = _user_token(request)
+    if not token:
+        raise HTTPException(401, "image loading requires your user authorization")
+    with _dbx_errors("Markdown image"):
+        try:
+            data, mime = await _browser(request).markdown_image(_ws_path(path), token)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+    return Response(data, media_type=mime, headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+
+
 @router.get("/workspace/version")
 async def workspace_version(request: Request, path: str) -> dict:
     """Has this object changed? One cheap `get-status`, no content.
@@ -1049,6 +1062,14 @@ async def workspace_save(request: Request, body: SaveDocument) -> dict:
             lang = str(existing or "").upper()
         if not lang:
             lang = _language_for_path(path)
+        complete = getattr(browser, "ensure_complete_notebook", None)
+        is_notebook = bool(current_status and current_status.get("object_type") == "NOTEBOOK") or bool(
+            re.match(r"^\ufeff?\s*(?:#|--|//) Databricks notebook source", body.text))
+        if complete and is_notebook:
+            try:
+                await complete(path, body.text, lang or "PYTHON", token, existing=current_status is not None)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
         await browser.import_source(path, body.text, token, language=lang)
 
     with _dbx_errors("workspace status"):

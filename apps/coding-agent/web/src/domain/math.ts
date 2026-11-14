@@ -57,6 +57,7 @@ export function findMath(text: string): MathSpan[] {
   const out: MathSpan[] = [];
   let i = 0;
   const n = text.length;
+  const missingClose = new Set<string>();
   /** Set while inside a fenced code block, to the fence marker seen. */
   let fence: string | null = null;
 
@@ -127,7 +128,8 @@ export function findMath(text: string): MathSpan[] {
     if (ch === "\\" && (text.startsWith("\\(", i) || text.startsWith("\\[", i))) {
       const display = text[i + 1] === "[";
       const closeTok = display ? "\\]" : "\\)";
-      const close = text.indexOf(closeTok, i + 2);
+      const close = missingClose.has(closeTok) ? -1 : text.indexOf(closeTok, i + 2);
+      if (close === -1) missingClose.add(closeTok);
       if (close !== -1) {
         out.push({
           start: i, end: close + closeTok.length,
@@ -237,14 +239,15 @@ export interface Split { prose: string; spans: MathSpan[] }
 /** Prose with each math span replaced by `\uE000<index>\uE001`, plus the spans to substitute back. */
 export function stashMath(text: string): Split {
   const spans = findMath(text);
-  if (spans.length === 0) return { prose: text, spans };
+  const literal = (s: string) => s.replaceAll(MARK, MARK + MARK);
+  if (spans.length === 0) return { prose: literal(text), spans };
   let prose = "";
   let at = 0;
   spans.forEach((s, idx) => {
-    prose += text.slice(at, s.start) + MARK + String(idx) + END;
+    prose += literal(text.slice(at, s.start)) + MARK + String(idx) + END;
     at = s.end;
   });
-  prose += text.slice(at);
+  prose += literal(text.slice(at));
   return { prose, spans };
 }
 
@@ -254,8 +257,14 @@ export function splitStashed(prose: string): ({ kind: "text"; text: string } | {
   let at = 0;
   for (let i = 0; i < prose.length; i++) {
     if (prose[i] !== MARK) continue;
+    if (prose[i + 1] === MARK) {
+      if (i > at) out.push({ kind: "text", text: prose.slice(at, i) });
+      out.push({ kind: "text", text: MARK });
+      i += 1; at = i + 1; continue;
+    }
     const close = prose.indexOf(END, i + 1);
     if (close === -1) break;
+    if (!/^\d+$/.test(prose.slice(i + 1, close))) continue;
     if (i > at) out.push({ kind: "text", text: prose.slice(at, i) });
     out.push({ kind: "math", index: Number(prose.slice(i + 1, close)) });
     i = close;

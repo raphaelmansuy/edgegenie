@@ -157,6 +157,16 @@ export function EditorSurface({
      applied over them: they choose. */
   const liveRef = useRef<Cell[]>([]);
   liveRef.current = liveCells;
+  const pendingNotebook = useRef<Cell[] | null>(null);
+  const flushNotebook = useCallback(() => {
+    const next = pendingNotebook.current;
+    if (!next) return;
+    text.current = serializeCells(next, target.language);
+    pendingNotebook.current = null;
+    onCells(next);
+  }, [target.language, onCells]);
+  const flushNotebookRef = useRef(flushNotebook);
+  flushNotebookRef.current = flushNotebook;
   const dirtyRef = useRef(false);
   dirtyRef.current = dirty;
   const adoptedVersion = useRef<string | null>(target.version);
@@ -311,7 +321,8 @@ export function EditorSurface({
   // Reordering does not unmount this surface, so it never flushes or reloads the editor.
   useEffect(() => () => {
     window.clearTimeout(saveTimer.current);
-    if (dirtyRef.current) writeDraft({ docId: target.path, text: text.current, basedOn: version.current ?? "", at: Date.now() });
+    flushNotebookRef.current();
+    if (dirtyRef.current) if (!writeDraft({ docId: target.path, text: text.current, basedOn: version.current ?? "", at: Date.now() })) setNotice({ tone: "warn", text: "Draft recovery is unavailable after reload. Keep this tab open or save your work." });
   }, [target.path]);
 
   const readOnly = target.truncated;
@@ -361,10 +372,12 @@ export function EditorSurface({
   const save = useCallback(async (approved?: string) => {
     if (readOnly || inFlight.current) return;
     inFlight.current = true;
+    window.clearTimeout(saveTimer.current);
+    flushNotebookRef.current();
     const body = text.current;
 
     if (target.kind === "notebook") {
-      const problems = checkCells(parseCells(body, target.language), target.language);
+      const problems = checkCells(liveRef.current ?? parseCells(body, target.language), target.language);
       if (problems.length) {
         setNotice({ tone: "error", text: `cannot save: ${problems[0]}` });
         inFlight.current = false;
@@ -386,7 +399,7 @@ export function EditorSurface({
         /* Only if nothing was typed while the request was in flight: a save takes seconds, and
            marking the buffer clean over the user's newer keystrokes would leave Save disabled on
            text that is not on disk. */
-        if (text.current === body) setDirty(false);
+        if (text.current === body && !pendingNotebook.current) setDirty(false);
         // Remember what we wrote, so the reload that follows is recognised as an echo, not an edit.
         savedCells.current = target.kind === "notebook" ? parseCells(body, target.language) : null;
         savedFile.current = target.kind === "file" ? body : null;
@@ -866,9 +879,7 @@ export function EditorSurface({
           onCopyCellLink={onCopyLink ? (n) => onCopyLink(n) : undefined}
           onChange={(next) => {
             setLiveCells(next);
-            // One serialization, in the ref, so save and draft read the same bytes the cells mean.
-            const serialized = serializeCells(next, target.language);
-            text.current = serialized;
+            liveRef.current = next;
             /* The reload after a save hands back the cells we just wrote. Reporting that as an edit
                is what left the buffer permanently dirty — the notice said "saved" while the dot
                said "unsaved", and both were true of different states. Compare by cell content: if
@@ -882,8 +893,13 @@ export function EditorSurface({
               return;
             }
             setDirty(true);
-            writeDraft({ docId: target.path, text: serialized, basedOn: version.current ?? "", at: Date.now() });
-            onCells(next);
+            dirtyRef.current = true;
+            pendingNotebook.current = next;
+            window.clearTimeout(saveTimer.current);
+            saveTimer.current = window.setTimeout(() => {
+              flushNotebookRef.current();
+              if (!writeDraft({ docId: target.path, text: text.current, basedOn: version.current ?? "", at: Date.now() })) setNotice({ tone: "warn", text: "Draft recovery is unavailable after reload. Keep this tab open or save your work." });
+            }, SAVE_DEBOUNCE);
           }}
           onAskCell={(cell, index) => onAskCell?.(cell, index)}
           onPrompt={onPromptCell}

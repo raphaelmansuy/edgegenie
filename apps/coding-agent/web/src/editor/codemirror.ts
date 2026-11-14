@@ -13,7 +13,7 @@ import {
   EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
   drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightSpecialChars,
 } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap, indentWithTab, toggleComment } from "@codemirror/commands";
+import { defaultKeymap, history, historyField, historyKeymap, indentWithTab, toggleComment } from "@codemirror/commands";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { autocompletion, completionKeymap } from "@codemirror/autocomplete";
 import { bracketMatching, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting, HighlightStyle } from "@codemirror/language";
@@ -34,7 +34,7 @@ function parserFor(language: string): Extension {
     case "sql": return sql();
     case "json": return json();
     case "javascript": case "js": case "typescript": case "ts": return javascript({ typescript: /ts$/.test(language) });
-    case "markdown": case "md": return markdown();
+    case "markdown": case "md": return [markdown(), EditorView.lineWrapping];
     default: return [];
   }
 }
@@ -126,6 +126,9 @@ function themeVars(theme: "light" | "dark"): Record<string, Record<string, strin
 
 export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, onSave, onChord }) => {
   let view: EditorView | null = null;
+  let currentLanguage = "python";
+  let currentTheme = theme;
+  let currentReadOnly = readOnly;
   const languageConf = new Compartment();
   const themeConf = new Compartment();
   const readOnlyConf = new Compartment();
@@ -140,7 +143,7 @@ export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, o
     lineNumbers(),
     highlightActiveLineGutter(),
     highlightSpecialChars(),
-    history(),
+    history({ minDepth: 30 }),
     drawSelection(),
     dropCursor(),
     EditorState.allowMultipleSelections.of(true),
@@ -165,7 +168,7 @@ export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, o
       { key: "Mod-Alt--", preventDefault: true, run: () => onChord?.("split") ?? false },
       ...completionKeymap,
       // After completionKeymap on purpose: Esc closes an open completion list first.
-      { key: "Escape", run: () => onChord?.("escape") ?? false },
+      { key: "Escape", run: () => view?.composing ? true : onChord?.("escape") ?? false },
       ...searchKeymap, ...historyKeymap, ...foldKeymap,
       ...defaultKeymap, indentWithTab,
     ]),
@@ -190,6 +193,7 @@ export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, o
   return {
     mount(parent, initial, language) {
       this.destroy();
+      currentLanguage = language;
       parent.replaceChildren();
       view = new EditorView({
         state: EditorState.create({ doc: initial, extensions: extensions() }),
@@ -214,6 +218,9 @@ export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, o
     onChange(cb) { changeCbs.push(cb); },
     onCellFocus(cb) { cellCbs.push(cb); },
     reconfigure(language, options) {
+      currentLanguage = language;
+      currentTheme = options?.theme ?? currentTheme;
+      currentReadOnly = options?.readOnly ?? currentReadOnly;
       view?.dispatch({ effects: [
         languageConf.reconfigure(parserFor(language)),
         ...(options?.theme ? [themeConf.reconfigure(highlight(options.theme))] : []),
@@ -231,6 +238,20 @@ export const createEditorHost: EditorHostFactory = ({ readOnly = false, theme, o
     getCaret: () => view?.state.selection.main.head ?? 0,
     getSelection: () => ({ start: view?.state.selection.main.from ?? 0, end: view?.state.selection.main.to ?? 0,
       multiple: (view?.state.selection.ranges.length ?? 0) > 1 }),
+    applyEdit(edit) {
+      if (!view || view.state.readOnly || view.composing) return;
+      view.dispatch({ changes: { from: edit.from, to: edit.to, insert: edit.insert },
+        selection: { anchor: edit.anchor, head: edit.head }, userEvent: "input.format" });
+      view.focus();
+    },
+    snapshot: () => view?.state.toJSON({ history: historyField }),
+    restoreSnapshot(snapshot) {
+      if (!view || !snapshot) return;
+      try {
+        view.setState(EditorState.fromJSON(snapshot, { extensions: extensions() }, { history: historyField }));
+        this.reconfigure(currentLanguage, { theme: currentTheme, readOnly: currentReadOnly });
+      } catch { /* An incompatible snapshot must not prevent readable source. */ }
+    },
     onCaret(cb) { caretCbs.push(cb); },
     blur() { view?.contentDOM.blur(); },
     destroy() {

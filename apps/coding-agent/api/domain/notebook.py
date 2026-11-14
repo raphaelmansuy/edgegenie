@@ -47,7 +47,7 @@ def _prefix(language: str) -> str:
     return PREFIX.get((language or "PYTHON").upper(), "#")
 
 
-def parse_source(text: str, language: str = "PYTHON") -> list[Cell]:
+def parse_source(text: str, language: str = "PYTHON", *, max_cells: int = MAX_CELLS) -> list[Cell]:
     """Split SOURCE text into cells. Never raises on odd input."""
     lang = (language or "PYTHON").lower()
     pre = _prefix(language)
@@ -93,9 +93,21 @@ def parse_source(text: str, language: str = "PYTHON") -> list[Cell]:
         if all(not ln.strip() or ln.strip() == header or any_header.match(ln) for ln in block):
             continue
         cells.append(_cell(len(cells), block, lang, pre))
-        if len(cells) >= MAX_CELLS:
+        if len(cells) >= max_cells:
             break
     return cells
+
+
+def read_completeness(text: str, language: str = "PYTHON") -> tuple[list[Cell], list[str]]:
+    """One-cell lookahead detects a hidden tail without returning an unbounded cell list."""
+    cells = parse_source(text, language, max_cells=MAX_CELLS + 1)
+    reasons = []
+    if len(cells) > MAX_CELLS:
+        reasons.append("cell_count")
+    visible = cells[:MAX_CELLS]
+    if any(c.truncated for c in visible):
+        reasons.append("cell_source")
+    return visible, reasons
 
 
 def _cell(index: int, block: list[str], lang: str, pre: str) -> Cell:

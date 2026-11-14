@@ -173,7 +173,8 @@ export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActi
 
   const onSaved = useCallback(() => { reload(); }, [reload]);
 
-  const editable = Boolean(actions.editing && data && !data.truncated);
+  const partial = Boolean(data && (data.truncated || data.cells.some(c => c.truncated) || data.incompleteReasons?.length));
+  const editable = Boolean(actions.editing && data && !partial);
   // The editor's text is the cells serialized exactly once. This is the only place it happens, so
   // "what the user sees" and "what a save writes" cannot diverge.
   const source = data ? (isFile ? data.text
@@ -185,7 +186,7 @@ export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActi
     kind: isFile ? "file" : "notebook",
     language: (data.language || "PYTHON").toUpperCase(),
     version: versionOf(data),
-    truncated: Boolean(data.truncated),
+    truncated: partial,
   } : null;
 
   /* When the editor is available, EditorSurface renders the one document bar. The old 128 px
@@ -242,13 +243,14 @@ export function NotebookViewer({ doc, actions }: { doc: Doc; actions: ViewerActi
             </div>
             <div className="cell-main">
               <CellCopy text={c.source} />
-              {c.kind === "markdown" ? <Markdown text={c.source} /> : <Code text={c.source} language={c.language} />}
+              {c.kind === "markdown" ? <Markdown text={c.source} surface="notebook" namespace={`${doc.ref}:${c.index}`} documentPath={doc.ref} /> : <Code text={c.source} language={c.language} />}
               {c.truncated && <p className="viewer-note">This cell is longer than the viewer shows. The agent can read all of it.</p>}
             </div>
           </div>
         ))}
         {data && !editable && isFile && <Code text={data.text} language={data.language || "plain"} />}
-        {data?.truncated && <p className="viewer-note">Showing the first 400 KB. The agent reads the rest in pages.</p>}
+        {partial && <p className="viewer-note">This notebook is partially loaded and cannot be edited. Open the complete source before making changes.</p>}
+        {partial && !data?.truncated && <p className="viewer-note" role="status">Partial notebook preview. Editing is disabled to preserve content beyond the preview limits. Open in Databricks to edit the full notebook.</p>}
       </div>
     </section>
   );

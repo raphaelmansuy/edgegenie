@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { loadEditorHost, type EditorChord, type EditorHost } from "../editor/host";
 
 interface Props {
+  retainedState?: { current: { value: string; state: unknown } | null };
   onReady?: (host: EditorHost) => void;
   /** The document text to show. A change here *replaces* the buffer (load, recover, apply diff). */
   value: string;
@@ -40,7 +41,7 @@ interface Props {
 export function Editor({
   value, language, readOnly = false, theme, onChange, onSave, autoFocus = false, ariaLabel,
   onChord, onCaret, focusRequest, onFocusDone,
-  onReady,
+  onReady, retainedState,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorHost | null>(null);
@@ -70,6 +71,7 @@ export function Editor({
           onChord: (chord) => handlers.current.onChord?.(chord) ?? false,
         });
         local.mount(host.current, value, language);
+        if (retainedState?.current?.value === value) local.restoreSnapshot?.(retainedState.current.state);
         local.onChange((next) => handlers.current.onChange(next));
         local.onCaret((pos) => handlers.current.onCaret?.(pos));
         applied.current = value;
@@ -84,6 +86,7 @@ export function Editor({
     })();
     return () => {
       live = false;
+      if (local && retainedState) retainedState.current = { value: local.getValue(), state: local.snapshot?.() };
       local?.destroy();
       editor.current = null;
     };

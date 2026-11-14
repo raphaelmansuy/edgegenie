@@ -53,7 +53,8 @@
     "e2e:agent-live-edit": "node scripts/agent-live-edit-e2e.mjs",
     "e2e:agent-storage": "node scripts/agent-storage-e2e.mjs",
     "e2e:agent-live-table": "node scripts/agent-live-table-e2e.mjs",
-    "e2e:agent-parity": "node scripts/agent-parity-e2e.mjs"
+    "e2e:agent-parity": "node scripts/agent-parity-e2e.mjs",
+    "e2e:notebook-markdown": "node scripts/notebook-markdown-e2e.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",
@@ -73,6 +74,9 @@
     "katex": "^0.19.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "unified": "11.0.5",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

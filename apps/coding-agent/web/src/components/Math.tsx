@@ -58,7 +58,8 @@ function MathView({ span, streaming = false }: MathProps) {
             strict: false,
             // No `\color`/size macros from the model: an answer must not restyle the app.
             trust: false,
-            output: "html",
+            output: "htmlAndMathml",
+            maxExpand: 1000,
             // Accessibility: KaTeX writes an invisible MathML copy for screen readers, which is the
             // only way a formula is readable aloud. It costs a little DOM and is worth it.
             maxSize: 12,
