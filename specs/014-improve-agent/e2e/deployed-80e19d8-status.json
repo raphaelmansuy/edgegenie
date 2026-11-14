@@ -1,0 +1,34 @@
+{
+  "workspace": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "app": "coding-agent",
+  "url": "https://coding-agent-7474647158015570.aws.databricksapps.com",
+  "compute_status": {
+    "message": "App compute is running.",
+    "state": "ACTIVE"
+  },
+  "app_status": {
+    "message": "App has status: App is running",
+    "state": "RUNNING"
+  },
+  "deployment": {
+    "create_time": "2026-11-14T00:11:10Z",
+    "deployment_id": "01f1dfbfe5171b6baf4d5a54669647d1",
+    "git_source": {
+      "commit": "80e19d8eca6788977aa8c8b7b8bda59340d60032",
+      "git_repository": {
+        "provider": "gitHub",
+        "url": "https://github.com/raphaelmansuy/opengenie"
+      },
+      "resolved_commit": "80e19d8eca6788977aa8c8b7b8bda59340d60032",
+      "source_code_path": "apps/coding-agent"
+    },
+    "status": {
+      "message": "App started successfully",
+      "state": "SUCCEEDED"
+    },
+    "update_time": "2026-11-14T00:11:42Z"
+  },
+  "live_checks_passed": 26,
+  "browser_report": "deployed-80e19d8-final-browser.json",
+  "verification_limit": "Native model initialization and UI smoke; no real-model response, mutation or full release qualification claimed."
+}

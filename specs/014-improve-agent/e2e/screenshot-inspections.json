@@ -1,7 +1,7 @@
 {
   "date": "2026-11-14",
-  "method": "Original 346 captures retain their prior individual inspection records. All 135 integration captures visually inspected in labeled contact sheets; detailed full-size review of jobs failure and notebook diff informed corrections. Failed iterations retained and marked superseded.",
-  "count": 481,
+  "method": "Original 346 captures retain their prior individual inspection records. All 135 integration captures visually inspected in labeled contact sheets; detailed full-size review of jobs failure and notebook diff informed corrections. Failed iterations retained and marked superseded. Four live deployment captures individually opened at full resolution; two initial loading-state captures superseded by two inspected ready-state captures.",
+  "count": 485,
   "screenshots": [
     {
       "path": "screenshots/assets-01/01-native-single-review.png",
@@ -2812,6 +2812,38 @@
       "inspection_sheet": "inspection-sheets/22.jpg",
       "status": "reviewed",
       "finding": "Inspected layout, responsive containment, control labels and displayed state; no blocking visual defect observed."
+    },
+    {
+      "path": "screenshots/deployed-80e19d8/01-desktop-session.png",
+      "sha256": "f6d6fbf6f95935e4f63c4c954c959fa4a020ee5b6f84be0501adac3f98ef81c8",
+      "inspected": true,
+      "inspection_method": "Individually opened at full resolution using view_image",
+      "status": "superseded",
+      "finding": "Captured before hydration; superseded by final ready-state screenshots."
+    },
+    {
+      "path": "screenshots/deployed-80e19d8/02-mobile-session.png",
+      "sha256": "9192ed02fcbf94b1d7571214166c5ce1b5249e49758117021459c5d9b1e10ed8",
+      "inspected": true,
+      "inspection_method": "Individually opened at full resolution using view_image",
+      "status": "superseded",
+      "finding": "Captured before hydration; superseded by final ready-state screenshots."
+    },
+    {
+      "path": "screenshots/deployed-80e19d8-final/01-desktop-ready.png",
+      "sha256": "0cc60399a2d39ab48832cbac1f4d73db685286223b4e5fe74dd5d37bc1b54aff",
+      "inspected": true,
+      "inspection_method": "Individually opened at full resolution using view_image",
+      "status": "reviewed",
+      "finding": "Ready status, loaded model and durable progress visible; desktop folder loaded, responsive layout contained, controls readable."
+    },
+    {
+      "path": "screenshots/deployed-80e19d8-final/02-mobile-ready.png",
+      "sha256": "5e872605e80bae4c695120e158eb8c49b37fa6c8824285fdecb6b2455e2f3801",
+      "inspected": true,
+      "inspection_method": "Individually opened at full resolution using view_image",
+      "status": "reviewed",
+      "finding": "Ready status, loaded model and durable progress visible; desktop folder loaded, responsive layout contained, controls readable."
     }
   ]
 }
