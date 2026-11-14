@@ -26,8 +26,18 @@ try{
  await page.goto(base+'/#/notebook'+path);const first=page.locator('.cell-block').first();await expect(first).toHaveAttribute('data-mode','read',{timeout:30000});await expect(first.locator('[data-heading-depth="1"]')).toHaveText('Notebook Markdown');
  for(const name of ['Hide the inspector','Hide the assistant','Hide the navigator']){const b=page.getByRole('button',{name,exact:true});if(await b.count())await b.first().click();}
  await expect(first.locator('table')).toBeVisible();const version=await page.locator('.app-version').textContent().catch(()=>page.locator('body').innerText());
- await page.screenshot({path:new URL('11-deployed-reading.png',import.meta.url).pathname});
+ if(process.argv.includes('--tab-copy')) {
+   await page.evaluate(()=>{window.copied=[];Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>window.copied.push(text)},configurable:true});});
+   await page.getByRole('button',{name:'Tab actions',exact:true}).click();
+   await expect(page.getByRole('menuitem',{name:'Copy URL',exact:true})).toBeVisible();
+   await page.screenshot({path:new URL('14-deployed-tab-copy.png',import.meta.url).pathname});
+   await page.getByRole('menuitem',{name:'Copy URL',exact:true}).click();
+   await expect.poll(()=>page.evaluate(()=>window.copied.at(-1))).toBe(base+'/#/notebook'+path);
+   await page.getByRole('button',{name:'Tab actions',exact:true}).click();
+   await page.getByRole('menuitem',{name:'Copy full path',exact:true}).click();
+   await expect.poll(()=>page.evaluate(()=>window.copied.at(-1))).toBe(path);
+ } else await page.screenshot({path:new URL('11-deployed-reading.png',import.meta.url).pathname});
  await first.getByRole('button',{name:'Edit Markdown cell 1',exact:true}).click();await expect(first.locator('.cm-content')).toBeVisible();await first.getByRole('button',{name:'Show preview of cell 1',exact:true}).click();await expect(first).toHaveAttribute('data-mode','read');expect(errors).toEqual([]);expect(blocked).toEqual([]);
  const scripts=await page.locator('script[src]').evaluateAll(nodes=>nodes.map(n=>n.src));
- writeFileSync(new URL('deployed-smoke.json',import.meta.url),JSON.stringify({pass:true,app:base,workspace:me.workspace.host,identity:me.username,version,scripts,errors,blocked,scope:'Real deployed frontend and API identity; notebook object is an intercepted fixture; no workspace writes or executions'},null,2));console.log('PASS deployed styled reading, source editor and preview; no workspace mutations');
+ writeFileSync(new URL(process.argv.includes('--tab-copy')?'tab-copy-deployed-smoke.json':'deployed-smoke.json',import.meta.url),JSON.stringify({pass:true,tabCopyVerified:process.argv.includes('--tab-copy'),app:base,workspace:me.workspace.host,identity:me.username,version,scripts,errors,blocked,scope:'Real deployed frontend and API identity; notebook object is an intercepted fixture; no workspace writes or executions'},null,2));console.log('PASS deployed styled reading, source editor and preview; no workspace mutations');
 }finally{await ctx.close();await browser.close();}

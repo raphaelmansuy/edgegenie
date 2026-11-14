@@ -48,3 +48,7 @@ same above-header layer as other global popovers; the final short-viewport captu
 Final `13-tab-copy-menu-narrow.png` was individually opened: menu title and both copy actions are
 uncovered, focus is visible, and the complete menu fits within the 390 by 400 viewport. Final desktop
 capture was reopened as well. The browser test asserts top-menu hit-testing, not only its bounding box.
+
+`14-deployed-tab-copy.png` was individually opened after release `0d4bde2`: both copy actions
+appear at the top of the deployed tab menu, aligned and unobstructed. The deployed smoke test
+verified the copied OpenGenie document URL and exact full path, with no workspace mutations.

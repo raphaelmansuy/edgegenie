@@ -1,0 +1,8 @@
+{
+  "commit": "0d4bde29c21838ac7b88339728f60ff05a4a5f2a",
+  "deploymentId": "01f1dff790041c889491d344ed1d2fb2",
+  "workspace": "https://dbc-cb61f1e1-bd8e.cloud.databricks.com",
+  "app": "https://coding-agent-7474647158015570.aws.databricksapps.com",
+  "deploymentState": "SUCCEEDED",
+  "appState": "RUNNING"
+}
