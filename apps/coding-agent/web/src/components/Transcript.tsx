@@ -259,7 +259,7 @@ function TurnViewInner({ turn, onRetry }: { turn: Turn; onRetry?: () => void }) 
       <div className="who">
         <span className="avatar you" aria-hidden><User size={12} /></span> You
         {turn.model && <span className="chip" style={{ marginLeft: 6 }} title={turn.model}>{modelTail(turn.model)}</span>}
-        <time>{statusWord[turn.status] ?? turn.status}</time>
+        <time>{turn.submission === "sending" ? "sending…" : statusWord[turn.status] ?? turn.status}</time>
       </div>
       <div className="prompt">
         {turn.attachments && turn.attachments.length > 0 && (

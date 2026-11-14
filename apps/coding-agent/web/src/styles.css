@@ -2912,6 +2912,11 @@ a.account-item { text-decoration: none; color: var(--ink); }
 .composer-error { margin: 0 0 6px; padding: 7px 10px; font-size: 12.5px; line-height: 1.45; color: var(--pink-700);
   background: var(--pink-100); border: 1px solid var(--pink-300); border-radius: var(--radius-sm); }
 .composer-error kbd { font: inherit; font-weight: 600; }
+.composer-send-status { display: flex; align-items: center; gap: 8px; margin: 0 0 6px;
+  padding: 7px 10px; font-size: 12.5px; line-height: 1.45; color: var(--blue-600);
+  background: var(--blue-100); border-radius: var(--radius-sm); overflow-wrap: anywhere; }
+.composer-send-status .spin { flex: none; }
+@media (prefers-reduced-motion: reduce) { .composer-send-status .spin { animation: none; } }
 
 /* The centre while a conversation runs in the dock: what exists so far. */
 

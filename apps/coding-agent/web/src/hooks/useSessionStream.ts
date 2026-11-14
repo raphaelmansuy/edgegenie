@@ -86,7 +86,7 @@ function mergeTurns(streamed: Turn[], server: Turn[]): Turn[] {
     };
   });
   for (const t of streamed) {
-    if (!ids.has(t.id) && !t.id.startsWith(PENDING)) merged.push(t);
+    if (!ids.has(t.id)) merged.push(t);
   }
   return merged;
 }
@@ -124,12 +124,15 @@ export function useSessionStream(sessionId: string | null) {
   const [session, setSession] = useState<SessionView>(() => emptySession());
   const [conn, setConn] = useState<StreamState>(IDLE);
   const [error, setError] = useState<string | null>(null);
+  const activeSession = useRef(sessionId);
+  activeSession.current = sessionId;
   const seq = useRef(0);
   /** Bumped by `retry()` to re-run the stream effect without changing any state it depends on. */
   const [retryNonce, setRetryNonce] = useState(0);
 
   // 1) reset + hydrate when the session changes
   useEffect(() => {
+    setError(null);
     if (!sessionId) {
       setSession(emptySession());
       setConn(IDLE);
@@ -283,20 +286,27 @@ export function useSessionStream(sessionId: string | null) {
   }, [sessionId, retryNonce]);
 
   const send = useCallback(async (text: string, attachments: Attachment[] = []) => {
-    if (!sessionId) return;
+    if (!sessionId) throw new Error("Open a conversation before sending a mission.");
     setError(null);
     // Show the user's message at once. Waiting for the server's echo made a slow start look like
     // nothing had been sent, and people sent the same request twice.
-    const pending = `${PENDING}${Date.now()}`;
+    const pending = `${PENDING}${crypto.randomUUID()}`;
     setSession((s) => ({
-      ...s, status: "streaming",
-      turns: [...s.turns, { ...newTurn(pending, s.turns.length + 1, text, s.model), attachments, status: "running" }],
+      ...s,
+      turns: [...s.turns, { ...newTurn(pending, s.turns.length + 1, text, s.model), attachments, status: "queued", submission: "sending" }],
     }));
     try {
-      await api.send(sessionId, text, `${sessionId}:${Date.now()}`, attachments);
+      const accepted = await api.send(sessionId, text, pending, attachments);
+      setSession(s => {
+        if (s.id !== sessionId) return s;
+        // SSE may win the race. Never replace its answer or terminal status with the POST snapshot.
+        if (s.turns.some(t => t.id === accepted.turnId)) return { ...s, turns: s.turns.filter(t => t.id !== pending) };
+        return { ...s, status: "streaming", turns: s.turns.map(t => t.id === pending
+          ? { ...t, id: accepted.turnId, submission: undefined, status: accepted.status ?? "queued" } : t) };
+      });
     } catch (e) {
-      setSession((s) => ({ ...s, status: "ready", turns: s.turns.filter((t) => t.id !== pending) }));
-      setError(e instanceof ApiError ? e.message : "could not send");
+      setSession((s) => s.id !== sessionId ? s : ({ ...s, turns: s.turns.filter((t) => t.id !== pending) }));
+      if (activeSession.current === sessionId) setError(e instanceof ApiError ? e.message : "Could not confirm acceptance. Review the conversation before resending; the server may have received the mission.");
       throw e;
     }
   }, [sessionId]);

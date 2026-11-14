@@ -321,7 +321,7 @@ export const api = {
   resume: (id: string) => call<SessionSummary>(`/api/sessions/${id}/resume`, { method: "POST" }),
   archive: (id: string) => call<void>(`/api/sessions/${id}`, { method: "DELETE" }),
   send: (id: string, text: string, key: string, attachments: Attachment[] = []) =>
-    call<{ turnId: string }>(`/api/sessions/${id}/messages`, { method: "POST",
+    call<{ turnId: string; status?: import("../domain/events").TurnStatus }>(`/api/sessions/${id}/messages`, { method: "POST",
       headers: { ...json, "Idempotency-Key": key },
       // References only: the server reads the content with the user's own token, and a blob by its id.
       // `name` travels because it is the user's word for the file — the transcript renders it on reload,

@@ -491,9 +491,21 @@ export function App() {
 
   // -- sending ----------------------------------------------------------------------------
   const starting = useRef(false);
+  const [submittingMission, setSubmittingMission] = useState(false);
+  const [missionDelivery, setMissionDelivery] = useState<import("./components/Composer").MissionDelivery | null>(null);
+  const deliverySession = useRef(active);
+  const selectedSession = useRef(active);
+  selectedSession.current = active;
+  useEffect(() => {
+    // Keep the first-session handoff; explicit navigation away from an existing session clears it.
+    if (deliverySession.current && deliverySession.current !== active) setMissionDelivery(null);
+    deliverySession.current = active;
+  }, [active]);
+  const submittingMissionRef = useRef(false);
   const start = async (prompt: string, ctx: Attachment[] = []) => {
-    if (starting.current) return;
+    if (starting.current) throw new Error("A conversation is already starting. Wait for confirmation before sending another mission.");
     starting.current = true;
+    setSubmittingMission(true);
     try {
       // The page may be used before `/api/me` has answered (a slow start): the folder is then still
       // empty, and sending it empty is a 422 the user cannot act on. Ask once, here, instead.
@@ -501,31 +513,48 @@ export function App() {
       const created = await api.create(where, model || defaultModel || undefined);
       setActive(created.id);
       await api.send(created.id, prompt, `${created.id}:1`, ctx);
-      await refresh();
+      // Acceptance has succeeded; a sidebar refresh failure must never invite a duplicate send.
+      void refresh().catch(() => {});
     } finally {
       starting.current = false;
+      setSubmittingMission(false);
     }
   };
 
   /** One send path for both composers: the centre's and the dock's. */
   const message = async (text: string, extra: Attachment[] = []) => {
-    let queryContext: Attachment | null = null;
+    if (submittingMissionRef.current || starting.current) throw new Error("A mission is still being sent. Wait for confirmation before sending another.");
+    submittingMissionRef.current = true;
+    setSubmittingMission(true);
+    setMissionDelivery({ state: "sending", text });
     try {
-      if (viewDoc && (viewDoc.kind === "query" || viewDoc.kind === "query-draft") && queryCapture.current)
-        queryContext = await queryCapture.current();
-    } catch (e) { setToast(`SQL context could not be captured: ${(e as Error).message}`); return; }
-    const auto = queryContext ?? (focus.doc ? autoAttachment(focus) : null);
-    const ctx = dedupe([...(auto ? [auto] : []), ...attachments, ...extra]);
-    setAttachments([]);
-    /* Sending a message is a request to SEE the answer, wherever it was typed from. This used to be
-       `if (viewDoc && !dockOnScreen)` — gated on a document being open — so on the home screen at a
-       mid width the message went off, a session was created on the server, the composer emptied, and
-       the conversation stayed an unopened drawer behind an edge handle. Measured: at 900 px, 0 turns
-       on screen with a `ready` session in the API. The condition was never about documents; it was
-       about the dock being an overlay rather than a column, which `reveal()` already handles. */
-    if (!dockOnScreen) reveal();
-    if (!active) await start(text, ctx);
-    else await send(text, ctx);
+      let queryContext: Attachment | null = null;
+      try {
+        if (viewDoc && (viewDoc.kind === "query" || viewDoc.kind === "query-draft") && queryCapture.current)
+          queryContext = await queryCapture.current();
+      } catch (e) { throw new Error(`SQL context could not be captured: ${(e as Error).message}`); }
+      const auto = queryContext ?? (focus.doc ? autoAttachment(focus) : null);
+      const ctx = dedupe([...(auto ? [auto] : []), ...attachments, ...extra]);
+      /* Sending a message is a request to SEE the answer, wherever it was typed from. This used to be
+         `if (viewDoc && !dockOnScreen)` — gated on a document being open — so on the home screen at a
+         mid width the message went off, a session was created on the server, the composer emptied, and
+         the conversation stayed an unopened drawer behind an edge handle. Measured: at 900 px, 0 turns
+         on screen with a `ready` session in the API. The condition was never about documents; it was
+         about the dock being an overlay rather than a column, which `reveal()` already handles. */
+      if (!dockOnScreen) reveal();
+      if (!active) await start(text, ctx);
+      else await send(text, ctx);
+      setAttachments([]);
+      if (!active || selectedSession.current === active) setMissionDelivery({ state: "accepted", text });
+    } catch (e) {
+      if (!active || selectedSession.current === active) setMissionDelivery({ state: "failed", text, error: e instanceof TypeError
+        ? "Could not confirm acceptance. Review the conversation before resending; the server may have received the mission."
+        : e instanceof Error ? e.message : "Could not send the mission." });
+      throw e;
+    } finally {
+      submittingMissionRef.current = false;
+      setSubmittingMission(false);
+    }
   };
 
   const ask = (action: Action, doc: Doc) => {
@@ -956,6 +985,9 @@ export function App() {
       focus={focus}
       session={session}
       hasSession={Boolean(active)}
+      submittingMission={submittingMission}
+      missionDelivery={missionDelivery}
+      onDeliveryDismiss={() => setMissionDelivery(null)}
       running={busy}
       conn={conn}
       error={error}
@@ -1192,6 +1224,8 @@ export function App() {
               {pending && <InlineApproval approval={pending} disabled={!canDecide({ status: session.status, requiresResume: session.requiresResume })}
                 onDecide={(a, outcome) => decide(a.approvalId, outcome)} />}
               <PendingWork /><WorkComposerBar /><Composer compact
+                delivery={missionDelivery}
+                onDeliveryDismiss={() => setMissionDelivery(null)}
                 inputRef={composerBox}
                 blockedReason={sendDecision.canSend ? null : sendDecision.reason} busy={busy} onSend={message} onStop={stop}
                 attachments={attachments} auto={viewDoc ? asAttachment(viewDoc) : null}

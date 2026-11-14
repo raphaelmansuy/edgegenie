@@ -37,6 +37,10 @@ export interface DockProps {
   session: SessionView;
   /** False until a session exists: the dock still works, it just has no turns yet (AD-5). */
   hasSession: boolean;
+  /** Submission can begin in another composer before this dock mounts. */
+  submittingMission?: boolean;
+  missionDelivery?: import("./Composer").MissionDelivery | null;
+  onDeliveryDismiss?: () => void;
   running: boolean;
   /** The stream state MACHINE, not a boolean. Two failures that need different exits — a dropped
    *  connection and a refused one — used to be one word, which is specs/012 [F2]. */
@@ -128,8 +132,8 @@ export function AssistantDock(p: DockProps) {
           needs action. */}
       <header className="dock-head">
         <span className={`dock-state tone-${p.session.status === "archived" ? "archived" : tone}`} title={p.session.status === "archived" ? "Archived conversation — saved work is available for review." : dockTitle(state, p.hasSession, turns.length > 0)}>
-          {state === "streaming" ? <span className="spin" aria-hidden /> : <span className="dock-state-dot" aria-hidden />}
-          <span className="dock-state-word">{p.session.status === "archived" ? "archived" : dockStateWord(state, p.hasSession, turns.length > 0, last?.status)}</span>
+          {p.submittingMission || state === "streaming" ? <span className="spin" aria-hidden /> : <span className="dock-state-dot" aria-hidden />}
+          <span className="dock-state-word" role="status">{p.submittingMission ? "sending" : p.session.status === "archived" ? "archived" : dockStateWord(state, p.hasSession, turns.length > 0, last?.status)}</span>
         </span>
         <span className="dock-context" title={p.focus.doc?.ref ?? "nothing is open"}>
           <LogoMark size={12} />
@@ -234,6 +238,8 @@ export function AssistantDock(p: DockProps) {
       )}
       <PendingWork /><WorkComposerBar /><AgentMeter session={p.session} />
       <Composer
+        delivery={p.missionDelivery}
+        onDeliveryDismiss={p.onDeliveryDismiss}
         variant="dock"
         blockedReason={decision.canSend ? null : decision.reason}
         busy={state === "streaming"}

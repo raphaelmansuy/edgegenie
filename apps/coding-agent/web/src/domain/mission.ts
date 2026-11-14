@@ -56,6 +56,9 @@ export function missionStatus(s: SessionView, conn: StreamState): { title: strin
     tone: "attention",
   };
   const last = currentMission(s);
+  if (last?.submission === "sending") return {
+    title: "Sending mission", detail: "Waiting for server acceptance. Keep this page open until confirmation arrives.", tone: "connection",
+  };
   if (last?.status === "paused") return { title: "Waiting for review or run", detail: "Review saved proposals or follow Runs. No action is approved automatically.", tone: "attention" };
   if (last?.status === "declined" || last?.status === "refused" || last?.status === "truncated") return {
     title: last.status === "declined" ? "Stopped by your decision" : last.status === "refused" ? "Model declined" : "Model limit reached",
@@ -156,6 +159,7 @@ export function missionView(s: SessionView, turn: Turn | undefined, conn: Stream
   const isCurrent = !turn || turn.id === current?.id;
   let state: MissionState = !turn ? (s.status === "ready" ? "ready" : "starting") : turn.status === "completed"
     ? (isAchieved(turn) ? "achieved" : "review") : turn.status;
+  if (turn?.submission === "sending") state = "starting";
   if (isCurrent) {
     if (s.status === "archived") state = "archived";
     else if (s.requiresResume) state = "recovery";
@@ -163,7 +167,9 @@ export function missionView(s: SessionView, turn: Turn | undefined, conn: Stream
     else if (s.approvals.some((a) => !a.outcome)) state = "waiting";
     else if (!turn && (s.status === "failed" || s.status === "blocked")) state = s.status;
   }
-  const presentation = MISSION_STATES[state] ?? MISSION_STATES.starting;
+  const presentation = state === "starting" && turn?.submission === "sending"
+    ? { label: "Sending", tone: "quiet", detail: "Waiting for server acceptance. Keep this page open until confirmation arrives." }
+    : MISSION_STATES[state] ?? MISSION_STATES.starting;
   const request = missionRequest(turn?.prompt || s.title || "");
   const objective = (request.split("\n").map((l) => l.trim()).find(Boolean) || "Your next mission").replace(/^(?:[-*]|\d+[.)])\s+/, "");
   const compact = objective.replace(/\/(?:Workspace\/)?(?:Users|Shared|Repos)\/[^\s]+/g, path => path.split("/").at(-1) || path);

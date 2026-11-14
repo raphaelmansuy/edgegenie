@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { api } from "../api/client";
 import { useSessionStream } from "./useSessionStream";
+import { emptySession } from "../domain/events";
 
 class Source {
   static current: Source;
@@ -16,6 +17,63 @@ class Source {
 }
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it("keeps delivery pending through slow hydration and adopts POST acceptance without SSE", async () => {
+  vi.stubGlobal("EventSource", Source);
+  let detail!: (value: any) => void, accept!: (value: any) => void;
+  vi.spyOn(api, "session").mockImplementation(() => new Promise(resolve => { detail = resolve; }));
+  vi.spyOn(api, "send").mockImplementation(() => new Promise(resolve => { accept = resolve; }));
+  const { result } = renderHook(() => useSessionStream("s"));
+  let sent!: Promise<void>;
+  act(() => { sent = result.current.send("Inspect sales"); });
+  expect(result.current.session.turns[0].submission).toBe("sending");
+  expect(result.current.session.status).not.toBe("streaming");
+  await act(async () => detail({ ...emptySession("s"), status: "ready" }));
+  expect(result.current.session.turns[0].prompt).toBe("Inspect sales");
+  await act(async () => { accept({ turnId: "t", status: "queued" }); await sent; });
+  expect(result.current.session.turns).toHaveLength(1);
+  expect(result.current.session.turns[0]).toMatchObject({ id: "t", status: "queued", submission: undefined });
+});
+
+it("does not overwrite a completed streamed answer with a late POST acknowledgement", async () => {
+  vi.stubGlobal("EventSource", Source);
+  vi.spyOn(api, "session").mockResolvedValue({ ...emptySession("s"), status: "ready" } as any);
+  let accept!: (value: any) => void;
+  vi.spyOn(api, "send").mockImplementation(() => new Promise(resolve => { accept = resolve; }));
+  const { result } = renderHook(() => useSessionStream("s"));
+  await waitFor(() => expect(result.current.session.status).toBe("ready"));
+  let sent!: Promise<void>;
+  act(() => { sent = result.current.send("Inspect sales"); });
+  act(() => {
+    for (const [i, type, extra] of [[1, "turn.started", { text: "Inspect sales" }], [2, "message.delta", { text: "Done" }], [3, "turn.completed", {}]] as const)
+      Source.current.onmessage?.({data: JSON.stringify({ seq: i, type, sessionId: "s", turnId: "t", ...extra })});
+  });
+  await waitFor(() => expect(result.current.session.turns[0].answer).toBe("Done"));
+  await act(async () => { accept({ turnId: "t", status: "running" }); await sent; });
+  expect(result.current.session.turns).toHaveLength(1);
+  expect(result.current.session.turns[0]).toMatchObject({ answer: "Done", status: "completed" });
+  expect(result.current.session.status).toBe("ready");
+});
+
+it("a refused follow-up preserves the running mission and a late failure cannot alter another session", async () => {
+  vi.stubGlobal("EventSource", Source);
+  vi.spyOn(api, "session").mockImplementation(async id => ({ ...emptySession(id), status: id === "s" ? "streaming" : "ready" } as any));
+  let reject!: (e: Error) => void;
+  vi.spyOn(api, "send").mockImplementation(() => new Promise((_, fail) => { reject = fail; }));
+  const { result, rerender } = renderHook(({ id }) => useSessionStream(id), { initialProps: { id: "s" } });
+  await waitFor(() => expect(result.current.session.status).toBe("streaming"));
+  let sent!: Promise<void>;
+  act(() => { sent = result.current.send("Follow up").catch(() => {}); });
+  await act(async () => { reject(new Error("Unavailable")); await sent; });
+  expect(result.current.session.status).toBe("streaming");
+  expect(result.current.session.turns).toHaveLength(0);
+  act(() => { sent = result.current.send("Another").catch(() => {}); });
+  rerender({ id: "other" });
+  await waitFor(() => expect(result.current.session.id).toBe("other"));
+  await act(async () => { reject(new Error("Old failure")); await sent; });
+  expect(result.current.error).toBeNull();
+  expect(result.current.session.status).toBe("ready");
+});
 
 it.each(["completed", "blocked"])("retains replayed mission details when metadata arrives after %s", async (status) => {
   vi.stubGlobal("EventSource", Source);

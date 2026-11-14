@@ -150,6 +150,8 @@ export interface PlanEntry { content: string; status: "pending" | "in_progress" 
 
 export interface Turn {
   id: string;
+  /** Local delivery state, separate from the server's execution status. */
+  submission?: "sending";
   attachments?: Attachment[];
   plan?: PlanEntry[];
   index: number;
@@ -292,7 +294,7 @@ export function reduce(state: SessionView, e: AgentEvent): SessionView {
       // The detail route inserts this turn before the stream replays it. Appending again made one
       // "Hello" draw as two turns, and both copies then received the same answer.
       const previous = s.turns.find((t) => t.id === id);
-      const kept = s.turns.filter((t) => !t.id.startsWith(PENDING) && t.id !== id);
+      const kept = s.turns.filter((t) => !(t.id.startsWith(PENDING) && t.prompt === e.text) && t.id !== id);
       const next = newTurn(id, previous?.index || kept.length + 1,
         String(e.text ?? previous?.prompt ?? ""), String(e.model ?? previous?.model ?? s.model));
       const turn: Turn = {

@@ -27,9 +27,12 @@ export { KIND_ICON } from "./AssetIcon";
 export { Chip } from "./Chip";
 
 interface Option { a: Attachment; hint: string }
+export interface MissionDelivery { state: "sending" | "accepted" | "failed"; text: string; error?: string }
 
 export function Composer({ blockedReason: why, busy, onSend, onStop, attachments, auto, onAdd, onRemove, openDocs, placeholder, inputRef,
-  variant = "main", compact = false, modelSlot, searchRoot, sessionId = null, modelSeesImages = true, modelName }: {
+  variant = "main", compact = false, modelSlot, searchRoot, sessionId = null, modelSeesImages = true, modelName, delivery, onDeliveryDismiss }: {
+  delivery?: MissionDelivery | null;
+  onDeliveryDismiss?: () => void;
   /** `mine` is what THIS composer holds: ready blobs, which the parent's `attachments` cannot know about. */
   /** Why this composer cannot accept text, or null when it can.
    *
@@ -65,13 +68,25 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
   const [skillCommands,setSkillCommands]=useState<Command[]>([]);
   const skillsLoaded=useRef("");
   const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
+  const [localSending, setSending] = useState(false);
+  const sending = localSending || delivery?.state === "sending";
+  const sendingRef = useRef(false);
+  const [sendNotice, setSendNotice] = useState("");
+  useEffect(() => {
+    if (!sending) return;
+    const timer = window.setTimeout(() => setSendNotice("Still sending — waiting for server confirmation. Keep this page open."), 8000);
+    return () => window.clearTimeout(timer);
+  }, [sending]);
   /** `blocked` is DERIVED, never passed as a boolean: one reason in, one presentation out. */
   const blocked = Boolean(why);
   const blockedText = why ? reasonText(why) : "";
   const blockedReasonId = useId();
   /** Why the last send did not go, in the server's words. Cleared as soon as the user edits. */
   const [failure, setFailure] = useState("");
+  useEffect(() => {
+    if (delivery?.state === "failed") { setText(delivery.text); setFailure(delivery.error ?? "Could not send the mission."); setSendNotice(""); }
+    if (delivery?.state === "accepted") { setText(""); setSendNotice("Mission accepted. Follow its progress in the conversation."); }
+  }, [delivery]);
   const [caret, setCaret] = useState(0);
   const [found, setFound] = useState<WsHit[]>([]);
   const [searching, setSearching] = useState(false);
@@ -96,6 +111,7 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
   const attachCount = () => attachments.filter((a) => a.kind === "blob").length + blobs.chips.length;
 
   const accept = (files: FileList | File[]) => {
+    if (sending || sendingRef.current) return;
     const list = Array.from(files);
     if (list.length === 0) return;
     blobs.add(list, { count: attachCount(), modelSeesImages, model: modelName });
@@ -185,10 +201,11 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
 
   const submit = async () => {
     const value = text.trim();
-    if (!value || sending || blocked || blobs.busy) return;
+    if (!value || sending || sendingRef.current || blocked || blobs.busy) return;
+    sendingRef.current = true;
     setSending(true);
+    setSendNotice("Sending mission — preparing context and waiting for server acceptance…");
     setFailure("");
-    setText("");
     setHistAt(-1);
     const next = pushHistory(history, value);
     setHistory(next);
@@ -200,6 +217,8 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
         .filter((c) => c.state === "ready" && c.blobId)
         .map((c) => ({ kind: "blob" as const, ref: c.blobId as string, name: c.name }));
       await onSend(value, mine);
+      setText("");
+      setSendNotice("Mission accepted. Follow its progress in the conversation.");
       // Sent, so the composer's chips are no longer a draft: the transcript owns them now. A CHIP THAT
       // FAILED is not sent, so it stays with its sentence to be retried or removed.
       blobs.clear();
@@ -208,8 +227,11 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
       // A refusal (no key for the model, no permission, the server down) must not eat the message:
       // put it back and say why, so fixing the cause and pressing Enter is all that is left to do.
       setText(value);
-      setFailure(e instanceof Error && e.message ? e.message : "The message could not be sent.");
-    } finally { setSending(false); }
+      setSendNotice("");
+      setFailure(e instanceof TypeError
+        ? "Could not confirm acceptance. Review the conversation before resending; the server may have received the mission."
+        : e instanceof Error && e.message ? e.message : "The message could not be sent.");
+    } finally { sendingRef.current = false; setSending(false); }
   };
 
   const useHistory = (key: "ArrowUp" | "ArrowDown") => {
@@ -238,6 +260,7 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
   };
 
   const mention = () => {
+    if (sendingRef.current) return;
     const el = ref.current;
     const at = el?.selectionStart ?? text.length;
     const lead = at > 0 && !/\s/.test(text[at - 1]) ? " " : "";
@@ -252,11 +275,15 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
     <section className={`composer${variant === "dock" ? " is-dock" : ""}${compact ? " is-compact" : ""}`} data-has-text={!!text.trim()} role="region"
       aria-label={variant === "dock" ? "Message the assistant" : "Message composer"}>
       <div className={`composer-box${blocked ? " is-blocked" : ""}`}>
+        {(sendNotice || sending) && <p className="composer-send-status" role="status" aria-atomic="true">
+          {sending && <span className="spin" aria-hidden="true" />}
+          <span>{sendNotice || "Sending mission — preparing context and waiting for server acceptance…"}</span>
+        </p>}
         {(attachments.length > 0 || auto || blobs.chips.length > 0) && (
           <div className={`ctx-row${auto && !attachments.length && !blobs.chips.length ? " is-auto-only" : ""}`} aria-label="Context for this message">
             {auto && !attachments.some((x) => x.ref === auto.ref) && <Chip a={auto} auto />}
             {attachments.filter((a) => a.kind !== "blob").map((a) => (
-              <Chip key={`${a.kind}:${a.ref}`} a={a} onRemove={() => onRemove(a)} />
+              <Chip key={`${a.kind}:${a.ref}`} a={a} onRemove={sending ? undefined : () => onRemove(a)} />
             ))}
             {blobs.chips.map((c) => (
               <Chip
@@ -268,7 +295,7 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
                 unseen={!modelSeesImages && /^image\//.test(c.mime ?? "")}
                 onRetry={c.state === "failed" ? () => blobs.retry(c.key, {
                   count: attachCount(), modelSeesImages, model: modelName }) : undefined}
-                onRemove={() => blobs.remove(c.key)}
+                onRemove={sending ? undefined : () => blobs.remove(c.key)}
               />
             ))}
           </div>
@@ -311,7 +338,7 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
           )}
           <textarea
             ref={ref}
-            value={text}
+            value={delivery?.state === "sending" ? delivery.text : text}
             /* A blocked composer is `readOnly`, NEVER `disabled`.
              *
              * `disabled` removes a form control from the tab order and from the accessibility tree's
@@ -322,7 +349,8 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
              * `readOnly` refuses edits exactly as firmly; it only stops pretending the control is not
              * there. Combined with `aria-disabled` and a described reason, the box stays reachable and
              * explains itself in place. [FX-1] [FX-2] */
-            readOnly={Boolean(blocked)}
+            readOnly={Boolean(blocked) || sending}
+            aria-busy={sending}
             aria-disabled={blocked ? true : undefined}
             aria-describedby={blocked ? blockedReasonId : undefined}
             placeholder={blocked ? blockedText : (placeholder ?? "Ask for a notebook, a job, a fix, an investigation…   @ adds a notebook, file or table")}
@@ -338,9 +366,11 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
               e.preventDefault();
               accept(files);
             }}
-            onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); if (failure) setFailure(""); if (blobs.notice) blobs.setNotice(""); }}
+            onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); onDeliveryDismiss?.(); setSendNotice(""); if (failure) setFailure(""); if (blobs.notice) blobs.setNotice(""); }}
             onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart)}
             onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (sending || sendingRef.current) { if (e.key === "Enter") e.preventDefault(); return; }
               if (open && (options.length > 0 || searching)) {
                 if (e.key === "ArrowDown") { e.preventDefault(); setPick((p) => Math.min(p + 1, options.length - 1)); return; }
                 if (e.key === "ArrowUp") { e.preventDefault(); setPick((p) => Math.max(p - 1, 0)); return; }
@@ -417,12 +447,12 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
         <div className="composer-actions">
           {/* Tools on the left, the primary action on the right: the reading order of every chat UI. */}
           <AttachMenu
-            disabled={blocked}
+            disabled={blocked || sending}
             onFiles={accept}
             onContext={mention}
           />
-          <button className="btn ghost icon-btn" aria-label="Add a notebook, file or table" title="Add context (⌘⇧A)" onClick={mention} disabled={blocked}>＠</button>
-          <button className="btn ghost icon-btn" aria-label="Commands" title="Commands (/)" disabled={blocked}
+          <button className="btn ghost icon-btn" aria-label="Add a notebook, file or table" title="Add context (⌘⇧A)" onClick={mention} disabled={blocked || sending}>＠</button>
+          <button className="btn ghost icon-btn" aria-label="Commands" title="Commands (/)" disabled={blocked || sending}
             onClick={() => {
               const el = ref.current;
               const at = el?.selectionStart ?? text.length;
@@ -433,7 +463,9 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
             }}>/</button>
           {modelSlot}
           <span className="hint"><kbd>⏎</kbd> send · <kbd>⇧⏎</kbd> new line</span>
-          {busy ? (
+          {sending ? (
+            <button className="btn primary" disabled>Sending…</button>
+          ) : busy && !text.trim() ? (
             <button className="btn stop" disabled={blocked} onClick={onStop}>Stop <kbd>Esc</kbd></button>
           ) : (
             <button className="btn primary" onClick={() => void submit()} disabled={!text.trim() || blocked || blobs.busy}
