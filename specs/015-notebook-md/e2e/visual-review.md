@@ -36,3 +36,15 @@ The additional `11-deployed-reading.png` was individually opened after the live 
 The title, subheading, paragraph, list, table and explicit Edit action render correctly in the actual
 served bundle. Account/model initialization is still in progress in the surrounding app chrome;
 the notebook fixture itself is fully rendered. No workspace content was created or overwritten.
+
+## Tab menu copy actions
+
+`12-tab-copy-menu.png` was opened individually: Copy URL and Copy full path appear above the
+move/close actions, in a distinct group, for the context-clicked tab. The first short-viewport
+capture exposed the app header covering the top of the menu. That capture is retained under
+`iteration-01/13-tab-copy-menu-narrow.png`. The popup now measures its actual height and uses the
+same above-header layer as other global popovers; the final short-viewport capture is reviewed below.
+
+Final `13-tab-copy-menu-narrow.png` was individually opened: menu title and both copy actions are
+uncovered, focus is visible, and the complete menu fits within the 390 by 400 viewport. Final desktop
+capture was reopened as well. The browser test asserts top-menu hit-testing, not only its bounding box.

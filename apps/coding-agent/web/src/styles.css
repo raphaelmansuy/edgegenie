@@ -1096,7 +1096,7 @@ kbd { font-family: var(--mono); font-size: 11px; color: var(--ink-2); background
 .doc-tabs-wrap.is-dragging, .doc-tabs-wrap.is-dragging * { cursor: grabbing; }
 .doc-tab.is-drag-source { opacity: 0.45; }
 .tab-drop-marker { position: absolute; top: 4px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--blue-600); pointer-events: none; z-index: var(--z-sticky); }
-.tab-popover { position: fixed; z-index: var(--z-popover); border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-pop); max-height: calc(100dvh - 16px); overflow: auto; }
+.tab-popover { position: fixed; z-index: calc(var(--z-modal) + 1); border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-pop); max-height: calc(100dvh - 16px); overflow: auto; }
 .tab-picker { width: min(380px, calc(100vw - 16px)); padding: 10px; }
 .tab-picker-heading { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 10px; font-size: 12px; }
 .tab-picker-heading > span { color: var(--ink-3); font-variant-numeric: tabular-nums; }

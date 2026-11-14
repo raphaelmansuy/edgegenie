@@ -3,11 +3,12 @@ import { createElement, useEffect, useLayoutEffect, useRef, useState, type Keybo
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronLeft, ChevronRight, CloseIcon, FileIcon, More } from "./Icons";
 import { KIND_ICON } from "./AssetIcon";
+import type { DocKind } from "../domain/docs";
 import { docTabId } from "../domain/tabs";
 import { display } from "../domain/keys";
 import { useTabDrag } from "../hooks/useTabDrag";
 
-export interface DocTab { id: string; name: string; kind: string; ref: string }
+export interface DocTab { id: string; name: string; kind: DocKind; ref: string }
 interface Props {
   docs: DocTab[]; active: string; dirtyIds: ReadonlySet<string>;
   onSelect: (id: string) => void;
@@ -15,11 +16,12 @@ interface Props {
   onCloseMany: (ids: string[]) => void;
   onMove: (id: string, index: number) => void;
   onReopen: () => void;
+  onCopy: (doc: DocTab, format: "url" | "path") => void;
   canReopen: boolean;
 }
 const tabIcon = (kind: string) => createElement(KIND_ICON[kind] ?? FileIcon, { size: 14 });
 
-export function DocTabs({ docs, active, dirtyIds, onSelect, onClose, onCloseMany, onMove, onReopen, canReopen }: Props) {
+export function DocTabs({ docs, active, dirtyIds, onSelect, onClose, onCloseMany, onMove, onReopen, canReopen, onCopy }: Props) {
   const strip = useRef<HTMLDivElement>(null);
   const pickerButton = useRef<HTMLButtonElement>(null);
   const actionsButton = useRef<HTMLButtonElement>(null);
@@ -110,6 +112,12 @@ export function DocTabs({ docs, active, dirtyIds, onSelect, onClose, onCloseMany
     window.addEventListener("resize", resize);
     return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("focusin", focusOut); window.removeEventListener("resize", resize); };
   }, [popup]);
+  useLayoutEffect(() => {
+    if (!popup || !popover.current) return;
+    const height = popover.current.getBoundingClientRect().height;
+    const y = Math.max(8, Math.min(popup.y, window.innerHeight - height - 8));
+    if (y !== popup.y) setPopup({ ...popup, y });
+  }, [popup]);
   useEffect(() => { if (popup?.id && !ids.includes(popup.id)) setPopup(null); }, [orderedIds, popup?.id]);
 
   function openPopup(kind: "picker" | "menu", id?: string, x?: number, y?: number, returnFocus?: HTMLElement) {
@@ -195,7 +203,7 @@ export function DocTabs({ docs, active, dirtyIds, onSelect, onClose, onCloseMany
         <button className="tab-control tab-scroll" aria-label="Scroll tabs left" title="Scroll tabs left" disabled={!overflow.left} onClick={() => scroll(-1)}><ChevronLeft size={15} /></button>
         <button className="tab-control tab-scroll" aria-label="Scroll tabs right" title="Scroll tabs right" disabled={!overflow.right} onClick={() => scroll(1)}><ChevronRight size={15} /></button>
         <button ref={actionsButton} className="tab-control" aria-label="Tab actions" aria-haspopup="menu" aria-expanded={popup?.kind === "menu"}
-          title="Tab actions — move, close or reopen" onClick={(e) => {
+          title="Tab actions — copy, move, close or reopen" onClick={(e) => {
             if (popup?.kind === "menu") { closePopup(); return; }
             const r = e.currentTarget.getBoundingClientRect();
             openPopup("menu", ids.includes(active) ? active : ids[0], r.right - 240, r.bottom, e.currentTarget);
@@ -226,6 +234,9 @@ export function DocTabs({ docs, active, dirtyIds, onSelect, onClose, onCloseMany
             <div className="tab-picker-hint">Drag to reorder · Alt+Shift+← / → to move</div>
           </> : menuDoc && <>
             <div className="tab-menu-title" title={menuDoc.ref}>{menuDoc.name}</div>
+            <button role="menuitem" onClick={() => run(() => onCopy(menuDoc, "url"))}>Copy URL</button>
+            <button role="menuitem" onClick={() => run(() => onCopy(menuDoc, "path"))}>Copy full path</button>
+            <div role="separator" />
             <button role="menuitem" disabled={menuAt === 0} onClick={() => run(() => move(menuDoc.id, menuAt - 1))}>Move left <kbd>Alt+Shift+←</kbd></button>
             <button role="menuitem" disabled={menuAt === docs.length - 1} onClick={() => run(() => move(menuDoc.id, menuAt + 1))}>Move right <kbd>Alt+Shift+→</kbd></button>
             <div role="separator" />

@@ -1128,6 +1128,10 @@ export function App() {
                 onClick={() => selectTab(CHAT)}>Mission overview <span>{session.title || "Current session"}</span></button>}
               {docs.length > 0 && (
                 <DocTabs docs={docs} active={view} dirtyIds={dirtyIds} onSelect={selectTab} onClose={closeDoc}
+                  onCopy={(doc, format) => {
+                    if (format === "url") void copyLink({ ...EMPTY_ROUTE, doc: { kind: doc.kind, ref: doc.ref } });
+                    else void copyText(doc.ref).then(ok => setToast(ok ? "Full path copied" : "Could not copy the full path"));
+                  }}
                   onMove={moveDocument} onCloseMany={closeDocuments} onReopen={reopenDocument} canReopen={closedCount > 0} />
               )}
 

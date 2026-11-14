@@ -1,0 +1,12 @@
+{
+  "pass": true,
+  "checks": [
+    "Inactive tab copies its own encoded document URL without navigating",
+    "Full path preserves Unicode, spaces and punctuation",
+    "Tab actions copies active document path",
+    "Clipboard failure is visible",
+    "Menu remains within narrow/short viewport",
+    "Escape dismisses menu"
+  ],
+  "errors": []
+}
