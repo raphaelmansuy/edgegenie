@@ -1,0 +1,40 @@
+
+Verifying https://coding-agent-7474647158015570.aws.databricksapps.com
+  deployment SUCCEEDED · app RUNNING
+  PASS the last deployment SUCCEEDED
+  PASS the app process is RUNNING
+App user scopes match the bundle
+  PASS user API scopes match databricks.yml
+Agent execution identity: user only; no separate identity declared or app-SP fallback enabled
+  PASS agent run-identity declaration is safe
+  PASS the app service principal can read and write the session volume
+  PASS secret resources attached (vertex-sa, llm-kek)
+  PASS the app answers /api/health
+  PASS POST /api/blobs is served, and a session is not required (home-screen attach)
+  PASS /api/sessions/{id}/events exists
+  PASS /api/lakebase/projects is served and lists objects
+  PASS /api/apps is served and lists objects
+  PASS /api/jobs is served and lists objects
+  PASS /api/pipelines is served and lists objects
+  PASS the state vocabulary is live: a running run reads running, offers Cancel, no Repair
+  PASS the app answers v1.2.0-rc.4 (no commit reported) and links its docs, source and releases
+  PASS the notebook session route is live (state: none)
+  PASS POST /api/jobs/1 is refused (405) — the browser has no write path, as designed
+  PASS POST /api/pipelines/x is refused (405) — the browser has no write path, as designed
+  PASS 13 models all declare seesImages; 6 declare vision
+        databricks/databricks-gemma-3-12b
+        databricks/databricks-llama-4-maverick
+        databricks/databricks-claude-sonnet-4-5
+        google_vertex/google/gemini-3.5-flash
+        google_vertex/google/gemini-3.8-flash
+        google_vertex/google/gemini-3.8-pro
+  PASS GET /api/config answers 200 — the new backend is live
+  PASS GET /api/docs/search?q=fence answers 200 — the new backend is live
+  PASS the deployed backend publishes the three write modes
+  PASS the served bundle has the attach control (/assets/index-DJYLPeB-.js)
+  PASS the served bundle carries the compiled version 1.2.0-rc.4
+  PASS the served bundle links the documentation site
+  local build is index-CX-nzyay.js, deployed is index-DJYLPeB-.js — run: scripts/deploy.sh
+  PASS a session starts with the default model
+
+DEPLOYED AND CURRENT — 26 passed

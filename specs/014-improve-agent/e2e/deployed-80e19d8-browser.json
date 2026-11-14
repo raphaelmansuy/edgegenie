@@ -1,0 +1,19 @@
+{
+  "pass": false,
+  "captures": [
+    "01-desktop-session.png",
+    "02-mobile-session.png"
+  ],
+  "errors": [],
+  "version": {
+    "version": "1.2.0-rc.4",
+    "commit": "",
+    "docs": "https://raphaelmansuy.github.io/opengenie/",
+    "source": "https://github.com/raphaelmansuy/opengenie",
+    "releases": "https://github.com/raphaelmansuy/opengenie/releases",
+    "agentMode": "stdio"
+  },
+  "initialHarnessCorrection": "The first attempt expected the gated Autonomy mode control; the deployed optional phase defaults retain the legacy controls. Corrected assertion checks the visible, enabled message composer.",
+  "scope": "Live deployed app via user OAuth; native default-model ACP session initialization and responsive rendering. No prompt sent or workspace object mutated.",
+  "superseded": "Initial screenshots preceded hydration. Final captures await ready status, model and folder using accessible regions."
+}

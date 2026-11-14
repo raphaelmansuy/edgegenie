@@ -1,0 +1,21 @@
+{
+  "pass": true,
+  "captures": [
+    "01-desktop-ready.png",
+    "02-mobile-ready.png"
+  ],
+  "errors": [],
+  "version": {
+    "version": "1.2.0-rc.4",
+    "commit": "",
+    "docs": "https://raphaelmansuy.github.io/opengenie/",
+    "source": "https://github.com/raphaelmansuy/opengenie",
+    "releases": "https://github.com/raphaelmansuy/opengenie/releases",
+    "agentMode": "stdio"
+  },
+  "scope": "Live user-OAuth app; actual default-model ACP session initialization and hydrated desktop/mobile rendering. No prompt sent or workspace object mutated.",
+  "harnessCorrections": [
+    "Autonomy control is gated in the deployed defaults; assert the visible composer instead.",
+    "Use the actual accessible Mission workspace region, not a nonexistent CSS class."
+  ]
+}

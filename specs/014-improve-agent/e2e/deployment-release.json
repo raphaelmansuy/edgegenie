@@ -4,7 +4,7 @@
   "app": "coding-agent",
   "requested_commit": "692dc53dc1c65fbd2e6276e6d2039ef57baba83f",
   "compute": "ACTIVE",
-  "serving_commit": null,
+  "serving_commit": "80e19d8eca6788977aa8c8b7b8bda59340d60032",
   "attempts": [
     {
       "result": "refused",
@@ -18,9 +18,15 @@
       "result": "accepted then build failed",
       "commit": "692dc53dc1c65fbd2e6276e6d2039ef57baba83f",
       "reason": "pinned opencode-ai postinstall omitted by npm ci --ignore-scripts"
+    },
+    {
+      "result": "SUCCEEDED",
+      "commit": "80e19d8eca6788977aa8c8b7b8bda59340d60032",
+      "authorization": "User approved one deployment attempt of corrected build",
+      "deployment_id": "01f1dfbfe5171b6baf4d5a54669647d1"
     }
   ],
-  "status": "approved additional deployment failed during build; correction validated locally; further deployment awaits approval",
-  "deployment_id": "01f1dfb9cee014e8a83661f9af4ddee6",
-  "app_status": "UNAVAILABLE"
+  "status": "corrected deployment SUCCEEDED; app RUNNING; 26 live checks and hydrated desktop/mobile browser smoke pass",
+  "deployment_id": "01f1dfbfe5171b6baf4d5a54669647d1",
+  "app_status": "RUNNING"
 }

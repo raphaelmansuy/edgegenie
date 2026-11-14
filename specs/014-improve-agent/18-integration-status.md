@@ -1,5 +1,9 @@
 # Integration and deployment status — 2026-11-14
 
+Latest: corrected commit `80e19d8` is deployed successfully, the target app is RUNNING, and
+26 live checks plus the hydrated desktop/mobile browser smoke pass. Earlier failures below are
+retained as history; the final section records the current deployment.
+
 The 50 upstream conflicts recorded on 13 November are resolved. The integrated branch includes
 upstream main `d2d4754e05f15dc06f41d57fdeaaa8b9ae6415e8` and preserves its SQL editor, notebook
 sessions, jobs/pipelines, Lakebase/App browsers and deployment environment selection. The spec 014
@@ -82,3 +86,28 @@ and the complete frontend build. Regression contracts exercise a fresh wrapper r
 initialization and rejection of an unexpected agent version; all 52 packaging/deployment/identity
 contracts pass. The approved attempt is consumed; deploying the correction needs another approval.
 Post-merge CI for `8765015` completed successfully before this correction.
+
+## Corrected deployment verified — 14 November 2026
+
+The user approved one deployment attempt of corrected commit
+`80e19d8eca6788977aa8c8b7b8bda59340d60032`. Databricks deployment
+`01f1dfbfe5171b6baf4d5a54669647d1` resolved exactly that commit, completed SUCCEEDED and reports
+the app RUNNING with compute ACTIVE. The version route returns `1.2.0-rc.4`; its commit field is
+empty, so the exact source identity is established by the platform deployment metadata, not an
+invented runtime value. Post-merge CI for this commit passed.
+
+All 26 existing live deployment checks pass using the verified user's OAuth identity: platform
+state, scopes/resources, health, current routes and frontend, infrastructure lists, refused write
+routes and actual default-model session initialization. A browser smoke checks the hydrated ready
+state at 1440×960 and 390×844 with no page exceptions or horizontal overflow. Both final screenshots
+were individually opened and inspected; initial loading-state captures remain marked superseded.
+The screenshot inventory now contains 485 inspected PNGs. Temporary app sessions were archived.
+The native workspace was not mutated and no prompt was sent.
+
+See [platform proof](e2e/deployed-80e19d8-status.json),
+[live verification](e2e/integration-logs/agent014-corrected-live-verify.log),
+[browser report](e2e/deployed-80e19d8-final-browser.json) and the reproducible
+[browser harness](e2e/tools/live-smoke.mjs). The browser harness was corrected to use controls
+enabled by the deployed defaults and the actual accessible Mission workspace region.
+Optional phase defaults and separate execution identity were not enabled by this deployment;
+full real-model mission/fault/noise and exhaustive release gates in section 17 remain unqualified.
